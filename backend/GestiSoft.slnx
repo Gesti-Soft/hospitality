@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GestiSoft.Api/GestiSoft.Api.csproj" />
+    <Project Path="src/GestiSoft.Application/GestiSoft.Application.csproj" />
+    <Project Path="src/GestiSoft.Contracts/GestiSoft.Contracts.csproj" />
+    <Project Path="src/GestiSoft.Domain/GestiSoft.Domain.csproj" />
+    <Project Path="src/GestiSoft.Infrastructure/GestiSoft.Infrastructure.csproj" />
+    <Project Path="src/GestiSoft.Worker/GestiSoft.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GestiSoft.Api.Tests/GestiSoft.Api.Tests.csproj" />
+    <Project Path="tests/GestiSoft.Application.Tests/GestiSoft.Application.Tests.csproj" />
+  </Folder>
+</Solution>

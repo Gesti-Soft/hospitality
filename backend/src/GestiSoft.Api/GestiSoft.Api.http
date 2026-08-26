@@ -1,0 +1,6 @@
+@GestiSoft.Api_HostAddress = http://localhost:5209
+
+GET {{GestiSoft.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
