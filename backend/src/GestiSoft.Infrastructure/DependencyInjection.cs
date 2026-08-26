@@ -1,4 +1,5 @@
 using GestiSoft.Infrastructure.Persistence;
+using GestiSoft.Infrastructure.Seed;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,7 @@ public static class DependencyInjection
                 "Connection string 'Default' non configurata (ConnectionStrings:Default oppure env var ConnectionStrings__Default).");
 
         services.AddDbContext<GestiSoftDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddScoped<ReferenceDataSeeder>();
 
         return services;
     }

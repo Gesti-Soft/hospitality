@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using GestiSoft.Application;
 using GestiSoft.Contracts.Health;
 using GestiSoft.Infrastructure;
+using GestiSoft.Infrastructure.Seed;
 using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
 
@@ -54,6 +55,14 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Popola le tabelle di riferimento condivise (Comuni/Stati/Documenti/TipoAlloggiato) se vuote —
+// idempotente, non richiede alcun file esterno (sostituisce il path assoluto Windows del legacy).
+using (var startupScope = app.Services.CreateScope())
+{
+    var seeder = startupScope.ServiceProvider.GetRequiredService<ReferenceDataSeeder>();
+    await seeder.SeedAsync();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

@@ -20,4 +20,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Seed\Data\*.csv" />
+  </ItemGroup>
+
 </Project>
