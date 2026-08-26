@@ -374,6 +374,90 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("prezzi_camera", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.ImpostazioniStruttura", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<TimeOnly?>("OraInvioGiornaliero")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("OsservatorioAttivo")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PayTouristAttivo")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PoliziaStatoAttiva")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("TassaSoggiornoMaxGiorni")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TassaSoggiornoPrezzo")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StrutturaId")
+                        .IsUnique();
+
+                    b.ToTable("impostazioni_struttura", (string)null);
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.LogEvento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClienteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CorrelationId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Dettaglio")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Livello")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Messaggio")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Origine")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.HasIndex("ClienteId", "StrutturaId", "CreatedAtUtc");
+
+                    b.ToTable("log_eventi", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.Ospite", b =>
                 {
                     b.Property<Guid>("Id")
@@ -899,6 +983,122 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("strutture", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.Utente", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Attivo")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ClienteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Cognome")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<bool>("IsSuperAdmin")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Nome")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("utenti", (string)null);
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.UtenteStruttura", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("BookingRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("BookingWrite")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("FinanceRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("FinanceWrite")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ReservationRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ReservationWrite")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RestaurantRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RestaurantWrite")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RoomStatusUpdate")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Ruolo")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("SettingAgency")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SettingRoomRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SettingRoomWrite")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SettingUser")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("StatePoliceRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("StatePoliceSettings")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("StatePoliceWrite")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UtenteId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.HasIndex("UtenteId", "StrutturaId")
+                        .IsUnique();
+
+                    b.ToTable("utenti_strutture", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.Cauzione", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.Prenotazione", "Prenotazione")
@@ -973,6 +1173,15 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Camera");
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.ImpostazioniStruttura", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.Ospite", b =>
@@ -1083,6 +1292,35 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Navigation("Cliente");
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.Utente", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.Cliente", "Cliente")
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Cliente");
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.UtenteStruttura", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", "Struttura")
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.Utente", "Utente")
+                        .WithMany("Strutture")
+                        .HasForeignKey("UtenteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Struttura");
+
+                    b.Navigation("Utente");
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.Cliente", b =>
                 {
                     b.Navigation("Strutture");
@@ -1096,6 +1334,11 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("GestiSoft.Domain.Entities.Ospite", b =>
                 {
                     b.Navigation("Membri");
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.Utente", b =>
+                {
+                    b.Navigation("Strutture");
                 });
 #pragma warning restore 612, 618
         }

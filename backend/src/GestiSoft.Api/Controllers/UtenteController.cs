@@ -1,0 +1,45 @@
+using GestiSoft.Application.Auth;
+using GestiSoft.Application.Utenti;
+using GestiSoft.Contracts.Utenti;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GestiSoft.Api.Controllers;
+
+[ApiController]
+[Route("utenti")]
+[Authorize]
+public class UtenteController(UtenteManagementService service, ICurrentUser currentUser) : ControllerBase
+{
+    [HttpPost]
+    public async Task<IActionResult> Crea([FromBody] CreaUtenteRequest request, CancellationToken cancellationToken)
+    {
+        var utente = await service.CreaAsync(currentUser, request, cancellationToken);
+        var dto = new UtenteDto(utente.Id, utente.Email, utente.Nome, utente.Cognome, utente.IsSuperAdmin, utente.ClienteId, utente.Attivo);
+        return Ok(dto);
+    }
+
+    [HttpPut("{utenteId:guid}/strutture/{strutturaId:guid}/ruolo")]
+    public async Task<IActionResult> AssegnaRuolo(
+        Guid utenteId,
+        Guid strutturaId,
+        [FromBody] AssegnaRuoloRequest request,
+        CancellationToken cancellationToken)
+    {
+        var a = await service.AssegnaRuoloAsync(currentUser, utenteId, strutturaId, request, cancellationToken);
+        var dto = new UtenteStrutturaDto(
+            a.Id, a.UtenteId, a.StrutturaId, a.Ruolo,
+            a.BookingRead, a.BookingWrite, a.ReservationRead, a.ReservationWrite,
+            a.StatePoliceRead, a.StatePoliceWrite, a.StatePoliceSettings,
+            a.SettingAgency, a.SettingUser, a.SettingRoomRead, a.SettingRoomWrite, a.RoomStatusUpdate,
+            a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite);
+        return Ok(dto);
+    }
+
+    [HttpPost("me/cambia-password")]
+    public async Task<IActionResult> CambiaPassword([FromBody] CambiaPasswordRequest request, CancellationToken cancellationToken)
+    {
+        await service.CambiaPasswordAsync(currentUser, request, cancellationToken);
+        return NoContent();
+    }
+}

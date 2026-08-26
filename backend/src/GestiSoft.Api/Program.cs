@@ -1,9 +1,16 @@
+using System.Text;
 using System.Threading.RateLimiting;
+using GestiSoft.Api.Auth;
+using GestiSoft.Api.Middleware;
 using GestiSoft.Application;
+using GestiSoft.Application.Auth;
 using GestiSoft.Contracts.Health;
 using GestiSoft.Infrastructure;
+using GestiSoft.Infrastructure.Auth;
 using GestiSoft.Infrastructure.Seed;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,24 +21,60 @@ builder.Host.UseSerilog((context, configuration) => configuration
     .WriteTo.Console());
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    // Rete di sicurezza: i controller devono sempre restituire DTO (mai entità EF direttamente,
+    // per non rischiare di esporre campi sensibili come PasswordHash), ma se qualcuno se ne
+    // dimenticasse in futuro, meglio omettere il ciclo che rispondere con un 500.
+    options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+});
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
 
+// Gestione errori globale: risposta ProblemDetails con messaggio sicuro + correlationId,
+// dettaglio completo nei log (vedi GlobalExceptionHandler).
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
+// Autenticazione JWT + ICurrentUser (letto dai claim per l'intera richiesta).
+var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
+var jwtOptions = jwtSection.Get<JwtOptions>() ?? throw new InvalidOperationException("Sezione 'Jwt' non configurata.");
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Senza questo, ASP.NET Core rimappa i claim standard ("sub", "email") su URI lunghi
+        // legacy per compatibilità storica, diversi da quelli letti in HttpContextCurrentUser.
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtOptions.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwtOptions.Audience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30),
+        };
+    });
+builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
+
 // Rate limiting per-tenant: evita che un singolo Cliente saturi il gestionale a danno degli
-// altri, dato che ora è un'unica applicazione condivisa multi-tenant (non più un'installazione
-// per cliente). Prima dell'autenticazione (Fase 2) la partizione è per IP; una volta introdotto
-// il JWT, va ripartita per ClienteId preso dai claim, così il limite segue davvero il tenant e
-// non l'indirizzo di rete (che può essere condiviso, es. NAT).
+// altri, dato che è un'unica applicazione condivisa multi-tenant (non un'installazione per
+// cliente). Partizionato per cliente_id quando l'utente è autenticato, altrimenti per IP.
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
-        var partitionKey = httpContext.User.FindFirst("cliente_id")?.Value
+        var partitionKey = httpContext.User.FindFirst(AppClaimTypes.ClienteId)?.Value
             ?? httpContext.Connection.RemoteIpAddress?.ToString()
             ?? "unknown";
 
@@ -56,12 +99,16 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Popola le tabelle di riferimento condivise (Comuni/Stati/Documenti/TipoAlloggiato) se vuote —
-// idempotente, non richiede alcun file esterno (sostituisce il path assoluto Windows del legacy).
+// Popola i dati di base se assenti (idempotente, non richiede alcun file esterno):
+// tabelle di riferimento Alloggiati Web + primo Super Admin (da configurazione, non hardcoded
+// come "admin"/"admin" del legacy).
 using (var startupScope = app.Services.CreateScope())
 {
-    var seeder = startupScope.ServiceProvider.GetRequiredService<ReferenceDataSeeder>();
-    await seeder.SeedAsync();
+    var referenceDataSeeder = startupScope.ServiceProvider.GetRequiredService<ReferenceDataSeeder>();
+    await referenceDataSeeder.SeedAsync();
+
+    var identitySeeder = startupScope.ServiceProvider.GetRequiredService<IdentitySeeder>();
+    await identitySeeder.SeedAsync();
 }
 
 // Configure the HTTP request pipeline.
@@ -70,9 +117,11 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseCors("Frontend");
 app.UseRateLimiter();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

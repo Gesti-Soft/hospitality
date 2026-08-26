@@ -44,6 +44,14 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
 
     public DbSet<TipoAlloggiato> TipiAlloggiato => Set<TipoAlloggiato>();
 
+    public DbSet<Utente> Utenti => Set<Utente>();
+
+    public DbSet<UtenteStruttura> UtentiStrutture => Set<UtenteStruttura>();
+
+    public DbSet<ImpostazioniStruttura> ImpostazioniStruttura => Set<ImpostazioniStruttura>();
+
+    public DbSet<LogEvento> LogEventi => Set<LogEvento>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GestiSoftDbContext).Assembly);

@@ -30,6 +30,14 @@ services:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
       Frontend__Origin: ${FRONTEND_ORIGIN:-http://localhost:8081}
+      Jwt__Issuer: ${JWT_ISSUER:-GestiSoft.Gestionale}
+      Jwt__Audience: ${JWT_AUDIENCE:-GestiSoft.Gestionale.Client}
+      Jwt__Secret: ${JWT_SECRET:?set JWT_SECRET (almeno 32 caratteri casuali)}
+      Jwt__LifetimeMinutes: ${JWT_LIFETIME_MINUTES:-60}
+      # Letti solo al primissimo avvio per creare il Super Admin iniziale (poi la password vive
+      # solo come hash in DB, questi valori non vengono più consultati) — vedi IdentitySeeder.
+      SuperAdmin__Email: ${SUPERADMIN_EMAIL:-}
+      SuperAdmin__Password: ${SUPERADMIN_PASSWORD:-}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-5080}:8080"
 

@@ -6,4 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Solo per riusare gli enum di dominio (es. RuoloUtente) nei DTO verso il frontend, niente
+         altro da Domain: i Contracts restano "forma sul filo", non entità EF. -->
+    <ProjectReference Include="..\GestiSoft.Domain\GestiSoft.Domain.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -1,5 +1,14 @@
+using GestiSoft.Application.Auth;
+using GestiSoft.Application.Clienti;
+using GestiSoft.Application.Impostazioni;
+using GestiSoft.Application.Logging;
+using GestiSoft.Application.Utenti;
+using GestiSoft.Domain.Entities;
+using GestiSoft.Infrastructure.Auth;
 using GestiSoft.Infrastructure.Persistence;
+using GestiSoft.Infrastructure.Repositories;
 using GestiSoft.Infrastructure.Seed;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +25,17 @@ public static class DependencyInjection
 
         services.AddDbContext<GestiSoftDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<ReferenceDataSeeder>();
+        services.AddScoped<IdentitySeeder>();
+
+        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.AddScoped<IUtenteRepository, UtenteRepository>();
+        services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddScoped<ILogEventoRepository, LogEventoRepository>();
+        services.AddScoped<IStrutturaRepository, StrutturaRepository>();
+        services.AddScoped<IImpostazioniStrutturaRepository, ImpostazioniStrutturaRepository>();
+        services.AddScoped<IClienteRepository, ClienteRepository>();
+        services.AddScoped<IUtenteStrutturaRepository, UtenteStrutturaRepository>();
+        services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
 
         return services;
     }
