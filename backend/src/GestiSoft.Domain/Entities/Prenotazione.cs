@@ -46,4 +46,13 @@ public class Prenotazione : TenantEntity
     public decimal? TotalTax { get; set; }
 
     public StatoPrenotazione? StatoPrenotazione { get; set; }
+
+    /// <summary>
+    /// Id prenotazione lato Wubook (rcode/reservation_code), usato come chiave di deduplica nel
+    /// pull da fetch_new_bookings/fetch_booking. Il legacy deduplicava per valore su
+    /// NumeroPrenotazione (stringa, ChannelReservationCode) — fragile perché quel campo è anche il
+    /// numero mostrato all'operatore e può collidere tra canali diversi. Null per le prenotazioni
+    /// create manualmente/non da OTA.
+    /// </summary>
+    public int? IdPrenotazioneWubook { get; set; }
 }

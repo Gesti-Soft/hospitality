@@ -18,6 +18,11 @@ public class PrenotazioneConfiguration : IEntityTypeConfiguration<Prenotazione>
 
         builder.HasIndex(p => new { p.StrutturaId, p.CheckIn, p.CheckOut });
 
+        // Chiave di deduplica per il pull da Wubook — filtrato perché le prenotazioni non-OTA hanno IdPrenotazioneWubook null.
+        builder.HasIndex(p => new { p.StrutturaId, p.IdPrenotazioneWubook })
+            .IsUnique()
+            .HasFilter("\"IdPrenotazioneWubook\" IS NOT NULL");
+
         builder.HasOne(p => p.Camera)
             .WithMany()
             .HasForeignKey(p => p.CameraId)

@@ -8,12 +8,14 @@ using GestiSoft.Application.Logging;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Utenti;
+using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Infrastructure.Auth;
 using GestiSoft.Infrastructure.Fatturazione;
 using GestiSoft.Infrastructure.Persistence;
 using GestiSoft.Infrastructure.Repositories;
 using GestiSoft.Infrastructure.Seed;
+using GestiSoft.Infrastructure.Wubook;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -55,7 +57,23 @@ public static class DependencyInjection
         services.AddScoped<IDatiClienteRepository, DatiClienteRepository>();
         services.AddScoped<IDatiFatturaRepository, DatiFatturaRepository>();
         services.AddScoped<IFatturaDocumentGenerator, FatturaDocumentGenerator>();
+        services.AddScoped<IWubookIntegrazioneRepository, WubookIntegrazioneRepository>();
         services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
+
+        // Backend esterno "gestisoft" (licenze/abbonamenti, già in produzione): il legacy leggeva
+        // l'URL da una env var letta a runtime chiamata letteralmente "gestisoft"; qui passa da
+        // configurazione standard (Gestisoft:BaseUrl / env var Gestisoft__BaseUrl). Non configurato
+        // per default in dev: se mancante, le chiamate falliscono solo quando l'integrazione Wubook
+        // viene effettivamente usata, non bloccano l'avvio dell'Api.
+        var gestisoftBaseUrl = configuration["Gestisoft:BaseUrl"];
+        services.AddHttpClient<IGestisoftLicenzaClient, GestisoftLicenzaClient>(client =>
+        {
+            if (!string.IsNullOrWhiteSpace(gestisoftBaseUrl))
+            {
+                client.BaseAddress = new Uri(gestisoftBaseUrl.TrimEnd('/') + "/");
+            }
+        });
+        services.AddHttpClient<IWubookClient, WubookXmlRpcClient>();
 
         return services;
     }

@@ -31,6 +31,30 @@ try
             .ForJob(heartbeatJobKey)
             .WithIdentity("heartbeat-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
+
+        // Fase 5 — Integrazione Wubook: stessa cadenza del legacy (GetWobook all'avvio + ogni 2h,
+        // hour timer per il pull prenotazioni, minute timer per gli eventi via gestisoft.it).
+        var wubookLicenzaJobKey = new JobKey("wubook-licenza-refresh");
+        quartz.AddJob<WubookLicenzaRefreshJob>(options => options.WithIdentity(wubookLicenzaJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(wubookLicenzaJobKey)
+            .WithIdentity("wubook-licenza-refresh-trigger")
+            .StartNow()
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(2).RepeatForever()));
+
+        var wubookPullJobKey = new JobKey("wubook-pull-prenotazioni");
+        quartz.AddJob<WubookPullPrenotazioniJob>(options => options.WithIdentity(wubookPullJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(wubookPullJobKey)
+            .WithIdentity("wubook-pull-prenotazioni-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(1).RepeatForever()));
+
+        var wubookEventiJobKey = new JobKey("wubook-eventi-polling");
+        quartz.AddJob<WubookEventiPollingJob>(options => options.WithIdentity(wubookEventiJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(wubookEventiJobKey)
+            .WithIdentity("wubook-eventi-polling-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 

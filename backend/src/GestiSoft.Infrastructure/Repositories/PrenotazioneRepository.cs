@@ -71,6 +71,24 @@ public class PrenotazioneRepository(GestiSoftDbContext db) : IPrenotazioneReposi
             .Where(p => p.StrutturaId == strutturaId && p.Anno == anno && p.StatoPrenotazione != StatoPrenotazione.Annullata)
             .SumAsync(p => p.ImportoPagato ?? 0, cancellationToken);
 
+    public async Task<IReadOnlyList<Prenotazione>> ListOccupazioneAsync(Guid strutturaId, Guid cameraId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken)
+    {
+        dataInizio = DateTime.SpecifyKind(dataInizio, DateTimeKind.Utc);
+        dataFine = DateTime.SpecifyKind(dataFine, DateTimeKind.Utc);
+
+        return await db.Prenotazioni.AsNoTracking()
+            .Where(p => p.StrutturaId == strutturaId
+                && p.CameraId == cameraId
+                && p.StatoPrenotazione != StatoPrenotazione.Annullata
+                && p.CheckIn != null && p.CheckOut != null
+                && p.CheckIn.Value.Date < dataFine
+                && p.CheckOut.Value.Date > dataInizio)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<Prenotazione?> GetByIdPrenotazioneWubookAsync(Guid strutturaId, int idPrenotazioneWubook, CancellationToken cancellationToken) =>
+        db.Prenotazioni.FirstOrDefaultAsync(p => p.StrutturaId == strutturaId && p.IdPrenotazioneWubook == idPrenotazioneWubook, cancellationToken);
+
     public async Task AddAsync(Prenotazione entity, CancellationToken cancellationToken)
     {
         db.Prenotazioni.Add(entity);

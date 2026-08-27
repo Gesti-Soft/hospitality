@@ -9,6 +9,7 @@ using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Strutture;
 using GestiSoft.Application.Utenti;
+using GestiSoft.Application.Wubook;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GestiSoft.Application;
@@ -39,6 +40,12 @@ public static class DependencyInjection
         services.AddScoped<DatiAziendaliService>();
         services.AddScoped<DatiClienteService>();
         services.AddScoped<FatturazioneService>();
+        services.AddScoped<WubookLicenzaService>();
+        services.AddScoped<WubookCamereService>();
+        services.AddScoped<WubookPrezziService>();
+        services.AddScoped<WubookDisponibilitaService>();
+        services.AddScoped<WubookPrenotazioniService>();
+        services.AddScoped<WubookEventiService>();
 
         return services;
     }

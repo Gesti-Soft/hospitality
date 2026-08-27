@@ -33,6 +33,11 @@ public interface IPrenotazioneRepository
     /// <summary>Somma ImportoPagato delle prenotazioni non annullate dell'anno — usata dal riepilogo cassa di Fase 4.</summary>
     Task<decimal> SommaImportoPagatoAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
 
+    /// <summary>Prenotazioni non annullate di una camera che si sovrappongono al periodo — usata dalla sincronizzazione disponibilità Wubook di Fase 5.</summary>
+    Task<IReadOnlyList<Prenotazione>> ListOccupazioneAsync(Guid strutturaId, Guid cameraId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken);
+
+    Task<Prenotazione?> GetByIdPrenotazioneWubookAsync(Guid strutturaId, int idPrenotazioneWubook, CancellationToken cancellationToken);
+
     Task AddAsync(Prenotazione entity, CancellationToken cancellationToken);
 
     Task UpdateAsync(Prenotazione entity, CancellationToken cancellationToken);

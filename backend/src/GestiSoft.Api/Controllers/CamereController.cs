@@ -42,5 +42,5 @@ public class CamereController(CamereService service, ICurrentUser currentUser) :
 
     private static CameraDto ToDto(SettingRoom r) => new(
         r.Id, r.StrutturaId, r.TipologiaId, r.Tipologia?.TipologiaCamera, r.StateRoom, r.Nome,
-        r.CapacitaOspiti, r.SoggiornoMinimo);
+        r.CapacitaOspiti, r.SoggiornoMinimo, r.IdCameraWubook, r.WubookAttiva);
 }
