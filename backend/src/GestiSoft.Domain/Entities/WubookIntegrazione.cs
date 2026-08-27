@@ -14,6 +14,11 @@ namespace GestiSoft.Domain.Entities;
 /// (username+token) era una sola per installazione (single-tenant); qui è per Struttura, decisione
 /// presa esplicitamente con l'utente. tokenWb/idWoBook non vengono MAI presi da configurazione
 /// locale: arrivano sempre, ad ogni rinnovo, dalla risposta di gestisoft.it/users/set-running.
+/// <see cref="IdPaytouristCache"/> (Fase 8) segue la stessa regola: è il "software_id" richiesto
+/// dall'API PayTourist, letto dalla stessa risposta (campo idPaytourist) invece di essere
+/// configurato a mano su una nuova entità PayTourist dedicata — su istruzione esplicita
+/// dell'utente, coerente col fatto che anche nel legacy questo valore arrivava, a monte, dallo
+/// stesso meccanismo di licenza (vedi Controller.Logic.StartUpLogic).
 /// </summary>
 public class WubookIntegrazione : TenantEntity
 {
@@ -30,6 +35,9 @@ public class WubookIntegrazione : TenantEntity
 
     /// <summary>Lcode Wubook (idWoBook) — cache dell'ultimo valore ricevuto da gestisoft.it, mai inserito a mano.</summary>
     public string? LcodeCache { get; set; }
+
+    /// <summary>Id Software PayTourist (idPaytourist) — cache dell'ultimo valore ricevuto da gestisoft.it, mai inserito a mano (Fase 8).</summary>
+    public string? IdPaytouristCache { get; set; }
 
     public DateTime? CacheAggiornataAtUtc { get; set; }
 

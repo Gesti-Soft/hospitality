@@ -16,6 +16,9 @@ public class ImpostazioniStrutturaRepository(GestiSoftDbContext db) : IImpostazi
     public async Task<IReadOnlyList<ImpostazioniStruttura>> ListAttivePerOsservatorioAsync(CancellationToken cancellationToken) =>
         await db.ImpostazioniStruttura.AsNoTracking().Where(i => i.OsservatorioAttivo).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<ImpostazioniStruttura>> ListAttivePerPayTouristAsync(CancellationToken cancellationToken) =>
+        await db.ImpostazioniStruttura.AsNoTracking().Where(i => i.PayTouristAttivo).ToListAsync(cancellationToken);
+
     public async Task UpsertAsync(ImpostazioniStruttura impostazioni, CancellationToken cancellationToken)
     {
         // Se l'entità è già tracciata (proviene da GetByStrutturaIdAsync sullo stesso DbContext

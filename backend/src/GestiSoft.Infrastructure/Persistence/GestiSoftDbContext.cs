@@ -63,6 +63,12 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
 
     public DbSet<OsservatorioInvio> OsservatorioInvii => Set<OsservatorioInvio>();
 
+    public DbSet<PayTouristIntegrazione> PayTouristIntegrazioni => Set<PayTouristIntegrazione>();
+
+    public DbSet<PayTouristStruttura> PayTouristStrutture => Set<PayTouristStruttura>();
+
+    public DbSet<PayTouristStrutturaTipologia> PayTouristStruttureTipologie => Set<PayTouristStrutturaTipologia>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GestiSoftDbContext).Assembly);

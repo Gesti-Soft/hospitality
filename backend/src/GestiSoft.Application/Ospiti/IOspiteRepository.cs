@@ -31,6 +31,16 @@ public interface IOspiteRepository
     /// </summary>
     Task<IReadOnlyList<Ospite>> ListCheckoutOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime data, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Ospiti di prenotazioni già completate (check-out effettuato, <c>StatoPrenotazione.Completata</c>)
+    /// non ancora inviate a PayTourist (<c>Prenotazione.PayTourist==false</c>), con check-out negli
+    /// ultimi 7 giorni, sulle sole tipologie camera indicate (la "struttura PayTourist" a cui
+    /// instradarli) — porta <c>OspitiLogic.GetPayTourist</c> del legacy 1:1, finestra mobile di 7
+    /// giorni inclusa (nessun meccanismo di recupero oltre quella finestra, fedele al legacy — vedi
+    /// PayTouristInvioService).
+    /// </summary>
+    Task<IReadOnlyList<Ospite>> ListDaInviarePayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken);
+
     void Add(Ospite entity);
 
     /// <summary>

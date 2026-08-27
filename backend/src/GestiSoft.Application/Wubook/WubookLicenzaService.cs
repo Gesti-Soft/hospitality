@@ -64,6 +64,7 @@ public class WubookLicenzaService(
 
         integrazione.ApiKeyCache = risultato.TokenWb;
         integrazione.LcodeCache = risultato.IdWoBook;
+        integrazione.IdPaytouristCache = risultato.IdPaytourist;
         integrazione.CacheAggiornataAtUtc = DateTime.UtcNow;
         integrazione.UltimoErrore = null;
 
@@ -94,5 +95,32 @@ public class WubookLicenzaService(
         }
 
         return (integrazione.ApiKeyCache, integrazione.LcodeCache);
+    }
+
+    /// <summary>
+    /// Id Software PayTourist (Fase 8) — stessa cache/rinnovo di <see cref="GetCredenzialiValideAsync"/>
+    /// ma, a differenza di quella, NON richiede <see cref="WubookIntegrazione.Attivo"/> (che gate
+    /// solo la sincronizzazione Wubook): basta che la licenza gestisoft.it (username/token) sia
+    /// configurata su questa Struttura, indipendentemente dal fatto che usi anche Wubook o meno —
+    /// idPaytourist arriva dalla stessa risposta di set-running ma è concettualmente un dato di
+    /// licenza generale, non specifico di Wubook.
+    /// </summary>
+    public async Task<int> GetIdPaytouristAsync(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var integrazione = await repository.GetByStrutturaIdAsync(strutturaId, cancellationToken)
+            ?? throw new ConflictException("Licenza gestisoft.it non configurata per questa struttura.");
+
+        var cacheValida = integrazione.CacheAggiornataAtUtc is { } aggiornata && DateTime.UtcNow - aggiornata < ScadenzaCache;
+        if (!cacheValida)
+        {
+            integrazione = await RinnovaCredenzialiAsync(integrazione, cancellationToken);
+        }
+
+        if (!int.TryParse(integrazione.IdPaytouristCache, out var idPaytourist) || idPaytourist <= 0)
+        {
+            throw new ConflictException(integrazione.UltimoErrore ?? "Id Software PayTourist non disponibile per questa struttura.");
+        }
+
+        return idPaytourist;
     }
 }

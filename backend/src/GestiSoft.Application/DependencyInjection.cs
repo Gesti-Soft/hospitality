@@ -8,6 +8,7 @@ using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
 using GestiSoft.Application.Osservatorio;
 using GestiSoft.Application.Ospiti;
+using GestiSoft.Application.PayTourist;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Strutture;
 using GestiSoft.Application.Utenti;
@@ -52,6 +53,8 @@ public static class DependencyInjection
         services.AddScoped<AlloggiatiWebInvioService>();
         services.AddScoped<OsservatorioConfigService>();
         services.AddScoped<OsservatorioInvioService>();
+        services.AddScoped<PayTouristConfigService>();
+        services.AddScoped<PayTouristInvioService>();
 
         return services;
     }

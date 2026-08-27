@@ -8,6 +8,7 @@ using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
 using GestiSoft.Application.Osservatorio;
 using GestiSoft.Application.Ospiti;
+using GestiSoft.Application.PayTourist;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Utenti;
 using GestiSoft.Application.Wubook;
@@ -16,6 +17,7 @@ using GestiSoft.Infrastructure.AlloggiatiWeb;
 using GestiSoft.Infrastructure.Auth;
 using GestiSoft.Infrastructure.Fatturazione;
 using GestiSoft.Infrastructure.Osservatorio;
+using GestiSoft.Infrastructure.PayTourist;
 using GestiSoft.Infrastructure.Persistence;
 using GestiSoft.Infrastructure.Repositories;
 using GestiSoft.Infrastructure.Seed;
@@ -66,6 +68,8 @@ public static class DependencyInjection
         services.AddScoped<IAnagraficaAlloggiatiWebRepository, AnagraficaAlloggiatiWebRepository>();
         services.AddScoped<IOsservatorioAppartamentoRepository, OsservatorioAppartamentoRepository>();
         services.AddScoped<IOsservatorioInvioRepository, OsservatorioInvioRepository>();
+        services.AddScoped<IPayTouristIntegrazioneRepository, PayTouristIntegrazioneRepository>();
+        services.AddScoped<IPayTouristStrutturaRepository, PayTouristStrutturaRepository>();
         services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
 
         // Backend esterno "gestisoft" (licenze/abbonamenti, già in produzione): il legacy leggeva
@@ -106,6 +110,20 @@ public static class DependencyInjection
             if (!string.IsNullOrWhiteSpace(osservatorioBaseUrl))
             {
                 client.BaseAddress = new Uri(osservatorioBaseUrl.TrimEnd('/') + "/");
+            }
+        });
+
+        // PayTourist (Fase 8): il legacy leggeva l'endpoint dalla env var "EndpointPayTourist", mai
+        // hardcoded; qui passa da configurazione standard (PayTourist:BaseUrl / env var
+        // PayTourist__BaseUrl), stesso trattamento delle altre integrazioni esterne — non
+        // configurato per default in dev, le chiamate falliscono solo quando l'integrazione viene
+        // effettivamente usata.
+        var payTouristBaseUrl = configuration["PayTourist:BaseUrl"];
+        services.AddHttpClient<IPayTouristClient, PayTouristClient>(client =>
+        {
+            if (!string.IsNullOrWhiteSpace(payTouristBaseUrl))
+            {
+                client.BaseAddress = new Uri(payTouristBaseUrl.TrimEnd('/') + "/");
             }
         });
 

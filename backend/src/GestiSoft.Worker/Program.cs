@@ -73,6 +73,15 @@ try
             .ForJob(osservatorioJobKey)
             .WithIdentity("osservatorio-invio-giornaliero-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
+
+        // Fase 8 — Integrazione PayTourist: stesso orario condiviso di Alloggiati Web/Osservatorio,
+        // stesso controllo ogni minuto.
+        var payTouristJobKey = new JobKey("paytourist-invio-giornaliero");
+        quartz.AddJob<PayTouristInvioGiornalieroJob>(options => options.WithIdentity(payTouristJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(payTouristJobKey)
+            .WithIdentity("paytourist-invio-giornaliero-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 

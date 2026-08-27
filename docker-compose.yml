@@ -38,8 +38,10 @@ services:
       # solo come hash in DB, questi valori non vengono più consultati) — vedi IdentitySeeder.
       SuperAdmin__Email: ${SUPERADMIN_EMAIL:-}
       SuperAdmin__Password: ${SUPERADMIN_PASSWORD:-}
+      Gestisoft__BaseUrl: ${GESTISOFT_BASE_URL:-}
       AlloggiatiWeb__Endpoint: ${ALLOGGIATIWEB_ENDPOINT:-}
       Osservatorio__BaseUrl: ${OSSERVATORIO_BASE_URL:-}
+      PayTourist__BaseUrl: ${PAYTOURIST_BASE_URL:-}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-5080}:8080"
 
@@ -55,8 +57,10 @@ services:
     environment:
       DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      Gestisoft__BaseUrl: ${GESTISOFT_BASE_URL:-}
       AlloggiatiWeb__Endpoint: ${ALLOGGIATIWEB_ENDPOINT:-}
       Osservatorio__BaseUrl: ${OSSERVATORIO_BASE_URL:-}
+      PayTourist__BaseUrl: ${PAYTOURIST_BASE_URL:-}
 
   frontend:
     build:

@@ -28,4 +28,9 @@ public class AnagraficaAlloggiatiWebRepository(GestiSoftDbContext db) : IAnagraf
         await db.TipiAlloggiato.AsNoTracking()
             .Select(t => new VoceAnagrafica(t.Descrizione, t.Codice, null))
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<VoceDocumentoConTypeId>> ListDocumentiConTypeIdAsync(CancellationToken cancellationToken) =>
+        await db.DocumentiIdentita.AsNoTracking()
+            .Select(d => new VoceDocumentoConTypeId(d.Descrizione, d.TypeId))
+            .ToListAsync(cancellationToken);
 }
