@@ -1,6 +1,6 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-08-27 (Fase 3 completa — Camere & Prenotazioni)
+Ultimo aggiornamento: 2026-08-27 (Fase 4 completa — Finanze & Fatturazione)
 
 ## Dove si trova tutto
 
@@ -158,9 +158,30 @@ Tutto implementato e **verificato end-to-end su Docker via curl** (non solo comp
 - **`CameraDto.TipologiaNome`** risulta valorizzato nelle liste (join esplicito) ma può risultare `null` nella risposta di POST/PUT camera appena creata/modificata se EF non ha già in memoria l'entità `Tipologia` collegata — non un bug (i dati in DB sono corretti), solo un dettaglio di cui tenere conto nel frontend (rifare un GET lista se serve il nome subito).
 - **Booking board realtime (SignalR)**: era segnata "should-have" nel piano per la Fase 3, non implementata in questa sessione — richiederebbe anche uno strato frontend che non esiste ancora (Fase 9). Da valutare se aggiungerla ora lato solo-backend (hub pronto ma nessun client) o rimandare a quando si scrive il frontend.
 
+## Fatto — Fase 4 COMPLETA: Finanze & Fatturazione
+
+Tutto implementato e **verificato end-to-end su Docker via curl**: CRUD Spese/Entrate, riepilogo cassa, dati aziendali (profilo fiscale emittente), anagrafica clienti fatturabili con deduplicazione automatica, creazione fatture da prenotazione con numerazione progressiva corretta, download on-demand di PDF e XML fattura elettronica (SDI).
+
+37. **2 decisioni prese con l'utente prima di scrivere il codice**:
+    - `DatiFattura.Progressivo` — nel legacy non era mai valorizzato (bug: usava solo `NumeroDocumento` = MAX globale su tutta la tabella, senza filtro struttura/anno, mentre lo schema Fase 1 impone già un vincolo unique `(StrutturaId, Anno, Progressivo)`). **Implementato "nel modo corretto"** (istruzione esplicita dell'utente): vero contatore `MAX(Progressivo) WHERE StrutturaId=x AND Anno=y + 1`, con **retry su conflitto di concorrenza** (due fatture create in parallelo che otterrebbero lo stesso progressivo) — race condition che il legacy non gestiva affatto.
+    - **Documenti fattura (PDF e XML SDI) generati on-demand, mai persistiti sul server** — proposta dell'utente, adottata: l'operatore scarica quando serve, zero storage/pulizia file da gestire lato server. L'XML SDI (inizialmente rimandato, poi richiesto esplicitamente dall'utente con "posso scaricarlo anche io, poi lo carico manualmente") segue lo stesso schema del legacy (FatturaElettronica ordinaria, FPR12 verso privati) ma **riscritto a mano con `System.Xml.Linq`** invece di dipendere dalla vecchia libreria NuGet "FatturaElettronica" (compatibilità .NET 10 non verificata) — non validato contro l'XSD ufficiale SDI, nessun invio reale (l'utente carica il file dove serve, es. presso il proprio intermediario/commercialista).
+38. **3 nuovi moduli Application/Infrastructure/Contracts/Api**:
+    - `Finanze` (`FinanzeService`): CRUD Spese/Entrate (porta `FinanzeLogic` del legacy, puro CRUD senza regole di business, solo aggiunto lo scoping per Struttura assente nel legacy single-tenant), lista Cauzioni (estensione additiva di `ICauzioneRepository`, che finora esponeva solo `AddAsync` dal check-out di Fase 3 — non toccato), e `RiepilogoCassaAsync` (porta `FinanzeLogic.GetCassa`: incassi prenotazioni non annullate + cauzioni + entrate − spese, per anno, **verificato con numeri esatti**: -40,50€ = 0 + 50 cauzione + 30 entrata − 120,50 spesa).
+    - `Fatturazione` (`DatiAziendaliService`, `DatiClienteService`, `FatturazioneService`): `DatiAziendaliService` gestisce il profilo fiscale emittente (una riga per Struttura, come `Settings.GetDataAzienda()` del legacy). `DatiClienteService` è il CRUD manuale dell'anagrafica clienti. `FatturazioneService.CreaDaPrenotazioneAsync` è il cuore del modulo: porta `FatturazioneViewModel` del legacy — trova l'Ospite capofila della prenotazione, calcola `CustomerKey = "{NumeroDocumento}-{Nome}-{Cognome}-{DataNascita}"` (stessa formula del legacy) per deduplicare/riusare un `DatiCliente` esistente o crearne uno nuovo, calcola `ImportoTotale = Quantita × PrezzoUnitario × (1 + Aliquota%)` (stessa formula di `IvaChanged` del legacy). **Non portato**: il calcolo automatico del Codice Fiscale dall'anagrafica ospite (il legacy usava un generatore CF + tabella Belfiore) — l'operatore lo compila a mano, segnalato come TODO esplicito nel codice.
+    - `IFatturaDocumentGenerator` (`Infrastructure/Fatturazione/FatturaDocumentGenerator.cs`): PDF con **QuestPDF** (licenza Community, gratuita sotto 1M$ di fatturato — segnalato all'utente), layout nuovo (non esisteva nulla nel legacy); XML SDI scritto a mano come sopra.
+39. **Nessuna nuova migration EF Core**: lo schema Domain della Fase 1 (`Spesa`, `Entrata`, `Cauzione`, `DatiAziendali`, `DatiCliente`, `DatiFattura`) era già completo e corretto per questa fase, incluso il vincolo unique su `DatiFattura` che ha guidato la decisione sul vero progressivo.
+40. **Verifica end-to-end via curl**: spese/entrate create e filtrate per anno, dati aziendali aggiornati, due fatture create in sequenza dalla stessa prenotazione con **progressivo 1→2 verificato** e **stesso cliente riusato** (deduplicazione CustomerKey confermata), calcolo IVA verificato (2×50€×1,10 = 110€ esatti), PDF scaricato e verificato come documento PDF valido (`file` → "PDF document, version 1.4, 1 page(s)"), XML scaricato e verificato strutturalmente corretto (imposta 10,00€ = 110−100), permessi `FinanceRead`/`FinanceWrite` verificati con l'utente reception (403 su spese senza permesso, come da pattern Fase 3).
+41. Commit fatto in git (locale, nessun remote configurato — repo solo su questo PC).
+
+## Miglioramenti/gap noti della Fase 4 (segnalati, non ancora applicati)
+
+- **Calcolo automatico Codice Fiscale da anagrafica ospite**: il legacy lo calcolava (generatore CF + tabella Belfiore dei comuni) quando creava un `DatiCliente` da un Ospite; qui il campo resta vuoto, da compilare manualmente. Se serve, richiede un generatore CF dedicato + i codici Belfiore (l'entità `Comune` esiste dalla Fase 1, andrebbe verificato se ha già il codice Belfiore o solo il nome).
+- **XML SDI non validato contro l'XSD ufficiale**: la struttura è corretta "a occhio" (confrontata con lo schema standard e con quanto generava il legacy) ma non c'è validazione formale — se in futuro serve una generazione affidabile al 100% per un invio reale, andrebbe aggiunta la validazione XSD (o tornare a valutare una libreria dedicata, verificandone la compatibilità .NET 10).
+- **Nessun invio reale a SDI/PEC/intermediario**: come nel legacy, ci si ferma al file scaricabile. Se in futuro serve l'invio reale, è una funzionalità completamente nuova (canale SDI, firma digitale, gestione ricevute/scarti) da progettare a parte.
+
 ## Prossimi passi immediati (da riprendere qui)
 
-1. **Fase 4 — Finanze & Fatturazione**: spese/entrate/cauzioni (CRUD, `Cauzione` già scritto ma solo per l'uso interno del check-out), dati aziendali/cliente/fattura (repository completo di `DatiAziendali`, oggi c'è solo la lettura minima del Comune usata per la tassa di soggiorno), generazione fattura elettronica.
+1. **Fase 5 — Integrazione Wubook**: porting del client XML-RPC (`OtaService.Data/Repositories/OtaService/OtaServiceApiRepository.cs` nel legacy, già scritto con `HttpClient` puro, facilmente portabile) + i controller REST già esistenti in `OtaService.Web`. Nel `GestiSoft.Worker` (Quartz.NET, già scaffoldato in Fase 0): pull prenotazioni (hourly) + polling eventi (minute).
 2. Prima di procedere oltre, sarebbe utile decidere se scrivere test automatici (xunit, progetti già scaffoldati in Fase 0 ma ancora vuoti a parte il placeholder) per fissare il comportamento di auth/tenant-guard/permessi granulari prima che il codice cresca ulteriormente — non ancora deciso con l'utente.
 
 ## Note per Fase 3+ (pattern consolidati da riusare, non reinventare)

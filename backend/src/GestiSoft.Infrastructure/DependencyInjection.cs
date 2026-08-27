@@ -1,6 +1,8 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Clienti;
+using GestiSoft.Application.Fatturazione;
+using GestiSoft.Application.Finanze;
 using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
 using GestiSoft.Application.Ospiti;
@@ -8,6 +10,7 @@ using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Utenti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Infrastructure.Auth;
+using GestiSoft.Infrastructure.Fatturazione;
 using GestiSoft.Infrastructure.Persistence;
 using GestiSoft.Infrastructure.Repositories;
 using GestiSoft.Infrastructure.Seed;
@@ -46,6 +49,12 @@ public static class DependencyInjection
         services.AddScoped<ICauzioneRepository, CauzioneRepository>();
         services.AddScoped<IOspiteRepository, OspiteRepository>();
         services.AddScoped<IDatiAziendaliComuneRepository, DatiAziendaliComuneRepository>();
+        services.AddScoped<ISpesaRepository, SpesaRepository>();
+        services.AddScoped<IEntrataRepository, EntrataRepository>();
+        services.AddScoped<IDatiAziendaliRepository, DatiAziendaliRepository>();
+        services.AddScoped<IDatiClienteRepository, DatiClienteRepository>();
+        services.AddScoped<IDatiFatturaRepository, DatiFatturaRepository>();
+        services.AddScoped<IFatturaDocumentGenerator, FatturaDocumentGenerator>();
         services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
 
         return services;

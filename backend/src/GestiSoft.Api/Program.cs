@@ -11,7 +11,12 @@ using GestiSoft.Infrastructure.Seed;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
+using QuestPDF.Infrastructure;
 using Serilog;
+
+// Community license QuestPDF: gratuita per aziende sotto 1M$ di fatturato annuo — richiesta
+// esplicitamente dalla libreria prima di generare qualsiasi documento.
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 

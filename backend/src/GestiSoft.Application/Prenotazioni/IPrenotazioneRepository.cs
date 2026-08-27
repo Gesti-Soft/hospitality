@@ -30,6 +30,9 @@ public interface IPrenotazioneRepository
     /// <summary>Conteggio prenotazioni dirette (Agenzia == "Diretta") dell'anno, per il numero prenotazione suggerito.</summary>
     Task<int> ContaDireteAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
 
+    /// <summary>Somma ImportoPagato delle prenotazioni non annullate dell'anno — usata dal riepilogo cassa di Fase 4.</summary>
+    Task<decimal> SommaImportoPagatoAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
+
     Task AddAsync(Prenotazione entity, CancellationToken cancellationToken);
 
     Task UpdateAsync(Prenotazione entity, CancellationToken cancellationToken);

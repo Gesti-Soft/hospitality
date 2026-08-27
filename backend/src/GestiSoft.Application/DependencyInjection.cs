@@ -1,6 +1,8 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Clienti;
+using GestiSoft.Application.Fatturazione;
+using GestiSoft.Application.Finanze;
 using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
 using GestiSoft.Application.Ospiti;
@@ -33,6 +35,10 @@ public static class DependencyInjection
         services.AddScoped<CanaliVenditaService>();
         services.AddScoped<PrenotazioniService>();
         services.AddScoped<OspitiService>();
+        services.AddScoped<FinanzeService>();
+        services.AddScoped<DatiAziendaliService>();
+        services.AddScoped<DatiClienteService>();
+        services.AddScoped<FatturazioneService>();
 
         return services;
     }
