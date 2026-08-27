@@ -55,6 +55,14 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
 
     public DbSet<WubookIntegrazione> WubookIntegrazioni => Set<WubookIntegrazione>();
 
+    public DbSet<AlloggiatiWebIntegrazione> AlloggiatiWebIntegrazioni => Set<AlloggiatiWebIntegrazione>();
+
+    public DbSet<OsservatorioAppartamento> OsservatorioAppartamenti => Set<OsservatorioAppartamento>();
+
+    public DbSet<OsservatorioAppartamentoTipologia> OsservatorioAppartamentiTipologie => Set<OsservatorioAppartamentoTipologia>();
+
+    public DbSet<OsservatorioInvio> OsservatorioInvii => Set<OsservatorioInvio>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GestiSoftDbContext).Assembly);

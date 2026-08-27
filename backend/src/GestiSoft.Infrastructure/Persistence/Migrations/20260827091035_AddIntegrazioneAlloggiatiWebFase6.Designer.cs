@@ -3,6 +3,7 @@ using System;
 using GestiSoft.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestiSoft.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GestiSoftDbContext))]
-    partial class GestiSoftDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260827091035_AddIntegrazioneAlloggiatiWebFase6")]
+    partial class AddIntegrazioneAlloggiatiWebFase6
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -639,118 +642,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.HasIndex("StrutturaId");
 
                     b.ToTable("ospiti_righe", (string)null);
-                });
-
-            modelBuilder.Entity("GestiSoft.Domain.Entities.OsservatorioAppartamento", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("CursoreDataAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("EntityCode")
-                        .HasColumnType("text");
-
-                    b.Property<string>("HotelCode")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Nome")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Password")
-                        .HasColumnType("text");
-
-                    b.Property<int>("ProssimoStayIdProgressivo")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("StrutturaId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("UltimeSchedineInviate")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("UltimoErrore")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UltimoInvioAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StrutturaId");
-
-                    b.ToTable("osservatorio_appartamenti", (string)null);
-                });
-
-            modelBuilder.Entity("GestiSoft.Domain.Entities.OsservatorioAppartamentoTipologia", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("OsservatorioAppartamentoId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TipologiaId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TipologiaId");
-
-                    b.HasIndex("OsservatorioAppartamentoId", "TipologiaId")
-                        .IsUnique();
-
-                    b.ToTable("osservatorio_appartamenti_tipologie", (string)null);
-                });
-
-            modelBuilder.Entity("GestiSoft.Domain.Entities.OsservatorioInvio", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("DataInvioUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("GuestId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("OspiteRigaId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PrenotazioneId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("StayId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("StrutturaId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PrenotazioneId");
-
-                    b.HasIndex("StrutturaId");
-
-                    b.ToTable("osservatorio_invii", (string)null);
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.Prenotazione", b =>
@@ -1455,43 +1346,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Navigation("Ospite");
                 });
 
-            modelBuilder.Entity("GestiSoft.Domain.Entities.OsservatorioAppartamento", b =>
-                {
-                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
-                        .WithMany()
-                        .HasForeignKey("StrutturaId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("GestiSoft.Domain.Entities.OsservatorioAppartamentoTipologia", b =>
-                {
-                    b.HasOne("GestiSoft.Domain.Entities.OsservatorioAppartamento", "OsservatorioAppartamento")
-                        .WithMany("Tipologie")
-                        .HasForeignKey("OsservatorioAppartamentoId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("GestiSoft.Domain.Entities.SettingTipologia", "Tipologia")
-                        .WithMany()
-                        .HasForeignKey("TipologiaId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("OsservatorioAppartamento");
-
-                    b.Navigation("Tipologia");
-                });
-
-            modelBuilder.Entity("GestiSoft.Domain.Entities.OsservatorioInvio", b =>
-                {
-                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
-                        .WithMany()
-                        .HasForeignKey("StrutturaId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("GestiSoft.Domain.Entities.Prenotazione", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.SettingRoom", "Camera")
@@ -1613,11 +1467,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("GestiSoft.Domain.Entities.Ospite", b =>
                 {
                     b.Navigation("Membri");
-                });
-
-            modelBuilder.Entity("GestiSoft.Domain.Entities.OsservatorioAppartamento", b =>
-                {
-                    b.Navigation("Tipologie");
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.Utente", b =>

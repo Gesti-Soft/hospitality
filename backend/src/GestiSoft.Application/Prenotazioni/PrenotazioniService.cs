@@ -1,6 +1,7 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Ospiti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -41,6 +42,7 @@ public class PrenotazioniService(
     IPrenotazioneRepository prenotazioni,
     ICameraRepository camere,
     ICauzioneRepository cauzioni,
+    IOspiteRepository ospiti,
     PermessoStrutturaGuard permessoGuard)
 {
     public async Task<IReadOnlyList<Prenotazione>> ListaInArrivoAsync(ICurrentUser currentUser, Guid strutturaId, DateTime? daData, CancellationToken cancellationToken)
@@ -171,7 +173,10 @@ public class PrenotazioniService(
 
     /// <summary>
     /// Check-out: se il CheckOut previsto è nel futuro si tratta di un check-out anticipato (la
-    /// data viene aggiornata a oggi). Se la cauzione non viene restituita al cliente, viene
+    /// data viene aggiornata a oggi, e la Permanenza sulla scheda Ospiti viene ricalcolata di
+    /// conseguenza — il legacy propagava questo ricalcolo in ChangeRoomStatus, gap segnalato nel
+    /// report di Fase 3 e chiuso qui perché la Permanenza per-ospite conta per la schedina
+    /// Alloggiati Web di questa Fase 6). Se la cauzione non viene restituita al cliente, viene
     /// registrato un movimento Cauzione. La camera passa sempre a DaPulire — il legacy aveva un
     /// bypass a Pronta se l'integrazione desktop "SyncMobile" non era installata, concetto che
     /// non esiste più nella versione web.
@@ -184,9 +189,10 @@ public class PrenotazioniService(
         var camera = await GetCameraDellaPrenotazioneAsync(prenotazione, cancellationToken);
 
         var oggi = DateTime.UtcNow.Date;
-        if (prenotazione.CheckOut is { } checkOutPrevisto && checkOutPrevisto.Date > oggi)
+        if (prenotazione.CheckOut is { } checkOutPrevisto && checkOutPrevisto.Date > oggi && prenotazione.CheckIn is { } checkIn)
         {
             prenotazione.CheckOut = oggi;
+            await RicalcolaPermanenzaAsync(prenotazione.Id, checkIn.Date, oggi, cancellationToken);
         }
 
         if (!request.RestituisciCauzione && request.ImportoCauzioneTrattenuta is { } importo && importo > 0)
@@ -241,6 +247,28 @@ public class PrenotazioniService(
         await camere.UpdateAsync(camera, cancellationToken);
         await prenotazioni.UpdateAsync(prenotazione, cancellationToken);
         return camera;
+    }
+
+    /// <summary>Ricalcola Permanenza sulla scheda Ospiti (capofamiglia + membri) dopo un check-out anticipato.</summary>
+    private async Task RicalcolaPermanenzaAsync(Guid prenotazioneId, DateTime checkIn, DateTime nuovoCheckOut, CancellationToken cancellationToken)
+    {
+        var ospite = await ospiti.GetByPrenotazioneAsync(prenotazioneId, cancellationToken);
+        if (ospite is null)
+        {
+            return;
+        }
+
+        var permanenza = Math.Max((nuovoCheckOut - checkIn).Days, 0);
+        ospite.Permanenza = permanenza;
+        ospite.UpdatedAtUtc = DateTime.UtcNow;
+
+        foreach (var membro in ospite.Membri)
+        {
+            membro.Permanenza = permanenza;
+            membro.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        await ospiti.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<SettingRoom> GetCameraDellaPrenotazioneAsync(Prenotazione prenotazione, CancellationToken cancellationToken)

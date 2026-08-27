@@ -10,6 +10,12 @@ public class ImpostazioniStrutturaRepository(GestiSoftDbContext db) : IImpostazi
     public Task<ImpostazioniStruttura?> GetByStrutturaIdAsync(Guid strutturaId, CancellationToken cancellationToken) =>
         db.ImpostazioniStruttura.FirstOrDefaultAsync(i => i.StrutturaId == strutturaId, cancellationToken);
 
+    public async Task<IReadOnlyList<ImpostazioniStruttura>> ListAttivePerPoliziaAsync(CancellationToken cancellationToken) =>
+        await db.ImpostazioniStruttura.AsNoTracking().Where(i => i.PoliziaStatoAttiva).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<ImpostazioniStruttura>> ListAttivePerOsservatorioAsync(CancellationToken cancellationToken) =>
+        await db.ImpostazioniStruttura.AsNoTracking().Where(i => i.OsservatorioAttivo).ToListAsync(cancellationToken);
+
     public async Task UpsertAsync(ImpostazioniStruttura impostazioni, CancellationToken cancellationToken)
     {
         // Se l'entità è già tracciata (proviene da GetByStrutturaIdAsync sullo stesso DbContext

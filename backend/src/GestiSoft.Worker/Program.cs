@@ -55,6 +55,24 @@ try
             .ForJob(wubookEventiJobKey)
             .WithIdentity("wubook-eventi-polling-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
+
+        // Fase 6 — Integrazione Alloggiati Web: porta lo StartDailyTaskTimer del legacy (controllo
+        // ogni minuto se è stata raggiunta l'ora di invio configurata per struttura).
+        var alloggiatiWebJobKey = new JobKey("alloggiati-web-invio-giornaliero");
+        quartz.AddJob<AlloggiatiWebInvioGiornalieroJob>(options => options.WithIdentity(alloggiatiWebJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(alloggiatiWebJobKey)
+            .WithIdentity("alloggiati-web-invio-giornaliero-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
+
+        // Fase 7 — Integrazione Osservatorio Turistico: stesso orario configurato di Alloggiati Web,
+        // stesso controllo ogni minuto.
+        var osservatorioJobKey = new JobKey("osservatorio-invio-giornaliero");
+        quartz.AddJob<OsservatorioInvioGiornalieroJob>(options => options.WithIdentity(osservatorioJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(osservatorioJobKey)
+            .WithIdentity("osservatorio-invio-giornaliero-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 

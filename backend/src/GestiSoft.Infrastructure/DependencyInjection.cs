@@ -1,3 +1,4 @@
+using GestiSoft.Application.AlloggiatiWeb;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Clienti;
@@ -5,13 +6,16 @@ using GestiSoft.Application.Fatturazione;
 using GestiSoft.Application.Finanze;
 using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Osservatorio;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Utenti;
 using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Infrastructure.AlloggiatiWeb;
 using GestiSoft.Infrastructure.Auth;
 using GestiSoft.Infrastructure.Fatturazione;
+using GestiSoft.Infrastructure.Osservatorio;
 using GestiSoft.Infrastructure.Persistence;
 using GestiSoft.Infrastructure.Repositories;
 using GestiSoft.Infrastructure.Seed;
@@ -58,6 +62,10 @@ public static class DependencyInjection
         services.AddScoped<IDatiFatturaRepository, DatiFatturaRepository>();
         services.AddScoped<IFatturaDocumentGenerator, FatturaDocumentGenerator>();
         services.AddScoped<IWubookIntegrazioneRepository, WubookIntegrazioneRepository>();
+        services.AddScoped<IAlloggiatiWebIntegrazioneRepository, AlloggiatiWebIntegrazioneRepository>();
+        services.AddScoped<IAnagraficaAlloggiatiWebRepository, AnagraficaAlloggiatiWebRepository>();
+        services.AddScoped<IOsservatorioAppartamentoRepository, OsservatorioAppartamentoRepository>();
+        services.AddScoped<IOsservatorioInvioRepository, OsservatorioInvioRepository>();
         services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
 
         // Backend esterno "gestisoft" (licenze/abbonamenti, già in produzione): il legacy leggeva
@@ -74,6 +82,32 @@ public static class DependencyInjection
             }
         });
         services.AddHttpClient<IWubookClient, WubookXmlRpcClient>();
+
+        // Servizio SOAP "Alloggiati Web" della Polizia di Stato (Fase 6): il legacy leggeva
+        // l'endpoint da una env var ("EndPointPM") mai hardcoded nel codice; qui passa da
+        // configurazione standard (AlloggiatiWeb:Endpoint / env var AlloggiatiWeb__Endpoint), non
+        // configurato per default in dev — se mancante, le chiamate falliscono solo quando
+        // l'integrazione viene effettivamente usata, non bloccano l'avvio dell'Api/Worker.
+        var alloggiatiWebEndpoint = configuration["AlloggiatiWeb:Endpoint"];
+        services.AddHttpClient<IAlloggiatiWebClient, AlloggiatiWebSoapClient>(client =>
+        {
+            if (!string.IsNullOrWhiteSpace(alloggiatiWebEndpoint))
+            {
+                client.BaseAddress = new Uri(alloggiatiWebEndpoint);
+            }
+        });
+
+        // Osservatorio Turistico (Fase 7): il legacy leggeva l'endpoint dalla env var "EndPointPMS",
+        // mai hardcoded; qui passa da configurazione standard (Osservatorio:BaseUrl / env var
+        // Osservatorio__BaseUrl), stesso trattamento delle altre integrazioni esterne.
+        var osservatorioBaseUrl = configuration["Osservatorio:BaseUrl"];
+        services.AddHttpClient<IOsservatorioClient, OsservatorioClient>(client =>
+        {
+            if (!string.IsNullOrWhiteSpace(osservatorioBaseUrl))
+            {
+                client.BaseAddress = new Uri(osservatorioBaseUrl.TrimEnd('/') + "/");
+            }
+        });
 
         return services;
     }

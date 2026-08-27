@@ -1,3 +1,4 @@
+using GestiSoft.Application.AlloggiatiWeb;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Clienti;
@@ -5,6 +6,7 @@ using GestiSoft.Application.Fatturazione;
 using GestiSoft.Application.Finanze;
 using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Osservatorio;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Strutture;
@@ -46,6 +48,10 @@ public static class DependencyInjection
         services.AddScoped<WubookDisponibilitaService>();
         services.AddScoped<WubookPrenotazioniService>();
         services.AddScoped<WubookEventiService>();
+        services.AddScoped<AlloggiatiWebConfigService>();
+        services.AddScoped<AlloggiatiWebInvioService>();
+        services.AddScoped<OsservatorioConfigService>();
+        services.AddScoped<OsservatorioInvioService>();
 
         return services;
     }

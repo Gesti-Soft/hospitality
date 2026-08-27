@@ -20,10 +20,19 @@ public class WubookLicenzaRefreshJob(
         var attive = await integrazioni.ListAttiveAsync(context.CancellationToken);
         logger.LogInformation("Rinnovo credenziali Wubook: {count} strutture attive", attive.Count);
 
-        foreach (var integrazione in attive)
+        foreach (var integrazioneNonTracciata in attive)
         {
             try
             {
+                // Bug trovato testando live durante la Fase 6: ListAttiveAsync legge con
+                // AsNoTracking, quindi passare quell'istanza direttamente a RinnovaCredenzialiAsync
+                // (che internamente fa un Upsert) la faceva risultare "Detached" anche se la riga
+                // esisteva già in DB, causando un INSERT con PK duplicata invece di un UPDATE — si
+                // ripresentava ad ogni ciclo di rinnovo (ogni 2h) per qualunque struttura già
+                // configurata. Corretto ri-agganciando l'entità tracciata prima del rinnovo.
+                var integrazione = await integrazioni.GetByStrutturaIdAsync(integrazioneNonTracciata.StrutturaId, context.CancellationToken)
+                    ?? integrazioneNonTracciata;
+
                 var aggiornata = await licenzaService.RinnovaCredenzialiAsync(integrazione, context.CancellationToken);
                 if (aggiornata.UltimoErrore is { } errore)
                 {
@@ -32,7 +41,7 @@ public class WubookLicenzaRefreshJob(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Rinnovo credenziali Wubook: eccezione per struttura {strutturaId}", integrazione.StrutturaId);
+                logger.LogError(ex, "Rinnovo credenziali Wubook: eccezione per struttura {strutturaId}", integrazioneNonTracciata.StrutturaId);
             }
         }
     }
