@@ -1,5 +1,7 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Logging;
+using GestiSoft.Contracts.Logging;
+using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -26,6 +28,9 @@ public class LogController(ILogEventoService logEventoService, ICurrentUser curr
         var filtro = new LogEventoFiltro(clienteId, strutturaId, livello, page, pageSize);
         var risultato = await logEventoService.CercaAsync(filtro, cancellationToken);
 
-        return Ok(risultato);
+        return Ok(new PagedResultDto<LogEventoDto>(risultato.Items.Select(ToDto).ToList(), risultato.TotalCount, risultato.Page, risultato.PageSize));
     }
+
+    private static LogEventoDto ToDto(LogEvento e) => new(
+        e.Id, e.ClienteId, e.StrutturaId, e.Livello, e.Messaggio, e.Dettaglio, e.CorrelationId, e.Origine, e.CreatedAtUtc);
 }

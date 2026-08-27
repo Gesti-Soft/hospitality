@@ -13,6 +13,9 @@ public class UtenteRepository(GestiSoftDbContext db) : IUtenteRepository
     public Task<Utente?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         db.Utenti.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<Utente>> ListByClienteIdAsync(Guid clienteId, CancellationToken cancellationToken) =>
+        await db.Utenti.AsNoTracking().Where(u => u.ClienteId == clienteId).OrderBy(u => u.Email).ToListAsync(cancellationToken);
+
     public async Task AddAsync(Utente utente, CancellationToken cancellationToken)
     {
         db.Utenti.Add(utente);

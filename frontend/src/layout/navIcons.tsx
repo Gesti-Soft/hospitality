@@ -1,0 +1,152 @@
+import type { SVGProps } from 'react'
+
+type IconProps = SVGProps<SVGSVGElement>
+
+const base = { width: 17, height: 17, viewBox: '0 0 18 18', fill: 'none' } as const
+
+export function IconCruscotto(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2" y="2" width="6" height="6" rx="1.3" stroke="currentColor" strokeWidth={1.6} />
+      <rect x="10" y="2" width="6" height="6" rx="1.3" stroke="currentColor" strokeWidth={1.6} />
+      <rect x="2" y="10" width="6" height="6" rx="1.3" stroke="currentColor" strokeWidth={1.6} />
+      <rect x="10" y="10" width="6" height="6" rx="1.3" stroke="currentColor" strokeWidth={1.6} />
+    </svg>
+  )
+}
+
+export function IconCalendario(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2" y="3.5" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M2 7H16M6 2V4.5M12 2V4.5" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconCamere(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M2 10V13.5H16V10" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M2.5 10V7.6C2.5 6.7 3.2 6 4.1 6H13.9C14.8 6 15.5 6.7 15.5 7.6V10" stroke="currentColor" strokeWidth={1.5} />
+      <circle cx="5.3" cy="8.2" r="1" stroke="currentColor" strokeWidth={1.3} />
+      <path d="M2 13.5V15M16 13.5V15" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconOspiti(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M3 16C3 12.7 5.7 11 9 11C12.3 11 15 12.7 15 16" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconFinanze(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2" y="4.5" width="14" height="9.5" rx="1.6" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M2 8H16" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M12 8V11" stroke="currentColor" strokeWidth={1.5} />
+    </svg>
+  )
+}
+
+export function IconFatturazione(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4.5 2H12L14.5 4.5V16H4.5V2Z" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" />
+      <path d="M6.8 8H12.2M6.8 11H12.2" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconPolizia(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 2L15 4.5V9C15 12.6 12.4 15 9 16C5.6 15 3 12.6 3 9V4.5L9 2Z" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function IconOsservatorio(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="9" cy="9" r="1.6" stroke="currentColor" strokeWidth={1.4} />
+      <path d="M9 3.5C11.5 5 13 7 13 9C13 11 11.5 13 9 14.5" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+      <path d="M9 3.5C6.5 5 5 7 5 9C5 11 6.5 13 9 14.5" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconPayTourist(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M9 6V9L11 11" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconWubook(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M2.5 9H15.5M9 2.5C10.8 4.4 11.8 6.6 11.8 9C11.8 11.4 10.8 13.6 9 15.5C7.2 13.6 6.2 11.4 6.2 9C6.2 6.6 7.2 4.4 9 2.5Z" stroke="currentColor" strokeWidth={1.3} />
+    </svg>
+  )
+}
+
+export function IconUtenti(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="6.5" cy="6.5" r="2.3" stroke="currentColor" strokeWidth={1.4} />
+      <circle cx="12.5" cy="8" r="1.9" stroke="currentColor" strokeWidth={1.4} />
+      <path d="M2 15C2 12.2 4 10.7 6.5 10.7C9 10.7 11 12.2 11 15" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+      <path d="M11.5 11C13.7 11 15.5 12.3 15.5 15" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconImpostazioni(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="9" cy="9" r="2.4" stroke="currentColor" strokeWidth={1.5} />
+      <path
+        d="M9 2.7V4.4M9 13.6V15.3M15.3 9H13.6M4.4 9H2.7M13.4 4.6L12.2 5.8M5.8 12.2L4.6 13.4M13.4 13.4L12.2 12.2M5.8 5.8L4.6 4.6"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+export function IconLog(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 2.5H14V15.5H4V2.5Z" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M6.5 6H11.5M6.5 9H11.5M6.5 12H9.5" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconEsci(props: IconProps) {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" {...props}>
+      <path d="M6 2H3.5C2.7 2 2 2.7 2 3.5V12.5C2 13.3 2.7 14 3.5 14H6" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M10.5 5L14 8L10.5 11" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 8H6" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconChevronDown(props: IconProps) {
+  return (
+    <svg width={14} height={14} viewBox="0 0 16 16" fill="none" {...props}>
+      <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}

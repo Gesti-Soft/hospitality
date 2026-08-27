@@ -63,6 +63,12 @@ public class PrenotazioniService(
         return await prenotazioni.ListStoricoAsync(strutturaId, anno, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Prenotazione>> ListaPeriodoAsync(ICurrentUser currentUser, Guid strutturaId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
+        return await prenotazioni.ListPeriodoAsync(strutturaId, dataInizio, dataFine, cancellationToken);
+    }
+
     public async Task<Prenotazione> GetAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);

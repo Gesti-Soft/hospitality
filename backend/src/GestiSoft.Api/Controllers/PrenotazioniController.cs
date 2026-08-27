@@ -15,19 +15,22 @@ public record CambiaStatoCameraRequest(StatoCamera NuovoStato);
 [Authorize]
 public class PrenotazioniController(PrenotazioniService service, ICurrentUser currentUser) : ControllerBase
 {
-    /// <summary>vista: "arrivi" (default), "in-corso", "storico" (richiede anno).</summary>
+    /// <summary>vista: "arrivi" (default), "in-corso", "storico" (richiede anno), "periodo" (richiede dataInizio/dataFine — usata dal booking board).</summary>
     [HttpGet]
     public async Task<IActionResult> Lista(
         Guid strutturaId,
         [FromQuery] string vista = "arrivi",
         [FromQuery] DateTime? daData = null,
         [FromQuery] int? anno = null,
+        [FromQuery] DateTime? dataInizio = null,
+        [FromQuery] DateTime? dataFine = null,
         CancellationToken cancellationToken = default)
     {
         IReadOnlyList<Prenotazione> prenotazioni = vista switch
         {
             "in-corso" => await service.ListaInCorsoAsync(currentUser, strutturaId, cancellationToken),
             "storico" => await service.ListaStoricoAsync(currentUser, strutturaId, anno ?? DateTime.UtcNow.Year, cancellationToken),
+            "periodo" => await service.ListaPeriodoAsync(currentUser, strutturaId, dataInizio ?? DateTime.UtcNow.Date, dataFine ?? (dataInizio ?? DateTime.UtcNow.Date).AddDays(14), cancellationToken),
             _ => await service.ListaInArrivoAsync(currentUser, strutturaId, daData, cancellationToken),
         };
 

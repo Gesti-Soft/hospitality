@@ -15,6 +15,9 @@ public interface IPrenotazioneRepository
     /// <summary>Storico (Annullata/Completata) filtrato per anno (GetStoricoPrenotazioniByRoom del legacy).</summary>
     Task<IReadOnlyList<Prenotazione>> ListStoricoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
 
+    /// <summary>Tutte le prenotazioni non annullate che intersecano il periodo, su tutte le camere della struttura — usata dal booking board del frontend (Fase 9).</summary>
+    Task<IReadOnlyList<Prenotazione>> ListPeriodoAsync(Guid strutturaId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken);
+
     /// <summary>
     /// True se esiste già una prenotazione non annullata sulla stessa camera che si sovrappone
     /// al periodo indicato (esclusa <paramref name="escludiPrenotazioneId"/> in caso di update).

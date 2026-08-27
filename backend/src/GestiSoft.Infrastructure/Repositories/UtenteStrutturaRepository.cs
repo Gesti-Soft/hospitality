@@ -10,6 +10,11 @@ public class UtenteStrutturaRepository(GestiSoftDbContext db) : IUtenteStruttura
     public Task<UtenteStruttura?> GetAsync(Guid utenteId, Guid strutturaId, CancellationToken cancellationToken) =>
         db.UtentiStrutture.FirstOrDefaultAsync(us => us.UtenteId == utenteId && us.StrutturaId == strutturaId, cancellationToken);
 
+    public async Task<IReadOnlyList<UtenteStruttura>> ListByStrutturaIdAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        await db.UtentiStrutture.AsNoTracking().Include(us => us.Utente)
+            .Where(us => us.StrutturaId == strutturaId)
+            .ToListAsync(cancellationToken);
+
     public async Task UpsertAsync(UtenteStruttura assegnazione, CancellationToken cancellationToken)
     {
         // Come in ImpostazioniStrutturaRepository: un'entità già tracciata (arrivata da GetAsync

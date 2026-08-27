@@ -35,6 +35,29 @@ public class UtenteManagementService(
     IStrutturaRepository strutture,
     IPasswordHasher<Utente> passwordHasher)
 {
+    public async Task<IReadOnlyList<Utente>> ListaUtentiClienteAsync(ICurrentUser currentUser, Guid clienteId, CancellationToken cancellationToken)
+    {
+        if (!currentUser.IsSuperAdmin && currentUser.ClienteId != clienteId)
+        {
+            throw new ForbiddenException("Non puoi consultare gli utenti di questo Cliente.");
+        }
+
+        return await utenti.ListByClienteIdAsync(clienteId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<UtenteStruttura>> ListaAssegnazioniStrutturaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var strutturaClienteId = await strutture.GetClienteIdAsync(strutturaId, cancellationToken)
+            ?? throw new NotFoundException("Struttura non trovata.");
+
+        if (!currentUser.IsSuperAdmin && currentUser.ClienteId != strutturaClienteId)
+        {
+            throw new ForbiddenException("Non puoi consultare gli utenti di questa struttura.");
+        }
+
+        return await utentiStrutture.ListByStrutturaIdAsync(strutturaId, cancellationToken);
+    }
+
     public async Task<Utente> CreaAsync(ICurrentUser currentUser, CreaUtenteRequest request, CancellationToken cancellationToken)
     {
         if (!currentUser.IsSuperAdmin && request.IsSuperAdmin)

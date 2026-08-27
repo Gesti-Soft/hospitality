@@ -1,8 +1,4 @@
-/*
- * Reset minimale e neutro. Nessuna identità visiva definitiva qui:
- * il design vero e proprio arriva nella Fase 9 del piano (passata di design dedicata),
- * non nello stile di default di un template.
- */
+/* Reset minimale: la tipografia/colori applicativi arrivano dal tema MUI (src/theme.ts), non da qui. */
 
 * {
   box-sizing: border-box;
@@ -13,9 +9,4 @@ body,
 #root {
   margin: 0;
   min-height: 100%;
-}
-
-body {
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: light dark;
 }

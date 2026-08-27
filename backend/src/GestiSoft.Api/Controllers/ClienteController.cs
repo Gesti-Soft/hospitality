@@ -1,6 +1,8 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Clienti;
+using GestiSoft.Application.Utenti;
 using GestiSoft.Contracts.Clienti;
+using GestiSoft.Contracts.Utenti;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,8 +11,15 @@ namespace GestiSoft.Api.Controllers;
 [ApiController]
 [Route("clienti")]
 [Authorize]
-public class ClienteController(ClienteService service, ICurrentUser currentUser) : ControllerBase
+public class ClienteController(ClienteService service, UtenteManagementService utentiService, ICurrentUser currentUser) : ControllerBase
 {
+    [HttpGet("{clienteId:guid}/utenti")]
+    public async Task<IActionResult> ListaUtenti(Guid clienteId, CancellationToken cancellationToken)
+    {
+        var utenti = await utentiService.ListaUtentiClienteAsync(currentUser, clienteId, cancellationToken);
+        return Ok(utenti.Select(u => new UtenteDto(u.Id, u.Email, u.Nome, u.Cognome, u.IsSuperAdmin, u.ClienteId, u.Attivo)));
+    }
+
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
