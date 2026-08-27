@@ -1,6 +1,7 @@
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Entities.Riferimenti;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace GestiSoft.Infrastructure.Persistence;
 
@@ -55,5 +56,33 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GestiSoftDbContext).Assembly);
+
+        // Npgsql accetta solo DateTime con Kind=Utc per le colonne "timestamp with time zone"
+        // (il default per DateTime in EF Core/Npgsql). I DateTime che arrivano dal JSON delle
+        // request HTTP hanno Kind=Unspecified (nessun offset nel payload) e altrimenti farebbero
+        // fallire ogni insert/update con ArgumentException. Applicato una sola volta qui invece
+        // che con SpecifyKind sparso in ogni service: i valori sono comunque sempre date/orari
+        // "locali alla struttura", non convertiamo il valore, lo ritagghiamo solo come UTC.
+        var utcConverter = new ValueConverter<DateTime, DateTime>(
+            v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
+            v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        var nullableUtcConverter = new ValueConverter<DateTime?, DateTime?>(
+            v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v,
+            v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v);
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                if (property.ClrType == typeof(DateTime))
+                {
+                    property.SetValueConverter(utcConverter);
+                }
+                else if (property.ClrType == typeof(DateTime?))
+                {
+                    property.SetValueConverter(nullableUtcConverter);
+                }
+            }
+        }
     }
 }

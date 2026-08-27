@@ -1,7 +1,10 @@
 using GestiSoft.Application.Auth;
+using GestiSoft.Application.Camere;
 using GestiSoft.Application.Clienti;
 using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Ospiti;
+using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Utenti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Infrastructure.Auth;
@@ -35,6 +38,14 @@ public static class DependencyInjection
         services.AddScoped<IImpostazioniStrutturaRepository, ImpostazioniStrutturaRepository>();
         services.AddScoped<IClienteRepository, ClienteRepository>();
         services.AddScoped<IUtenteStrutturaRepository, UtenteStrutturaRepository>();
+        services.AddScoped<ITipologiaCameraRepository, TipologiaCameraRepository>();
+        services.AddScoped<ICameraRepository, CameraRepository>();
+        services.AddScoped<IPrezzoCameraRepository, PrezzoCameraRepository>();
+        services.AddScoped<ICanaleVenditaRepository, CanaleVenditaRepository>();
+        services.AddScoped<IPrenotazioneRepository, PrenotazioneRepository>();
+        services.AddScoped<ICauzioneRepository, CauzioneRepository>();
+        services.AddScoped<IOspiteRepository, OspiteRepository>();
+        services.AddScoped<IDatiAziendaliComuneRepository, DatiAziendaliComuneRepository>();
         services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
 
         return services;

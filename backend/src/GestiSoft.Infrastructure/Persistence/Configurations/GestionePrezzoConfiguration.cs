@@ -13,10 +13,16 @@ public class GestionePrezzoConfiguration : IEntityTypeConfiguration<GestionePrez
 
         builder.Property(p => p.PrezzoPerNotte).HasPrecision(18, 2);
         builder.HasIndex(p => new { p.CameraId, p.DataInizio, p.DataFine });
+        builder.HasIndex(p => new { p.TipologiaId, p.DataInizio, p.DataFine });
 
         builder.HasOne(p => p.Camera)
             .WithMany()
             .HasForeignKey(p => p.CameraId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(p => p.Tipologia)
+            .WithMany()
+            .HasForeignKey(p => p.TipologiaId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

@@ -1,0 +1,90 @@
+using GestiSoft.Application.Auth;
+using GestiSoft.Application.Prenotazioni;
+using GestiSoft.Contracts.Prenotazioni;
+using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GestiSoft.Api.Controllers;
+
+public record CambiaStatoCameraRequest(StatoCamera NuovoStato);
+
+[ApiController]
+[Route("strutture/{strutturaId:guid}/prenotazioni")]
+[Authorize]
+public class PrenotazioniController(PrenotazioniService service, ICurrentUser currentUser) : ControllerBase
+{
+    /// <summary>vista: "arrivi" (default), "in-corso", "storico" (richiede anno).</summary>
+    [HttpGet]
+    public async Task<IActionResult> Lista(
+        Guid strutturaId,
+        [FromQuery] string vista = "arrivi",
+        [FromQuery] DateTime? daData = null,
+        [FromQuery] int? anno = null,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Prenotazione> prenotazioni = vista switch
+        {
+            "in-corso" => await service.ListaInCorsoAsync(currentUser, strutturaId, cancellationToken),
+            "storico" => await service.ListaStoricoAsync(currentUser, strutturaId, anno ?? DateTime.UtcNow.Year, cancellationToken),
+            _ => await service.ListaInArrivoAsync(currentUser, strutturaId, daData, cancellationToken),
+        };
+
+        return Ok(prenotazioni.Select(ToDto));
+    }
+
+    [HttpGet("{prenotazioneId:guid}")]
+    public async Task<IActionResult> Get(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
+    {
+        var prenotazione = await service.GetAsync(currentUser, strutturaId, prenotazioneId, cancellationToken);
+        return Ok(ToDto(prenotazione));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Crea(Guid strutturaId, [FromBody] CreaPrenotazioneRequest request, CancellationToken cancellationToken)
+    {
+        var prenotazione = await service.CreaAsync(currentUser, strutturaId, request, cancellationToken);
+        return Ok(ToDto(prenotazione));
+    }
+
+    [HttpPut("{prenotazioneId:guid}")]
+    public async Task<IActionResult> Aggiorna(Guid strutturaId, Guid prenotazioneId, [FromBody] AggiornaPrenotazioneRequest request, CancellationToken cancellationToken)
+    {
+        var prenotazione = await service.AggiornaAsync(currentUser, strutturaId, prenotazioneId, request, cancellationToken);
+        return Ok(ToDto(prenotazione));
+    }
+
+    [HttpPost("{prenotazioneId:guid}/annulla")]
+    public async Task<IActionResult> Annulla(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
+    {
+        var prenotazione = await service.AnnullaAsync(currentUser, strutturaId, prenotazioneId, cancellationToken);
+        return Ok(ToDto(prenotazione));
+    }
+
+    [HttpPost("{prenotazioneId:guid}/check-in")]
+    public async Task<IActionResult> CheckIn(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
+    {
+        var prenotazione = await service.CheckInAsync(currentUser, strutturaId, prenotazioneId, cancellationToken);
+        return Ok(ToDto(prenotazione));
+    }
+
+    [HttpPost("{prenotazioneId:guid}/check-out")]
+    public async Task<IActionResult> CheckOut(Guid strutturaId, Guid prenotazioneId, [FromBody] CheckOutRequest request, CancellationToken cancellationToken)
+    {
+        var prenotazione = await service.CheckOutAsync(currentUser, strutturaId, prenotazioneId, request, cancellationToken);
+        return Ok(ToDto(prenotazione));
+    }
+
+    [HttpPut("{prenotazioneId:guid}/stato-camera")]
+    public async Task<IActionResult> CambiaStatoCamera(Guid strutturaId, Guid prenotazioneId, [FromBody] CambiaStatoCameraRequest request, CancellationToken cancellationToken)
+    {
+        await service.CambiaStatoCameraManualeAsync(currentUser, strutturaId, prenotazioneId, request.NuovoStato, cancellationToken);
+        return NoContent();
+    }
+
+    private static PrenotazioneDto ToDto(Prenotazione p) => new(
+        p.Id, p.StrutturaId, p.CameraId, p.Camera?.Nome, p.Agenzia, p.NumeroPrenotazione,
+        p.ImportoPrenotazione, p.ImportoPagato, p.ImportoTotale, p.CheckIn, p.CheckOut,
+        p.NumeroOspiti, p.StatePolice, p.PMS, p.PayTourist, p.Anno, p.TotalTax, p.StatoPrenotazione);
+}
