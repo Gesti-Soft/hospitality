@@ -30,5 +30,11 @@ public class LogEvento : Entity
     /// <summary>Origine dell'evento: "Api", "Worker", nome dell'integrazione, ecc.</summary>
     public string Origine { get; set; } = string.Empty;
 
+    /// <summary>Categoria per filtrare in UI: "Prenotazione", "Wubook", "AlloggiatiWeb", "Osservatorio", "PayTourist", "Sistema"...</summary>
+    public string? Categoria { get; set; }
+
+    /// <summary>Email dell'utente che ha compiuto l'azione — null per eventi di sistema/job automatici (nessun utente coinvolto).</summary>
+    public string? Operatore { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }

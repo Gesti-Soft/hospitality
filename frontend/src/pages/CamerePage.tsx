@@ -8,6 +8,7 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
+import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
@@ -20,8 +21,13 @@ import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
+import { aggiungiGiorni, differenzaGiorni, inizioGiornoLocale } from '../lib/date'
 import { useStruttura } from '../struttura/StrutturaContext'
-import { StatoCamera, useCamere, useEliminaCamera, type CameraDto } from '../api/camere'
+import { StatoCamera, useCamere, useDuplicaCamere, useEliminaCamera, type CameraDto } from '../api/camere'
 import { useEliminaTipologia, useTipologie, type TipologiaCameraDto } from '../api/tipologie'
 import { usePrezzi, useEliminaPrezzo, type PrezzoCameraDto } from '../api/prezzi'
 import { useCanaliVendita, useCreaCanaleVendita, useAggiornaCanaleVendita, useEliminaCanaleVendita, type CanaleVenditaDto } from '../api/canaliVendita'
@@ -51,9 +57,10 @@ const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', mont
 type Tab_ = 'camere' | 'tipologie' | 'prezzi' | 'canali'
 
 export function CamerePage() {
-  const { strutturaId } = useStruttura()
+  const { strutturaId, strutture } = useStruttura()
   const [tab, setTab] = useState<Tab_>('camere')
   const [errore, setErrore] = useState<string | null>(null)
+  const [duplicaAperto, setDuplicaAperto] = useState(false)
 
   const camere = useCamere(strutturaId)
   const tipologie = useTipologie(strutturaId)
@@ -64,6 +71,8 @@ export function CamerePage() {
     setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
+  const altreStrutture = strutture.filter((s) => s.id !== strutturaId)
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -73,6 +82,11 @@ export function CamerePage() {
           <Tab label="Prezzi" value="prezzi" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
           <Tab label="Canali vendita" value="canali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
         </Tabs>
+        {altreStrutture.length > 0 && (
+          <Button variant="outlined" size="small" onClick={() => setDuplicaAperto(true)}>
+            Duplica da un'altra struttura
+          </Button>
+        )}
       </Box>
 
       {errore && (
@@ -96,7 +110,77 @@ export function CamerePage() {
         />
       )}
       {tab === 'canali' && <TabCanali strutturaId={strutturaId} canali={canali.data} caricamento={canali.isLoading} onErrore={segnalaErrore} />}
+
+      {duplicaAperto && strutturaId && <DuplicaDaAltraStrutturaDialog strutturaId={strutturaId} altreStrutture={altreStrutture} onClose={() => setDuplicaAperto(false)} />}
     </Box>
+  )
+}
+
+function DuplicaDaAltraStrutturaDialog({
+  strutturaId,
+  altreStrutture,
+  onClose,
+}: {
+  strutturaId: string
+  altreStrutture: { id: string; nome: string }[]
+  onClose: () => void
+}) {
+  const [origineId, setOrigineId] = useState('')
+  const [errore, setErrore] = useState<string | null>(null)
+  const [risultato, setRisultato] = useState<{ tipologie: number; camere: number; prezzi: number; canali: number; saltati: number } | null>(null)
+
+  const duplica = useDuplicaCamere(strutturaId)
+
+  function conferma() {
+    if (origineId === '') {
+      setErrore('Seleziona la struttura da cui duplicare.')
+      return
+    }
+    setErrore(null)
+    duplica.mutate(origineId, {
+      onSuccess: (r) => setRisultato(r),
+      onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+    })
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Duplica da un'altra struttura</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        {errore && <Alert severity="error">{errore}</Alert>}
+        {risultato ? (
+          <Alert severity="success">
+            Duplicati: {risultato.tipologie} tipologie, {risultato.camere} camere, {risultato.prezzi} periodi di prezzo, {risultato.canali} canali
+            vendita.
+            {risultato.saltati > 0 && ` ${risultato.saltati} elemento/i saltato/i perché già esistente/i con lo stesso nome in questa struttura.`}
+          </Alert>
+        ) : (
+          <>
+            <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
+              Copia tipologie, camere, periodi di prezzo e canali vendita dalla struttura scelta a questa. Gli elementi il cui nome esiste già
+              qui vengono saltati, non sovrascritti.
+            </Typography>
+            <TextField select label="Struttura di origine" value={origineId} onChange={(e) => setOrigineId(e.target.value)} disabled={duplica.isPending}>
+              {altreStrutture.map((s) => (
+                <MenuItem key={s.id} value={s.id}>
+                  {s.nome}
+                </MenuItem>
+              ))}
+            </TextField>
+          </>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} disabled={duplica.isPending}>
+          {risultato ? 'Chiudi' : 'Annulla'}
+        </Button>
+        {!risultato && (
+          <Button variant="contained" color="secondary" onClick={conferma} disabled={duplica.isPending}>
+            Duplica
+          </Button>
+        )}
+      </DialogActions>
+    </Dialog>
   )
 }
 
@@ -145,6 +229,7 @@ function TabCamere({
   onErrore: (err: unknown) => void
 }) {
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | CameraDto>('chiuso')
+  const [tipologiaFiltro, setTipologiaFiltro] = useState('')
   const elimina = useEliminaCamera(strutturaId)
 
   function eliminaCamera(camera: CameraDto) {
@@ -152,9 +237,27 @@ function TabCamere({
     elimina.mutate(camera.id, { onError: onErrore })
   }
 
+  const camereFiltrate = (camere ?? []).filter((c) => tipologiaFiltro === '' || c.tipologiaId === tipologiaFiltro)
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <IntestazioneTab titolo="Camere" azione={{ etichetta: '+ Nuova camera', onClick: () => setDialogo('nuova'), disabilitato: !strutturaId }} />
+
+      <TextField
+        select
+        size="small"
+        label="Tipologia"
+        value={tipologiaFiltro}
+        onChange={(e) => setTipologiaFiltro(e.target.value)}
+        sx={{ minWidth: 240 }}
+      >
+        <MenuItem value="">Tutte le tipologie</MenuItem>
+        {tipologie.map((t) => (
+          <MenuItem key={t.id} value={t.id}>
+            {t.tipologiaCamera}
+          </MenuItem>
+        ))}
+      </TextField>
 
       {caricamento && <Skeleton variant="rounded" height={220} />}
 
@@ -172,8 +275,10 @@ function TabCamere({
               </TableRow>
             </TableHead>
             <TableBody>
-              {(camere ?? []).length === 0 && <RigaVuota colSpan={6} messaggio="Nessuna camera configurata." />}
-              {(camere ?? []).map((c) => (
+              {camereFiltrate.length === 0 && (
+                <RigaVuota colSpan={6} messaggio={tipologiaFiltro === '' ? 'Nessuna camera configurata.' : 'Nessuna camera per questa tipologia.'} />
+              )}
+              {camereFiltrate.map((c) => (
                 <TableRow key={c.id} hover>
                   <TableCell sx={{ fontWeight: 700 }}>{c.nome}</TableCell>
                   <TableCell>{c.tipologiaNome ?? '—'}</TableCell>
@@ -314,6 +419,7 @@ function TabPrezzi({
   onErrore: (err: unknown) => void
 }) {
   const [dialogoAperto, setDialogoAperto] = useState(false)
+  const [vista, setVista] = useState<'lista' | 'calendario'>('lista')
   const elimina = useEliminaPrezzo(strutturaId)
 
   const nomeCamera = (id: string | null) => camere.find((c) => c.id === id)?.nome ?? null
@@ -326,14 +432,28 @@ function TabPrezzi({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <IntestazioneTab
-        titolo="Calendario prezzi"
-        azione={{ etichetta: '+ Nuovo periodo', onClick: () => setDialogoAperto(true), disabilitato: !strutturaId || (camere.length === 0 && tipologie.length === 0) }}
-      />
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Calendario prezzi</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <ToggleButtonGroup exclusive size="small" value={vista} onChange={(_, v) => v && setVista(v)}>
+            <ToggleButton value="lista">Lista</ToggleButton>
+            <ToggleButton value="calendario">Calendario</ToggleButton>
+          </ToggleButtonGroup>
+          <Button
+            variant="contained"
+            color="secondary"
+            size="small"
+            onClick={() => setDialogoAperto(true)}
+            disabled={!strutturaId || tipologie.length === 0}
+          >
+            + Nuovo periodo
+          </Button>
+        </Box>
+      </Box>
 
       {caricamento && <Skeleton variant="rounded" height={220} />}
 
-      {!caricamento && (
+      {!caricamento && vista === 'lista' && (
         <Cornice>
           <Table size="small">
             <TableHead>
@@ -372,8 +492,146 @@ function TabPrezzi({
         </Cornice>
       )}
 
+      {!caricamento && vista === 'calendario' && (
+        <VistaPrezziCalendario prezzi={prezzi ?? []} camere={camere} tipologie={tipologie} onEliminaPrezzo={eliminaPrezzo} />
+      )}
+
       {dialogoAperto && strutturaId && (
         <PrezzoDialog strutturaId={strutturaId} camere={camere} tipologie={tipologie} onClose={() => setDialogoAperto(false)} />
+      )}
+    </Box>
+  )
+}
+
+const GIORNI_VISIBILI_PREZZI = 14
+const COL_RIGA_PREZZI = 200
+const COL_GIORNO_PREZZI = 74
+
+function VistaPrezziCalendario({
+  prezzi,
+  camere,
+  tipologie,
+  onEliminaPrezzo,
+}: {
+  prezzi: PrezzoCameraDto[]
+  camere: CameraDto[]
+  tipologie: TipologiaCameraDto[]
+  onEliminaPrezzo: (p: PrezzoCameraDto) => void
+}) {
+  const [inizioFinestra, setInizioFinestra] = useState(() => inizioGiornoLocale(new Date()))
+  const giorni = Array.from({ length: GIORNI_VISIBILI_PREZZI }, (_, i) => aggiungiGiorni(inizioFinestra, i))
+
+  // Una riga per tipologia (ambito "tutta la tipologia") + una riga per ogni camera che ha almeno
+  // un periodo specifico — evita di elencare tutte le camere della struttura se non hanno prezzi propri.
+  type Riga = { chiave: string; etichetta: string; cameraId: string | null; tipologiaId: string | null }
+  const righe: Riga[] = [
+    ...tipologie.map((t) => ({ chiave: `t-${t.id}`, etichetta: t.tipologiaCamera, cameraId: null, tipologiaId: t.id })),
+    ...camere
+      .filter((c) => prezzi.some((p) => p.cameraId === c.id))
+      .map((c) => ({ chiave: `c-${c.id}`, etichetta: `${c.nome} (camera)`, cameraId: c.id, tipologiaId: null })),
+  ]
+
+  function prezzoDelGiorno(riga: Riga, giorno: Date): PrezzoCameraDto | null {
+    return (
+      prezzi.find((p) => {
+        if (riga.cameraId ? p.cameraId !== riga.cameraId : p.tipologiaId !== riga.tipologiaId) return false
+        if (!p.dataInizio || !p.dataFine) return false
+        const inizio = inizioGiornoLocale(new Date(p.dataInizio))
+        const fine = inizioGiornoLocale(new Date(p.dataFine))
+        return giorno >= inizio && giorno <= fine
+      }) ?? null
+    )
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, -7))}>
+          <ChevronLeftIcon fontSize="small" />
+        </IconButton>
+        <Typography sx={{ fontSize: 13, fontWeight: 700, minWidth: 190, textAlign: 'center' }}>
+          {formattatoreData.format(giorni[0])} – {formattatoreData.format(giorni[giorni.length - 1])}
+        </Typography>
+        <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, 7))}>
+          <ChevronRightIcon fontSize="small" />
+        </IconButton>
+      </Box>
+
+      {righe.length === 0 && (
+        <Box sx={{ border: `1px dashed ${tokens.surfaceBorder}`, borderRadius: 2, p: 4, textAlign: 'center', color: tokens.textSecondary }}>
+          Nessuna tipologia configurata.
+        </Box>
+      )}
+
+      {righe.length > 0 && (
+        <Cornice>
+          <Box sx={{ overflowX: 'auto' }}>
+            <Box sx={{ display: 'flex' }}>
+              <Box sx={{ width: COL_RIGA_PREZZI, flex: '0 0 auto', borderRight: `1px solid ${tokens.surfaceBorder}` }} />
+              <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GIORNI_VISIBILI_PREZZI}, ${COL_GIORNO_PREZZI}px)` }}>
+                {giorni.map((g) => {
+                  const weekend = g.getDay() === 0 || g.getDay() === 6
+                  const oggi = differenzaGiorni(g, new Date()) === 0
+                  return (
+                    <Box
+                      key={g.getTime()}
+                      sx={{
+                        height: 36,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: weekend ? tokens.paper : 'transparent',
+                        borderLeft: `1px solid ${tokens.surfaceBorder}`,
+                        borderBottom: `1px solid ${tokens.surfaceBorder}`,
+                      }}
+                    >
+                      <Typography sx={{ fontFamily: fontMono, fontSize: 12, fontWeight: oggi ? 700 : 500, color: oggi ? tokens.blue600 : tokens.textSecondary }}>
+                        {g.getDate()}/{g.getMonth() + 1}
+                      </Typography>
+                    </Box>
+                  )
+                })}
+              </Box>
+            </Box>
+
+            {righe.map((riga) => (
+              <Box key={riga.chiave} sx={{ display: 'flex', borderTop: `1px solid ${tokens.surfaceBorder}` }}>
+                <Box sx={{ width: COL_RIGA_PREZZI, flex: '0 0 auto', display: 'flex', alignItems: 'center', px: 1.5, borderRight: `1px solid ${tokens.surfaceBorder}` }}>
+                  <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 700 }}>
+                    {riga.etichetta}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GIORNI_VISIBILI_PREZZI}, ${COL_GIORNO_PREZZI}px)` }}>
+                  {giorni.map((g) => {
+                    const p = prezzoDelGiorno(riga, g)
+                    return (
+                      <Box
+                        key={g.getTime()}
+                        onClick={() => p && onEliminaPrezzo(p)}
+                        title={p ? 'Clicca per eliminare questo periodo' : undefined}
+                        sx={{
+                          height: 40,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderLeft: `1px solid ${tokens.surfaceBorder}`,
+                          bgcolor: p ? tokens.ok100 : 'transparent',
+                          cursor: p ? 'pointer' : 'default',
+                        }}
+                      >
+                        {p?.prezzoPerNotte != null && (
+                          <Typography sx={{ fontFamily: fontMono, fontSize: 11.5, fontWeight: 700, color: tokens.ok600 }}>
+                            {Math.round(p.prezzoPerNotte)}€
+                          </Typography>
+                        )}
+                      </Box>
+                    )
+                  })}
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Cornice>
       )}
     </Box>
   )
@@ -431,6 +689,10 @@ function TabCanali({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <IntestazioneTab titolo="Canali vendita" azione={{ etichetta: '+ Nuovo canale', onClick: () => apriDialogo('nuovo'), disabilitato: !strutturaId }} />
+      <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
+        Le fonti di provenienza delle prenotazioni (es. Booking.com, Diretta) — selezionabili quando crei una prenotazione e usate per
+        colorare i pallini nel Calendario.
+      </Typography>
 
       {caricamento && <Skeleton variant="rounded" height={160} />}
 

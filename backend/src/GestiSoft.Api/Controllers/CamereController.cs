@@ -40,7 +40,16 @@ public class CamereController(CamereService service, ICurrentUser currentUser) :
         return NoContent();
     }
 
+    /// <summary>Duplica tipologie/camere/prezzi/canali vendita da un'altra Struttura attiva dello stesso Cliente.</summary>
+    [HttpPost("duplica-da/{strutturaOrigineId:guid}")]
+    public async Task<IActionResult> DuplicaDa(Guid strutturaId, Guid strutturaOrigineId, CancellationToken cancellationToken)
+    {
+        var risultato = await service.DuplicaDaAsync(currentUser, strutturaId, strutturaOrigineId, cancellationToken);
+        return Ok(risultato);
+    }
+
     private static CameraDto ToDto(SettingRoom r) => new(
         r.Id, r.StrutturaId, r.TipologiaId, r.Tipologia?.TipologiaCamera, r.StateRoom, r.Nome,
-        r.CapacitaOspiti, r.SoggiornoMinimo, r.IdCameraWubook, r.WubookAttiva);
+        r.CapacitaOspiti, r.SoggiornoMinimo, r.IdCameraWubook, r.WubookAttiva,
+        r.CodiceCameraWubook, r.PrezzoWubookOverride, r.WubookSoloWoodoo);
 }

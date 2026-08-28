@@ -4,6 +4,7 @@ public record StrutturaAdminInfo(
     Guid Id,
     string Nome,
     bool Attivo,
+    DateTime? DisattivataAtUtc,
     bool WubookAttivo,
     string? WubookUltimoErrore,
     DateTime? WubookCacheAggiornataAtUtc,
@@ -41,4 +42,11 @@ public record DashboardSuperAdminInfo(IReadOnlyList<ClienteAdminInfo> Clienti, I
 public interface ISuperAdminRepository
 {
     Task<DashboardSuperAdminInfo> GetDashboardAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Elimina DEFINITIVAMENTE una Struttura e tutti i dati collegati (camere, prenotazioni, ospiti,
+    /// fatture, integrazioni...). Irreversibile — il chiamante (SuperAdminService) verifica prima che
+    /// la Struttura sia disattivata da almeno 90 giorni.
+    /// </summary>
+    Task EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken);
 }

@@ -13,6 +13,7 @@ import Typography from '@mui/material/Typography'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { ApiError } from '../api/client'
 import {
+  esportaSchedinaAlloggiatiWebSingola,
   esportaSchedineAlloggiatiWeb,
   useAlloggiatiWebConfig,
   useInviaAlloggiatiWebOra,
@@ -28,7 +29,7 @@ export function PoliziaPage() {
   const config = useAlloggiatiWebConfig(strutturaId)
   const schedine = useSchedineAlloggiatiWeb(strutturaId)
   const [errore, setErrore] = useState<string | null>(null)
-  const [risultatoInvio, setRisultatoInvio] = useState<{ inviate: number; totale: number; errori: string[]; messaggio: string | null } | null>(null)
+  const [risultatoInvio, setRisultatoInvio] = useState<{ inviate: number; totale: number; errori: number; messaggio: string | null } | null>(null)
 
   const invia = useInviaAlloggiatiWebOra(strutturaId)
 
@@ -45,6 +46,15 @@ export function PoliziaPage() {
     if (!strutturaId) return
     try {
       await esportaSchedineAlloggiatiWeb(strutturaId)
+    } catch (err) {
+      setErrore(err instanceof ApiError ? err.message : 'Download non riuscito.')
+    }
+  }
+
+  async function esportaSingola(ospiteId: string) {
+    if (!strutturaId) return
+    try {
+      await esportaSchedinaAlloggiatiWebSingola(strutturaId, ospiteId)
     } catch (err) {
       setErrore(err instanceof ApiError ? err.message : 'Download non riuscito.')
     }
@@ -81,10 +91,9 @@ export function PoliziaPage() {
         {config.data?.ultimoErrore && <Alert severity="warning">{config.data.ultimoErrore}</Alert>}
 
         {risultatoInvio && (
-          <Alert severity={risultatoInvio.errori.length > 0 ? 'warning' : 'success'} onClose={() => setRisultatoInvio(null)}>
+          <Alert severity={risultatoInvio.errori > 0 ? 'warning' : 'success'} onClose={() => setRisultatoInvio(null)}>
             {risultatoInvio.inviate}/{risultatoInvio.totale} schedine inviate.
             {risultatoInvio.messaggio ? ` ${risultatoInvio.messaggio}` : ''}
-            {risultatoInvio.errori.length > 0 && ` Errori: ${risultatoInvio.errori.join('; ')}`}
           </Alert>
         )}
 
@@ -92,7 +101,7 @@ export function PoliziaPage() {
           <Button variant="contained" color="secondary" onClick={inviaOra} disabled={invia.isPending}>
             Invia ora
           </Button>
-          <Button variant="outlined" onClick={esporta}>
+          <Button variant="outlined" onClick={esporta} disabled={(schedine.data ?? []).length === 0}>
             Esporta schedine del giorno
           </Button>
         </Box>
@@ -111,12 +120,13 @@ export function PoliziaPage() {
                   <TableCell>Check-in</TableCell>
                   <TableCell>Check-out</TableCell>
                   <TableCell>Stato</TableCell>
+                  <TableCell align="right">Azioni</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {(schedine.data ?? []).length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                    <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                       Nessuna schedina negli ultimi 30 giorni.
                     </TableCell>
                   </TableRow>
@@ -129,6 +139,13 @@ export function PoliziaPage() {
                     <TableCell sx={{ fontFamily: fontMono }}>{s.checkOut ? formattatoreData.format(new Date(s.checkOut)) : '—'}</TableCell>
                     <TableCell>
                       <Chip size="small" label={s.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: s.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                    </TableCell>
+                    <TableCell align="right">
+                      {!s.inviata && (
+                        <Button size="small" variant="outlined" onClick={() => esportaSingola(s.ospiteId)}>
+                          Scarica
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

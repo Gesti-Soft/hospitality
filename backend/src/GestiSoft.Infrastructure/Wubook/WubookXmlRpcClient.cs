@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Xml.Linq;
+using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Wubook;
 
 namespace GestiSoft.Infrastructure.Wubook;
@@ -46,7 +47,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
     {
         var (codice, dati, fault) = await InvocaAsync(
             "new_room", cancellationToken,
-            token, LcodeInt(lcode), 0, request.Nome, request.Occupancy, (int)request.PrezzoBase, request.Disponibilita, request.ShortName, request.Board);
+            token, LcodeInt(lcode), request.Woodoo ? 1 : 0, request.Nome, request.Occupancy, (int)request.PrezzoBase, request.Disponibilita, request.ShortName, request.Board);
 
         VerificaEsito(codice, fault, "la creazione della camera");
 
@@ -155,10 +156,10 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
 
     public async Task<IReadOnlyList<WubookCanale>> GetChannelsInfoAsync(string token, CancellationToken cancellationToken)
     {
-        var (codice, dati, fault) = await InvocaAsync("get_channels_info", cancellationToken, token);
-        VerificaEsito(codice, fault, "il recupero dei canali");
-
-        var s = dati?.Element("struct");
+        // get_channels_info, a differenza di tutte le altre chiamate, non risponde con l'array
+        // [responseCode, dati] ma con uno struct diretto (confermato dalla documentazione ufficiale
+        // Wubook) — usa un parsing dedicato, non VerificaEsito/InvocaAsync.
+        var s = await InvocaStructAsync("get_channels_info", "il recupero dei canali", cancellationToken, token);
         if (s is null)
         {
             return Array.Empty<WubookCanale>();
@@ -358,15 +359,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         using var response = await http.PostAsync(Endpoint, content, cancellationToken);
         var corpo = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        XDocument documento;
-        try
-        {
-            documento = XDocument.Parse(corpo);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"Risposta Wubook non è XML valido per '{metodo}'.", ex);
-        }
+        var documento = AnalizzaDocumento(corpo, metodo);
 
         var fault = documento.Descendants("fault").FirstOrDefault();
         if (fault is not null)
@@ -389,11 +382,49 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         return (codice, dati, null);
     }
 
+    /// <summary>
+    /// Per le chiamate la cui risposta è direttamente uno struct (oggi solo get_channels_info) —
+    /// non il consueto array [responseCode, dati] usato da tutte le altre chiamate Wubook, quindi
+    /// nessun controllo di codice d'esito da fare (la documentazione ufficiale Wubook per questo
+    /// metodo non prevede un codice d'errore separato).
+    /// </summary>
+    private async Task<XElement?> InvocaStructAsync(string metodo, string operazione, CancellationToken cancellationToken, params object[] parametri)
+    {
+        var richiesta = MethodCall(metodo, parametri);
+        using var content = new StringContent(new XDocument(richiesta).ToString(SaveOptions.DisableFormatting), Encoding.UTF8, "text/xml");
+        using var response = await http.PostAsync(Endpoint, content, cancellationToken);
+        var corpo = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        var documento = AnalizzaDocumento(corpo, metodo);
+
+        var fault = documento.Descendants("fault").FirstOrDefault();
+        if (fault is not null)
+        {
+            var faultStruct = fault.Descendants("struct").FirstOrDefault();
+            var messaggio = faultStruct is null ? null : MembroStringa(faultStruct, "faultString");
+            throw new ConflictException($"Wubook ha rifiutato {operazione}: {messaggio ?? "errore sconosciuto"}.");
+        }
+
+        return documento.Descendants("param").FirstOrDefault()?.Element("value")?.Element("struct");
+    }
+
+    private static XDocument AnalizzaDocumento(string corpo, string metodo)
+    {
+        try
+        {
+            return XDocument.Parse(corpo);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Risposta Wubook non è XML valido per '{metodo}'.", ex);
+        }
+    }
+
     private static void VerificaEsito(int codice, string? fault, string operazione)
     {
         if (codice != 0)
         {
-            throw new InvalidOperationException($"Wubook ha rifiutato {operazione} (codice {codice}): {fault ?? "nessun dettaglio"}.");
+            throw new ConflictException($"Wubook ha rifiutato {operazione} (codice {codice}): {fault ?? "nessun dettaglio"}.");
         }
     }
 

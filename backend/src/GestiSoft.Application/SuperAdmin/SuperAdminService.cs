@@ -133,6 +133,34 @@ public class SuperAdminService(
         return utente;
     }
 
+    /// <summary>
+    /// Eliminazione DEFINITIVA (hard delete, non il soft-delete di Struttura.Attivo) di una Struttura
+    /// e di tutti i suoi dati collegati — irreversibile. Consentita solo per Strutture già disattivate
+    /// da almeno 90 giorni (controllo ripetuto qui lato server, non solo filtrato in UI, perché
+    /// l'azione non si può annullare). Nessuna cancellazione automatica: va sempre confermata
+    /// esplicitamente riga per riga dal Super Admin (vedi ISuperAdminRepository.EliminaStrutturaAsync
+    /// per l'ordine di cancellazione delle tabelle collegate).
+    /// </summary>
+    public async Task EliminaStrutturaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)
+            ?? throw new NotFoundException("Struttura non trovata.");
+
+        if (struttura.Attivo || struttura.DisattivataAtUtc is null)
+        {
+            throw new ConflictException("Solo una struttura disattivata può essere eliminata definitivamente.");
+        }
+
+        if (struttura.DisattivataAtUtc.Value > DateTime.UtcNow.AddDays(-90))
+        {
+            throw new ConflictException("La struttura può essere eliminata definitivamente solo dopo 90 giorni dalla disattivazione.");
+        }
+
+        await repository.EliminaStrutturaAsync(strutturaId, cancellationToken);
+    }
+
     private static void RichiediSuperAdmin(ICurrentUser currentUser)
     {
         if (!currentUser.IsSuperAdmin)

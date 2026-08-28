@@ -3,6 +3,7 @@ using System;
 using GestiSoft.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestiSoft.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GestiSoftDbContext))]
-    partial class GestiSoftDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260828140150_AggiungiDisattivataAtStruttura")]
+    partial class AggiungiDisattivataAtStruttura
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -510,9 +513,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Categoria")
-                        .HasColumnType("text");
-
                     b.Property<Guid?>("ClienteId")
                         .HasColumnType("uuid");
 
@@ -530,9 +530,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Messaggio")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Operatore")
                         .HasColumnType("text");
 
                     b.Property<string>("Origine")
@@ -617,8 +614,7 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PrenotazioneId")
-                        .IsUnique();
+                    b.HasIndex("PrenotazioneId");
 
                     b.HasIndex("StrutturaId");
 
@@ -905,11 +901,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CameraId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("CauzioneAttiva")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
                     b.Property<string>("CheckEditSelection")
                         .HasColumnType("text");
 
@@ -949,11 +940,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<bool>("PayTourist")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("SpesePuliziaAttiva")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
                     b.Property<bool>("StatePolice")
                         .HasColumnType("boolean");
 
@@ -965,11 +951,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Supply")
                         .HasColumnType("text");
-
-                    b.Property<bool>("TassaSoggiornoAttiva")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
 
                     b.Property<decimal?>("TotalTax")
                         .HasPrecision(18, 2)
@@ -1184,10 +1165,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<int?>("CapacitaOspiti")
                         .HasColumnType("integer");
 
-                    b.Property<string>("CodiceCameraWubook")
-                        .HasMaxLength(4)
-                        .HasColumnType("character varying(4)");
-
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1198,9 +1175,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<decimal?>("PrezzoWubookOverride")
-                        .HasColumnType("numeric");
 
                     b.Property<int?>("SoggiornoMinimo")
                         .HasColumnType("integer");
@@ -1219,11 +1193,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("WubookAttiva")
                         .HasColumnType("boolean");
-
-                    b.Property<bool>("WubookSoloWoodoo")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
 
                     b.HasKey("Id");
 
@@ -1674,8 +1643,8 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("GestiSoft.Domain.Entities.Ospite", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.Prenotazione", "Prenotazione")
-                        .WithOne("Ospite")
-                        .HasForeignKey("GestiSoft.Domain.Entities.Ospite", "PrenotazioneId");
+                        .WithMany()
+                        .HasForeignKey("PrenotazioneId");
 
                     b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
                         .WithMany()
@@ -1931,11 +1900,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("GestiSoft.Domain.Entities.PayTouristStruttura", b =>
                 {
                     b.Navigation("Tipologie");
-                });
-
-            modelBuilder.Entity("GestiSoft.Domain.Entities.Prenotazione", b =>
-                {
-                    b.Navigation("Ospite");
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.Utente", b =>

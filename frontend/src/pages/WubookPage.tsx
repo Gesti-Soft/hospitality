@@ -1,9 +1,15 @@
 import { useState } from 'react'
 import Alert from '@mui/material/Alert'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
+import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
@@ -15,25 +21,29 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import SyncIcon from '@mui/icons-material/SyncOutlined'
-import LinkOffIcon from '@mui/icons-material/LinkOffOutlined'
+import LinkIcon from '@mui/icons-material/LinkOutlined'
 import EditCalendarIcon from '@mui/icons-material/EditCalendarOutlined'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
+import SettingsIcon from '@mui/icons-material/SettingsOutlined'
 import { useStruttura } from '../struttura/StrutturaContext'
-import { useCamere } from '../api/camere'
+import { useTipologie } from '../api/tipologie'
 import { ApiError } from '../api/client'
 import {
+  useAssociaCameraWubook,
+  useCamerePerAssociazione,
+  useCamereRemoteWubook,
   useEliminaPianoPrezzo,
   useEliminaPianoRestrizione,
   usePianiPrezzo,
   usePianiRestrizione,
   useRimuoviWubookCamera,
-  useSincronizzaWubookCamera,
   useSincronizzaWubookDisponibilita,
   useSincronizzaWubookPrenotazioni,
   useSincronizzaWubookPrezzi,
   useWubookConfig,
+  type CameraWubookInfoDto,
+  type CameraWubookRemoteDto,
   type PianoPrezzoDto,
   type PianoRestrizioneDto,
   type WubookIntegrazioneDto,
@@ -41,6 +51,7 @@ import {
 import { aggiungiGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { ChiusureRestrizioniDialog } from '../components/ChiusureRestrizioniDialog'
+import { ImpostazioniWubookCameraDialog } from '../components/ImpostazioniWubookCameraDialog'
 import { PianoPrezzoDialog } from '../components/PianoPrezzoDialog'
 import { PianoRestrizioneDialog } from '../components/PianoRestrizioneDialog'
 
@@ -49,7 +60,8 @@ type TabWubook = 'camere' | 'piani-prezzo' | 'piani-restrizione'
 export function WubookPage() {
   const { strutturaId } = useStruttura()
   const config = useWubookConfig(strutturaId)
-  const camere = useCamere(strutturaId)
+  const camere = useCamerePerAssociazione(strutturaId)
+  const tipologie = useTipologie(strutturaId)
   const [tab, setTab] = useState<TabWubook>('camere')
 
   return (
@@ -73,7 +85,7 @@ export function WubookPage() {
       {tab === 'camere' && (
         <Box>
           {camere.isLoading && <Skeleton variant="rounded" height={180} />}
-          {!camere.isLoading && <TabellaCamere strutturaId={strutturaId!} camere={camere.data ?? []} />}
+          {!camere.isLoading && <TabellaCamere strutturaId={strutturaId!} camere={camere.data ?? []} tipologie={tipologie.data ?? []} />}
         </Box>
       )}
 
@@ -127,7 +139,10 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
       })
     } else {
       sincronizzaPrenotazioni.mutate(undefined, {
-        onSuccess: (r) => setMessaggio(`Prenotazioni: ${r.importate} importate, ${r.aggiornate} aggiornate, ${r.annullate} annullate.${r.errori.length > 0 ? ` Errori: ${r.errori.join('; ')}` : ''}`),
+        onSuccess: (r) =>
+          setMessaggio(
+            `Prenotazioni: ${r.importate} importate, ${r.aggiornate} aggiornate, ${r.annullate} annullate.${r.errori > 0 ? ` ${r.errori} errore/i.` : ''}`,
+          ),
         onError: gestisciErrore,
       })
     }
@@ -162,15 +177,34 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
   )
 }
 
-function TabellaCamere({ strutturaId, camere }: { strutturaId: string; camere: ReturnType<typeof useCamere>['data'] }) {
+function TabellaCamere({
+  strutturaId,
+  camere,
+  tipologie,
+}: {
+  strutturaId: string
+  camere: CameraWubookInfoDto[]
+  tipologie: { id: string; tipologiaCamera: string }[]
+}) {
   const [errore, setErrore] = useState<string | null>(null)
+  const [tipologiaFiltro, setTipologiaFiltro] = useState('')
   const [dialogoChiusure, setDialogoChiusure] = useState<{ cameraId: string; cameraNome: string } | null>(null)
-  const sincronizza = useSincronizzaWubookCamera(strutturaId)
+  const [dialogoAssocia, setDialogoAssocia] = useState<CameraWubookInfoDto | null>(null)
+  const [dialogoImpostazioni, setDialogoImpostazioni] = useState<CameraWubookInfoDto | null>(null)
   const rimuovi = useRimuoviWubookCamera(strutturaId)
 
   function gestisciErrore(err: unknown) {
     setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
+
+  function eliminaDaWubook(c: CameraWubookInfoDto) {
+    if (!window.confirm(`Eliminare "${c.cameraNome}" da Wubook? La camera locale resta, solo la camera su Wubook viene rimossa.`)) return
+    rimuovi.mutate(c.cameraId, { onError: gestisciErrore })
+  }
+
+  // Come otaservice.web (legacy): select Tipologia prima di tutto, poi solo le camere di quella
+  // tipologia — mai la tabella piatta con tutte le camere della struttura insieme.
+  const camereFiltrate = camere.filter((c) => tipologiaFiltro === '' || c.tipologiaId === tipologiaFiltro)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -179,48 +213,94 @@ function TabellaCamere({ strutturaId, camere }: { strutturaId: string; camere: R
           {errore}
         </Alert>
       )}
+
+      <TextField select size="small" label="Tipologia" value={tipologiaFiltro} onChange={(e) => setTipologiaFiltro(e.target.value)} sx={{ minWidth: 240 }}>
+        <MenuItem value="">Tutte le tipologie</MenuItem>
+        {tipologie.map((t) => (
+          <MenuItem key={t.id} value={t.id}>
+            {t.tipologiaCamera}
+          </MenuItem>
+        ))}
+      </TextField>
+
       <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Camera</TableCell>
-              <TableCell>Stato Wubook</TableCell>
-              <TableCell>Id camera Wubook</TableCell>
+              <TableCell>Tipologia</TableCell>
+              <TableCell>Disponibilità oggi</TableCell>
+              <TableCell>Associazione Wubook</TableCell>
               <TableCell align="right">Azioni</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {(camere ?? []).length === 0 && (
+            {camereFiltrate.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                  Nessuna camera configurata.
+                <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                  {tipologiaFiltro === '' ? 'Nessuna camera configurata.' : 'Nessuna camera per questa tipologia.'}
                 </TableCell>
               </TableRow>
             )}
-            {(camere ?? []).map((c) => (
-              <TableRow key={c.id} hover>
-                <TableCell sx={{ fontWeight: 700 }}>{c.nome}</TableCell>
+            {camereFiltrate.map((c) => (
+              <TableRow key={c.cameraId} hover>
+                <TableCell sx={{ fontWeight: 700 }}>{c.cameraNome}</TableCell>
+                <TableCell>{c.tipologiaNome ?? '—'}</TableCell>
                 <TableCell>
-                  <Chip size="small" label={c.wubookAttiva ? 'Sincronizzata' : 'Non sincronizzata'} sx={{ bgcolor: c.wubookAttiva ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                    <Chip
+                      size="small"
+                      label={c.chiusaOggi ? 'Chiusa' : 'Disponibile'}
+                      sx={{ bgcolor: c.chiusaOggi ? tokens.error600 : tokens.ok600, color: '#fff', fontWeight: 700 }}
+                    />
+                    {c.chiusureCount > 0 && (
+                      <Chip size="small" label={`Chiusure: ${c.chiusureCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
+                    )}
+                    {c.restrizioniCount > 0 && (
+                      <Chip size="small" label={`Restrizioni: ${c.restrizioniCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
+                    )}
+                  </Box>
                 </TableCell>
-                <TableCell sx={{ fontFamily: fontMono }}>{c.idCameraWubook ?? '—'}</TableCell>
+                <TableCell>
+                  {c.wubookAttiva && c.idCameraWubook != null ? (
+                    <Chip size="small" label={`Associata (id ${c.idCameraWubook})`} sx={{ bgcolor: tokens.ok600, color: '#fff', fontWeight: 700 }} />
+                  ) : (
+                    <Chip size="small" label="Non associata" sx={{ bgcolor: tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
+                  )}
+                </TableCell>
                 <TableCell align="right">
-                  <Tooltip title="Chiusure e restrizioni per periodo">
-                    <IconButton size="small" onClick={() => setDialogoChiusure({ cameraId: c.id, cameraNome: c.nome })}>
-                      <EditCalendarIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Sincronizza su Wubook">
-                    <IconButton size="small" onClick={() => sincronizza.mutate(c.id, { onError: gestisciErrore })} disabled={sincronizza.isPending}>
-                      <SyncIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  {!c.wubookAttiva && (
+                    <>
+                      <Tooltip title="Associa a una camera già esistente su Wubook">
+                        <IconButton size="small" onClick={() => setDialogoAssocia(c)}>
+                          <LinkIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Crea su Wubook">
+                        <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
+                          <SettingsIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </>
+                  )}
                   {c.wubookAttiva && (
-                    <Tooltip title="Rimuovi da Wubook">
-                      <IconButton size="small" onClick={() => rimuovi.mutate(c.id, { onError: gestisciErrore })} disabled={rimuovi.isPending}>
-                        <LinkOffIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    <>
+                      <Tooltip title="Chiusure e restrizioni per periodo">
+                        <IconButton size="small" onClick={() => setDialogoChiusure({ cameraId: c.cameraId, cameraNome: c.cameraNome })}>
+                          <EditCalendarIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Modifica su Wubook (codice camera, prezzo, WooDoo)">
+                        <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
+                          <SettingsIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Elimina da Wubook">
+                        <IconButton size="small" onClick={() => eliminaDaWubook(c)} disabled={rimuovi.isPending}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </>
                   )}
                 </TableCell>
               </TableRow>
@@ -237,7 +317,81 @@ function TabellaCamere({ strutturaId, camere }: { strutturaId: string; camere: R
           onClose={() => setDialogoChiusure(null)}
         />
       )}
+
+      {dialogoAssocia && (
+        <AssociaCameraWubookDialog strutturaId={strutturaId} camera={dialogoAssocia} onClose={() => setDialogoAssocia(null)} />
+      )}
+
+      {dialogoImpostazioni && (
+        <ImpostazioniWubookCameraDialog
+          strutturaId={strutturaId}
+          cameraId={dialogoImpostazioni.cameraId}
+          cameraNome={dialogoImpostazioni.cameraNome}
+          wubookAttiva={dialogoImpostazioni.wubookAttiva}
+          onClose={() => setDialogoImpostazioni(null)}
+        />
+      )}
     </Box>
+  )
+}
+
+function AssociaCameraWubookDialog({ strutturaId, camera, onClose }: { strutturaId: string; camera: CameraWubookInfoDto; onClose: () => void }) {
+  const remote = useCamereRemoteWubook(strutturaId, true)
+  const associa = useAssociaCameraWubook(strutturaId)
+  const [selezionata, setSelezionata] = useState<CameraWubookRemoteDto | null>(null)
+  const [errore, setErrore] = useState<string | null>(null)
+
+  function conferma() {
+    if (!selezionata) {
+      setErrore('Seleziona una camera Wubook.')
+      return
+    }
+    setErrore(null)
+    associa.mutate({ cameraId: camera.cameraId, idCameraWubook: selezionata.id }, { onSuccess: onClose, onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.') })
+  }
+
+  function rimuoviAssociazione() {
+    setErrore(null)
+    associa.mutate({ cameraId: camera.cameraId, idCameraWubook: null }, { onSuccess: onClose, onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.') })
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Associa "{camera.cameraNome}" a Wubook</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        {errore && <Alert severity="error">{errore}</Alert>}
+        <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
+          Scegli la camera già presente su Wubook a cui corrisponde questa camera locale — nessuna nuova camera viene creata su Wubook,
+          solo l'associazione viene salvata (a differenza di "Crea su Wubook", che invece crea una camera nuova).
+        </Typography>
+        {remote.isLoading && <Skeleton variant="rounded" height={56} />}
+        {remote.isError && <Alert severity="error">Impossibile recuperare le camere da Wubook. Verifica le credenziali in Impostazioni.</Alert>}
+        {!remote.isLoading && !remote.isError && (
+          <Autocomplete
+            options={remote.data ?? []}
+            getOptionLabel={(r) => `${r.nome} (id ${r.id})`}
+            value={selezionata}
+            onChange={(_, valore) => setSelezionata(valore)}
+            disabled={associa.isPending}
+            noOptionsText="Nessuna camera trovata su Wubook"
+            renderInput={(params) => <TextField {...params} label="Camera Wubook" placeholder="Cerca per nome…" autoFocus />}
+          />
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        {camera.wubookAttiva && (
+          <Button color="error" onClick={rimuoviAssociazione} disabled={associa.isPending} sx={{ mr: 'auto' }}>
+            Rimuovi associazione
+          </Button>
+        )}
+        <Button onClick={onClose} disabled={associa.isPending}>
+          Annulla
+        </Button>
+        <Button variant="contained" color="secondary" onClick={conferma} disabled={associa.isPending || remote.isLoading}>
+          Associa
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 

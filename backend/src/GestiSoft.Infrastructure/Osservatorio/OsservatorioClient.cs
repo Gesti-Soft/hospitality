@@ -72,12 +72,49 @@ public class OsservatorioClient(HttpClient http) : IOsservatorioClient
         }
     }
 
+    public async Task<DateTime?> GetCurrentStatusDateAsync(string token, string hotelCode, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"entity/GetCurrentStatusDate/{hotelCode}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await InviaConRetryAsync(() => http.SendAsync(CloneRequest(request), cancellationToken), cancellationToken);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        // Risposta: una stringa JSON con virgolette contenente un istante UTC (es. "2026-04-30T22:00:00Z"),
+        // che convertito in ora italiana (il container gira con TZ=Europe/Rome) dà la data "pulita"
+        // a cui il server è fermo (nell'esempio, 1° maggio 2026 a mezzanotte locale) — è già il
+        // PROSSIMO giorno da chiudere, non l'ultimo chiuso: verificato dal vivo, un +1 aggiuntivo
+        // produceva "Invalid Date" (il server rifiuta di saltare un giorno).
+        var corpo = (await response.Content.ReadAsStringAsync(cancellationToken)).Trim().Trim('"');
+        return DateTimeOffset.TryParse(corpo, CultureInfo.InvariantCulture, DateTimeStyles.None, out var istante)
+            ? istante.ToLocalTime().Date
+            : null;
+    }
+
     public async Task<OsservatorioEsitoOperazione> EndDayAsync(string token, string hotelCode, DateTime data, CancellationToken cancellationToken)
     {
+        // Il legacy girava su un server con orologio in ora italiana: "zzz"/"o" producevano sempre
+        // l'offset italiano (+01:00/+02:00). "data" qui arriva con Kind=Utc (DateTime.UtcNow.Date):
+        // formattarla così com'è produce sempre "+00:00" — va ritaggata come locale (il container
+        // gira con TZ=Europe/Rome). Formato "o" (round-trip, secondi frazionari + offset) come
+        // nell'esempio della pagina Help dell'endpoint reale.
+        var dataLocale = DateTime.SpecifyKind(data.Date, DateTimeKind.Local);
         var payload = new XElement("EndDayPmsDTO",
             new XAttribute(XNamespace.Xmlns + "xsi", Xsi.NamespaceName),
             new XElement("HotelCode", hotelCode),
-            new XElement("CurrentDate", data.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture)));
+            new XElement("CurrentDate", dataLocale.ToString("o", CultureInfo.InvariantCulture)));
 
         return await InviaOperazioneAsync("entity/enddayfrompms", token, payload, cancellationToken);
     }
@@ -93,7 +130,6 @@ public class OsservatorioClient(HttpClient http) : IOsservatorioClient
         try
         {
             var testoXml = new XDocument(payload).ToString(SaveOptions.DisableFormatting);
-
             var response = await InviaConRetryAsync(() =>
             {
                 var request = new HttpRequestMessage(HttpMethod.Post, percorso)

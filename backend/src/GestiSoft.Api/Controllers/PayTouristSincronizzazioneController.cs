@@ -20,6 +20,14 @@ public class PayTouristSincronizzazioneController(PayTouristInvioService invioSe
         return Ok(new RisultatoInvioPayTouristDto(risultato.Inviate, risultato.TotalePrenotazioni, risultato.Errori, risultato.Messaggio));
     }
 
+    /// <summary>Invio di una singola prenotazione (per Ospite) a PayTourist, oltre al bulk "Invia ora tutte".</summary>
+    [HttpPost("strutture/{payTouristStrutturaId:guid}/prenotazioni/{ospiteId:guid}/invia")]
+    public async Task<IActionResult> InviaSingola(Guid strutturaId, Guid payTouristStrutturaId, Guid ospiteId, CancellationToken cancellationToken)
+    {
+        await invioService.InviaSingolaAsync(currentUser, strutturaId, payTouristStrutturaId, ospiteId, cancellationToken);
+        return NoContent();
+    }
+
     /// <summary>Elenco prenotazioni recenti (30 giorni) da inviare/già inviate per una struttura PayTourist — per la schermata operativa.</summary>
     [HttpGet("strutture/{payTouristStrutturaId:guid}/prenotazioni")]
     public async Task<IActionResult> Lista(Guid strutturaId, Guid payTouristStrutturaId, CancellationToken cancellationToken)

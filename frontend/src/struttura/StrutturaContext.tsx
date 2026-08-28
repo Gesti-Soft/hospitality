@@ -25,7 +25,10 @@ export function StrutturaProvider({ children }: { children: ReactNode }) {
   const isSuperAdmin = sessione?.isSuperAdmin ?? false
 
   const [clienteId, setClienteId] = useState<string | null>(() => (isSuperAdmin ? localStorage.getItem(CHIAVE_CLIENTE) : null))
-  const [strutturaId, setStrutturaId] = useState<string | null>(() => localStorage.getItem(CHIAVE_STRUTTURA))
+  // Il SuperAdmin non deve mai vedere una struttura preselezionata all'accesso: la select resta
+  // vuota finché non ne sceglie una esplicitamente (richiesta esplicita — menu operativo nascosto
+  // fino a selezione, vedi AppShell).
+  const [strutturaId, setStrutturaId] = useState<string | null>(() => (isSuperAdmin ? null : localStorage.getItem(CHIAVE_STRUTTURA)))
 
   const { data: clienti, isLoading: clientiLoading } = useClienti(isSuperAdmin)
   const { data: strutture, isLoading: struttureLoading } = useStrutture(isSuperAdmin ? clienteId : null)
@@ -39,11 +42,20 @@ export function StrutturaProvider({ children }: { children: ReactNode }) {
 
   // Quando la lista strutture (dipendente dal Cliente per il SuperAdmin) cambia, assicurati che la
   // struttura selezionata sia una di quelle disponibili — altrimenti scegli la prima.
+  // Il SuperAdmin è escluso da questa auto-selezione: per lui la select resta vuota finché non
+  // sceglie esplicitamente (se la struttura salvata non è più valida, la si azzera soltanto).
   useEffect(() => {
     if (!strutture || strutture.length === 0) return
     if (strutturaId && strutture.some((s) => s.id === strutturaId)) return
+    if (isSuperAdmin) {
+      if (strutturaId) {
+        setStrutturaId(null)
+        localStorage.removeItem(CHIAVE_STRUTTURA)
+      }
+      return
+    }
     setStrutturaId(strutture[0].id)
-  }, [strutture, strutturaId])
+  }, [strutture, strutturaId, isSuperAdmin])
 
   const selezionaCliente = (id: string) => {
     setClienteId(id)

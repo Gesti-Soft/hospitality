@@ -7,6 +7,7 @@ public record StrutturaAdminDto(
     Guid Id,
     string Nome,
     bool Attivo,
+    DateTime? DisattivataAtUtc,
     bool WubookAttivo,
     string? WubookUltimoErrore,
     DateTime? WubookCacheAggiornataAtUtc,

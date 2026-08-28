@@ -28,11 +28,19 @@ public class AlloggiatiWebSincronizzazioneController(AlloggiatiWebInvioService i
         return Ok(new RisultatoInvioAlloggiatiWebDto(risultato.Inviate, risultato.TotaleSchedine, risultato.Errori, risultato.Messaggio));
     }
 
-    /// <summary>Fallback: esporta come file di testo le schedine del giorno senza inviarle né marcarle come inviate (stesso pattern "on-demand, mai persistito" di PDF/XML fattura in Fase 4).</summary>
+    /// <summary>Fallback: esporta come file di testo le schedine ancora da inviare (30 giorni, stessa fonte della lista mostrata a schermo) senza inviarle né marcarle come inviate (stesso pattern "on-demand, mai persistito" di PDF/XML fattura in Fase 4).</summary>
     [HttpGet("schedine/export")]
     public async Task<IActionResult> Esporta(Guid strutturaId, CancellationToken cancellationToken)
     {
         var testo = await invioService.EsportaAsync(currentUser, strutturaId, cancellationToken);
         return File(Encoding.UTF8.GetBytes(testo), "text/plain", $"schedine-alloggiati-web-{DateTime.UtcNow:yyyyMMdd}.txt");
+    }
+
+    /// <summary>Esporta come file di testo UNA sola schedina, oltre al bulk.</summary>
+    [HttpGet("schedine/{ospiteId:guid}/export")]
+    public async Task<IActionResult> EsportaSingola(Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken)
+    {
+        var testo = await invioService.EsportaSingolaAsync(currentUser, strutturaId, ospiteId, cancellationToken);
+        return File(Encoding.UTF8.GetBytes(testo), "text/plain", $"schedina-alloggiati-web-{DateTime.UtcNow:yyyyMMdd}.txt");
     }
 }

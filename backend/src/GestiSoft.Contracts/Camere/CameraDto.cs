@@ -12,4 +12,7 @@ public record CameraDto(
     int? CapacitaOspiti,
     int? SoggiornoMinimo,
     int? IdCameraWubook,
-    bool WubookAttiva);
+    bool WubookAttiva,
+    string? CodiceCameraWubook,
+    decimal? PrezzoWubookOverride,
+    bool WubookSoloWoodoo);

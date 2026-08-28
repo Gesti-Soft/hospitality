@@ -14,6 +14,8 @@ public interface ILogEventoService
         string? correlationId = null,
         Guid? clienteId = null,
         Guid? strutturaId = null,
+        string? categoria = null,
+        string? operatore = null,
         CancellationToken cancellationToken = default);
 
     Task<PagedResult<LogEvento>> CercaAsync(LogEventoFiltro filtro, CancellationToken cancellationToken = default);

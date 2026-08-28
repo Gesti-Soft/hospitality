@@ -28,6 +28,13 @@ public class Struttura
     public bool Attivo { get; set; } = true;
 
     /// <summary>
+    /// Momento in cui la Struttura è stata disattivata (null se non è mai stata disattivata, o se è
+    /// stata riattivata). Usato dal Super Admin per individuare le Strutture disattivate da oltre 90
+    /// giorni ed eliminarle definitivamente (vedi SuperAdminService).
+    /// </summary>
+    public DateTime? DisattivataAtUtc { get; set; }
+
+    /// <summary>
     /// Concessione dei servizi esterni da parte del Super Admin, per singola Struttura (non più per
     /// l'intero Cliente: due Strutture dello stesso Cliente possono avere concessioni diverse, es.
     /// contratti/licenze distinti). Se false, questa Struttura non deve poterlo usare né attivare in

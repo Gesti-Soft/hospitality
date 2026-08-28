@@ -19,7 +19,12 @@ public record CreaCameraRequest(
     StatoCamera StateRoom,
     string Nome,
     int? CapacitaOspiti,
-    int? SoggiornoMinimo);
+    int? SoggiornoMinimo,
+    string? CodiceCameraWubook,
+    decimal? PrezzoWubookOverride,
+    bool WubookSoloWoodoo);
+
+public record RisultatoDuplicazioneCamere(int Tipologie, int Camere, int Prezzi, int Canali, int Saltati);
 
 /// <summary>
 /// CRUD di Tipologie camera e Camere — modulo "impostazioni camere" del legacy RoomSettingLogic,
@@ -29,6 +34,9 @@ public record CreaCameraRequest(
 public class CamereService(
     ITipologiaCameraRepository tipologie,
     ICameraRepository camere,
+    IPrezzoCameraRepository prezzi,
+    ICanaleVenditaRepository canali,
+    IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard)
 {
     // --- Tipologie ---
@@ -138,6 +146,9 @@ public class CamereService(
             Nome = nome,
             CapacitaOspiti = request.CapacitaOspiti,
             SoggiornoMinimo = request.SoggiornoMinimo,
+            CodiceCameraWubook = NormalizzaCodiceWubook(request.CodiceCameraWubook),
+            PrezzoWubookOverride = request.PrezzoWubookOverride,
+            WubookSoloWoodoo = request.WubookSoloWoodoo,
         };
 
         await camere.AddAsync(entity, cancellationToken);
@@ -163,10 +174,24 @@ public class CamereService(
         entity.Nome = nome;
         entity.CapacitaOspiti = request.CapacitaOspiti;
         entity.SoggiornoMinimo = request.SoggiornoMinimo;
+        entity.CodiceCameraWubook = NormalizzaCodiceWubook(request.CodiceCameraWubook);
+        entity.PrezzoWubookOverride = request.PrezzoWubookOverride;
+        entity.WubookSoloWoodoo = request.WubookSoloWoodoo;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await camere.UpdateAsync(entity, cancellationToken);
         return entity;
+    }
+
+    private static string? NormalizzaCodiceWubook(string? codice)
+    {
+        if (string.IsNullOrWhiteSpace(codice))
+        {
+            return null;
+        }
+
+        var alfanumerico = new string(codice.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        return alfanumerico.Length == 0 ? null : (alfanumerico.Length <= 4 ? alfanumerico : alfanumerico[..4]);
     }
 
     public async Task EliminaCameraAsync(ICurrentUser currentUser, Guid strutturaId, Guid cameraId, CancellationToken cancellationToken)
@@ -203,5 +228,164 @@ public class CamereService(
         {
             throw new ConflictException("La tipologia indicata non appartiene a questa struttura.");
         }
+    }
+
+    // --- Duplicazione da un'altra Struttura ---
+
+    /// <summary>
+    /// Duplica tipologie/camere/prezzi/canali vendita da un'altra Struttura attiva dello stesso
+    /// Cliente — pensata per una Struttura nuova che vuole ripartire dalla configurazione di una
+    /// struttura gemella invece di ricrearla da zero. Le camere/tipologie il cui nome esiste già
+    /// nella struttura di destinazione vengono SALTATE (non sovrascritte, non duplicate) — riportate
+    /// nel conteggio "Saltati" così l'operatore sa cosa non è stato copiato; i prezzi collegati a
+    /// una camera/tipologia saltata vengono saltati a loro volta (non avrebbero a chi riferirsi).
+    /// L'associazione Wubook (IdCameraWubook/WubookAttiva) NON viene mai copiata: è specifica di
+    /// questa struttura, non ha senso trasferirla da un'altra.
+    /// </summary>
+    public async Task<RisultatoDuplicazioneCamere> DuplicaDaAsync(ICurrentUser currentUser, Guid strutturaId, Guid strutturaOrigineId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomWrite, cancellationToken);
+
+        if (strutturaId == strutturaOrigineId)
+        {
+            throw new ConflictException("Seleziona una struttura di origine diversa da quella corrente.");
+        }
+
+        var clienteDestinazione = await strutture.GetClienteIdAsync(strutturaId, cancellationToken);
+        var clienteOrigine = await strutture.GetClienteIdAsync(strutturaOrigineId, cancellationToken);
+        if (clienteOrigine is null || clienteDestinazione is null || clienteOrigine != clienteDestinazione)
+        {
+            throw new ConflictException("Puoi duplicare solo da un'altra struttura dello stesso Cliente.");
+        }
+
+        int saltati = 0;
+
+        var tipologieOrigine = await tipologie.ListByStrutturaAsync(strutturaOrigineId, cancellationToken);
+        var mappaTipologie = new Dictionary<Guid, Guid>();
+        foreach (var t in tipologieOrigine)
+        {
+            var nome = t.TipologiaCamera.Trim();
+            if (await tipologie.ExistsByNomeAsync(strutturaId, nome, escludiId: null, cancellationToken))
+            {
+                saltati++;
+                continue;
+            }
+
+            var nuova = new SettingTipologia
+            {
+                StrutturaId = strutturaId,
+                TipologiaCamera = nome,
+                SpesePulizia = t.SpesePulizia,
+                Animali = t.Animali,
+                Cauzione = t.Cauzione,
+                PrezzoDefault = t.PrezzoDefault,
+                NumeroImplementoPersona = t.NumeroImplementoPersona,
+                Implemento = t.Implemento,
+            };
+            await tipologie.AddAsync(nuova, cancellationToken);
+            mappaTipologie[t.Id] = nuova.Id;
+        }
+
+        var camereOrigine = await camere.ListByStrutturaAsync(strutturaOrigineId, cancellationToken);
+        var mappaCamere = new Dictionary<Guid, Guid>();
+        foreach (var c in camereOrigine)
+        {
+            var nome = c.Nome.Trim();
+            if (await camere.ExistsByNomeAsync(strutturaId, nome, escludiId: null, cancellationToken))
+            {
+                saltati++;
+                continue;
+            }
+
+            Guid? nuovaTipologiaId = null;
+            if (c.TipologiaId is { } tId)
+            {
+                if (!mappaTipologie.TryGetValue(tId, out var mappata))
+                {
+                    // La tipologia di origine non è stata duplicata (nome già esistente): la camera
+                    // non ha più a cosa agganciarsi in modo affidabile, saltata anche lei.
+                    saltati++;
+                    continue;
+                }
+
+                nuovaTipologiaId = mappata;
+            }
+
+            var nuova = new SettingRoom
+            {
+                StrutturaId = strutturaId,
+                TipologiaId = nuovaTipologiaId,
+                StateRoom = StatoCamera.Pronta,
+                Nome = nome,
+                CapacitaOspiti = c.CapacitaOspiti,
+                SoggiornoMinimo = c.SoggiornoMinimo,
+            };
+            await camere.AddAsync(nuova, cancellationToken);
+            mappaCamere[c.Id] = nuova.Id;
+        }
+
+        var prezziOrigine = await prezzi.ListByStrutturaAsync(strutturaOrigineId, cancellationToken);
+        var prezziDuplicati = 0;
+        foreach (var p in prezziOrigine)
+        {
+            Guid? nuovaCameraId = null, nuovaTipologiaId = null;
+            if (p.CameraId is { } cId)
+            {
+                if (!mappaCamere.TryGetValue(cId, out var mappata))
+                {
+                    saltati++;
+                    continue;
+                }
+
+                nuovaCameraId = mappata;
+            }
+            else if (p.TipologiaId is { } tId)
+            {
+                if (!mappaTipologie.TryGetValue(tId, out var mappata))
+                {
+                    saltati++;
+                    continue;
+                }
+
+                nuovaTipologiaId = mappata;
+            }
+            else
+            {
+                continue;
+            }
+
+            prezzi.Add(new GestionePrezzo
+            {
+                StrutturaId = strutturaId,
+                CameraId = nuovaCameraId,
+                TipologiaId = nuovaTipologiaId,
+                DataInizio = p.DataInizio,
+                DataFine = p.DataFine,
+                PrezzoPerNotte = p.PrezzoPerNotte,
+            });
+            prezziDuplicati++;
+        }
+
+        if (prezziDuplicati > 0)
+        {
+            await prezzi.SaveChangesAsync(cancellationToken);
+        }
+
+        var canaliOrigine = await canali.ListByStrutturaAsync(strutturaOrigineId, cancellationToken);
+        var canaliDuplicati = 0;
+        foreach (var c in canaliOrigine)
+        {
+            var descrizione = c.Descrizione.Trim();
+            if (await canali.ExistsByDescrizioneAsync(strutturaId, descrizione, escludiId: null, cancellationToken))
+            {
+                saltati++;
+                continue;
+            }
+
+            await canali.AddAsync(new SettingAgenzia { StrutturaId = strutturaId, Descrizione = descrizione }, cancellationToken);
+            canaliDuplicati++;
+        }
+
+        return new RisultatoDuplicazioneCamere(mappaTipologie.Count, mappaCamere.Count, prezziDuplicati, canaliDuplicati, saltati);
     }
 }

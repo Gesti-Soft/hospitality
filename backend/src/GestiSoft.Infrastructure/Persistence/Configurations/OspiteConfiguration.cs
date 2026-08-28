@@ -12,8 +12,8 @@ public class OspiteConfiguration : IEntityTypeConfiguration<Ospite>
         builder.ConfigureTenant();
 
         builder.HasOne(o => o.Prenotazione)
-            .WithMany()
-            .HasForeignKey(o => o.PrenotazioneId)
+            .WithOne(p => p.Ospite)
+            .HasForeignKey<Ospite>(o => o.PrenotazioneId)
             .OnDelete(DeleteBehavior.ClientSetNull);
 
         builder.HasMany(o => o.Membri)

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Alert from '@mui/material/Alert'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
@@ -24,8 +25,11 @@ interface Props {
 }
 
 export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props) {
-  const [ambito, setAmbito] = useState<'tipologia' | 'camera'>(tipologie.length > 0 ? 'tipologia' : 'camera')
-  const [targetId, setTargetId] = useState('')
+  // La Tipologia va sempre scelta per prima (richiesta esplicita): "per camera specifica" filtra
+  // solo le camere di quella tipologia, non elenca più tutte le camere della struttura insieme.
+  const [tipologiaId, setTipologiaId] = useState('')
+  const [ambito, setAmbito] = useState<'tipologia' | 'camera'>('tipologia')
+  const [cameraId, setCameraId] = useState('')
   const [dataInizio, setDataInizio] = useState(formatoInputData(new Date()))
   const [dataFine, setDataFine] = useState(formatoInputData(new Date()))
   const [prezzoPerNotte, setPrezzoPerNotte] = useState('')
@@ -33,12 +37,18 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
 
   const imposta = useImpostaPrezzo(strutturaId)
 
+  const camereTipologia = camere.filter((c) => c.tipologiaId === tipologiaId)
+
   function salva() {
     const inizio = parsaInputData(dataInizio)
     const fine = parsaInputData(dataFine)
 
-    if (targetId === '') {
-      setErrore(`Seleziona ${ambito === 'camera' ? 'una camera' : 'una tipologia'}.`)
+    if (tipologiaId === '') {
+      setErrore('Seleziona una tipologia.')
+      return
+    }
+    if (ambito === 'camera' && cameraId === '') {
+      setErrore('Seleziona una camera.')
       return
     }
     if (fine < inizio) {
@@ -52,8 +62,8 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
     setErrore(null)
 
     const request: ImpostaPrezzoRequest = {
-      cameraId: ambito === 'camera' ? targetId : null,
-      tipologiaId: ambito === 'tipologia' ? targetId : null,
+      cameraId: ambito === 'camera' ? cameraId : null,
+      tipologiaId: ambito === 'tipologia' ? tipologiaId : null,
       dataInizio: isoLocale(inizio),
       dataFine: isoLocale(fine),
       prezzoPerNotte: Number(prezzoPerNotte),
@@ -71,46 +81,52 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         {errore && <Alert severity="error">{errore}</Alert>}
 
+        <TextField
+          select
+          label="Tipologia"
+          value={tipologiaId}
+          onChange={(e) => {
+            setTipologiaId(e.target.value)
+            setCameraId('')
+          }}
+          required
+          disabled={imposta.isPending}
+        >
+          {tipologie.length === 0 && <MenuItem value="">Nessuna tipologia disponibile</MenuItem>}
+          {tipologie.map((t) => (
+            <MenuItem key={t.id} value={t.id}>
+              {t.tipologiaCamera}
+            </MenuItem>
+          ))}
+        </TextField>
+
         <ToggleButtonGroup
           exclusive
           value={ambito}
           onChange={(_, valore) => {
-            if (valore) {
-              setAmbito(valore)
-              setTargetId('')
-            }
+            if (valore) setAmbito(valore)
           }}
           size="small"
         >
           <ToggleButton value="tipologia" disabled={imposta.isPending}>
-            Per tipologia
+            Tutta la tipologia
           </ToggleButton>
-          <ToggleButton value="camera" disabled={imposta.isPending}>
-            Per camera specifica
+          <ToggleButton value="camera" disabled={imposta.isPending || tipologiaId === ''}>
+            Camera specifica
           </ToggleButton>
         </ToggleButtonGroup>
 
-        <TextField
-          select
-          label={ambito === 'camera' ? 'Camera' : 'Tipologia'}
-          value={targetId}
-          onChange={(e) => setTargetId(e.target.value)}
-          required
-          disabled={imposta.isPending}
-        >
-          {(ambito === 'camera' ? camere : tipologie).length === 0 && <MenuItem value="">Nessuna disponibile</MenuItem>}
-          {ambito === 'camera'
-            ? camere.map((c) => (
-                <MenuItem key={c.id} value={c.id}>
-                  {c.nome}
-                </MenuItem>
-              ))
-            : tipologie.map((t) => (
-                <MenuItem key={t.id} value={t.id}>
-                  {t.tipologiaCamera}
-                </MenuItem>
-              ))}
-        </TextField>
+        {ambito === 'camera' && (
+          <Autocomplete
+            options={camereTipologia}
+            getOptionLabel={(c) => c.nome}
+            value={camereTipologia.find((c) => c.id === cameraId) ?? null}
+            onChange={(_, valore) => setCameraId(valore?.id ?? '')}
+            disabled={imposta.isPending}
+            noOptionsText="Nessuna camera per questa tipologia"
+            renderInput={(params) => <TextField {...params} label="Camera" required placeholder="Cerca per nome…" />}
+          />
+        )}
 
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField

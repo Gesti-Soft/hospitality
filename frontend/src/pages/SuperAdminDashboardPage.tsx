@@ -27,11 +27,15 @@ import EditIcon from '@mui/icons-material/EditOutlined'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LockResetIcon from '@mui/icons-material/LockResetOutlined'
+import DeleteForeverIcon from '@mui/icons-material/DeleteForeverOutlined'
 import { ApiError } from '../api/client'
 import {
+  GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA,
+  giorniDaDisattivazione,
   useAggiornaServiziStruttura,
   useAggiornaUtente,
   useDashboardSuperAdmin,
+  useEliminaStrutturaDefinitivamente,
   useImpostaAttivoCliente,
   useImpostaAttivoUtente,
   useResettaPasswordUtente,
@@ -64,6 +68,7 @@ export function SuperAdminDashboardPage() {
   const [utenteInModifica, setUtenteInModifica] = useState<UtenteAdminDto | null>(null)
   const [clienteInModifica, setClienteInModifica] = useState<ClienteAdminDto | null>(null)
   const [nuovoUtenteAperto, setNuovoUtenteAperto] = useState(false)
+  const [strutturaDaEliminare, setStrutturaDaEliminare] = useState<{ struttura: StrutturaAdminDto; clienteRagioneSociale: string } | null>(null)
 
   function toggleEspanso(clienteId: string) {
     setEspansi((prec) => {
@@ -97,6 +102,12 @@ export function SuperAdminDashboardPage() {
     0,
   )
 
+  const struttureEliminabili = clienti.flatMap((c) =>
+    c.strutture
+      .filter((s) => !s.attivo && s.disattivataAtUtc && giorniDaDisattivazione(s.disattivataAtUtc) >= GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA)
+      .map((s) => ({ struttura: s, clienteRagioneSociale: c.ragioneSociale })),
+  )
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
@@ -110,6 +121,50 @@ export function SuperAdminDashboardPage() {
           accento={struttureConErroreLicenza > 0}
         />
       </Box>
+
+      {struttureEliminabili.length > 0 && (
+        <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.error600}`, borderRadius: 2, overflow: 'hidden' }}>
+          <Box sx={{ p: '18px 20px', borderBottom: `1px solid ${tokens.surfaceBorder}` }}>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5 }}>Strutture eliminabili</Typography>
+            <Typography sx={{ fontSize: 12, color: tokens.textSecondary, mt: 0.25 }}>
+              Disattivate da almeno {GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA} giorni — l'eliminazione è definitiva e cancella tutti i dati collegati
+              (camere, prenotazioni, ospiti, fatture...). Nessuna cancellazione automatica: va confermata singolarmente.
+            </Typography>
+          </Box>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Cliente</TableCell>
+                <TableCell>Struttura</TableCell>
+                <TableCell>Disattivata il</TableCell>
+                <TableCell align="right">Giorni</TableCell>
+                <TableCell align="right">Azioni</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {struttureEliminabili.map(({ struttura, clienteRagioneSociale }) => (
+                <TableRow key={struttura.id} hover>
+                  <TableCell sx={{ color: tokens.textSecondary }}>{clienteRagioneSociale}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{struttura.nome}</TableCell>
+                  <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+                    {struttura.disattivataAtUtc ? formattatoreData.format(new Date(struttura.disattivataAtUtc)) : '—'}
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
+                    {struttura.disattivataAtUtc ? giorniDaDisattivazione(struttura.disattivataAtUtc) : '—'}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Tooltip title="Elimina definitivamente">
+                      <IconButton size="small" color="error" onClick={() => setStrutturaDaEliminare({ struttura, clienteRagioneSociale })}>
+                        <DeleteForeverIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
 
       <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, overflow: 'hidden' }}>
         <Box sx={{ p: '18px 20px', borderBottom: `1px solid ${tokens.surfaceBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -159,6 +214,13 @@ export function SuperAdminDashboardPage() {
       {utenteInModifica && <ModificaUtenteDialog utente={utenteInModifica} onClose={() => setUtenteInModifica(null)} />}
       {clienteInModifica && <ModificaClienteDialog cliente={clienteInModifica} onClose={() => setClienteInModifica(null)} />}
       {nuovoUtenteAperto && <NuovoUtenteDialog clienti={clienti} onClose={() => setNuovoUtenteAperto(false)} />}
+      {strutturaDaEliminare && (
+        <EliminaStrutturaDialog
+          struttura={strutturaDaEliminare.struttura}
+          clienteRagioneSociale={strutturaDaEliminare.clienteRagioneSociale}
+          onClose={() => setStrutturaDaEliminare(null)}
+        />
+      )}
     </Box>
   )
 }
@@ -696,6 +758,63 @@ function ResetPasswordDialog({ utente, onClose }: { utente: UtenteAdminDto; onCl
             Reimposta
           </Button>
         )}
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+function EliminaStrutturaDialog({
+  struttura,
+  clienteRagioneSociale,
+  onClose,
+}: {
+  struttura: StrutturaAdminDto
+  clienteRagioneSociale: string
+  onClose: () => void
+}) {
+  const [conferma, setConferma] = useState('')
+  const [errore, setErrore] = useState<string | null>(null)
+  const elimina = useEliminaStrutturaDefinitivamente()
+
+  const confermaValida = conferma.trim() === struttura.nome
+
+  function procedi() {
+    if (!confermaValida) return
+    setErrore(null)
+    elimina.mutate(struttura.id, {
+      onSuccess: onClose,
+      onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+    })
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ color: tokens.error600 }}>Elimina definitivamente "{struttura.nome}"</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        {errore && <Alert severity="error">{errore}</Alert>}
+        <Alert severity="error">
+          Questa azione è <strong>irreversibile</strong>: cancella per sempre la struttura "{struttura.nome}" del Cliente "{clienteRagioneSociale}"
+          e tutti i dati collegati (camere, prenotazioni, ospiti, fatture, integrazioni). Non è un semplice disattiva/riattiva.
+        </Alert>
+        <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+          Per confermare, scrivi il nome esatto della struttura: <strong>{struttura.nome}</strong>
+        </Typography>
+        <TextField
+          value={conferma}
+          onChange={(e) => setConferma(e.target.value)}
+          fullWidth
+          disabled={elimina.isPending}
+          autoFocus
+          placeholder={struttura.nome}
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} disabled={elimina.isPending}>
+          Annulla
+        </Button>
+        <Button variant="contained" color="error" onClick={procedi} disabled={!confermaValida || elimina.isPending}>
+          Elimina definitivamente
+        </Button>
       </DialogActions>
     </Dialog>
   )

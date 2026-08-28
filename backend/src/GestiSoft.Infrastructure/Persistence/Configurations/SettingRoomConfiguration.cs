@@ -12,6 +12,8 @@ public class SettingRoomConfiguration : IEntityTypeConfiguration<SettingRoom>
         builder.ConfigureTenant();
 
         builder.Property(r => r.Nome).IsRequired().HasMaxLength(200);
+        builder.Property(r => r.CodiceCameraWubook).HasMaxLength(4);
+        builder.Property(r => r.WubookSoloWoodoo).HasDefaultValue(false);
         builder.HasIndex(r => new { r.StrutturaId, r.Nome }).IsUnique();
         builder.HasIndex(r => new { r.StrutturaId, r.IdCameraWubook });
 

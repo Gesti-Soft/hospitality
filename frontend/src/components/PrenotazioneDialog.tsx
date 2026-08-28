@@ -12,6 +12,7 @@ import Divider from '@mui/material/Divider'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import MenuItem from '@mui/material/MenuItem'
 import TextField from '@mui/material/TextField'
+import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import type { CameraDto } from '../api/camere'
 import type { CanaleVenditaDto } from '../api/canaliVendita'
@@ -72,6 +73,9 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
   const [importoPagato, setImportoPagato] = useState<string>(modifica?.importoPagato != null ? String(modifica.importoPagato) : '')
   const [restituisciCauzione, setRestituisciCauzione] = useState(true)
   const [importoCauzioneTrattenuta, setImportoCauzioneTrattenuta] = useState('')
+  const [tassaSoggiornoAttiva, setTassaSoggiornoAttiva] = useState(modifica?.tassaSoggiornoAttiva ?? true)
+  const [spesePuliziaAttiva, setSpesePuliziaAttiva] = useState(modifica?.spesePuliziaAttiva ?? true)
+  const [cauzioneAttiva, setCauzioneAttiva] = useState(modifica?.cauzioneAttiva ?? true)
   const [errore, setErrore] = useState<string | null>(null)
 
   const crea = useCreaPrenotazione(strutturaId)
@@ -116,6 +120,9 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
       checkIn: isoLocale(checkInDate!),
       checkOut: isoLocale(checkOutDate!),
       numeroOspiti: numeroOspitiNumero || null,
+      tassaSoggiornoAttiva,
+      spesePuliziaAttiva,
+      cauzioneAttiva,
     }
 
     if (modifica) {
@@ -245,6 +252,31 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
             fullWidth
             disabled={inCorso}
           />
+        </Box>
+
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+          <FormControlLabel
+            control={<Checkbox checked={spesePuliziaAttiva} onChange={(e) => setSpesePuliziaAttiva(e.target.checked)} disabled={inCorso} />}
+            label="Spese di pulizia"
+          />
+          <FormControlLabel
+            control={<Checkbox checked={cauzioneAttiva} onChange={(e) => setCauzioneAttiva(e.target.checked)} disabled={inCorso} />}
+            label="Cauzione"
+          />
+          <Tooltip
+            title={
+              modifica
+                ? 'Decisa alla creazione: se disattivata, le schedine Alloggiati Web/Osservatorio/PayTourist erano state marcate già inviate senza inviare nulla. Non modificabile in seguito.'
+                : 'Se disattivata, le schedine Alloggiati Web/Osservatorio/PayTourist non verranno inviate per questa prenotazione — verranno segnate come già inviate.'
+            }
+          >
+            <FormControlLabel
+              control={
+                <Checkbox checked={tassaSoggiornoAttiva} onChange={(e) => setTassaSoggiornoAttiva(e.target.checked)} disabled={inCorso || !!modifica} />
+              }
+              label="Tassa di soggiorno"
+            />
+          </Tooltip>
         </Box>
 
         {preventivo.data && (

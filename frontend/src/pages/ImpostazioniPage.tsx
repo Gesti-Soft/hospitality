@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueries } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -20,7 +21,7 @@ import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useTipologie } from '../api/tipologie'
-import { ApiError } from '../api/client'
+import { ApiError, apiGet } from '../api/client'
 import { useAggiornaImpostazioni, useImpostazioni, type ImpostazioniStrutturaDto, type ImpostazioniStrutturaRequest } from '../api/impostazioni'
 import {
   useAggiornaAlloggiatiWebConfig,
@@ -32,11 +33,14 @@ import {
   usePayTouristConfig,
   usePayTouristStrutture,
   useRinnovaWubookCredenziali,
+  useSchedineAlloggiatiWeb,
   useWubookConfig,
   type AlloggiatiWebIntegrazioneDto,
   type OsservatorioAppartamentoDto,
   type PayTouristIntegrazioneDto,
   type PayTouristStrutturaDto,
+  type PrenotazionePayTouristDto,
+  type SchedinaOsservatorioDto,
   type WubookIntegrazioneDto,
 } from '../api/integrazioni'
 import { fontDisplay, tokens } from '../theme'
@@ -46,6 +50,26 @@ import { PayTouristStrutturaDialog } from '../components/PayTouristStrutturaDial
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 type TabImpostazioni = 'generali' | 'licenza' | 'polizia' | 'osservatorio' | 'paytourist'
+
+/** Pallino colorato (verde = inserito, grigio = mancante) — usato come indicatore compatto accanto a un campo o un titolo, al posto di un Chip testuale. */
+function Pallino({ inserito }: { inserito: boolean }) {
+  return (
+    <Box
+      component="span"
+      sx={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', bgcolor: inserito ? tokens.ok600 : tokens.textTertiary, flex: '0 0 auto' }}
+    />
+  )
+}
+
+/** Etichetta di campo con pallino di stato — per i token/credenziali, indica a colpo d'occhio se è già stato inserito. */
+function EtichettaConPallino({ testo, inserito }: { testo: string; inserito: boolean }) {
+  return (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+      <Pallino inserito={inserito} />
+      {testo}
+    </Box>
+  )
+}
 
 export function ImpostazioniPage() {
   const { strutturaId } = useStruttura()
@@ -81,14 +105,117 @@ function TabGenerali({ strutturaId }: { strutturaId: string | null }) {
   const wubookAbilitato = strutturaCorrente?.wubookAbilitato ?? false
 
   return (
-    <Box sx={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      {impostazioni.isLoading && <Skeleton variant="rounded" height={380} />}
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2.5, alignItems: 'flex-start' }}>
+      {impostazioni.isLoading && <Skeleton variant="rounded" height={380} sx={{ flex: '1 1 460px', maxWidth: 640 }} />}
       {!impostazioni.isLoading && impostazioni.data && strutturaCorrente && (
-        <ImpostazioniGeneraliForm strutturaId={strutturaId!} dati={impostazioni.data} servizi={strutturaCorrente} />
+        <Box sx={{ flex: '1 1 460px', maxWidth: 640 }}>
+          <ImpostazioniGeneraliForm strutturaId={strutturaId!} dati={impostazioni.data} servizi={strutturaCorrente} />
+        </Box>
       )}
 
-      {wubookAbilitato && wubookConfig.isLoading && <Skeleton variant="rounded" height={80} />}
-      {wubookAbilitato && !wubookConfig.isLoading && wubookConfig.data && <WubookAttivoToggle strutturaId={strutturaId!} dati={wubookConfig.data} />}
+      {wubookAbilitato && wubookConfig.isLoading && <Skeleton variant="rounded" height={80} sx={{ flex: '1 1 460px', maxWidth: 640 }} />}
+      {wubookAbilitato && !wubookConfig.isLoading && wubookConfig.data && (
+        <Box sx={{ flex: '1 1 460px', maxWidth: 640 }}>
+          <WubookAttivoToggle strutturaId={strutturaId!} dati={wubookConfig.data} />
+        </Box>
+      )}
+
+      {strutturaId && strutturaCorrente && (
+        <Box sx={{ flex: '1 1 100%' }}>
+          <StoricoInviiAutomatici strutturaId={strutturaId} servizi={strutturaCorrente} />
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+type RigaStoricoInvio = { modulo: string; ospite: string; camera: string | null; checkIn: string | null; checkOut: string | null }
+
+/**
+ * Storico delle schedine/prenotazioni già inviate ai 3 servizi esterni fino ad oggi — utile perché
+ * una prenotazione con Tassa di soggiorno disattivata (vedi PrenotazioneDialog) viene marcata
+ * "inviata" senza che nulla venga davvero trasmesso: questa vista rende visibile anche quei casi,
+ * non solo gli invii reali. Riusa gli stessi 3 endpoint "elenco schedine" già usati dalle pagine
+ * operative (Polizia/Osservatorio/PayTourist, finestra 30 giorni), filtrati qui su "già inviata" —
+ * nessuna nuova query backend.
+ */
+function StoricoInviiAutomatici({ strutturaId, servizi }: { strutturaId: string; servizi: ServiziConcessi }) {
+  const schedineAlloggiati = useSchedineAlloggiatiWeb(servizi.alloggiatiWebAbilitato ? strutturaId : null)
+  const appartamenti = useOsservatorioAppartamenti(servizi.osservatorioAbilitato ? strutturaId : null)
+  const payTouristStrutture = usePayTouristStrutture(servizi.payTouristAbilitato ? strutturaId : null)
+
+  const schedineOsservatorio = useQueries({
+    queries: (appartamenti.data ?? []).map((a) => ({
+      queryKey: ['osservatorio-schedine', strutturaId, a.id],
+      queryFn: () => apiGet<SchedinaOsservatorioDto[]>(`/strutture/${strutturaId}/osservatorio/appartamenti/${a.id}/schedine`),
+    })),
+  })
+
+  const prenotazioniPayTourist = useQueries({
+    queries: (payTouristStrutture.data ?? []).map((s) => ({
+      queryKey: ['paytourist-prenotazioni', strutturaId, s.id],
+      queryFn: () => apiGet<PrenotazionePayTouristDto[]>(`/strutture/${strutturaId}/paytourist/strutture/${s.id}/prenotazioni`),
+    })),
+  })
+
+  if (!servizi.alloggiatiWebAbilitato && !servizi.osservatorioAbilitato && !servizi.payTouristAbilitato) {
+    return null
+  }
+
+  const righe: RigaStoricoInvio[] = [
+    ...(schedineAlloggiati.data ?? [])
+      .filter((s) => s.inviata)
+      .map((s) => ({ modulo: 'Polizia di Stato', ospite: s.nomeOspite, camera: s.camera, checkIn: s.checkIn, checkOut: s.checkOut })),
+    ...schedineOsservatorio.flatMap((q) =>
+      (q.data ?? [])
+        .filter((s) => s.arrivoInviato)
+        .map((s) => ({ modulo: 'Osservatorio', ospite: s.nomeOspite, camera: s.camera, checkIn: s.checkIn, checkOut: s.checkOut })),
+    ),
+    ...prenotazioniPayTourist.flatMap((q) =>
+      (q.data ?? [])
+        .filter((s) => s.inviata)
+        .map((s) => ({ modulo: 'PayTourist', ospite: s.nomeOspite, camera: s.camera, checkIn: s.checkIn, checkOut: s.checkOut })),
+    ),
+  ].sort((a, b) => new Date(b.checkIn ?? 0).getTime() - new Date(a.checkIn ?? 0).getTime())
+
+  return (
+    <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+      <Box sx={{ p: '18px 20px' }}>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Storico invii (ultimi 30 giorni)</Typography>
+        <Typography sx={{ fontSize: 12, color: tokens.textTertiary, mt: 0.5 }}>
+          Schedine/prenotazioni già inviate ai servizi esterni — include anche quelle marcate come inviate automaticamente (es. tassa di
+          soggiorno disattivata per una prenotazione).
+        </Typography>
+      </Box>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Modulo</TableCell>
+            <TableCell>Ospite</TableCell>
+            <TableCell>Camera</TableCell>
+            <TableCell>Check-in</TableCell>
+            <TableCell>Check-out</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {righe.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                Nessun invio negli ultimi 30 giorni.
+              </TableCell>
+            </TableRow>
+          )}
+          {righe.map((r, i) => (
+            <TableRow key={i} hover>
+              <TableCell sx={{ fontWeight: 700 }}>{r.modulo}</TableCell>
+              <TableCell>{r.ospite}</TableCell>
+              <TableCell>{r.camera ?? '—'}</TableCell>
+              <TableCell>{r.checkIn ? formattatoreDataOra.format(new Date(r.checkIn)) : '—'}</TableCell>
+              <TableCell>{r.checkOut ? formattatoreDataOra.format(new Date(r.checkOut)) : '—'}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </Box>
   )
 }
@@ -324,7 +451,7 @@ function LicenzaGestisoftForm({ strutturaId, dati }: { strutturaId: string; dati
       <Box sx={{ display: 'flex', gap: 2 }}>
         <TextField label="Utente gestisoft.it" value={gestisoftUsername} onChange={(e) => setGestisoftUsername(e.target.value)} fullWidth disabled={aggiornaLicenza.isPending} />
         <TextField
-          label="Token gestisoft.it"
+          label={<EtichettaConPallino testo="Token gestisoft.it" inserito={dati.licenzaConfigurata} />}
           type="password"
           value={gestisoftToken}
           onChange={(e) => setGestisoftToken(e.target.value)}
@@ -403,7 +530,7 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
       <TextField label="Utente" value={utente} onChange={(e) => setUtente(e.target.value)} disabled={aggiorna.isPending} />
       <Box sx={{ display: 'flex', gap: 2 }}>
         <TextField
-          label="Password"
+          label={<EtichettaConPallino testo="Password" inserito={dati.credenzialiConfigurate} />}
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -412,7 +539,7 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
           helperText={dati.credenzialiConfigurate ? "Già salvata: lasciarla vuota e salvare la AZZERA" : ' '}
         />
         <TextField
-          label="Ws Key"
+          label={<EtichettaConPallino testo="Ws Key" inserito={dati.credenzialiConfigurate} />}
           type="password"
           value={wsKey}
           onChange={(e) => setWsKey(e.target.value)}
@@ -615,7 +742,7 @@ function PayTouristConfigForm({ strutturaId, dati }: { strutturaId: string; dati
       {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Configurazione salvata.</Alert>}
 
       <TextField
-        label="Token"
+        label={<EtichettaConPallino testo="Token" inserito={dati.tokenConfigurato} />}
         type="password"
         value={token}
         onChange={(e) => setToken(e.target.value)}

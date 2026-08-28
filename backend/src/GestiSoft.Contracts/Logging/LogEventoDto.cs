@@ -11,6 +11,8 @@ public record LogEventoDto(
     string? Dettaglio,
     string? CorrelationId,
     string Origine,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    string? Categoria,
+    string? Operatore);
 
 public record PagedResultDto<T>(IReadOnlyList<T> Items, int TotalCount, int Page, int PageSize);

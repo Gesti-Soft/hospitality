@@ -3,6 +3,7 @@ using System;
 using GestiSoft.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestiSoft.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GestiSoftDbContext))]
-    partial class GestiSoftDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260828142911_OspitePrenotazioneUnoAUno")]
+    partial class OspitePrenotazioneUnoAUno
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -510,9 +513,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Categoria")
-                        .HasColumnType("text");
-
                     b.Property<Guid?>("ClienteId")
                         .HasColumnType("uuid");
 
@@ -530,9 +530,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Messaggio")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Operatore")
                         .HasColumnType("text");
 
                     b.Property<string>("Origine")
@@ -1184,10 +1181,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<int?>("CapacitaOspiti")
                         .HasColumnType("integer");
 
-                    b.Property<string>("CodiceCameraWubook")
-                        .HasMaxLength(4)
-                        .HasColumnType("character varying(4)");
-
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1198,9 +1191,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<decimal?>("PrezzoWubookOverride")
-                        .HasColumnType("numeric");
 
                     b.Property<int?>("SoggiornoMinimo")
                         .HasColumnType("integer");
@@ -1219,11 +1209,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("WubookAttiva")
                         .HasColumnType("boolean");
-
-                    b.Property<bool>("WubookSoloWoodoo")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
 
                     b.HasKey("Id");
 

@@ -129,6 +129,7 @@ public class StrutturaService(IStrutturaRepository repository, IUtenteStrutturaR
         }
 
         struttura.Attivo = attivo;
+        struttura.DisattivataAtUtc = attivo ? null : DateTime.UtcNow;
         await repository.UpdateAsync(struttura, cancellationToken);
         return struttura;
     }

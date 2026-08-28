@@ -20,19 +20,24 @@ const COL_CAMERA = 184
 const COL_GIORNO = 74
 const RIGA_ALTEZZA = 56
 
-const CANALE_AIRBNB = '#3E8E82'
-const CANALE_EXPEDIA = '#6B7A8F'
-
 const NOMI_GIORNO = ['DOM', 'LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB']
 const FORMATTATORE_LABEL = new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
 
-function coloreCanale(agenzia: string | null): { colore: string; etichetta: string } {
-  const a = (agenzia ?? '').trim().toLowerCase()
-  if (a.includes('booking')) return { colore: tokens.blue600, etichetta: 'Booking.com' }
-  if (a.includes('airbnb')) return { colore: CANALE_AIRBNB, etichetta: 'Airbnb' }
-  if (a.includes('expedia')) return { colore: CANALE_EXPEDIA, etichetta: 'Expedia' }
-  if (a === '' || a === 'diretta') return { colore: tokens.orange600, etichetta: 'Diretta' }
-  return { colore: tokens.ink600, etichetta: agenzia ?? 'Altro' }
+// Nessuna lista fissa di canali (Diretta/Booking.com/Airbnb...): i pallini colorati riflettono solo
+// le agenzie che esistono davvero — la distinct dei valori Prenotazione.Agenzia effettivamente in
+// uso nella finestra visibile del calendario, non un elenco statico né la tabella canali_vendita
+// (che è solo un suggerimento testo, vedi PrenotazioneDialog).
+const PALETTE_CANALI = [tokens.blue600, tokens.orange600, tokens.ok600, tokens.ink600, tokens.blue400, tokens.orange400, tokens.wait600, tokens.error600]
+
+function normalizzaAgenzia(agenzia: string | null): string {
+  const a = (agenzia ?? '').trim()
+  return a === '' ? 'Diretta' : a
+}
+
+function coloreCanale(agenzia: string | null, agenzieDistinct: string[]): { colore: string; etichetta: string } {
+  const etichetta = normalizzaAgenzia(agenzia)
+  const idx = Math.max(0, agenzieDistinct.indexOf(etichetta))
+  return { colore: PALETTE_CANALI[idx % PALETTE_CANALI.length], etichetta }
 }
 
 const ETICHETTA_STATO_CAMERA: Record<StatoCamera, string> = {
@@ -87,6 +92,11 @@ export function CalendarioPage() {
     return mappa
   }, [prenotazioni.data])
 
+  const agenzieDistinct = useMemo(
+    () => Array.from(new Set((prenotazioni.data ?? []).map((p) => normalizzaAgenzia(p.agenzia)))).sort(),
+    [prenotazioni.data],
+  )
+
   const caricamento = camere.isLoading || prenotazioni.isLoading
 
   return (
@@ -108,7 +118,7 @@ export function CalendarioPage() {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Legenda />
+          <Legenda agenzieDistinct={agenzieDistinct} />
           <Button
             variant="contained"
             color="secondary"
@@ -217,6 +227,7 @@ export function CalendarioPage() {
                     setDialogo({ modo: 'crea', cameraId: camera.id, checkIn: giorno, checkOut: aggiungiGiorni(giorno, 1) })
                   }
                   onPrenotazione={(p) => setDialogo({ modo: 'modifica', prenotazione: p })}
+                  agenzieDistinct={agenzieDistinct}
                 />
               ))}
             </Box>
@@ -237,19 +248,14 @@ export function CalendarioPage() {
   )
 }
 
-function Legenda() {
-  const voci = [
-    { etichetta: 'Diretta', colore: tokens.orange600 },
-    { etichetta: 'Booking.com', colore: tokens.blue600 },
-    { etichetta: 'Airbnb', colore: CANALE_AIRBNB },
-    { etichetta: 'Expedia', colore: CANALE_EXPEDIA },
-  ]
+function Legenda({ agenzieDistinct }: { agenzieDistinct: string[] }) {
+  if (agenzieDistinct.length === 0) return null
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-      {voci.map((v) => (
-        <Box key={v.etichetta} sx={{ display: 'flex', alignItems: 'center', gap: 0.625 }}>
-          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: v.colore }} />
-          <Typography sx={{ fontSize: 11.5, color: tokens.textSecondary }}>{v.etichetta}</Typography>
+      {agenzieDistinct.map((etichetta) => (
+        <Box key={etichetta} sx={{ display: 'flex', alignItems: 'center', gap: 0.625 }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: coloreCanale(etichetta, agenzieDistinct).colore }} />
+          <Typography sx={{ fontSize: 11.5, color: tokens.textSecondary }}>{etichetta}</Typography>
         </Box>
       ))}
     </Box>
@@ -264,9 +270,10 @@ interface RigaCameraProps {
   prenotazioni: PrenotazioneDto[]
   onCellaVuota: (giorno: Date) => void
   onPrenotazione: (p: PrenotazioneDto) => void
+  agenzieDistinct: string[]
 }
 
-function RigaCamera({ camera, giorni, inizioFinestra, fineFinestra, prenotazioni, onCellaVuota, onPrenotazione }: RigaCameraProps) {
+function RigaCamera({ camera, giorni, inizioFinestra, fineFinestra, prenotazioni, onCellaVuota, onPrenotazione, agenzieDistinct }: RigaCameraProps) {
   const barre = useMemo(() => {
     return prenotazioni
       .map((p) => {
@@ -327,7 +334,7 @@ function RigaCamera({ camera, giorni, inizioFinestra, fineFinestra, prenotazioni
         })}
 
         {barre.map(({ prenotazione, startIdx, span }) => {
-          const { colore, etichetta } = coloreCanale(prenotazione.agenzia)
+          const { colore, etichetta } = coloreCanale(prenotazione.agenzia, agenzieDistinct)
           const nomeOspite = prenotazione.numeroPrenotazione ? `#${prenotazione.numeroPrenotazione}` : etichetta
           return (
             <Box

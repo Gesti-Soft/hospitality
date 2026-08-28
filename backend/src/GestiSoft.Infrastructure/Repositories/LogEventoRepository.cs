@@ -32,6 +32,11 @@ public class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepository
             query = query.Where(l => l.Livello == livello);
         }
 
+        if (!string.IsNullOrWhiteSpace(filtro.Categoria))
+        {
+            query = query.Where(l => l.Categoria == filtro.Categoria);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
 
         var items = await query

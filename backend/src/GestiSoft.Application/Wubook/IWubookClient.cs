@@ -2,7 +2,7 @@ namespace GestiSoft.Application.Wubook;
 
 public record WubookCamera(int Id, string Nome, string? ShortName, int Occupancy, decimal Prezzo, int Disponibilita, int Subroom, string? Board);
 
-public record WubookNuovaCameraRequest(string Nome, string ShortName, int Occupancy, decimal PrezzoBase, int Disponibilita, string Board);
+public record WubookNuovaCameraRequest(string Nome, string ShortName, int Occupancy, decimal PrezzoBase, int Disponibilita, string Board, bool Woodoo = false);
 
 public record WubookPrenotazione(
     int RCode,

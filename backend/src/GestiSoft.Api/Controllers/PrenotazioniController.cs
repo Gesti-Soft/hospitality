@@ -89,5 +89,6 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
     private static PrenotazioneDto ToDto(Prenotazione p) => new(
         p.Id, p.StrutturaId, p.CameraId, p.Camera?.Nome, p.Agenzia, p.NumeroPrenotazione,
         p.ImportoPrenotazione, p.ImportoPagato, p.ImportoTotale, p.CheckIn, p.CheckOut,
-        p.NumeroOspiti, p.StatePolice, p.PMS, p.PayTourist, p.Anno, p.TotalTax, p.StatoPrenotazione);
+        p.NumeroOspiti, p.StatePolice, p.PMS, p.PayTourist, p.Anno, p.TotalTax, p.StatoPrenotazione,
+        p.TassaSoggiornoAttiva, p.SpesePuliziaAttiva, p.CauzioneAttiva, p.Ospite?.Nome, p.Ospite?.Cognome);
 }

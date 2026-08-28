@@ -1,9 +1,11 @@
 using GestiSoft.Application.AlloggiatiWeb;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Logging;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.Osservatorio;
 
@@ -31,8 +33,10 @@ public class OsservatorioInvioService(
     IOsservatorioInvioRepository invii,
     IAnagraficaAlloggiatiWebRepository anagrafica,
     IOsservatorioClient client,
+    IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard,
-    ConcessioneServiziGuard concessioneGuard)
+    ConcessioneServiziGuard concessioneGuard,
+    ILogEventoService logEventi)
 {
     public async Task<RisultatoInvioOsservatorio> InviaOraAsync(ICurrentUser currentUser, Guid strutturaId, Guid appartamentoId, CancellationToken cancellationToken)
     {
@@ -125,8 +129,24 @@ public class OsservatorioInvioService(
             return new RisultatoInvioOsservatorio(0, 0, 0, login.Errore);
         }
 
+        // Il cursore autorevole è quello del server Osservatorio, non il nostro locale: ogni
+        // struttura può essere "ferma" a un giorno diverso lato loro (es. per un'installazione
+        // precedente mai proseguita, come scoperto per Villa Chifeci Scopello — ferma al 1°
+        // maggio mentre da noi il cursore locale era vuoto). GetCurrentStatusDate restituisce
+        // già il PROSSIMO giorno da chiudere (non l'ultimo chiuso: un +1 aggiuntivo veniva
+        // rifiutato con "Invalid Date", verificato dal vivo chiudendo per intero l'arretrato di
+        // Villa Chifeci Scopello, 120 giorni, fino ad oggi senza errori). Il cursore locale
+        // (CursoreDataAtUtc) resta solo come cache/storico per la UI (v. ListSchedineAsync), qui
+        // viene sempre risincronizzato da GetCurrentStatusDate.
+        var statoRemoto = await client.GetCurrentStatusDateAsync(login.Token, appartamento.HotelCode!, cancellationToken);
+        if (statoRemoto is null)
+        {
+            await SalvaErroreAsync(appartamento, "Impossibile leggere lo stato corrente (GetCurrentStatusDate) dall'Osservatorio Turistico.", cancellationToken);
+            return new RisultatoInvioOsservatorio(0, 0, 0, "Stato remoto non disponibile.");
+        }
+
         var tipologieIds = appartamento.Tipologie.Select(t => t.TipologiaId).ToHashSet();
-        var cursore = appartamento.CursoreDataAtUtc?.Date ?? oggi;
+        var cursore = statoRemoto.Value.Date;
 
         int arriviInviati = 0, checkoutInviati = 0, giorniChiusi = 0;
 
@@ -300,5 +320,14 @@ public class OsservatorioInvioService(
         appartamento.UltimoErrore = errore;
         appartamento.UltimoInvioAtUtc = DateTime.UtcNow;
         await appartamenti.UpdateAsync(appartamento, cancellationToken);
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Warning,
+            $"Invio Osservatorio Turistico ({appartamento.Nome}): {errore}",
+            origine: "Osservatorio",
+            clienteId: await strutture.GetClienteIdAsync(appartamento.StrutturaId, cancellationToken),
+            strutturaId: appartamento.StrutturaId,
+            categoria: "Osservatorio",
+            cancellationToken: cancellationToken);
     }
 }

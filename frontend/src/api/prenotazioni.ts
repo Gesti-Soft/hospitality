@@ -25,6 +25,13 @@ export interface PrenotazioneDto {
   anno: number
   totalTax: number | null
   statoPrenotazione: StatoPrenotazione | null
+  /** I 3 toggle per prenotazione. Se tassaSoggiornoAttiva è false, statePolice/pms/payTourist sono stati marcati "già inviati" alla creazione, senza inviare nulla. */
+  tassaSoggiornoAttiva: boolean
+  spesePuliziaAttiva: boolean
+  cauzioneAttiva: boolean
+  /** Ospite capofamiglia, se la scheda alloggiati è già stata compilata (null altrimenti). */
+  ospiteNome: string | null
+  ospiteCognome: string | null
 }
 
 export interface PrenotazioneRequest {
@@ -37,6 +44,9 @@ export interface PrenotazioneRequest {
   checkIn: string
   checkOut: string
   numeroOspiti: number | null
+  tassaSoggiornoAttiva: boolean
+  spesePuliziaAttiva: boolean
+  cauzioneAttiva: boolean
 }
 
 export interface PreventivoDto {

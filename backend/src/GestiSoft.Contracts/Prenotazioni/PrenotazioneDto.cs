@@ -20,4 +20,9 @@ public record PrenotazioneDto(
     bool PayTourist,
     int Anno,
     decimal? TotalTax,
-    StatoPrenotazione? StatoPrenotazione);
+    StatoPrenotazione? StatoPrenotazione,
+    bool TassaSoggiornoAttiva,
+    bool SpesePuliziaAttiva,
+    bool CauzioneAttiva,
+    string? OspiteNome,
+    string? OspiteCognome);

@@ -16,8 +16,8 @@ public class WubookChiusureController(WubookChiusureService service, ICurrentUse
     [HttpGet]
     public async Task<IActionResult> Lista(Guid strutturaId, Guid cameraId, CancellationToken cancellationToken)
     {
-        var chiusure = await service.ListaAsync(currentUser, strutturaId, cameraId, cancellationToken);
-        return Ok(chiusure.Select(ToDto));
+        var blocchi = await service.ListaAsync(currentUser, strutturaId, cameraId, cancellationToken);
+        return Ok(blocchi.Select(b => ToDto(b, cameraId)));
     }
 
     [HttpPost]
@@ -34,5 +34,7 @@ public class WubookChiusureController(WubookChiusureService service, ICurrentUse
         return NoContent();
     }
 
-    private static ChiusuraCameraDto ToDto(ChiusuraCamera c) => new(c.Id, c.CameraId, c.DataInizio, c.DataFine, c.Motivo, c.Quantita);
+    private static ChiusuraCameraDto ToDto(ChiusuraCamera c) => new(c.Id, c.CameraId, c.DataInizio, c.DataFine, c.Motivo, c.Quantita, "Manuale");
+
+    private static ChiusuraCameraDto ToDto(BloccoCamera b, Guid cameraId) => new(b.Id, cameraId, b.DataInizio, b.DataFine, b.Motivo, b.Quantita, b.Origine);
 }

@@ -76,7 +76,9 @@ public class OsservatorioConfigService(
         var esistenti = entity.Tipologie.Select(t => t.TipologiaId).ToHashSet();
         foreach (var tipologiaId in richieste.Where(id => !esistenti.Contains(id)))
         {
-            entity.Tipologie.Add(new OsservatorioAppartamentoTipologia { OsservatorioAppartamentoId = entity.Id, TipologiaId = tipologiaId });
+            var riga = new OsservatorioAppartamentoTipologia { OsservatorioAppartamentoId = entity.Id, TipologiaId = tipologiaId };
+            repository.AggiungiTipologia(riga);
+            entity.Tipologie.Add(riga);
         }
     }
 }

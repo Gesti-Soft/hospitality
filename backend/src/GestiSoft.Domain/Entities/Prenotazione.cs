@@ -14,6 +14,9 @@ public class Prenotazione : TenantEntity
 
     public SettingRoom? Camera { get; set; }
 
+    /// <summary>Scheda alloggiati del capofamiglia/ospite principale, se già compilata (vedi OspitiService). Inverso di Ospite.PrenotazioneId.</summary>
+    public Ospite? Ospite { get; set; }
+
     /// <summary>Canale/agenzia di provenienza (es. "Booking.com", "Diretto") — testo libero, vedi SettingAgenzia.</summary>
     public string? Agenzia { get; set; }
 
@@ -36,6 +39,24 @@ public class Prenotazione : TenantEntity
     public bool PMS { get; set; }
 
     public bool PayTourist { get; set; }
+
+    /// <summary>
+    /// I 3 toggle per prenotazione (Spese di pulizia/Cauzione/Tassa di soggiorno), fedeli al form
+    /// legacy AddOrUpdateOspitiView. Default true (attivi) per non alterare prenotazioni esistenti.
+    /// Se TassaSoggiornoAttiva è false alla creazione, PrenotazioniService marca StatePolice/PMS/
+    /// PayTourist come già "inviati" senza inviare nulla — stessa logica di
+    /// AddOrUpdateOspitiViewModel.Save() del legacy (vedi commento lì per i dettagli).
+    /// </summary>
+    public bool TassaSoggiornoAttiva { get; set; } = true;
+
+    public bool SpesePuliziaAttiva { get; set; } = true;
+
+    /// <summary>
+    /// A differenza del legacy (dove la cauzione non aveva un toggle, solo un importo di sola
+    /// visualizzazione), qui è un terzo toggle a richiesta esplicita dell'utente, per coerenza visiva
+    /// con gli altri due — nessun effetto sugli invii, solo sull'importo cauzione applicato.
+    /// </summary>
+    public bool CauzioneAttiva { get; set; } = true;
 
     public string? CheckEditSelection { get; set; }
 

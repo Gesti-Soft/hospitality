@@ -1,6 +1,7 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Logging;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -16,7 +17,10 @@ public record CreaPrenotazioneRequest(
     decimal? ImportoTotale,
     DateTime CheckIn,
     DateTime CheckOut,
-    int? NumeroOspiti);
+    int? NumeroOspiti,
+    bool TassaSoggiornoAttiva = true,
+    bool SpesePuliziaAttiva = true,
+    bool CauzioneAttiva = true);
 
 public record AggiornaPrenotazioneRequest(
     Guid CameraId,
@@ -27,7 +31,10 @@ public record AggiornaPrenotazioneRequest(
     decimal? ImportoTotale,
     DateTime CheckIn,
     DateTime CheckOut,
-    int? NumeroOspiti);
+    int? NumeroOspiti,
+    bool TassaSoggiornoAttiva = true,
+    bool SpesePuliziaAttiva = true,
+    bool CauzioneAttiva = true);
 
 public record CheckOutRequest(bool RestituisciCauzione, decimal? ImportoCauzioneTrattenuta);
 
@@ -43,8 +50,21 @@ public class PrenotazioniService(
     ICameraRepository camere,
     ICauzioneRepository cauzioni,
     IOspiteRepository ospiti,
-    PermessoStrutturaGuard permessoGuard)
+    IStrutturaRepository strutture,
+    PermessoStrutturaGuard permessoGuard,
+    ILogEventoService logEventi)
 {
+    private Task LogPrenotazioneAsync(ICurrentUser currentUser, Guid strutturaId, string messaggio, CancellationToken cancellationToken) =>
+        logEventi.RegistraAsync(
+            LivelloLog.Info,
+            messaggio,
+            origine: "Api",
+            clienteId: currentUser.ClienteId,
+            strutturaId: strutturaId,
+            categoria: "Prenotazione",
+            operatore: currentUser.Email,
+            cancellationToken: cancellationToken);
+
     public async Task<IReadOnlyList<Prenotazione>> ListaInArrivoAsync(ICurrentUser currentUser, Guid strutturaId, DateTime? daData, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
@@ -89,6 +109,17 @@ public class PrenotazioniService(
             numeroPrenotazione = (conteggio + 1).ToString();
         }
 
+        var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)
+            ?? throw new NotFoundException("Struttura non trovata.");
+
+        // Fedele a AddOrUpdateOspitiViewModel.Save() del legacy: se la Tassa di soggiorno è
+        // disattivata per questa prenotazione, le schedine Alloggiati Web/Osservatorio/PayTourist
+        // vengono marcate subito come "già inviate" senza inviare nulla (mai più segnalate come
+        // "da inviare"). In più (richiesta esplicita, non presente nel legacy): lo stesso vale,
+        // indipendentemente dal toggle, per ciascun servizio che la Struttura non ha proprio
+        // ("l'account") — inutile marcare "da inviare" una schedina per un servizio non concesso.
+        var tassaDisattivata = !request.TassaSoggiornoAttiva;
+
         var entity = new Prenotazione
         {
             StrutturaId = strutturaId,
@@ -105,9 +136,16 @@ public class PrenotazioniService(
             // Una prenotazione appena creata è sempre Incompleta finché non viene collegata una
             // scheda ospiti (vedi OspitiService), fedele a OspitiLogic.AddOrUpdateOspiti del legacy.
             StatoPrenotazione = StatoPrenotazione.Incompleta,
+            TassaSoggiornoAttiva = request.TassaSoggiornoAttiva,
+            SpesePuliziaAttiva = request.SpesePuliziaAttiva,
+            CauzioneAttiva = request.CauzioneAttiva,
+            StatePolice = tassaDisattivata || !struttura.AlloggiatiWebAbilitato,
+            PMS = tassaDisattivata || !struttura.OsservatorioAbilitato,
+            PayTourist = tassaDisattivata || !struttura.PayTouristAbilitato,
         };
 
         await prenotazioni.AddAsync(entity, cancellationToken);
+        await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione creata (camera {request.CameraId}, {request.CheckIn:dd/MM/yyyy}–{request.CheckOut:dd/MM/yyyy}).", cancellationToken);
         return entity;
     }
 
@@ -130,9 +168,17 @@ public class PrenotazioniService(
         entity.CheckOut = request.CheckOut;
         entity.NumeroOspiti = request.NumeroOspiti;
         entity.Anno = request.CheckIn.Year;
+        // I 3 toggle si possono correggere anche dopo la creazione (es. capito solo dopo di non
+        // dover applicare le spese di pulizia), ma modificarli qui NON ritocca mai StatePolice/PMS/
+        // PayTourist: quella marcatura "già inviato" si decide solo alla creazione (fedele al
+        // legacy), per non rischiare di cancellare la prova di un invio reale già avvenuto.
+        entity.TassaSoggiornoAttiva = request.TassaSoggiornoAttiva;
+        entity.SpesePuliziaAttiva = request.SpesePuliziaAttiva;
+        entity.CauzioneAttiva = request.CauzioneAttiva;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await prenotazioni.UpdateAsync(entity, cancellationToken);
+        await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione #{entity.NumeroPrenotazione ?? entity.Id.ToString()[..8]} modificata.", cancellationToken);
         return entity;
     }
 
@@ -152,6 +198,7 @@ public class PrenotazioniService(
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await prenotazioni.UpdateAsync(entity, cancellationToken);
+        await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione #{entity.NumeroPrenotazione ?? entity.Id.ToString()[..8]} annullata.", cancellationToken);
         return entity;
     }
 

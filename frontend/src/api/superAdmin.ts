@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPut } from './client'
+import { apiDelete, apiGet, apiPut } from './client'
 
 export interface StrutturaAdminDto {
   id: string
   nome: string
   /** False = struttura "eliminata" (soft-delete) dal Cliente stesso o dal Super Admin. */
   attivo: boolean
+  /** Valorizzato solo se !attivo — quando è passato da oltre 90 giorni la struttura è eliminabile definitivamente. */
+  disattivataAtUtc: string | null
   wubookAttivo: boolean
   wubookUltimoErrore: string | null
   wubookCacheAggiornataAtUtc: string | null
@@ -121,4 +123,20 @@ export function useImpostaAttivoUtente() {
       apiPut(`/super-admin/utenti/${utenteId}/attivo`, { attivo }),
     onSuccess: invalida,
   })
+}
+
+/** Eliminazione DEFINITIVA (hard delete, irreversibile) di una struttura disattivata da oltre 90 giorni. */
+export function useEliminaStrutturaDefinitivamente() {
+  const invalida = useInvalidaDashboard()
+  return useMutation({
+    mutationFn: (strutturaId: string) => apiDelete(`/super-admin/strutture/${strutturaId}`),
+    onSuccess: invalida,
+  })
+}
+
+export const GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA = 90
+
+export function giorniDaDisattivazione(disattivataAtUtc: string): number {
+  const ms = Date.now() - new Date(disattivataAtUtc).getTime()
+  return Math.floor(ms / (1000 * 60 * 60 * 24))
 }

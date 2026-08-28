@@ -51,6 +51,11 @@ export function CameraDialog({ strutturaId, camera, tipologie, onClose }: Props)
       nome: nome.trim(),
       capacitaOspiti: capacitaOspiti.trim() === '' ? null : Number(capacitaOspiti),
       soggiornoMinimo: soggiornoMinimo.trim() === '' ? null : Number(soggiornoMinimo),
+      // Non editabili da questo dialog (v. "Impostazioni Wubook" nella pagina Wubook) — passati
+      // invariati per non azzerarli ad ogni salvataggio della scheda camera principale.
+      codiceCameraWubook: camera?.codiceCameraWubook ?? null,
+      prezzoWubookOverride: camera?.prezzoWubookOverride ?? null,
+      wubookSoloWoodoo: camera?.wubookSoloWoodoo ?? false,
     }
 
     const onError = (err: unknown) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')

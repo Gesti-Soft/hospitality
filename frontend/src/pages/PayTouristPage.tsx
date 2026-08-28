@@ -14,7 +14,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { ApiError } from '../api/client'
-import { esportaPayTourist, useInviaPayTouristOra, usePayTouristStrutture, usePrenotazioniPayTourist } from '../api/integrazioni'
+import { esportaPayTourist, useInviaPayTouristOra, useInviaPayTouristSingola, usePayTouristStrutture, usePrenotazioniPayTourist } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -39,6 +39,24 @@ export function PayTouristPage() {
 
   const prenotazioni = usePrenotazioniPayTourist(strutturaId, payTouristStrutturaId)
   const invia = useInviaPayTouristOra(strutturaId)
+  const inviaSingola = useInviaPayTouristSingola(strutturaId)
+  const [invioSingoloInCorso, setInvioSingoloInCorso] = useState<string | null>(null)
+
+  function eseguiInviaSingola(ospiteId: string) {
+    if (!payTouristStrutturaId) return
+    setErrore(null)
+    setInvioSingoloInCorso(ospiteId)
+    inviaSingola.mutate(
+      { payTouristStrutturaId, ospiteId },
+      {
+        onSuccess: () => setInvioSingoloInCorso(null),
+        onError: (err) => {
+          setInvioSingoloInCorso(null)
+          setErrore(err instanceof ApiError ? err.message : 'Invio non riuscito, riprova.')
+        },
+      },
+    )
+  }
 
   function inviaOra() {
     setErrore(null)
@@ -95,7 +113,7 @@ export function PayTouristPage() {
           <Button variant="contained" color="secondary" size="small" onClick={inviaOra} disabled={invia.isPending}>
             Invia ora tutte
           </Button>
-          <Button variant="outlined" size="small" onClick={esporta} disabled={!payTouristStrutturaId}>
+          <Button variant="outlined" size="small" onClick={esporta} disabled={!payTouristStrutturaId || (prenotazioni.data ?? []).length === 0}>
             Esporta JSON
           </Button>
         </Box>
@@ -129,12 +147,13 @@ export function PayTouristPage() {
                     <TableCell>Check-in</TableCell>
                     <TableCell>Check-out</TableCell>
                     <TableCell>Stato</TableCell>
+                    <TableCell align="right">Azioni</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {(prenotazioni.data ?? []).length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                      <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                         Nessuna prenotazione negli ultimi 30 giorni.
                       </TableCell>
                     </TableRow>
@@ -147,6 +166,18 @@ export function PayTouristPage() {
                       <TableCell sx={{ fontFamily: fontMono }}>{p.checkOut ? formattatoreData.format(new Date(p.checkOut)) : '—'}</TableCell>
                       <TableCell>
                         <Chip size="small" label={p.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: p.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                      </TableCell>
+                      <TableCell align="right">
+                        {!p.inviata && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => eseguiInviaSingola(p.ospiteId)}
+                            disabled={invioSingoloInCorso === p.ospiteId}
+                          >
+                            {invioSingoloInCorso === p.ospiteId ? 'Invio…' : 'Invia'}
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

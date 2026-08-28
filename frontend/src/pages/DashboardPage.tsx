@@ -109,12 +109,13 @@ export function DashboardPage() {
         </Button>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
-        <KpiCard etichetta="Arrivi oggi" valore={arriviProssimi.isLoading ? null : String(arriviOggi.length)} dettaglio="ospiti attesi" />
-        <KpiCard
-          etichetta="Partenze oggi"
-          valore={arriviInCorso.isLoading ? null : String(partenzeOggi.length)}
-          dettaglio="check-out previsti"
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+        <KpiCardDoppia
+          etichetta="Arrivi e partenze oggi"
+          voci={[
+            { valore: arriviProssimi.isLoading ? null : String(arriviOggi.length), etichetta: 'arrivi' },
+            { valore: arriviInCorso.isLoading ? null : String(partenzeOggi.length), etichetta: 'partenze' },
+          ]}
         />
         <KpiCard
           etichetta="Occupazione"
@@ -185,6 +186,26 @@ function KpiCard({ etichetta, valore, dettaglio, accento }: { etichetta: string;
           <Typography sx={{ fontFamily: fontMono, fontSize: 28, fontWeight: 600 }}>{valore}</Typography>
         )}
         {dettaglio && valore !== null && <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>{dettaglio}</Typography>}
+      </Box>
+    </Box>
+  )
+}
+
+function KpiCardDoppia({ etichetta, voci }: { etichetta: string; voci: { valore: string | null; etichetta: string }[] }) {
+  return (
+    <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: '20px 22px' }}>
+      <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: tokens.textSecondary }}>{etichetta}</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 3, mt: 1 }}>
+        {voci.map((v) => (
+          <Box key={v.etichetta} sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+            {v.valore === null ? (
+              <Skeleton width={40} height={34} />
+            ) : (
+              <Typography sx={{ fontFamily: fontMono, fontSize: 28, fontWeight: 600 }}>{v.valore}</Typography>
+            )}
+            {v.valore !== null && <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>{v.etichetta}</Typography>}
+          </Box>
+        ))}
       </Box>
     </Box>
   )

@@ -100,6 +100,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, overflowY: 'auto' }}>
           {navSections
             .filter((section) => !section.soloSuperAdmin || isSuperAdmin)
+            // Per il SuperAdmin, le sezioni operative restano nascoste finché non seleziona
+            // esplicitamente una Struttura (nessuna struttura precaricata all'accesso).
+            .filter((section) => section.soloSuperAdmin || !isSuperAdmin || !!strutturaId)
             .map((section) => (
             <Box key={section.title} sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <Typography sx={sezioneLabelSx}>{section.title}</Typography>

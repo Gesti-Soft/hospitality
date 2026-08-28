@@ -1,7 +1,10 @@
 using GestiSoft.Application.Auth;
+using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Logging;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.AlloggiatiWeb;
 
@@ -24,8 +27,10 @@ public class AlloggiatiWebInvioService(
     IAlloggiatiWebIntegrazioneRepository integrazioni,
     IAnagraficaAlloggiatiWebRepository anagrafica,
     IAlloggiatiWebClient client,
+    IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard,
-    ConcessioneServiziGuard concessioneGuard)
+    ConcessioneServiziGuard concessioneGuard,
+    ILogEventoService logEventi)
 {
     public async Task<RisultatoInvioAlloggiatiWeb> InviaOraAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -109,18 +114,41 @@ public class AlloggiatiWebInvioService(
     }
 
     /// <summary>
-    /// Esportazione su richiesta (download) delle schedine del giorno — fallback quando il
+    /// Esportazione su richiesta (download) delle schedine ancora da inviare — fallback quando il
     /// servizio SOAP non è ancora configurato o non è raggiungibile, senza inviarle né marcarle
     /// come inviate (stesso pattern "on-demand, mai persistito" di PDF/XML fattura in Fase 4).
+    /// Usa la stessa fonte dati della lista mostrata a schermo (30 giorni, non solo check-in
+    /// oggi/ieri): l'export deve coincidere con quello che l'operatore vede in pagina come "da
+    /// inviare" — prima usava la finestra stretta pensata per il job automatico giornaliero,
+    /// risultando vuoto ogni volta che non c'erano arrivi esattamente in quei 2 giorni.
     /// </summary>
     public async Task<string> EsportaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
 
-        var daInviare = await ospiti.ListDaInviareAlloggiatiWebAsync(strutturaId, cancellationToken);
+        var daInviare = await ListDaInviareRecentiAsync(strutturaId, cancellationToken);
         var builder = await CreaBuilderAsync(cancellationToken);
 
         return string.Join("\r\n", daInviare.SelectMany(builder.Costruisci));
+    }
+
+    /// <summary>Esportazione di una singola schedina (per Ospite), oltre al bulk.</summary>
+    public async Task<string> EsportaSingolaAsync(ICurrentUser currentUser, Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+
+        var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+        var ospite = recenti.FirstOrDefault(o => o.Id == ospiteId)
+            ?? throw new NotFoundException("Ospite non trovato tra le schedine recenti.");
+
+        var builder = await CreaBuilderAsync(cancellationToken);
+        return string.Join("\r\n", builder.Costruisci(ospite));
+    }
+
+    private async Task<IReadOnlyList<Ospite>> ListDaInviareRecentiAsync(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+        return recenti.Where(o => o.Prenotazione?.StatePolice != true).ToList();
     }
 
     private async Task<SchedinaAlloggiatiWebBuilder> CreaBuilderAsync(CancellationToken cancellationToken) => new(
@@ -152,6 +180,18 @@ public class AlloggiatiWebInvioService(
         integrazione.UltimeSchedineInviate = inviate;
         integrazione.UltimoErrore = errore;
         await integrazioni.UpsertAsync(integrazione, cancellationToken);
+
+        if (errore is not null)
+        {
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Invio Alloggiati Web (Polizia di Stato): {errore}",
+                origine: "AlloggiatiWeb",
+                clienteId: await strutture.GetClienteIdAsync(integrazione.StrutturaId, cancellationToken),
+                strutturaId: integrazione.StrutturaId,
+                categoria: "AlloggiatiWeb",
+                cancellationToken: cancellationToken);
+        }
 
         return new RisultatoInvioAlloggiatiWeb(inviate, totale, totale - inviate, errore);
     }

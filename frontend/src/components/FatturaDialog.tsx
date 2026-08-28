@@ -130,6 +130,19 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           </TextField>
         )}
 
+        {!modifica &&
+          prenotazioneId !== '' &&
+          (() => {
+            const p = prenotazioniDisponibili.find((x) => x.id === prenotazioneId)
+            return p?.totalTax ? (
+              <Alert severity="info">
+                Questa prenotazione ha una tassa di soggiorno di {p.totalTax.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}, non
+                inclusa automaticamente nel prezzo qui sotto (non è soggetta a IVA come il soggiorno): aggiungila manualmente all'importo o in una
+                riga/nota separata se vuoi fatturarla insieme.
+              </Alert>
+            ) : null
+          })()}
+
         {modifica && (
           <TextField select label="Cliente assegnato" value={datiClienteId ?? ''} onChange={(e) => setDatiClienteId(e.target.value)} disabled={inCorso}>
             <MenuItem value="">Nessuno</MenuItem>

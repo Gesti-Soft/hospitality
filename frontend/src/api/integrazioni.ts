@@ -135,7 +135,8 @@ export interface AlloggiatiWebConfigRequest {
 export interface RisultatoInvioAlloggiatiWebDto {
   inviate: number
   totaleSchedine: number
-  errori: string[]
+  /** Conteggio, non un elenco — i dettagli sono in messaggio. */
+  errori: number
   messaggio: string | null
 }
 
@@ -157,6 +158,10 @@ export function useInviaAlloggiatiWebOra(strutturaId: string | null) {
 
 export function esportaSchedineAlloggiatiWeb(strutturaId: string) {
   return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/schedine/export`, `schedine-alloggiati-web.txt`)
+}
+
+export function esportaSchedinaAlloggiatiWebSingola(strutturaId: string, ospiteId: string) {
+  return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/schedine/${ospiteId}/export`, `schedina-alloggiati-web.txt`)
 }
 
 export function useSchedineAlloggiatiWeb(strutturaId: string | null) {
@@ -243,7 +248,8 @@ export interface PayTouristStrutturaRequest {
 export interface RisultatoInvioPayTouristDto {
   inviate: number
   totalePrenotazioni: number
-  errori: string[]
+  /** Conteggio, non un elenco — i dettagli sono in messaggio. */
+  errori: number
   messaggio: string | null
 }
 
@@ -285,6 +291,18 @@ export function useInviaPayTouristOra(strutturaId: string | null) {
   })
 }
 
+export function useInviaPayTouristSingola(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ payTouristStrutturaId, ospiteId }: { payTouristStrutturaId: string; ospiteId: string }) =>
+      apiPost<void>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/prenotazioni/${ospiteId}/invia`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['paytourist-prenotazioni', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['paytourist-strutture', strutturaId] })
+    },
+  })
+}
+
 export function esportaPayTourist(strutturaId: string, payTouristStrutturaId: string) {
   return apiScaricaFile(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/export`, `paytourist-export.json`)
 }
@@ -314,7 +332,8 @@ export interface RisultatoSincronizzazioneWubookDto {
   importate: number
   aggiornate: number
   annullate: number
-  errori: string[]
+  /** Conteggio, non un elenco. */
+  errori: number
 }
 
 function useInvalidaWubook(strutturaId: string | null) {
@@ -373,7 +392,10 @@ export function useSincronizzaWubookCamera(strutturaId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (cameraId: string) => apiPost(`/strutture/${strutturaId}/wubook/camere/${cameraId}/sincronizza`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['camere', strutturaId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['camere', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['camere-wubook', strutturaId] })
+    },
   })
 }
 
@@ -381,7 +403,61 @@ export function useRimuoviWubookCamera(strutturaId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (cameraId: string) => apiDelete(`/strutture/${strutturaId}/wubook/camere/${cameraId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['camere', strutturaId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['camere', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['camere-wubook', strutturaId] })
+    },
+  })
+}
+
+export interface CameraWubookInfoDto {
+  cameraId: string
+  cameraNome: string
+  tipologiaId: string | null
+  tipologiaNome: string | null
+  idCameraWubook: number | null
+  wubookAttiva: boolean
+  chiusaOggi: boolean
+  chiusureCount: number
+  restrizioniCount: number
+}
+
+export interface CameraWubookRemoteDto {
+  id: number
+  nome: string
+  shortName: string | null
+  occupancy: number
+  prezzo: number
+  disponibilita: number
+}
+
+/** Camere locali con stato associazione/disponibilità odierna — per la select Tipologia → camere della tab Wubook ridisegnata. */
+export function useCamerePerAssociazione(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['camere-wubook', strutturaId],
+    queryFn: () => apiGet<CameraWubookInfoDto[]>(`/strutture/${strutturaId}/wubook/camere/per-associazione`),
+    enabled: !!strutturaId,
+  })
+}
+
+/** Camere già presenti su Wubook (fetch_rooms) — caricate solo quando serve (dialog di associazione aperto), è una vera chiamata Wubook. */
+export function useCamereRemoteWubook(strutturaId: string | null, abilitato: boolean) {
+  return useQuery({
+    queryKey: ['camere-wubook-remote', strutturaId],
+    queryFn: () => apiGet<CameraWubookRemoteDto[]>(`/strutture/${strutturaId}/wubook/camere/remote`),
+    enabled: !!strutturaId && abilitato,
+  })
+}
+
+export function useAssociaCameraWubook(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ cameraId, idCameraWubook }: { cameraId: string; idCameraWubook: number | null }) =>
+      apiPut(`/strutture/${strutturaId}/wubook/camere/${cameraId}/associazione`, { idCameraWubook }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['camere-wubook', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['camere', strutturaId] })
+    },
   })
 }
 
@@ -390,12 +466,14 @@ export function useRimuoviWubookCamera(strutturaId: string | null) {
 // ---------------------------------------------------------------------------
 
 export interface ChiusuraCameraDto {
-  id: string
+  /** null per le righe derivate al volo da una prenotazione reale (v. `origine`) — mai eliminabili. */
+  id: string | null
   cameraId: string
   dataInizio: string
   dataFine: string
   motivo: string | null
   quantita: number | null
+  origine: 'Manuale' | 'Prenotazione'
 }
 
 export interface CreaChiusuraCameraRequest {

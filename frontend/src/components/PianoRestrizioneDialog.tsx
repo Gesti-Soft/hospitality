@@ -22,6 +22,8 @@ export function PianoRestrizioneDialog({ strutturaId, piano, onClose }: Props) {
   const [nome, setNome] = useState(piano?.nome ?? '')
   const [minStay, setMinStay] = useState(piano?.regole?.minStay != null ? String(piano.regole.minStay) : '')
   const [maxStay, setMaxStay] = useState(piano?.regole?.maxStay != null ? String(piano.regole.maxStay) : '')
+  const [minStayArrival, setMinStayArrival] = useState(piano?.regole?.minStayArrival != null ? String(piano.regole.minStayArrival) : '')
+  const [maxStayArrival, setMaxStayArrival] = useState(piano?.regole?.maxStayArrival != null ? String(piano.regole.maxStayArrival) : '')
   const [chiuso, setChiuso] = useState(piano?.regole?.chiuso ?? false)
   const [chiusoArrivo, setChiusoArrivo] = useState(piano?.regole?.chiusoArrivo ?? false)
   const [chiusoPartenza, setChiusoPartenza] = useState(piano?.regole?.chiusoPartenza ?? false)
@@ -40,9 +42,9 @@ export function PianoRestrizioneDialog({ strutturaId, piano, onClose }: Props) {
 
     const regole = {
       minStay: minStay.trim() === '' ? null : Number(minStay),
-      minStayArrival: null,
+      minStayArrival: minStayArrival.trim() === '' ? null : Number(minStayArrival),
       maxStay: maxStay.trim() === '' ? null : Number(maxStay),
-      maxStayArrival: null,
+      maxStayArrival: maxStayArrival.trim() === '' ? null : Number(maxStayArrival),
       chiuso,
       chiusoArrivo,
       chiusoPartenza,
@@ -67,6 +69,11 @@ export function PianoRestrizioneDialog({ strutturaId, piano, onClose }: Props) {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField label="Soggiorno minimo" type="number" value={minStay} onChange={(e) => setMinStay(e.target.value)} fullWidth disabled={inCorso} />
           <TextField label="Soggiorno massimo" type="number" value={maxStay} onChange={(e) => setMaxStay(e.target.value)} fullWidth disabled={inCorso} />
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <TextField label="Soggiorno minimo all'arrivo" type="number" value={minStayArrival} onChange={(e) => setMinStayArrival(e.target.value)} fullWidth disabled={inCorso} />
+          <TextField label="Soggiorno massimo all'arrivo" type="number" value={maxStayArrival} onChange={(e) => setMaxStayArrival(e.target.value)} fullWidth disabled={inCorso} />
         </Box>
 
         <FormControlLabel control={<Checkbox checked={chiuso} onChange={(e) => setChiuso(e.target.checked)} disabled={inCorso} />} label="Chiuso (nessuna vendita)" />

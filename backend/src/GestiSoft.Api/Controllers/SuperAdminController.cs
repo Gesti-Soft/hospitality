@@ -76,12 +76,24 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
         return Ok(new { utente.Id, utente.Attivo });
     }
 
+    /// <summary>
+    /// Eliminazione DEFINITIVA di una Struttura disattivata da almeno 90 giorni — irreversibile,
+    /// nessuna cancellazione automatica: va sempre invocata esplicitamente riga per riga dalla
+    /// dashboard, mai da un job schedulato.
+    /// </summary>
+    [HttpDelete("strutture/{strutturaId:guid}")]
+    public async Task<IActionResult> EliminaStruttura(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await service.EliminaStrutturaAsync(currentUser, strutturaId, cancellationToken);
+        return NoContent();
+    }
+
     private static DashboardSuperAdminDto ToDto(ApplicationSuperAdmin.DashboardSuperAdminInfo d) => new(
         d.Clienti.Select(c => new ClienteAdminDto(
             c.Id, c.RagioneSociale, c.PartitaIva, c.Attivo, c.CreatedAtUtc,
             c.NumeroUtenti, c.NumeroUtentiAttivi,
             c.Strutture.Select(s => new StrutturaAdminDto(
-                s.Id, s.Nome, s.Attivo, s.WubookAttivo, s.WubookUltimoErrore, s.WubookCacheAggiornataAtUtc,
+                s.Id, s.Nome, s.Attivo, s.DisattivataAtUtc, s.WubookAttivo, s.WubookUltimoErrore, s.WubookCacheAggiornataAtUtc,
                 s.PoliziaStatoAttiva, s.OsservatorioAttivo, s.PayTouristAttivo,
                 s.WubookAbilitato, s.AlloggiatiWebAbilitato, s.OsservatorioAbilitato, s.PayTouristAbilitato)).ToList()))
             .ToList(),

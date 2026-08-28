@@ -14,6 +14,8 @@ public class LogEventoService(ILogEventoRepository repository) : ILogEventoServi
         string? correlationId = null,
         Guid? clienteId = null,
         Guid? strutturaId = null,
+        string? categoria = null,
+        string? operatore = null,
         CancellationToken cancellationToken = default)
     {
         var evento = new LogEvento
@@ -25,6 +27,8 @@ public class LogEventoService(ILogEventoRepository repository) : ILogEventoServi
             CorrelationId = correlationId,
             ClienteId = clienteId,
             StrutturaId = strutturaId,
+            Categoria = categoria,
+            Operatore = operatore,
         };
 
         await repository.AddAsync(evento, cancellationToken);

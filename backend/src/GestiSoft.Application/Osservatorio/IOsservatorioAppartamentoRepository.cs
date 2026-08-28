@@ -13,4 +13,13 @@ public interface IOsservatorioAppartamentoRepository
     Task UpdateAsync(OsservatorioAppartamento entity, CancellationToken cancellationToken);
 
     void RimuoviTipologia(OsservatorioAppartamentoTipologia riga);
+
+    /// <summary>
+    /// Aggiunge esplicitamente al DbContext prima di agganciarla via navigazione (entity.Tipologie.Add) —
+    /// necessario perché la riga ha già una chiave Guid valorizzata lato client (costruttore di
+    /// TenantEntity) e il genitore è già in stato Modified: senza questo, EF la classifica per
+    /// convenzione come Modified invece che Added e genera un UPDATE su una riga che non esiste
+    /// ancora (stesso bug già corretto in OspiteRepository.AddMembro).
+    /// </summary>
+    void AggiungiTipologia(OsservatorioAppartamentoTipologia riga);
 }

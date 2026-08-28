@@ -46,4 +46,15 @@ public interface IOsservatorioClient
     Task<OsservatorioEsitoOperazione> SendArrivalsAsync(string token, string hotelCode, IReadOnlyList<OsservatorioStayDto> stays, CancellationToken cancellationToken);
 
     Task<OsservatorioEsitoOperazione> SendCheckoutsAsync(string token, string hotelCode, IReadOnlyList<OsservatorioStayDto> stays, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// GET entity/GetCurrentStatusDate/{hotelCode} — il PROSSIMO giorno da chiudere secondo il
+    /// server Osservatorio per questa entità (data locale italiana, senza componente ora), non
+    /// l'ultimo già chiuso. Autorevole, mai "oggi" secondo il nostro orologio: il server può essere
+    /// "fermo" a un giorno diverso per ogni struttura (es. da un'installazione precedente mai
+    /// proseguita) ed enddayfrompms rifiuta con "Invalid Date" se non si riparte esattamente da lì
+    /// (verificato dal vivo: un +1 su questo valore veniva anch'esso rifiutato). Null se la chiamata
+    /// fallisce o la risposta non è una data valida.
+    /// </summary>
+    Task<DateTime?> GetCurrentStatusDateAsync(string token, string hotelCode, CancellationToken cancellationToken);
 }

@@ -39,6 +39,7 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
                     s.Id,
                     s.Nome,
                     s.Attivo,
+                    s.DisattivataAtUtc,
                     w?.Attivo ?? false,
                     w?.UltimoErrore,
                     w?.CacheAggiornataAtUtc,
@@ -74,5 +75,54 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
             u.CreatedAtUtc)).ToList();
 
         return new DashboardSuperAdminInfo(infoClienti, infoUtenti);
+    }
+
+    /// <summary>
+    /// Cancellazione fisica riga per riga di ogni tabella tenant-scoped della Struttura, in un unico
+    /// ordine che rispetta i vincoli FK "Restrict" del modello (verificato leggendo le FK reali di
+    /// ogni entità, non per tentativi): i figli sempre prima dei genitori a cui puntano con Restrict
+    /// (es. SettingRoom prima di SettingTipologia, OspiteRiga prima di Ospite, Ospite/Cauzione/
+    /// OsservatorioInvio prima di Prenotazione). Tutto in un'unica transazione: se un vincolo FK non
+    /// previsto blocca una cancellazione, l'intera operazione va in rollback, nessun dato parziale
+    /// viene perso — mai un'eliminazione "a metà".
+    /// </summary>
+    public async Task EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        await db.ChiusureCamera.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.RestrizioniSoggiornoCamera.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.PrezziCamera.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.OspitiRighe.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.Cauzioni.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.OsservatorioInvii.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.Ospiti.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.DatiFattura.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.Prenotazioni.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.Camere.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        // Tabelle ponte senza StrutturaId proprio: filtrate tramite l'entità Struttura-scoped a cui puntano.
+        await db.OsservatorioAppartamentiTipologie
+            .Where(x => db.OsservatorioAppartamenti.Any(a => a.Id == x.OsservatorioAppartamentoId && a.StrutturaId == strutturaId))
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.PayTouristStruttureTipologie
+            .Where(x => db.PayTouristStrutture.Any(p => p.Id == x.PayTouristStrutturaId && p.StrutturaId == strutturaId))
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.TipologieCamera.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.CanaliVendita.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.DatiCliente.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.DatiAziendali.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.Spese.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.Entrate.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.ImpostazioniStruttura.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.LogEventi.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.WubookIntegrazioni.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.AlloggiatiWebIntegrazioni.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.OsservatorioAppartamenti.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.PayTouristStrutture.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.PayTouristIntegrazioni.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.UtentiStrutture.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.Strutture.Where(x => x.Id == strutturaId).ExecuteDeleteAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
     }
 }

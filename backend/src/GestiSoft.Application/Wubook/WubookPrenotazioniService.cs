@@ -1,5 +1,6 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
+using GestiSoft.Application.Logging;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Domain.Entities;
@@ -24,7 +25,9 @@ public class WubookPrenotazioniService(
     ICameraRepository camere,
     IWubookClient wubookClient,
     WubookLicenzaService licenzaService,
-    PermessoStrutturaGuard permessoGuard)
+    IStrutturaRepository strutture,
+    PermessoStrutturaGuard permessoGuard,
+    ILogEventoService logEventi)
 {
     private enum EsitoBooking { Creata, Aggiornata, Annullata, Ignorata }
 
@@ -55,9 +58,17 @@ public class WubookPrenotazioniService(
                     case EsitoBooking.Annullata: annullate++; break;
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 errori++;
+                await logEventi.RegistraAsync(
+                    LivelloLog.Warning,
+                    $"Import prenotazione Wubook rcode={booking.RCode}: {ex.Message}",
+                    origine: "Wubook",
+                    clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                    strutturaId: strutturaId,
+                    categoria: "Wubook",
+                    cancellationToken: cancellationToken);
             }
         }
 

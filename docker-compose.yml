@@ -28,6 +28,10 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      # Le strutture gestite sono tutte italiane e le date/ore inserite dall'operatore (es. orario
+      # di invio giornaliero) sono sempre intese come ora locale italiana — senza questo, il
+      # confronto con DateTime.Now nei job Worker userebbe UTC, con uno scarto di 1-2 ore (CET/CEST).
+      TZ: ${TZ:-Europe/Rome}
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
       Frontend__Origin: ${FRONTEND_ORIGIN:-http://localhost:8081}
       Jwt__Issuer: ${JWT_ISSUER:-GestiSoft.Gestionale}
@@ -56,6 +60,9 @@ services:
         condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      # v. commento sul servizio "api" — i job di invio giornaliero confrontano l'orario configurato
+      # con DateTime.Now, che senza TZ sarebbe UTC invece che ora locale italiana.
+      TZ: ${TZ:-Europe/Rome}
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
       Gestisoft__BaseUrl: ${GESTISOFT_BASE_URL:-}
       AlloggiatiWeb__Endpoint: ${ALLOGGIATIWEB_ENDPOINT:-}

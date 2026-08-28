@@ -19,7 +19,7 @@ import Typography from '@mui/material/Typography'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import { useStruttura } from '../struttura/StrutturaContext'
-import { LivelloLog, useLogs, type LogEventoDto } from '../api/log'
+import { CATEGORIE_LOG, LivelloLog, useLogs, type LogEventoDto } from '../api/log'
 import { fontMono, tokens } from '../theme'
 
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -40,32 +40,54 @@ const COLORE_LIVELLO: Record<LivelloLog, string> = {
 export function LogPage() {
   const { strutturaId } = useStruttura()
   const [livello, setLivello] = useState<string>('')
+  const [categoria, setCategoria] = useState<string>('')
   const [page, setPage] = useState(1)
   const [dettaglio, setDettaglio] = useState<LogEventoDto | null>(null)
 
-  const logs = useLogs(strutturaId, livello === '' ? null : (Number(livello) as LivelloLog), page, PAGE_SIZE)
+  const logs = useLogs(strutturaId, livello === '' ? null : (Number(livello) as LivelloLog), categoria === '' ? null : categoria, page, PAGE_SIZE)
 
   const totalPages = logs.data ? Math.max(1, Math.ceil(logs.data.totalCount / PAGE_SIZE)) : 1
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <TextField
-          select
-          size="small"
-          label="Livello"
-          value={livello}
-          onChange={(e) => {
-            setLivello(e.target.value)
-            setPage(1)
-          }}
-          sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="">Tutti</MenuItem>
-          <MenuItem value={String(LivelloLog.Info)}>Info</MenuItem>
-          <MenuItem value={String(LivelloLog.Warning)}>Avviso</MenuItem>
-          <MenuItem value={String(LivelloLog.Error)}>Errore</MenuItem>
-        </TextField>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <TextField
+            select
+            size="small"
+            label="Livello"
+            value={livello}
+            onChange={(e) => {
+              setLivello(e.target.value)
+              setPage(1)
+            }}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="">Tutti</MenuItem>
+            <MenuItem value={String(LivelloLog.Info)}>Info</MenuItem>
+            <MenuItem value={String(LivelloLog.Warning)}>Avviso</MenuItem>
+            <MenuItem value={String(LivelloLog.Error)}>Errore</MenuItem>
+          </TextField>
+
+          <TextField
+            select
+            size="small"
+            label="Categoria"
+            value={categoria}
+            onChange={(e) => {
+              setCategoria(e.target.value)
+              setPage(1)
+            }}
+            sx={{ minWidth: 180 }}
+          >
+            <MenuItem value="">Tutte</MenuItem>
+            {CATEGORIE_LOG.map((c) => (
+              <MenuItem key={c} value={c}>
+                {c}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
@@ -89,7 +111,8 @@ export function LogPage() {
               <TableRow>
                 <TableCell>Data</TableCell>
                 <TableCell>Livello</TableCell>
-                <TableCell>Origine</TableCell>
+                <TableCell>Categoria</TableCell>
+                <TableCell>Operatore</TableCell>
                 <TableCell>Messaggio</TableCell>
                 <TableCell>Correlation Id</TableCell>
               </TableRow>
@@ -97,7 +120,7 @@ export function LogPage() {
             <TableBody>
               {(logs.data?.items ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                     Nessun evento registrato.
                   </TableCell>
                 </TableRow>
@@ -108,7 +131,8 @@ export function LogPage() {
                   <TableCell>
                     <Chip size="small" label={ETICHETTA_LIVELLO[l.livello]} sx={{ bgcolor: COLORE_LIVELLO[l.livello], color: '#fff', fontWeight: 700 }} />
                   </TableCell>
-                  <TableCell sx={{ fontSize: 12.5 }}>{l.origine}</TableCell>
+                  <TableCell sx={{ fontSize: 12.5 }}>{l.categoria ?? l.origine}</TableCell>
+                  <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>{l.operatore ?? '—'}</TableCell>
                   <TableCell sx={{ fontSize: 12.5 }}>{l.messaggio}</TableCell>
                   <TableCell sx={{ fontFamily: fontMono, fontSize: 11, color: tokens.textTertiary }}>{l.correlationId ?? '—'}</TableCell>
                 </TableRow>
