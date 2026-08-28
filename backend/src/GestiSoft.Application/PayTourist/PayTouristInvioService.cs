@@ -1,6 +1,7 @@
 using GestiSoft.Application.AlloggiatiWeb;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Wubook;
@@ -9,6 +10,8 @@ using GestiSoft.Domain.Entities;
 namespace GestiSoft.Application.PayTourist;
 
 public record RisultatoInvioPayTourist(int Inviate, int TotalePrenotazioni, int Errori, string? Messaggio);
+
+public record PrenotazionePayTourist(Guid OspiteId, Guid? PrenotazioneId, string NomeOspite, string? Camera, DateTime? CheckIn, DateTime? CheckOut, bool Inviata);
 
 /// <summary>
 /// Invio a PayTourist — porta StatePoliceLogic.SendSchedinePayTourist del legacy: per ogni
@@ -33,7 +36,7 @@ public class PayTouristInvioService(
     IPayTouristIntegrazioneRepository integrazioni,
     IPayTouristStrutturaRepository payTouristStrutture,
     IAnagraficaAlloggiatiWebRepository anagrafica,
-    IDatiAziendaliComuneRepository datiAziendali,
+    IImpostazioniStrutturaRepository impostazioniStruttura,
     IPayTouristClient client,
     WubookLicenzaService wubookLicenzaService,
     PermessoStrutturaGuard permessoGuard)
@@ -155,6 +158,27 @@ public class PayTouristInvioService(
         return string.Join("\r\n", righe);
     }
 
+    /// <summary>Elenco prenotazioni recenti (30 giorni sul check-out) di una struttura PayTourist per la schermata operativa — da inviare e già inviate.</summary>
+    public async Task<IReadOnlyList<PrenotazionePayTourist>> ListPrenotazioniAsync(ICurrentUser currentUser, Guid strutturaId, Guid payTouristStrutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+
+        var payTouristStruttura = await payTouristStrutture.GetAsync(strutturaId, payTouristStrutturaId, cancellationToken)
+            ?? throw new NotFoundException("Struttura PayTourist non trovata.");
+
+        var tipologieIds = payTouristStruttura.Tipologie.Select(t => t.TipologiaId).ToHashSet();
+        var recenti = await ospiti.ListRecentiPayTouristAsync(strutturaId, tipologieIds, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+
+        return recenti.Select(o => new PrenotazionePayTourist(
+            o.Id,
+            o.PrenotazioneId,
+            $"{o.Cognome} {o.Nome}".Trim(),
+            o.Prenotazione?.Camera?.Nome,
+            o.Prenotazione?.CheckIn,
+            o.Prenotazione?.CheckOut,
+            o.Prenotazione?.PayTourist ?? false)).ToList();
+    }
+
     private async Task<(int Inviate, int Trovate, int Errori, IReadOnlyList<string> Messaggi)> ProcessaStrutturaAsync(
         Guid strutturaId,
         PayTouristStruttura payTouristStruttura,
@@ -250,7 +274,7 @@ public class PayTouristInvioService(
         await anagrafica.ListLuoghiAsync(cancellationToken),
         await anagrafica.ListDocumentiConTypeIdAsync(cancellationToken),
         await anagrafica.ListTipiAlloggiatoAsync(cancellationToken),
-        await datiAziendali.GetComuneAsync(strutturaId, cancellationToken));
+        (await impostazioniStruttura.GetByStrutturaIdAsync(strutturaId, cancellationToken))?.ComuneAttivita);
 
     private async Task<RisultatoInvioPayTourist> SegnalaErroreGlobaleAsync(IReadOnlyList<PayTouristStruttura> lista, string errore, CancellationToken cancellationToken)
     {

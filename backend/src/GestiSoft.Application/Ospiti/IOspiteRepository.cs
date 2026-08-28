@@ -16,6 +16,13 @@ public interface IOspiteRepository
     Task<IReadOnlyList<Ospite>> ListDaInviareAlloggiatiWebAsync(Guid strutturaId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Ospiti con soggiorno non annullato e check-in nella finestra indicata (indipendentemente dal
+    /// flag StatePolice) — per la schermata operativa Alloggiati Web (Impostazioni), che deve
+    /// mostrare sia le schedine da inviare sia quelle già inviate, non solo quelle in coda.
+    /// </summary>
+    Task<IReadOnlyList<Ospite>> ListRecentiAlloggiatiWebAsync(Guid strutturaId, DateTime da, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Ospiti con arrivo (check-in) in una data, soggiorno in corso, non ancora inviati
     /// all'Osservatorio Turistico (Prenotazione.PMS==false), sulle sole tipologie camera indicate
     /// (l'appartamento a cui instradarli) — porta OspitiLogic.GetPms del legacy, filtrato per
@@ -32,6 +39,13 @@ public interface IOspiteRepository
     Task<IReadOnlyList<Ospite>> ListCheckoutOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime data, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Ospiti non annullati con check-in o check-out nella finestra indicata, sulle tipologie
+    /// dell'appartamento — per la schermata operativa Osservatorio, che deve mostrare sia gli
+    /// arrivi/partenze da inviare sia quelli già inviati (non solo il giorno corrente).
+    /// </summary>
+    Task<IReadOnlyList<Ospite>> ListRecentiOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime da, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Ospiti di prenotazioni già completate (check-out effettuato, <c>StatoPrenotazione.Completata</c>)
     /// non ancora inviate a PayTourist (<c>Prenotazione.PayTourist==false</c>), con check-out negli
     /// ultimi 7 giorni, sulle sole tipologie camera indicate (la "struttura PayTourist" a cui
@@ -40,6 +54,14 @@ public interface IOspiteRepository
     /// PayTouristInvioService).
     /// </summary>
     Task<IReadOnlyList<Ospite>> ListDaInviarePayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ospiti di prenotazioni completate con check-out nella finestra indicata (indipendentemente dal
+    /// flag PayTourist), sulle tipologie della struttura PayTourist — per la schermata operativa
+    /// PayTourist (Impostazioni), che deve mostrare sia le prenotazioni da inviare sia quelle già
+    /// inviate, non solo quelle ancora in coda.
+    /// </summary>
+    Task<IReadOnlyList<Ospite>> ListRecentiPayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime da, CancellationToken cancellationToken);
 
     void Add(Ospite entity);
 

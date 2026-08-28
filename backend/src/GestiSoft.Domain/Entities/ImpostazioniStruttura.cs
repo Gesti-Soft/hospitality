@@ -21,4 +21,12 @@ public class ImpostazioniStruttura : TenantEntity
     public decimal? TassaSoggiornoPrezzo { get; set; }
 
     public int? TassaSoggiornoMaxGiorni { get; set; }
+
+    /// <summary>
+    /// Comune dove opera fisicamente la struttura (porta GeneralSetting["COMUNE ATTIVITA'"] del
+    /// legacy) — distinto dal comune fiscale/amministrativo dell'azienda (DatiAziendali.Comune,
+    /// Fase 4): usato per l'esenzione tassa di soggiorno per residenza e per le riduzioni
+    /// PayTourist per residenza/esenzione (StatePoliceLogic.ControlReduction nel legacy).
+    /// </summary>
+    public string? ComuneAttivita { get; set; }
 }

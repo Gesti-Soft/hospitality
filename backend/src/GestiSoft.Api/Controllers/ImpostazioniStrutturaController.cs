@@ -32,5 +32,6 @@ public class ImpostazioniStrutturaController(ImpostazioniStrutturaService servic
         impostazioni.PayTouristAttivo,
         impostazioni.OraInvioGiornaliero,
         impostazioni.TassaSoggiornoPrezzo,
-        impostazioni.TassaSoggiornoMaxGiorni);
+        impostazioni.TassaSoggiornoMaxGiorni,
+        impostazioni.ComuneAttivita);
 }

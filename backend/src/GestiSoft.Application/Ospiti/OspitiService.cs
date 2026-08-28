@@ -50,7 +50,6 @@ public class OspitiService(
     IOspiteRepository ospiti,
     IPrenotazioneRepository prenotazioni,
     IImpostazioniStrutturaRepository impostazioniStruttura,
-    IDatiAziendaliComuneRepository datiAziendali,
     PermessoStrutturaGuard permessoGuard)
 {
     public async Task<Ospite?> GetSchedaAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
@@ -163,7 +162,7 @@ public class OspitiService(
             return 0;
         }
 
-        var comuneStruttura = await datiAziendali.GetComuneAsync(strutturaId, cancellationToken);
+        var comuneStruttura = impostazioni.ComuneAttivita;
         var importoPerPersona = impostazioni.TassaSoggiornoPrezzo.Value * giorniEffettivi;
 
         decimal totale = 0;

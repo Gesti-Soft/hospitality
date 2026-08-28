@@ -97,6 +97,45 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("cauzioni", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.ChiusuraCamera", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CameraId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("DataFine")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("DataInizio")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Motivo")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Quantita")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.HasIndex("CameraId", "DataInizio", "DataFine");
+
+                    b.ToTable("chiusure_camera", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.Cliente", b =>
                 {
                     b.Property<Guid>("Id")
@@ -425,6 +464,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ComuneAttivita")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -927,6 +969,48 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.HasIndex("StrutturaId", "CheckIn", "CheckOut");
 
                     b.ToTable("prenotazioni", (string)null);
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.RestrizioneSoggiornoCamera", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CameraId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("DataFine")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("DataInizio")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("MaxStay")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MinStay")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Motivo")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.HasIndex("CameraId", "DataInizio", "DataFine");
+
+                    b.ToTable("restrizioni_soggiorno_camera", (string)null);
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.Riferimenti.Comune", b =>
@@ -1433,6 +1517,23 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Navigation("Prenotazione");
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.ChiusuraCamera", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.SettingRoom", "Camera")
+                        .WithMany()
+                        .HasForeignKey("CameraId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Camera");
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.DatiAziendali", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
@@ -1626,6 +1727,23 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("CameraId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Camera");
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.RestrizioneSoggiornoCamera", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.SettingRoom", "Camera")
+                        .WithMany()
+                        .HasForeignKey("CameraId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
                         .WithMany()

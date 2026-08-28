@@ -9,6 +9,7 @@ export interface ImpostazioniStrutturaDto {
   oraInvioGiornaliero: string | null
   tassaSoggiornoPrezzo: number | null
   tassaSoggiornoMaxGiorni: number | null
+  comuneAttivita: string | null
 }
 
 export type ImpostazioniStrutturaRequest = Omit<ImpostazioniStrutturaDto, 'strutturaId'>

@@ -7,6 +7,8 @@ namespace GestiSoft.Application.AlloggiatiWeb;
 
 public record RisultatoInvioAlloggiatiWeb(int Inviate, int TotaleSchedine, int Errori, string? Messaggio);
 
+public record SchedinaAlloggiatiWeb(Guid OspiteId, Guid? PrenotazioneId, string NomeOspite, string? Camera, DateTime? CheckIn, DateTime? CheckOut, bool Inviata);
+
 /// <summary>
 /// Invio giornaliero delle schedine Alloggiati Web — porta il ramo remoto di
 /// StatePoliceLogic.SendSchedine del legacy: per ogni Ospite con soggiorno in corso non ancora
@@ -84,6 +86,23 @@ public class AlloggiatiWebInvioService(
 
         var messaggio = errori == 0 ? null : $"{errori} schedina/e non inviata/e: {ultimoErrore}";
         return await SalvaEsitoAsync(integrazione, inviate, daInviare.Count, messaggio, cancellationToken);
+    }
+
+    /// <summary>Elenco schedine recenti (30 giorni) per la schermata operativa — da inviare e già inviate, non solo quelle in coda.</summary>
+    public async Task<IReadOnlyList<SchedinaAlloggiatiWeb>> ListSchedineAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+
+        var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+
+        return recenti.Select(o => new SchedinaAlloggiatiWeb(
+            o.Id,
+            o.PrenotazioneId,
+            $"{o.Cognome} {o.Nome}".Trim(),
+            o.Prenotazione?.Camera?.Nome,
+            o.Prenotazione?.CheckIn,
+            o.Prenotazione?.CheckOut,
+            o.Prenotazione?.StatePolice ?? false)).ToList();
     }
 
     /// <summary>

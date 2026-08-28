@@ -1,135 +1,157 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
-import IconButton from '@mui/material/IconButton'
+import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
-import Tooltip from '@mui/material/Tooltip'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import EditIcon from '@mui/icons-material/EditOutlined'
-import SendIcon from '@mui/icons-material/SendOutlined'
 import { useStruttura } from '../struttura/StrutturaContext'
-import { useTipologie } from '../api/tipologie'
 import { ApiError } from '../api/client'
-import { useInviaOsservatorioOra, useOsservatorioAppartamenti, type OsservatorioAppartamentoDto } from '../api/integrazioni'
+import { useInviaOsservatorioOra, useOsservatorioAppartamenti, useSchedineOsservatorio } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
-import { OsservatorioAppartamentoDialog } from '../components/OsservatorioAppartamentoDialog'
 
-const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 export function OsservatorioPage() {
   const { strutturaId } = useStruttura()
   const appartamenti = useOsservatorioAppartamenti(strutturaId)
-  const tipologie = useTipologie(strutturaId)
-  const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | OsservatorioAppartamentoDto>('chiuso')
+  const [appartamentoId, setAppartamentoId] = useState<string | null>(null)
   const [errore, setErrore] = useState<string | null>(null)
-  const [risultati, setRisultati] = useState<Record<string, string>>({})
+  const [risultato, setRisultato] = useState<string | null>(null)
 
+  useEffect(() => {
+    const lista = appartamenti.data ?? []
+    if (lista.length > 0 && (appartamentoId === null || !lista.some((a) => a.id === appartamentoId))) {
+      setAppartamentoId(lista[0].id)
+    }
+    if (lista.length === 0 && appartamentoId !== null) {
+      setAppartamentoId(null)
+    }
+  }, [appartamenti.data, appartamentoId])
+
+  const schedine = useSchedineOsservatorio(strutturaId, appartamentoId)
   const invia = useInviaOsservatorioOra(strutturaId)
 
-  function inviaOra(a: OsservatorioAppartamentoDto) {
+  function inviaOra() {
+    if (!appartamentoId) return
     setErrore(null)
-    invia.mutate(a.id, {
-      onSuccess: (r) =>
-        setRisultati((prec) => ({
-          ...prec,
-          [a.id]: `${r.arriviInviati} arrivi, ${r.checkoutInviati} check-out, ${r.giorniChiusi} giorni chiusi.${r.messaggio ? ` ${r.messaggio}` : ''}`,
-        })),
+    setRisultato(null)
+    invia.mutate(appartamentoId, {
+      onSuccess: (r) => setRisultato(`${r.arriviInviati} arrivi, ${r.checkoutInviati} check-out, ${r.giorniChiusi} giorni chiusi.${r.messaggio ? ` ${r.messaggio}` : ''}`),
       onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
     })
   }
 
+  const appartamentoSelezionato = (appartamenti.data ?? []).find((a) => a.id === appartamentoId) ?? null
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-        Invio giornaliero di arrivi/partenze all'Osservatorio Turistico regionale. Una struttura può avere più appartamenti/entità PMS,
-        ognuno con le proprie credenziali e un sottoinsieme di tipologie camera.
+        Invio giornaliero di arrivi/partenze all'Osservatorio Turistico regionale. Appartamenti e credenziali si configurano in
+        Impostazioni.
       </Typography>
 
-      {errore && (
-        <Alert severity="error" onClose={() => setErrore(null)}>
-          {errore}
-        </Alert>
+      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
+
+      {appartamenti.isLoading && <Skeleton variant="rounded" height={60} />}
+
+      {!appartamenti.isLoading && (appartamenti.data ?? []).length === 0 && (
+        <Alert severity="info">Nessun appartamento configurato. Aggiungine uno in Impostazioni &gt; Osservatorio Turistico.</Alert>
       )}
 
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Appartamenti</Typography>
-        <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo('nuovo')} disabled={!strutturaId}>
-          + Nuovo appartamento
-        </Button>
-      </Box>
+      {!appartamenti.isLoading && (appartamenti.data ?? []).length > 0 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <TextField
+            select
+            size="small"
+            label="Appartamento"
+            value={appartamentoId ?? ''}
+            onChange={(e) => setAppartamentoId(e.target.value)}
+            sx={{ minWidth: 240 }}
+          >
+            {(appartamenti.data ?? []).map((a) => (
+              <MenuItem key={a.id} value={a.id}>
+                {a.nome}
+              </MenuItem>
+            ))}
+          </TextField>
 
-      {(appartamenti.isLoading || tipologie.isLoading) && <Skeleton variant="rounded" height={220} />}
+          {appartamentoSelezionato && (
+            <Chip
+              size="small"
+              label={appartamentoSelezionato.credenzialiConfigurate ? 'Credenziali configurate' : 'Credenziali non configurate'}
+              sx={{ bgcolor: appartamentoSelezionato.credenzialiConfigurate ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }}
+            />
+          )}
 
-      {!appartamenti.isLoading && !tipologie.isLoading && (
-        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Nome</TableCell>
-                <TableCell>Credenziali</TableCell>
-                <TableCell>Ultimo invio</TableCell>
-                <TableCell>Ultimo errore</TableCell>
-                <TableCell align="right">Azioni</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {(appartamenti.data ?? []).length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                    Nessun appartamento configurato.
-                  </TableCell>
-                </TableRow>
-              )}
-              {(appartamenti.data ?? []).map((a) => (
-                <TableRow key={a.id} hover>
-                  <TableCell sx={{ fontWeight: 700 }}>{a.nome}</TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      label={a.credenzialiConfigurate ? 'Configurate' : 'Da configurare'}
-                      sx={{ bgcolor: a.credenzialiConfigurate ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }}
-                    />
-                  </TableCell>
-                  <TableCell sx={{ fontFamily: fontMono, fontSize: 12.5 }}>
-                    {a.ultimoInvioAtUtc ? formattatoreDataOra.format(new Date(a.ultimoInvioAtUtc)) : 'mai eseguito'}
-                    {risultati[a.id] && (
-                      <Typography sx={{ fontSize: 11, color: tokens.textSecondary, mt: 0.25 }}>{risultati[a.id]}</Typography>
-                    )}
-                  </TableCell>
-                  <TableCell sx={{ fontSize: 12, color: tokens.error600 }}>{a.ultimoErrore ?? '—'}</TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="Invia ora">
-                      <IconButton size="small" onClick={() => inviaOra(a)} disabled={invia.isPending}>
-                        <SendIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Modifica">
-                      <IconButton size="small" onClick={() => setDialogo(a)}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <Button variant="contained" color="secondary" size="small" onClick={inviaOra} disabled={invia.isPending || !appartamentoId}>
+            Invia ora
+          </Button>
         </Box>
       )}
 
-      {dialogo !== 'chiuso' && strutturaId && (
-        <OsservatorioAppartamentoDialog
-          strutturaId={strutturaId}
-          appartamento={dialogo === 'nuovo' ? null : dialogo}
-          tipologie={tipologie.data ?? []}
-          onClose={() => setDialogo('chiuso')}
-        />
+      {appartamentoSelezionato?.ultimoErrore && <Alert severity="warning">{appartamentoSelezionato.ultimoErrore}</Alert>}
+      {risultato && (
+        <Alert severity="info" onClose={() => setRisultato(null)}>
+          {risultato}
+        </Alert>
+      )}
+
+      {appartamentoId && (
+        <Box>
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, mb: 1.5 }}>Arrivi/partenze (ultimi 30 giorni)</Typography>
+          {schedine.isLoading && <Skeleton variant="rounded" height={220} />}
+          {!schedine.isLoading && (
+            <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Ospite</TableCell>
+                    <TableCell>Camera</TableCell>
+                    <TableCell>Check-in</TableCell>
+                    <TableCell>Check-out</TableCell>
+                    <TableCell>Arrivo</TableCell>
+                    <TableCell>Partenza</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(schedine.data ?? []).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                        Nessun arrivo/partenza negli ultimi 30 giorni.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {(schedine.data ?? []).map((s) => (
+                    <TableRow key={s.ospiteId} hover>
+                      <TableCell sx={{ fontWeight: 700 }}>{s.nomeOspite}</TableCell>
+                      <TableCell>{s.camera ?? '—'}</TableCell>
+                      <TableCell sx={{ fontFamily: fontMono }}>{s.checkIn ? formattatoreData.format(new Date(s.checkIn)) : '—'}</TableCell>
+                      <TableCell sx={{ fontFamily: fontMono }}>{s.checkOut ? formattatoreData.format(new Date(s.checkOut)) : '—'}</TableCell>
+                      <TableCell>
+                        <Chip size="small" label={s.arrivoInviato ? 'Inviato' : 'Da inviare'} sx={{ bgcolor: s.arrivoInviato ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                      </TableCell>
+                      <TableCell>
+                        {s.partenzaInviata === null ? (
+                          '—'
+                        ) : (
+                          <Chip size="small" label={s.partenzaInviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: s.partenzaInviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          )}
+        </Box>
       )}
     </Box>
   )

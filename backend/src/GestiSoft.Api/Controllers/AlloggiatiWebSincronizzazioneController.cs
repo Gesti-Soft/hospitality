@@ -13,6 +13,14 @@ namespace GestiSoft.Api.Controllers;
 [Authorize]
 public class AlloggiatiWebSincronizzazioneController(AlloggiatiWebInvioService invioService, ICurrentUser currentUser) : ControllerBase
 {
+    /// <summary>Elenco schedine recenti (30 giorni) da inviare/già inviate — per la schermata operativa.</summary>
+    [HttpGet("schedine")]
+    public async Task<IActionResult> Lista(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var schedine = await invioService.ListSchedineAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(schedine.Select(s => new SchedinaAlloggiatiWebDto(s.OspiteId, s.PrenotazioneId, s.NomeOspite, s.Camera, s.CheckIn, s.CheckOut, s.Inviata)));
+    }
+
     [HttpPost("schedine/invia")]
     public async Task<IActionResult> InviaOra(Guid strutturaId, CancellationToken cancellationToken)
     {

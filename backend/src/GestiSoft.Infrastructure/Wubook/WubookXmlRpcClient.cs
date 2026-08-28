@@ -180,6 +180,156 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         return canali;
     }
 
+    public async Task<WubookCamera?> FetchSingleRoomAsync(string token, string lcode, int idCameraWubook, CancellationToken cancellationToken)
+    {
+        var (codice, dati, fault) = await InvocaAsync("fetch_single_room", cancellationToken, token, LcodeInt(lcode), idCameraWubook);
+        if (codice != 0)
+        {
+            return null;
+        }
+
+        var s = dati?.Element("struct");
+        return s is null
+            ? null
+            : new WubookCamera(
+                Id: MembroInt(s, "id"),
+                Nome: MembroStringa(s, "name") ?? string.Empty,
+                ShortName: MembroStringa(s, "shortname"),
+                Occupancy: MembroInt(s, "occupancy"),
+                Prezzo: MembroDecimal(s, "price"),
+                Disponibilita: MembroInt(s, "avail"),
+                Subroom: MembroInt(s, "subroom"),
+                Board: MembroStringa(s, "board"));
+    }
+
+    // --- Piani prezzo nominati (add_vplan/mod_vplans/del_plan/get_pricing_plans/update_plan_name) ---
+
+    public async Task<IReadOnlyList<WubookPianoPrezzo>> GetPricingPlansAsync(string token, string lcode, CancellationToken cancellationToken)
+    {
+        var (codice, dati, fault) = await InvocaAsync("get_pricing_plans", cancellationToken, token, LcodeInt(lcode));
+        VerificaEsito(codice, fault, "il recupero dei piani prezzo");
+
+        return ElementiArray(dati)
+            .Select(v => v.Element("struct"))
+            .Where(s => s is not null)
+            .Select(s => LeggiPianoPrezzo(s!))
+            .ToList();
+    }
+
+    private static WubookPianoPrezzo LeggiPianoPrezzo(XElement s)
+    {
+        var haVpid = s.Elements("member").Any(m => m.Element("name")?.Value == "vpid");
+        return new WubookPianoPrezzo(
+            Id: MembroInt(s, "id"),
+            Nome: MembroStringa(s, "name") ?? string.Empty,
+            Daily: MembroBool(s, "daily"),
+            IsVirtual: haVpid,
+            ParentId: haVpid ? MembroInt(s, "vpid") : null,
+            Variazione: haVpid ? MembroDecimal(s, "variation") : null,
+            TipoVariazione: haVpid ? MembroInt(s, "variation_type") : null);
+    }
+
+    public async Task<int> AddVirtualPlanAsync(string token, string lcode, string nome, int parentId, int tipoVariazione, decimal variazione, CancellationToken cancellationToken)
+    {
+        var (codice, dati, fault) = await InvocaAsync(
+            "add_vplan", cancellationToken, token, LcodeInt(lcode), nome, parentId, tipoVariazione, (double)variazione);
+        VerificaEsito(codice, fault, "la creazione del piano prezzo");
+        return PrimoIntero(dati) ?? throw new InvalidOperationException("Wubook non ha restituito un id piano prezzo valido.");
+    }
+
+    public async Task ModVirtualPlanAsync(string token, string lcode, int pianoId, int tipoVariazione, decimal variazione, CancellationToken cancellationToken)
+    {
+        var voce = StructOf([("pid", pianoId), ("variation", (double)variazione), ("variation_type", tipoVariazione)]);
+        var (codice, _, fault) = await InvocaAsync("mod_vplans", cancellationToken, token, LcodeInt(lcode), ArrayOf([voce]));
+        VerificaEsito(codice, fault, "l'aggiornamento del piano prezzo");
+    }
+
+    public async Task DelPlanAsync(string token, string lcode, int pianoId, CancellationToken cancellationToken)
+    {
+        var (codice, _, fault) = await InvocaAsync("del_plan", cancellationToken, token, LcodeInt(lcode), pianoId);
+        VerificaEsito(codice, fault, "la rimozione del piano prezzo");
+    }
+
+    public async Task UpdatePlanNameAsync(string token, string lcode, int pianoId, string nome, CancellationToken cancellationToken)
+    {
+        var (codice, _, fault) = await InvocaAsync("update_plan_name", cancellationToken, token, LcodeInt(lcode), pianoId, nome);
+        VerificaEsito(codice, fault, "la rinomina del piano prezzo");
+    }
+
+    // --- Piani restrizione nominati (rplan_add_rplan/rplan_rplans/rplan_rename_rplan/rplan_del_rplan/rplan_update_rplan_rules) ---
+
+    public async Task<IReadOnlyList<WubookPianoRestrizione>> GetRestrictionPlansAsync(string token, string lcode, CancellationToken cancellationToken)
+    {
+        var (codice, dati, fault) = await InvocaAsync("rplan_rplans", cancellationToken, token, LcodeInt(lcode));
+        VerificaEsito(codice, fault, "il recupero dei piani restrizione");
+
+        return ElementiArray(dati)
+            .Select(v => v.Element("struct"))
+            .Where(s => s is not null)
+            .Select(s => new WubookPianoRestrizione(MembroInt(s!, "id"), MembroStringa(s!, "name") ?? string.Empty, LeggiRegole(MembroStruct(s!, "rules"))))
+            .ToList();
+    }
+
+    private static XElement? MembroStruct(XElement structEl, string nome) =>
+        structEl.Elements("member").FirstOrDefault(m => m.Element("name")?.Value == nome)?.Element("value")?.Element("struct");
+
+    private static WubookRegoleRestrizione? LeggiRegole(XElement? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        return new WubookRegoleRestrizione(
+            MinStay: MembroIntOpt(s, "min_stay"),
+            MinStayArrival: MembroIntOpt(s, "min_stay_arrival"),
+            MaxStay: MembroIntOpt(s, "max_stay"),
+            MaxStayArrival: MembroIntOpt(s, "max_stay_arrival"),
+            Chiuso: MembroBoolOpt(s, "closed"),
+            ChiusoArrivo: MembroBoolOpt(s, "closed_arrival"),
+            ChiusoPartenza: MembroBoolOpt(s, "closed_departure"));
+    }
+
+    public async Task<int> AddRestrictionPlanAsync(string token, string lcode, string nome, CancellationToken cancellationToken)
+    {
+        var (codice, dati, fault) = await InvocaAsync("rplan_add_rplan", cancellationToken, token, LcodeInt(lcode), nome, 1);
+        VerificaEsito(codice, fault, "la creazione del piano restrizione");
+        return PrimoIntero(dati) ?? throw new InvalidOperationException("Wubook non ha restituito un id piano restrizione valido.");
+    }
+
+    public async Task RenameRestrictionPlanAsync(string token, string lcode, int pianoId, string nome, CancellationToken cancellationToken)
+    {
+        var (codice, _, fault) = await InvocaAsync("rplan_rename_rplan", cancellationToken, token, LcodeInt(lcode), pianoId, nome);
+        VerificaEsito(codice, fault, "la rinomina del piano restrizione");
+    }
+
+    public async Task DelRestrictionPlanAsync(string token, string lcode, int pianoId, CancellationToken cancellationToken)
+    {
+        var (codice, _, fault) = await InvocaAsync("rplan_del_rplan", cancellationToken, token, LcodeInt(lcode), pianoId);
+        VerificaEsito(codice, fault, "la rimozione del piano restrizione");
+    }
+
+    public async Task UpdateRestrictionPlanRulesAsync(string token, string lcode, int pianoId, WubookRegoleRestrizione regole, CancellationToken cancellationToken)
+    {
+        var membri = new List<(string, object)>();
+        if (regole.MinStay is { } minStay) membri.Add(("min_stay", minStay));
+        if (regole.MinStayArrival is { } minStayArrival) membri.Add(("min_stay_arrival", minStayArrival));
+        if (regole.MaxStay is { } maxStay) membri.Add(("max_stay", maxStay));
+        if (regole.MaxStayArrival is { } maxStayArrival) membri.Add(("max_stay_arrival", maxStayArrival));
+        if (regole.Chiuso is { } chiuso) membri.Add(("closed", chiuso ? 1 : 0));
+        if (regole.ChiusoArrivo is { } chiusoArrivo) membri.Add(("closed_arrival", chiusoArrivo ? 1 : 0));
+        if (regole.ChiusoPartenza is { } chiusoPartenza) membri.Add(("closed_departure", chiusoPartenza ? 1 : 0));
+
+        var (codice, _, fault) = await InvocaAsync("rplan_update_rplan_rules", cancellationToken, token, LcodeInt(lcode), pianoId, StructOf(membri));
+        VerificaEsito(codice, fault, "l'aggiornamento delle regole del piano restrizione");
+    }
+
+    private static int? PrimoIntero(XElement? dati)
+    {
+        var testo = dati?.Element("int")?.Value ?? dati?.Descendants("int").FirstOrDefault()?.Value;
+        return int.TryParse(testo, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
+    }
+
     private static WubookPrenotazione LeggiPrenotazione(XElement s) => new(
         RCode: MembroInt(s, "reservation_code") is var rc && rc != 0 ? rc : MembroInt(s, "id"),
         ChannelReservationCode: MembroStringa(s, "channel_reservation_code"),
@@ -265,6 +415,19 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         var testo = valore?.Element("int")?.Value ?? valore?.Element("i4")?.Value ?? valore?.Value;
         return int.TryParse(testo, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : 0;
     }
+
+    private static bool MembroBool(XElement structEl, string nome)
+    {
+        var valore = structEl.Elements("member").FirstOrDefault(m => m.Element("name")?.Value == nome)?.Element("value");
+        var testo = valore?.Element("boolean")?.Value ?? valore?.Element("int")?.Value ?? valore?.Value;
+        return testo == "1" || string.Equals(testo, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int? MembroIntOpt(XElement structEl, string nome) =>
+        structEl.Elements("member").Any(m => m.Element("name")?.Value == nome) ? MembroInt(structEl, nome) : null;
+
+    private static bool? MembroBoolOpt(XElement structEl, string nome) =>
+        structEl.Elements("member").Any(m => m.Element("name")?.Value == nome) ? MembroBool(structEl, nome) : null;
 
     private static decimal MembroDecimal(XElement structEl, string nome)
     {

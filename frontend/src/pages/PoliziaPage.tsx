@@ -2,65 +2,35 @@ import { useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
 import Skeleton from '@mui/material/Skeleton'
-import TextField from '@mui/material/TextField'
+import Table from '@mui/material/Table'
+import TableBody from '@mui/material/TableBody'
+import TableCell from '@mui/material/TableCell'
+import TableHead from '@mui/material/TableHead'
+import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { ApiError } from '../api/client'
 import {
   esportaSchedineAlloggiatiWeb,
-  useAggiornaAlloggiatiWebConfig,
   useAlloggiatiWebConfig,
   useInviaAlloggiatiWebOra,
-  type AlloggiatiWebIntegrazioneDto,
+  useSchedineAlloggiatiWeb,
 } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
 
+const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export function PoliziaPage() {
   const { strutturaId } = useStruttura()
   const config = useAlloggiatiWebConfig(strutturaId)
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, maxWidth: 760 }}>
-      <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-        Invio giornaliero delle schedine di soggiorno alla Polizia di Stato (Alloggiati Web). L'orario di invio automatico si imposta in
-        Impostazioni.
-      </Typography>
-
-      {config.isLoading && <Skeleton variant="rounded" height={340} />}
-      {!config.isLoading && config.data && <ConfigForm strutturaId={strutturaId!} dati={config.data} />}
-    </Box>
-  )
-}
-
-function ConfigForm({ strutturaId, dati }: { strutturaId: string; dati: AlloggiatiWebIntegrazioneDto }) {
-  const [utente, setUtente] = useState(dati.utente ?? '')
-  const [password, setPassword] = useState('')
-  const [wsKey, setWsKey] = useState('')
+  const schedine = useSchedineAlloggiatiWeb(strutturaId)
   const [errore, setErrore] = useState<string | null>(null)
-  const [salvato, setSalvato] = useState(false)
   const [risultatoInvio, setRisultatoInvio] = useState<{ inviate: number; totale: number; errori: string[]; messaggio: string | null } | null>(null)
 
-  const aggiorna = useAggiornaAlloggiatiWebConfig(strutturaId)
   const invia = useInviaAlloggiatiWebOra(strutturaId)
-
-  function salva() {
-    setErrore(null)
-    setSalvato(false)
-    aggiorna.mutate(
-      { utente: utente.trim() === '' ? null : utente.trim(), password: password.trim() === '' ? null : password.trim(), wsKey: wsKey.trim() === '' ? null : wsKey.trim() },
-      {
-        onSuccess: () => {
-          setSalvato(true)
-          setPassword('')
-          setWsKey('')
-        },
-        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
-      },
-    )
-  }
 
   function inviaOra() {
     setErrore(null)
@@ -72,6 +42,7 @@ function ConfigForm({ strutturaId, dati }: { strutturaId: string; dati: Alloggia
   }
 
   async function esporta() {
+    if (!strutturaId) return
     try {
       await esportaSchedineAlloggiatiWeb(strutturaId)
     } catch (err) {
@@ -80,61 +51,37 @@ function ConfigForm({ strutturaId, dati }: { strutturaId: string; dati: Alloggia
   }
 
   return (
-    <>
-      <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Credenziali Alloggiati Web</Typography>
-          <StatoBadge configurato={dati.credenzialiConfigurate} />
-        </Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, maxWidth: 900 }}>
+      <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
+        Invio giornaliero delle schedine di soggiorno alla Polizia di Stato (Alloggiati Web). Credenziali e orario di invio automatico si
+        configurano in Impostazioni.
+      </Typography>
 
-        {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-        {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Credenziali salvate.</Alert>}
-
-        <TextField label="Utente" value={utente} onChange={(e) => setUtente(e.target.value)} disabled={aggiorna.isPending} />
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            fullWidth
-            disabled={aggiorna.isPending}
-            helperText={dati.credenzialiConfigurate ? "Già salvata: lasciarla vuota e salvare la AZZERA" : ' '}
-          />
-          <TextField
-            label="Ws Key"
-            type="password"
-            value={wsKey}
-            onChange={(e) => setWsKey(e.target.value)}
-            fullWidth
-            disabled={aggiorna.isPending}
-            helperText={dati.credenzialiConfigurate ? "Già salvata: lasciarla vuota e salvare la AZZERA" : ' '}
-          />
-        </Box>
-
-        <Box>
-          <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
-            Salva credenziali
-          </Button>
-        </Box>
-      </Box>
+      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
       <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Stato invii</Typography>
-
-        <Box sx={{ display: 'flex', gap: 4 }}>
-          <Campo etichetta="Ultimo invio" valore={dati.ultimoInvioAtUtc ? formattatoreDataOra.format(new Date(dati.ultimoInvioAtUtc)) : 'mai eseguito'} />
-          <Campo etichetta="Schedine nell'ultimo invio" valore={String(dati.ultimeSchedineInviate ?? '—')} />
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Stato invii</Typography>
+          {config.data && (
+            <Chip
+              size="small"
+              label={config.data.credenzialiConfigurate ? 'Credenziali configurate' : 'Credenziali non configurate'}
+              sx={{ bgcolor: config.data.credenzialiConfigurate ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }}
+            />
+          )}
         </Box>
 
-        {dati.ultimoErrore && (
-          <Alert severity="warning" sx={{ mt: 0.5 }}>
-            {dati.ultimoErrore}
-          </Alert>
+        {config.data && (
+          <Box sx={{ display: 'flex', gap: 4 }}>
+            <Campo etichetta="Ultimo invio" valore={config.data.ultimoInvioAtUtc ? formattatoreDataOra.format(new Date(config.data.ultimoInvioAtUtc)) : 'mai eseguito'} />
+            <Campo etichetta="Schedine nell'ultimo invio" valore={String(config.data.ultimeSchedineInviate ?? '—')} />
+          </Box>
         )}
 
+        {config.data?.ultimoErrore && <Alert severity="warning">{config.data.ultimoErrore}</Alert>}
+
         {risultatoInvio && (
-          <Alert severity={risultatoInvio.errori.length > 0 ? 'warning' : 'success'} sx={{ mt: 0.5 }} onClose={() => setRisultatoInvio(null)}>
+          <Alert severity={risultatoInvio.errori.length > 0 ? 'warning' : 'success'} onClose={() => setRisultatoInvio(null)}>
             {risultatoInvio.inviate}/{risultatoInvio.totale} schedine inviate.
             {risultatoInvio.messaggio ? ` ${risultatoInvio.messaggio}` : ''}
             {risultatoInvio.errori.length > 0 && ` Errori: ${risultatoInvio.errori.join('; ')}`}
@@ -150,7 +97,47 @@ function ConfigForm({ strutturaId, dati }: { strutturaId: string; dati: Alloggia
           </Button>
         </Box>
       </Box>
-    </>
+
+      <Box>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, mb: 1.5 }}>Schedine (ultimi 30 giorni)</Typography>
+        {schedine.isLoading && <Skeleton variant="rounded" height={220} />}
+        {!schedine.isLoading && (
+          <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Ospite</TableCell>
+                  <TableCell>Camera</TableCell>
+                  <TableCell>Check-in</TableCell>
+                  <TableCell>Check-out</TableCell>
+                  <TableCell>Stato</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(schedine.data ?? []).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                      Nessuna schedina negli ultimi 30 giorni.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {(schedine.data ?? []).map((s) => (
+                  <TableRow key={s.ospiteId} hover>
+                    <TableCell sx={{ fontWeight: 700 }}>{s.nomeOspite}</TableCell>
+                    <TableCell>{s.camera ?? '—'}</TableCell>
+                    <TableCell sx={{ fontFamily: fontMono }}>{s.checkIn ? formattatoreData.format(new Date(s.checkIn)) : '—'}</TableCell>
+                    <TableCell sx={{ fontFamily: fontMono }}>{s.checkOut ? formattatoreData.format(new Date(s.checkOut)) : '—'}</TableCell>
+                    <TableCell>
+                      <Chip size="small" label={s.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: s.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
+      </Box>
+    </Box>
   )
 }
 
@@ -159,24 +146,6 @@ function Campo({ etichetta, valore }: { etichetta: string; valore: string }) {
     <Box>
       <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.04em' }}>{etichetta}</Typography>
       <Typography sx={{ fontFamily: fontMono, fontSize: 14, fontWeight: 600 }}>{valore}</Typography>
-    </Box>
-  )
-}
-
-function StatoBadge({ configurato }: { configurato: boolean }) {
-  return (
-    <Box
-      sx={{
-        fontSize: 11.5,
-        fontWeight: 700,
-        color: '#fff',
-        bgcolor: configurato ? tokens.ok600 : tokens.textTertiary,
-        borderRadius: 999,
-        px: 1.25,
-        py: 0.375,
-      }}
-    >
-      {configurato ? 'Configurato' : 'Non configurato'}
     </Box>
   )
 }

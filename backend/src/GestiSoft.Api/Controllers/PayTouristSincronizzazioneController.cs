@@ -20,6 +20,14 @@ public class PayTouristSincronizzazioneController(PayTouristInvioService invioSe
         return Ok(new RisultatoInvioPayTouristDto(risultato.Inviate, risultato.TotalePrenotazioni, risultato.Errori, risultato.Messaggio));
     }
 
+    /// <summary>Elenco prenotazioni recenti (30 giorni) da inviare/già inviate per una struttura PayTourist — per la schermata operativa.</summary>
+    [HttpGet("strutture/{payTouristStrutturaId:guid}/prenotazioni")]
+    public async Task<IActionResult> Lista(Guid strutturaId, Guid payTouristStrutturaId, CancellationToken cancellationToken)
+    {
+        var prenotazioni = await invioService.ListPrenotazioniAsync(currentUser, strutturaId, payTouristStrutturaId, cancellationToken);
+        return Ok(prenotazioni.Select(p => new PrenotazionePayTouristDto(p.OspiteId, p.PrenotazioneId, p.NomeOspite, p.Camera, p.CheckIn, p.CheckOut, p.Inviata)));
+    }
+
     /// <summary>Fallback: esporta come JSON le prenotazioni pronte per una struttura PayTourist senza inviarle né marcarle come inviate (stesso pattern "on-demand, mai persistito" di PDF/XML fattura e schedine Alloggiati Web).</summary>
     [HttpGet("strutture/{payTouristStrutturaId:guid}/export")]
     public async Task<IActionResult> Esporta(Guid strutturaId, Guid payTouristStrutturaId, CancellationToken cancellationToken)

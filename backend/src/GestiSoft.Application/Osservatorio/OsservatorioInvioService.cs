@@ -9,6 +9,8 @@ namespace GestiSoft.Application.Osservatorio;
 
 public record RisultatoInvioOsservatorio(int ArriviInviati, int CheckoutInviati, int GiorniChiusi, string? Messaggio);
 
+public record SchedinaOsservatorio(Guid OspiteId, Guid? PrenotazioneId, string NomeOspite, string? Camera, DateTime? CheckIn, DateTime? CheckOut, bool ArrivoInviato, bool? PartenzaInviata);
+
 /// <summary>
 /// Invio giornaliero all'Osservatorio Turistico — porta SendSchedinaOseervatorio/CloseDay di
 /// StatePoliceLogic del legacy: login, recupero di eventuali giorni arretrati non chiusi (solo
@@ -61,6 +63,33 @@ public class OsservatorioInvioService(
         }
 
         return risultati;
+    }
+
+    /// <summary>
+    /// Elenco arrivi/partenze recenti (30 giorni) di un appartamento per la schermata operativa —
+    /// da inviare e già inviati. La partenza si considera inviata se il cursore di chiusura
+    /// giornata dell'appartamento ha già superato la data di check-out (nessun flag dedicato per
+    /// singola prenotazione: il checkout viene chiuso per giorno, non per ospite).
+    /// </summary>
+    public async Task<IReadOnlyList<SchedinaOsservatorio>> ListSchedineAsync(ICurrentUser currentUser, Guid strutturaId, Guid appartamentoId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+
+        var appartamento = await appartamenti.GetAsync(strutturaId, appartamentoId, cancellationToken)
+            ?? throw new NotFoundException("Appartamento Osservatorio Turistico non trovato.");
+
+        var tipologieIds = appartamento.Tipologie.Select(t => t.TipologiaId).ToHashSet();
+        var recenti = await ospiti.ListRecentiOsservatorioAsync(strutturaId, tipologieIds, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+
+        return recenti.Select(o => new SchedinaOsservatorio(
+            o.Id,
+            o.PrenotazioneId,
+            $"{o.Cognome} {o.Nome}".Trim(),
+            o.Prenotazione?.Camera?.Nome,
+            o.Prenotazione?.CheckIn,
+            o.Prenotazione?.CheckOut,
+            o.Prenotazione?.PMS ?? false,
+            o.Prenotazione?.CheckOut is { } checkOut ? appartamento.CursoreDataAtUtc?.Date > checkOut.Date : null)).ToList();
     }
 
     private async Task<RisultatoInvioOsservatorio> ProcessaAppartamentoAsync(Guid strutturaId, OsservatorioAppartamento appartamento, CancellationToken cancellationToken)

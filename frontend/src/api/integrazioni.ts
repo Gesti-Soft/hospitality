@@ -20,6 +20,37 @@ export interface AlloggiatiWebIntegrazioneDto {
   ultimoErrore: string | null
 }
 
+export interface SchedinaAlloggiatiWebDto {
+  ospiteId: string
+  prenotazioneId: string | null
+  nomeOspite: string
+  camera: string | null
+  checkIn: string | null
+  checkOut: string | null
+  inviata: boolean
+}
+
+export interface SchedinaOsservatorioDto {
+  ospiteId: string
+  prenotazioneId: string | null
+  nomeOspite: string
+  camera: string | null
+  checkIn: string | null
+  checkOut: string | null
+  arrivoInviato: boolean
+  partenzaInviata: boolean | null
+}
+
+export interface PrenotazionePayTouristDto {
+  ospiteId: string
+  prenotazioneId: string | null
+  nomeOspite: string
+  camera: string | null
+  checkIn: string | null
+  checkOut: string | null
+  inviata: boolean
+}
+
 export interface OsservatorioAppartamentoDto {
   id: string
   strutturaId: string
@@ -128,6 +159,14 @@ export function esportaSchedineAlloggiatiWeb(strutturaId: string) {
   return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/schedine/export`, `schedine-alloggiati-web.txt`)
 }
 
+export function useSchedineAlloggiatiWeb(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['alloggiati-web-schedine', strutturaId],
+    queryFn: () => apiGet<SchedinaAlloggiatiWebDto[]>(`/strutture/${strutturaId}/alloggiati-web/schedine`),
+    enabled: !!strutturaId,
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Osservatorio Turistico
 // ---------------------------------------------------------------------------
@@ -175,6 +214,14 @@ export function useInviaOsservatorioOra(strutturaId: string | null) {
     mutationFn: (appartamentoId: string) =>
       apiPost<RisultatoInvioOsservatorioDto>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}/invia`),
     onSuccess: invalida,
+  })
+}
+
+export function useSchedineOsservatorio(strutturaId: string | null, appartamentoId: string | null) {
+  return useQuery({
+    queryKey: ['osservatorio-schedine', strutturaId, appartamentoId],
+    queryFn: () => apiGet<SchedinaOsservatorioDto[]>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}/schedine`),
+    enabled: !!strutturaId && !!appartamentoId,
   })
 }
 
@@ -242,12 +289,23 @@ export function esportaPayTourist(strutturaId: string, payTouristStrutturaId: st
   return apiScaricaFile(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/export`, `paytourist-export.json`)
 }
 
+export function usePrenotazioniPayTourist(strutturaId: string | null, payTouristStrutturaId: string | null) {
+  return useQuery({
+    queryKey: ['paytourist-prenotazioni', strutturaId, payTouristStrutturaId],
+    queryFn: () => apiGet<PrenotazionePayTouristDto[]>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/prenotazioni`),
+    enabled: !!strutturaId && !!payTouristStrutturaId,
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Wubook
 // ---------------------------------------------------------------------------
 
 export interface WubookConfigRequest {
   attivo: boolean
+}
+
+export interface WubookLicenzaRequest {
   gestisoftUsername: string | null
   gestisoftToken: string | null
 }
@@ -272,10 +330,19 @@ export function useAggiornaWubookConfig(strutturaId: string | null) {
   })
 }
 
+// Separato da useAggiornaWubookConfig apposta: due submit indipendenti (toggle Attivo vs licenza gestisoft.it).
+export function useAggiornaWubookLicenza(strutturaId: string | null) {
+  const invalida = useInvalidaWubook(strutturaId)
+  return useMutation({
+    mutationFn: (request: WubookLicenzaRequest) => apiPut<WubookIntegrazioneDto>(`/strutture/${strutturaId}/wubook/licenza`, request),
+    onSuccess: invalida,
+  })
+}
+
 export function useRinnovaWubookCredenziali(strutturaId: string | null) {
   const invalida = useInvalidaWubook(strutturaId)
   return useMutation({
-    mutationFn: () => apiPost<WubookIntegrazioneDto>(`/strutture/${strutturaId}/wubook/rinnova`),
+    mutationFn: () => apiPost<WubookIntegrazioneDto>(`/strutture/${strutturaId}/wubook/config/rinnova`),
     onSuccess: invalida,
   })
 }
@@ -315,5 +382,229 @@ export function useRimuoviWubookCamera(strutturaId: string | null) {
   return useMutation({
     mutationFn: (cameraId: string) => apiDelete(`/strutture/${strutturaId}/wubook/camere/${cameraId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['camere', strutturaId] }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Chiusure camera per periodo
+// ---------------------------------------------------------------------------
+
+export interface ChiusuraCameraDto {
+  id: string
+  cameraId: string
+  dataInizio: string
+  dataFine: string
+  motivo: string | null
+  quantita: number | null
+}
+
+export interface CreaChiusuraCameraRequest {
+  dataInizio: string
+  dataFine: string
+  motivo: string | null
+  quantita: number | null
+}
+
+export function useChiusureCamera(strutturaId: string | null, cameraId: string | null) {
+  return useQuery({
+    queryKey: ['wubook-chiusure', strutturaId, cameraId],
+    queryFn: () => apiGet<ChiusuraCameraDto[]>(`/strutture/${strutturaId}/wubook/camere/${cameraId}/chiusure`),
+    enabled: !!strutturaId && !!cameraId,
+  })
+}
+
+export function useCreaChiusuraCamera(strutturaId: string | null, cameraId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: CreaChiusuraCameraRequest) => apiPost<ChiusuraCameraDto>(`/strutture/${strutturaId}/wubook/camere/${cameraId}/chiusure`, request),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['wubook-chiusure', strutturaId, cameraId] }),
+  })
+}
+
+export function useEliminaChiusuraCamera(strutturaId: string | null, cameraId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (chiusuraId: string) => apiDelete(`/strutture/${strutturaId}/wubook/camere/${cameraId}/chiusure/${chiusuraId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['wubook-chiusure', strutturaId, cameraId] }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Restrizioni soggiorno camera per periodo
+// ---------------------------------------------------------------------------
+
+export interface RestrizioneSoggiornoCameraDto {
+  id: string
+  cameraId: string
+  dataInizio: string
+  dataFine: string
+  minStay: number | null
+  maxStay: number | null
+  motivo: string | null
+}
+
+export interface CreaRestrizioneSoggiornoCameraRequest {
+  dataInizio: string
+  dataFine: string
+  minStay: number | null
+  maxStay: number | null
+  motivo: string | null
+}
+
+export function useRestrizioniPeriodoCamera(strutturaId: string | null, cameraId: string | null) {
+  return useQuery({
+    queryKey: ['wubook-restrizioni-periodo', strutturaId, cameraId],
+    queryFn: () => apiGet<RestrizioneSoggiornoCameraDto[]>(`/strutture/${strutturaId}/wubook/camere/${cameraId}/restrizioni-periodo`),
+    enabled: !!strutturaId && !!cameraId,
+  })
+}
+
+export function useCreaRestrizionePeriodoCamera(strutturaId: string | null, cameraId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: CreaRestrizioneSoggiornoCameraRequest) =>
+      apiPost<RestrizioneSoggiornoCameraDto>(`/strutture/${strutturaId}/wubook/camere/${cameraId}/restrizioni-periodo`, request),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['wubook-restrizioni-periodo', strutturaId, cameraId] }),
+  })
+}
+
+export function useEliminaRestrizionePeriodoCamera(strutturaId: string | null, cameraId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (restrizioneId: string) => apiDelete(`/strutture/${strutturaId}/wubook/camere/${cameraId}/restrizioni-periodo/${restrizioneId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['wubook-restrizioni-periodo', strutturaId, cameraId] }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Piani prezzo nominati/virtuali
+// ---------------------------------------------------------------------------
+
+export interface PianoPrezzoDto {
+  id: number
+  nome: string
+  daily: boolean
+  isVirtual: boolean
+  parentId: number | null
+  variazione: number | null
+  tipoVariazione: number | null
+}
+
+export interface CreaPianoPrezzoRequest {
+  nome: string
+  parentId: number
+  tipoVariazione: number
+  variazione: number
+}
+
+export interface AggiornaPianoPrezzoRequest {
+  nome: string | null
+  tipoVariazione: number | null
+  variazione: number | null
+}
+
+export function usePianiPrezzo(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['wubook-piani-prezzo', strutturaId],
+    queryFn: () => apiGet<PianoPrezzoDto[]>(`/strutture/${strutturaId}/wubook/piani-prezzo`),
+    enabled: !!strutturaId,
+  })
+}
+
+function useInvalidaPianiPrezzo(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return () => queryClient.invalidateQueries({ queryKey: ['wubook-piani-prezzo', strutturaId] })
+}
+
+export function useCreaPianoPrezzo(strutturaId: string | null) {
+  const invalida = useInvalidaPianiPrezzo(strutturaId)
+  return useMutation({
+    mutationFn: (request: CreaPianoPrezzoRequest) => apiPost<{ id: number }>(`/strutture/${strutturaId}/wubook/piani-prezzo`, request),
+    onSuccess: invalida,
+  })
+}
+
+export function useAggiornaPianoPrezzo(strutturaId: string | null) {
+  const invalida = useInvalidaPianiPrezzo(strutturaId)
+  return useMutation({
+    mutationFn: ({ pianoId, request }: { pianoId: number; request: AggiornaPianoPrezzoRequest }) =>
+      apiPut<void>(`/strutture/${strutturaId}/wubook/piani-prezzo/${pianoId}`, request),
+    onSuccess: invalida,
+  })
+}
+
+export function useEliminaPianoPrezzo(strutturaId: string | null) {
+  const invalida = useInvalidaPianiPrezzo(strutturaId)
+  return useMutation({
+    mutationFn: (pianoId: number) => apiDelete(`/strutture/${strutturaId}/wubook/piani-prezzo/${pianoId}`),
+    onSuccess: invalida,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Piani restrizione nominati
+// ---------------------------------------------------------------------------
+
+export interface RegoleRestrizioneDto {
+  minStay: number | null
+  minStayArrival: number | null
+  maxStay: number | null
+  maxStayArrival: number | null
+  chiuso: boolean | null
+  chiusoArrivo: boolean | null
+  chiusoPartenza: boolean | null
+}
+
+export interface PianoRestrizioneDto {
+  id: number
+  nome: string
+  regole: RegoleRestrizioneDto | null
+}
+
+export interface CreaPianoRestrizioneRequest {
+  nome: string
+  regole: RegoleRestrizioneDto | null
+}
+
+export interface AggiornaPianoRestrizioneRequest {
+  nome: string | null
+  regole: RegoleRestrizioneDto | null
+}
+
+export function usePianiRestrizione(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['wubook-piani-restrizione', strutturaId],
+    queryFn: () => apiGet<PianoRestrizioneDto[]>(`/strutture/${strutturaId}/wubook/piani-restrizione`),
+    enabled: !!strutturaId,
+  })
+}
+
+function useInvalidaPianiRestrizione(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return () => queryClient.invalidateQueries({ queryKey: ['wubook-piani-restrizione', strutturaId] })
+}
+
+export function useCreaPianoRestrizione(strutturaId: string | null) {
+  const invalida = useInvalidaPianiRestrizione(strutturaId)
+  return useMutation({
+    mutationFn: (request: CreaPianoRestrizioneRequest) => apiPost<{ id: number }>(`/strutture/${strutturaId}/wubook/piani-restrizione`, request),
+    onSuccess: invalida,
+  })
+}
+
+export function useAggiornaPianoRestrizione(strutturaId: string | null) {
+  const invalida = useInvalidaPianiRestrizione(strutturaId)
+  return useMutation({
+    mutationFn: ({ pianoId, request }: { pianoId: number; request: AggiornaPianoRestrizioneRequest }) =>
+      apiPut<void>(`/strutture/${strutturaId}/wubook/piani-restrizione/${pianoId}`, request),
+    onSuccess: invalida,
+  })
+}
+
+export function useEliminaPianoRestrizione(strutturaId: string | null) {
+  const invalida = useInvalidaPianiRestrizione(strutturaId)
+  return useMutation({
+    mutationFn: (pianoId: number) => apiDelete(`/strutture/${strutturaId}/wubook/piani-restrizione/${pianoId}`),
+    onSuccess: invalida,
   })
 }

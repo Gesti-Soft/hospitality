@@ -26,6 +26,14 @@ public class WubookConfigController(WubookLicenzaService service, ICurrentUser c
         return Ok(ToDto(integrazione));
     }
 
+    /// <summary>Licenza gestisoft.it (Utente/Token) — endpoint separato, vedi <see cref="WubookLicenzaService.AggiornaLicenzaAsync"/>.</summary>
+    [HttpPut("/strutture/{strutturaId:guid}/wubook/licenza")]
+    public async Task<IActionResult> AggiornaLicenza(Guid strutturaId, [FromBody] AggiornaWubookLicenzaRequest request, CancellationToken cancellationToken)
+    {
+        var integrazione = await service.AggiornaLicenzaAsync(currentUser, strutturaId, request, cancellationToken);
+        return Ok(ToDto(integrazione));
+    }
+
     /// <summary>Forza un rinnovo immediato delle credenziali (utile subito dopo aver inserito la licenza, senza aspettare il job periodico).</summary>
     [HttpPost("rinnova")]
     public async Task<IActionResult> Rinnova(Guid strutturaId, CancellationToken cancellationToken)

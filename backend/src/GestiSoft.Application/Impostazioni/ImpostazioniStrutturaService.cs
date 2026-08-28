@@ -9,7 +9,8 @@ public record AggiornaImpostazioniRequest(
     bool PayTouristAttivo,
     TimeOnly? OraInvioGiornaliero,
     decimal? TassaSoggiornoPrezzo,
-    int? TassaSoggiornoMaxGiorni);
+    int? TassaSoggiornoMaxGiorni,
+    string? ComuneAttivita);
 
 public class ImpostazioniStrutturaService(IImpostazioniStrutturaRepository repository, TenantAccessGuard accessGuard)
 {
@@ -38,6 +39,7 @@ public class ImpostazioniStrutturaService(IImpostazioniStrutturaRepository repos
         impostazioni.OraInvioGiornaliero = request.OraInvioGiornaliero;
         impostazioni.TassaSoggiornoPrezzo = request.TassaSoggiornoPrezzo;
         impostazioni.TassaSoggiornoMaxGiorni = request.TassaSoggiornoMaxGiorni;
+        impostazioni.ComuneAttivita = request.ComuneAttivita;
         impostazioni.UpdatedAtUtc = DateTime.UtcNow;
 
         await repository.UpsertAsync(impostazioni, cancellationToken);

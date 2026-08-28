@@ -56,7 +56,6 @@ public static class DependencyInjection
         services.AddScoped<IPrenotazioneRepository, PrenotazioneRepository>();
         services.AddScoped<ICauzioneRepository, CauzioneRepository>();
         services.AddScoped<IOspiteRepository, OspiteRepository>();
-        services.AddScoped<IDatiAziendaliComuneRepository, DatiAziendaliComuneRepository>();
         services.AddScoped<ISpesaRepository, SpesaRepository>();
         services.AddScoped<IEntrataRepository, EntrataRepository>();
         services.AddScoped<IDatiAziendaliRepository, DatiAziendaliRepository>();
@@ -64,6 +63,8 @@ public static class DependencyInjection
         services.AddScoped<IDatiFatturaRepository, DatiFatturaRepository>();
         services.AddScoped<IFatturaDocumentGenerator, FatturaDocumentGenerator>();
         services.AddScoped<IWubookIntegrazioneRepository, WubookIntegrazioneRepository>();
+        services.AddScoped<IChiusuraCameraRepository, ChiusuraCameraRepository>();
+        services.AddScoped<IRestrizioneSoggiornoCameraRepository, RestrizioneSoggiornoCameraRepository>();
         services.AddScoped<IAlloggiatiWebIntegrazioneRepository, AlloggiatiWebIntegrazioneRepository>();
         services.AddScoped<IAnagraficaAlloggiatiWebRepository, AnagraficaAlloggiatiWebRepository>();
         services.AddScoped<IOsservatorioAppartamentoRepository, OsservatorioAppartamentoRepository>();

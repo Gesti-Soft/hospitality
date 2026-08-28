@@ -69,6 +69,10 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
 
     public DbSet<PayTouristStrutturaTipologia> PayTouristStruttureTipologie => Set<PayTouristStrutturaTipologia>();
 
+    public DbSet<ChiusuraCamera> ChiusureCamera => Set<ChiusuraCamera>();
+
+    public DbSet<RestrizioneSoggiornoCamera> RestrizioniSoggiornoCamera => Set<RestrizioneSoggiornoCamera>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GestiSoftDbContext).Assembly);

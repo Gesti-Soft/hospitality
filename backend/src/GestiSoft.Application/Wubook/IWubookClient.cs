@@ -23,6 +23,12 @@ public record WubookPrenotazione(
 
 public record WubookCanale(int Id, string Nome);
 
+public record WubookPianoPrezzo(int Id, string Nome, bool Daily, bool IsVirtual, int? ParentId, decimal? Variazione, int? TipoVariazione);
+
+public record WubookRegoleRestrizione(int? MinStay, int? MinStayArrival, int? MaxStay, int? MaxStayArrival, bool? Chiuso, bool? ChiusoArrivo, bool? ChiusoPartenza);
+
+public record WubookPianoRestrizione(int Id, string Nome, WubookRegoleRestrizione? Regole);
+
 /// <summary>
 /// Client XML-RPC verso Wubook (https://wired.wubook.net/xrws/) — porta OtaServiceApiRepository
 /// del sistema legacy. token/lcode sono SEMPRE quelli ottenuti da IGestisoftLicenzaClient, mai
@@ -56,4 +62,31 @@ public interface IWubookClient
     Task<WubookPrenotazione?> FetchBookingAsync(string token, string lcode, int rcode, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<WubookCanale>> GetChannelsInfoAsync(string token, CancellationToken cancellationToken);
+
+    /// <summary>fetch_single_room — usata per risolvere il "subroom" (camera virtuale/pool) di una camera prima di chiusure/restrizioni per periodo, fedele a RoomsController.ResolveTargetRoom del legacy.</summary>
+    Task<WubookCamera?> FetchSingleRoomAsync(string token, string lcode, int idCameraWubook, CancellationToken cancellationToken);
+
+    // --- Piani prezzo nominati (PricingPlansController del legacy) ---
+
+    Task<IReadOnlyList<WubookPianoPrezzo>> GetPricingPlansAsync(string token, string lcode, CancellationToken cancellationToken);
+
+    Task<int> AddVirtualPlanAsync(string token, string lcode, string nome, int parentId, int tipoVariazione, decimal variazione, CancellationToken cancellationToken);
+
+    Task ModVirtualPlanAsync(string token, string lcode, int pianoId, int tipoVariazione, decimal variazione, CancellationToken cancellationToken);
+
+    Task DelPlanAsync(string token, string lcode, int pianoId, CancellationToken cancellationToken);
+
+    Task UpdatePlanNameAsync(string token, string lcode, int pianoId, string nome, CancellationToken cancellationToken);
+
+    // --- Piani restrizione nominati (RestrictionsController del legacy) ---
+
+    Task<IReadOnlyList<WubookPianoRestrizione>> GetRestrictionPlansAsync(string token, string lcode, CancellationToken cancellationToken);
+
+    Task<int> AddRestrictionPlanAsync(string token, string lcode, string nome, CancellationToken cancellationToken);
+
+    Task RenameRestrictionPlanAsync(string token, string lcode, int pianoId, string nome, CancellationToken cancellationToken);
+
+    Task DelRestrictionPlanAsync(string token, string lcode, int pianoId, CancellationToken cancellationToken);
+
+    Task UpdateRestrictionPlanRulesAsync(string token, string lcode, int pianoId, WubookRegoleRestrizione regole, CancellationToken cancellationToken);
 }

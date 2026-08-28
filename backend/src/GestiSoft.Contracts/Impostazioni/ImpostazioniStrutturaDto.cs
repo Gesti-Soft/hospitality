@@ -7,4 +7,5 @@ public record ImpostazioniStrutturaDto(
     bool PayTouristAttivo,
     TimeOnly? OraInvioGiornaliero,
     decimal? TassaSoggiornoPrezzo,
-    int? TassaSoggiornoMaxGiorni);
+    int? TassaSoggiornoMaxGiorni,
+    string? ComuneAttivita);

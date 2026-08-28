@@ -2,11 +2,11 @@ import { useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import Skeleton from '@mui/material/Skeleton'
+import Tab from '@mui/material/Tab'
+import Tabs from '@mui/material/Tabs'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
@@ -17,124 +17,83 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import SyncIcon from '@mui/icons-material/SyncOutlined'
 import LinkOffIcon from '@mui/icons-material/LinkOffOutlined'
+import EditCalendarIcon from '@mui/icons-material/EditCalendarOutlined'
+import EditIcon from '@mui/icons-material/EditOutlined'
+import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useCamere } from '../api/camere'
 import { ApiError } from '../api/client'
 import {
-  useAggiornaWubookConfig,
+  useEliminaPianoPrezzo,
+  useEliminaPianoRestrizione,
+  usePianiPrezzo,
+  usePianiRestrizione,
   useRimuoviWubookCamera,
-  useRinnovaWubookCredenziali,
   useSincronizzaWubookCamera,
   useSincronizzaWubookDisponibilita,
   useSincronizzaWubookPrenotazioni,
   useSincronizzaWubookPrezzi,
   useWubookConfig,
+  type PianoPrezzoDto,
+  type PianoRestrizioneDto,
   type WubookIntegrazioneDto,
 } from '../api/integrazioni'
 import { aggiungiGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { ChiusureRestrizioniDialog } from '../components/ChiusureRestrizioniDialog'
+import { PianoPrezzoDialog } from '../components/PianoPrezzoDialog'
+import { PianoRestrizioneDialog } from '../components/PianoRestrizioneDialog'
 
-const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+type TabWubook = 'camere' | 'piani-prezzo' | 'piani-restrizione'
 
 export function WubookPage() {
   const { strutturaId } = useStruttura()
   const config = useWubookConfig(strutturaId)
   const camere = useCamere(strutturaId)
+  const [tab, setTab] = useState<TabWubook>('camere')
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, maxWidth: 900 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, maxWidth: 1000 }}>
       <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-        Sincronizzazione con Wubook (OTA/channel manager): licenza gestisoft.it, poi camere/prezzi/disponibilità/prenotazioni.
+        Sincronizzazione con Wubook (OTA/channel manager): camere/prezzi/disponibilità/prenotazioni. Licenza gestisoft.it e attivazione si
+        configurano in Impostazioni.
       </Typography>
 
-      {config.isLoading && <Skeleton variant="rounded" height={260} />}
-      {!config.isLoading && config.data && <ConfigForm strutturaId={strutturaId!} dati={config.data} />}
+      {config.isLoading && <Skeleton variant="rounded" height={80} />}
+      {!config.isLoading && config.data && <StatoWubook dati={config.data} />}
 
       {!config.isLoading && config.data?.credenzialiPronte && <SincronizzazioneForm strutturaId={strutturaId!} />}
 
-      <Box>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, mb: 1.5 }}>Camere</Typography>
-        {camere.isLoading && <Skeleton variant="rounded" height={180} />}
-        {!camere.isLoading && <TabellaCamere strutturaId={strutturaId!} camere={camere.data ?? []} />}
-      </Box>
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 0 }}>
+        <Tab label="Camere" value="camere" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+        <Tab label="Piani prezzo" value="piani-prezzo" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+        <Tab label="Piani restrizione" value="piani-restrizione" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+      </Tabs>
+
+      {tab === 'camere' && (
+        <Box>
+          {camere.isLoading && <Skeleton variant="rounded" height={180} />}
+          {!camere.isLoading && <TabellaCamere strutturaId={strutturaId!} camere={camere.data ?? []} />}
+        </Box>
+      )}
+
+      {tab === 'piani-prezzo' && <TabPianiPrezzo strutturaId={strutturaId!} />}
+      {tab === 'piani-restrizione' && <TabPianiRestrizione strutturaId={strutturaId!} />}
     </Box>
   )
 }
 
-function ConfigForm({ strutturaId, dati }: { strutturaId: string; dati: WubookIntegrazioneDto }) {
-  const [attivo, setAttivo] = useState(dati.attivo)
-  const [gestisoftUsername, setGestisoftUsername] = useState(dati.gestisoftUsername ?? '')
-  const [gestisoftToken, setGestisoftToken] = useState('')
-  const [errore, setErrore] = useState<string | null>(null)
-  const [salvato, setSalvato] = useState(false)
-
-  const aggiorna = useAggiornaWubookConfig(strutturaId)
-  const rinnova = useRinnovaWubookCredenziali(strutturaId)
-
-  function salva() {
-    setErrore(null)
-    setSalvato(false)
-    aggiorna.mutate(
-      { attivo, gestisoftUsername: gestisoftUsername.trim() === '' ? null : gestisoftUsername.trim(), gestisoftToken: gestisoftToken.trim() === '' ? null : gestisoftToken.trim() },
-      {
-        onSuccess: () => {
-          setSalvato(true)
-          setGestisoftToken('')
-        },
-        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
-      },
-    )
-  }
-
-  function rinnovaOra() {
-    setErrore(null)
-    rinnova.mutate(undefined, { onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.') })
-  }
-
+function StatoWubook({ dati }: { dati: WubookIntegrazioneDto }) {
   return (
-    <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Licenza gestisoft.it</Typography>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Stato sincronizzazione</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip size="small" label={dati.licenzaConfigurata ? 'Licenza configurata' : 'Licenza non configurata'} sx={{ bgcolor: dati.licenzaConfigurata ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
+          <Chip size="small" label={dati.attivo ? 'Attiva' : 'Non attiva'} sx={{ bgcolor: dati.attivo ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
           <Chip size="small" label={dati.credenzialiPronte ? 'Credenziali Wubook pronte' : 'In attesa di rinnovo'} sx={{ bgcolor: dati.credenzialiPronte ? tokens.blue600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
         </Box>
       </Box>
-
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-      {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Configurazione salvata.</Alert>}
       {dati.ultimoErrore && <Alert severity="warning">{dati.ultimoErrore}</Alert>}
-
-      <FormControlLabel
-        control={<Checkbox checked={attivo} onChange={(e) => setAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
-        label="Sincronizzazione Wubook attiva per questa struttura"
-      />
-
-      <Box sx={{ display: 'flex', gap: 2 }}>
-        <TextField label="Utente gestisoft.it" value={gestisoftUsername} onChange={(e) => setGestisoftUsername(e.target.value)} fullWidth disabled={aggiorna.isPending} />
-        <TextField
-          label="Token gestisoft.it"
-          type="password"
-          value={gestisoftToken}
-          onChange={(e) => setGestisoftToken(e.target.value)}
-          fullWidth
-          disabled={aggiorna.isPending}
-          helperText={dati.licenzaConfigurata ? "Già salvato: lasciarlo vuoto e salvare lo AZZERA" : ' '}
-        />
-      </Box>
-
-      <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
-        Cache aggiornata: {dati.cacheAggiornataAtUtc ? formattatoreDataOra.format(new Date(dati.cacheAggiornataAtUtc)) : 'mai'}
-      </Typography>
-
-      <Box sx={{ display: 'flex', gap: 1.5 }}>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
-          Salva
-        </Button>
-        <Button variant="outlined" onClick={rinnovaOra} disabled={rinnova.isPending || !dati.licenzaConfigurata}>
-          Rinnova credenziali ora
-        </Button>
-      </Box>
     </Box>
   )
 }
@@ -162,7 +121,10 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
     if (azione === 'prezzi') {
       sincronizzaPrezzi.mutate(periodo, { onSuccess: () => setMessaggio('Prezzi sincronizzati.'), onError: gestisciErrore })
     } else if (azione === 'disponibilita') {
-      sincronizzaDisponibilita.mutate(periodo, { onSuccess: () => setMessaggio('Disponibilità sincronizzata.'), onError: gestisciErrore })
+      sincronizzaDisponibilita.mutate(periodo, {
+        onSuccess: () => setMessaggio('Disponibilità sincronizzata (chiusure e restrizioni per periodo incluse).'),
+        onError: gestisciErrore,
+      })
     } else {
       sincronizzaPrenotazioni.mutate(undefined, {
         onSuccess: (r) => setMessaggio(`Prenotazioni: ${r.importate} importate, ${r.aggiornate} aggiornate, ${r.annullate} annullate.${r.errori.length > 0 ? ` Errori: ${r.errori.join('; ')}` : ''}`),
@@ -202,6 +164,7 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
 
 function TabellaCamere({ strutturaId, camere }: { strutturaId: string; camere: ReturnType<typeof useCamere>['data'] }) {
   const [errore, setErrore] = useState<string | null>(null)
+  const [dialogoChiusure, setDialogoChiusure] = useState<{ cameraId: string; cameraNome: string } | null>(null)
   const sincronizza = useSincronizzaWubookCamera(strutturaId)
   const rimuovi = useRimuoviWubookCamera(strutturaId)
 
@@ -242,6 +205,11 @@ function TabellaCamere({ strutturaId, camere }: { strutturaId: string; camere: R
                 </TableCell>
                 <TableCell sx={{ fontFamily: fontMono }}>{c.idCameraWubook ?? '—'}</TableCell>
                 <TableCell align="right">
+                  <Tooltip title="Chiusure e restrizioni per periodo">
+                    <IconButton size="small" onClick={() => setDialogoChiusure({ cameraId: c.id, cameraNome: c.nome })}>
+                      <EditCalendarIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                   <Tooltip title="Sincronizza su Wubook">
                     <IconButton size="small" onClick={() => sincronizza.mutate(c.id, { onError: gestisciErrore })} disabled={sincronizza.isPending}>
                       <SyncIcon fontSize="small" />
@@ -260,6 +228,175 @@ function TabellaCamere({ strutturaId, camere }: { strutturaId: string; camere: R
           </TableBody>
         </Table>
       </Box>
+
+      {dialogoChiusure && (
+        <ChiusureRestrizioniDialog
+          strutturaId={strutturaId}
+          cameraId={dialogoChiusure.cameraId}
+          cameraNome={dialogoChiusure.cameraNome}
+          onClose={() => setDialogoChiusure(null)}
+        />
+      )}
+    </Box>
+  )
+}
+
+function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
+  const piani = usePianiPrezzo(strutturaId)
+  const elimina = useEliminaPianoPrezzo(strutturaId)
+  const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | PianoPrezzoDto>('chiuso')
+  const [errore, setErrore] = useState<string | null>(null)
+
+  function gestisciErrore(err: unknown) {
+    setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
+        Piani prezzo nominati/virtuali (es. "Non rimborsabile -10%"), derivati dal piano di partenza con una variazione fissa o
+        percentuale. La mappatura piano→canale si fa nel pannello Wubook.
+      </Typography>
+
+      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
+
+      <Box>
+        <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo('nuovo')}>
+          + Nuovo piano
+        </Button>
+      </Box>
+
+      {piani.isLoading && <Skeleton variant="rounded" height={180} />}
+
+      {!piani.isLoading && (
+        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Id</TableCell>
+                <TableCell>Nome</TableCell>
+                <TableCell>Tipo</TableCell>
+                <TableCell>Variazione</TableCell>
+                <TableCell align="right">Azioni</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(piani.data ?? []).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                    Nessun piano prezzo.
+                  </TableCell>
+                </TableRow>
+              )}
+              {(piani.data ?? []).map((p) => (
+                <TableRow key={p.id} hover>
+                  <TableCell sx={{ fontFamily: fontMono }}>{p.id}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>{p.nome}</TableCell>
+                  <TableCell>{p.isVirtual ? `Virtuale (da ${p.parentId})` : 'Base'}</TableCell>
+                  <TableCell>{p.variazione != null ? `${p.variazione} (${p.tipoVariazione === 2 ? '%' : '€'})` : '—'}</TableCell>
+                  <TableCell align="right">
+                    {p.isVirtual && (
+                      <>
+                        <Tooltip title="Modifica">
+                          <IconButton size="small" onClick={() => setDialogo(p)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Elimina">
+                          <IconButton size="small" onClick={() => elimina.mutate(p.id, { onError: gestisciErrore })} disabled={elimina.isPending}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
+      {dialogo !== 'chiuso' && (
+        <PianoPrezzoDialog strutturaId={strutturaId} piano={dialogo === 'nuovo' ? null : dialogo} piani={piani.data ?? []} onClose={() => setDialogo('chiuso')} />
+      )}
+    </Box>
+  )
+}
+
+function TabPianiRestrizione({ strutturaId }: { strutturaId: string }) {
+  const piani = usePianiRestrizione(strutturaId)
+  const elimina = useEliminaPianoRestrizione(strutturaId)
+  const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | PianoRestrizioneDto>('chiuso')
+  const [errore, setErrore] = useState<string | null>(null)
+
+  function gestisciErrore(err: unknown) {
+    setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
+        Piani restrizione nominati: regole di default (soggiorno min/max, chiusure arrivo/partenza) applicabili a un piano. Distinti dal
+        soggiorno minimo/massimo per camera e periodo (tab Camere).
+      </Typography>
+
+      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
+
+      <Box>
+        <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo('nuovo')}>
+          + Nuovo piano
+        </Button>
+      </Box>
+
+      {piani.isLoading && <Skeleton variant="rounded" height={180} />}
+
+      {!piani.isLoading && (
+        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Id</TableCell>
+                <TableCell>Nome</TableCell>
+                <TableCell>Min/Max</TableCell>
+                <TableCell>Chiuso</TableCell>
+                <TableCell align="right">Azioni</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(piani.data ?? []).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                    Nessun piano restrizione.
+                  </TableCell>
+                </TableRow>
+              )}
+              {(piani.data ?? []).map((p) => (
+                <TableRow key={p.id} hover>
+                  <TableCell sx={{ fontFamily: fontMono }}>{p.id}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>{p.nome}</TableCell>
+                  <TableCell>{p.regole ? `${p.regole.minStay ?? '—'} / ${p.regole.maxStay ?? '—'}` : '—'}</TableCell>
+                  <TableCell>{p.regole?.chiuso ? 'Sì' : 'No'}</TableCell>
+                  <TableCell align="right">
+                    <Tooltip title="Modifica">
+                      <IconButton size="small" onClick={() => setDialogo(p)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Elimina">
+                      <IconButton size="small" onClick={() => elimina.mutate(p.id, { onError: gestisciErrore })} disabled={elimina.isPending}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
+      {dialogo !== 'chiuso' && <PianoRestrizioneDialog strutturaId={strutturaId} piano={dialogo === 'nuovo' ? null : dialogo} onClose={() => setDialogo('chiuso')} />}
     </Box>
   )
 }

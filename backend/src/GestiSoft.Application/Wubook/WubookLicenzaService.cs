@@ -4,7 +4,9 @@ using GestiSoft.Domain.Entities;
 
 namespace GestiSoft.Application.Wubook;
 
-public record AggiornaWubookConfigRequest(bool Attivo, string? GestisoftUsername, string? GestisoftToken);
+public record AggiornaWubookConfigRequest(bool Attivo);
+
+public record AggiornaWubookLicenzaRequest(string? GestisoftUsername, string? GestisoftToken);
 
 /// <summary>
 /// Configurazione dell'integrazione Wubook per Struttura e rinnovo delle credenziali. Il rinnovo
@@ -35,6 +37,25 @@ public class WubookLicenzaService(
             ?? new WubookIntegrazione { StrutturaId = strutturaId };
 
         entity.Attivo = request.Attivo;
+        entity.UpdatedAtUtc = DateTime.UtcNow;
+
+        await repository.UpsertAsync(entity, cancellationToken);
+        return entity;
+    }
+
+    /// <summary>
+    /// Separato da <see cref="AggiornaConfigAsync"/> apposta: le due form (toggle Attivo e licenza
+    /// gestisoft.it) vivono entrambe in ImpostazioniPage ma sono submit indipendenti — un unico
+    /// endpoint che scrivesse insieme tutti i campi rischierebbe di azzerare il token già salvato
+    /// se l'operatore tocca solo il toggle, o viceversa.
+    /// </summary>
+    public async Task<WubookIntegrazione> AggiornaLicenzaAsync(ICurrentUser currentUser, Guid strutturaId, AggiornaWubookLicenzaRequest request, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomWrite, cancellationToken);
+
+        var entity = await repository.GetByStrutturaIdAsync(strutturaId, cancellationToken)
+            ?? new WubookIntegrazione { StrutturaId = strutturaId };
+
         entity.GestisoftUsername = request.GestisoftUsername;
         entity.GestisoftToken = request.GestisoftToken;
         entity.UpdatedAtUtc = DateTime.UtcNow;
