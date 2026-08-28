@@ -31,7 +31,8 @@ public class OsservatorioInvioService(
     IOsservatorioInvioRepository invii,
     IAnagraficaAlloggiatiWebRepository anagrafica,
     IOsservatorioClient client,
-    PermessoStrutturaGuard permessoGuard)
+    PermessoStrutturaGuard permessoGuard,
+    ConcessioneServiziGuard concessioneGuard)
 {
     public async Task<RisultatoInvioOsservatorio> InviaOraAsync(ICurrentUser currentUser, Guid strutturaId, Guid appartamentoId, CancellationToken cancellationToken)
     {
@@ -94,6 +95,8 @@ public class OsservatorioInvioService(
 
     private async Task<RisultatoInvioOsservatorio> ProcessaAppartamentoAsync(Guid strutturaId, OsservatorioAppartamento appartamento, CancellationToken cancellationToken)
     {
+        await concessioneGuard.EnsureOsservatorioAsync(strutturaId, cancellationToken);
+
         if (string.IsNullOrWhiteSpace(appartamento.EntityCode) || string.IsNullOrWhiteSpace(appartamento.Password) || string.IsNullOrWhiteSpace(appartamento.HotelCode))
         {
             await SalvaErroreAsync(appartamento, "Credenziali Osservatorio Turistico non configurate.", cancellationToken);

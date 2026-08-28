@@ -13,6 +13,11 @@ public class Cliente
 
     public string? PartitaIva { get; set; }
 
+    /// <summary>
+    /// Sospensione dell'intero Cliente da parte del Super Admin (es. mancato pagamento): se false,
+    /// nessun utente di questo Cliente può accedere (AuthService.LoginAsync) né operare su nessuna
+    /// delle sue Strutture (TenantAccessGuard.EnsureAccessAsync), anche con un token già emesso.
+    /// </summary>
     public bool Attivo { get; set; } = true;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

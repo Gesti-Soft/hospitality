@@ -235,7 +235,7 @@ function TabDatiAziendali({ strutturaId }: { strutturaId: string | null }) {
   return <DatiAziendaliForm strutturaId={strutturaId!} dati={dati.data} />
 }
 
-function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; dati: DatiAziendaliDto }) {
+export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; dati: DatiAziendaliDto }) {
   const [iso2, setIso2] = useState(dati.iso2 ?? 'IT')
   const [pIva, setPIva] = useState(dati.pIva ?? '')
   const [codiceFiscale, setCodiceFiscale] = useState(dati.codiceFiscale ?? '')

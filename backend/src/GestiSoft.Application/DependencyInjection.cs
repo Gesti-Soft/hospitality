@@ -10,7 +10,9 @@ using GestiSoft.Application.Osservatorio;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.PayTourist;
 using GestiSoft.Application.Prenotazioni;
+using GestiSoft.Application.Riferimenti;
 using GestiSoft.Application.Strutture;
+using GestiSoft.Application.SuperAdmin;
 using GestiSoft.Application.Utenti;
 using GestiSoft.Application.Wubook;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<ILogEventoService, LogEventoService>();
         services.AddScoped<TenantAccessGuard>();
         services.AddScoped<PermessoStrutturaGuard>();
+        services.AddScoped<ConcessioneServiziGuard>();
         services.AddScoped<ImpostazioniStrutturaService>();
         services.AddScoped<ClienteService>();
         services.AddScoped<StrutturaService>();
@@ -59,6 +62,8 @@ public static class DependencyInjection
         services.AddScoped<OsservatorioInvioService>();
         services.AddScoped<PayTouristConfigService>();
         services.AddScoped<PayTouristInvioService>();
+        services.AddScoped<RiferimentiService>();
+        services.AddScoped<SuperAdminService>();
 
         return services;
     }

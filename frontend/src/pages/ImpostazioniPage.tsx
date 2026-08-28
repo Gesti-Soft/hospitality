@@ -75,16 +75,20 @@ export function ImpostazioniPage() {
 // ---------------------------------------------------------------------------
 
 function TabGenerali({ strutturaId }: { strutturaId: string | null }) {
+  const { strutturaCorrente } = useStruttura()
   const impostazioni = useImpostazioni(strutturaId)
   const wubookConfig = useWubookConfig(strutturaId)
+  const wubookAbilitato = strutturaCorrente?.wubookAbilitato ?? false
 
   return (
     <Box sx={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {impostazioni.isLoading && <Skeleton variant="rounded" height={380} />}
-      {!impostazioni.isLoading && impostazioni.data && <ImpostazioniGeneraliForm strutturaId={strutturaId!} dati={impostazioni.data} />}
+      {!impostazioni.isLoading && impostazioni.data && strutturaCorrente && (
+        <ImpostazioniGeneraliForm strutturaId={strutturaId!} dati={impostazioni.data} servizi={strutturaCorrente} />
+      )}
 
-      {wubookConfig.isLoading && <Skeleton variant="rounded" height={80} />}
-      {!wubookConfig.isLoading && wubookConfig.data && <WubookAttivoToggle strutturaId={strutturaId!} dati={wubookConfig.data} />}
+      {wubookAbilitato && wubookConfig.isLoading && <Skeleton variant="rounded" height={80} />}
+      {wubookAbilitato && !wubookConfig.isLoading && wubookConfig.data && <WubookAttivoToggle strutturaId={strutturaId!} dati={wubookConfig.data} />}
     </Box>
   )
 }
@@ -115,7 +119,13 @@ function WubookAttivoToggle({ strutturaId, dati }: { strutturaId: string; dati: 
   )
 }
 
-function ImpostazioniGeneraliForm({ strutturaId, dati }: { strutturaId: string; dati: ImpostazioniStrutturaDto }) {
+export interface ServiziConcessi {
+  alloggiatiWebAbilitato: boolean
+  osservatorioAbilitato: boolean
+  payTouristAbilitato: boolean
+}
+
+export function ImpostazioniGeneraliForm({ strutturaId, dati, servizi }: { strutturaId: string; dati: ImpostazioniStrutturaDto; servizi: ServiziConcessi }) {
   const [poliziaStatoAttiva, setPoliziaStatoAttiva] = useState(dati.poliziaStatoAttiva)
   const [osservatorioAttivo, setOsservatorioAttivo] = useState(dati.osservatorioAttivo)
   const [payTouristAttivo, setPayTouristAttivo] = useState(dati.payTouristAttivo)
@@ -148,41 +158,58 @@ function ImpostazioniGeneraliForm({ strutturaId, dati }: { strutturaId: string; 
     })
   }
 
+  const nessunServizioInvii = !servizi.alloggiatiWebAbilitato && !servizi.osservatorioAbilitato && !servizi.payTouristAbilitato
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Invii automatici</Typography>
-        <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
-          Attiva qui i servizi per cui hai già configurato le credenziali nelle rispettive sezioni. L'orario si applica a tutti gli invii
-          giornalieri di questa struttura.
-        </Typography>
+      {!nessunServizioInvii && (
+        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Invii automatici</Typography>
+          <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+            Attiva qui i servizi per cui hai già configurato le credenziali nelle rispettive sezioni. L'orario si applica a tutti gli invii
+            giornalieri di questa struttura.
+          </Typography>
 
-        {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-        {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Impostazioni salvate.</Alert>}
+          {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
+          {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Impostazioni salvate.</Alert>}
 
-        <FormControlLabel
-          control={<Checkbox checked={poliziaStatoAttiva} onChange={(e) => setPoliziaStatoAttiva(e.target.checked)} disabled={aggiorna.isPending} />}
-          label="Invio schedine Polizia di Stato (Alloggiati Web)"
-        />
-        <FormControlLabel
-          control={<Checkbox checked={osservatorioAttivo} onChange={(e) => setOsservatorioAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
-          label="Invio Osservatorio Turistico"
-        />
-        <FormControlLabel
-          control={<Checkbox checked={payTouristAttivo} onChange={(e) => setPayTouristAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
-          label="Invio PayTourist"
-        />
+          {servizi.alloggiatiWebAbilitato && (
+            <FormControlLabel
+              control={<Checkbox checked={poliziaStatoAttiva} onChange={(e) => setPoliziaStatoAttiva(e.target.checked)} disabled={aggiorna.isPending} />}
+              label="Invio schedine Polizia di Stato (Alloggiati Web)"
+            />
+          )}
+          {servizi.osservatorioAbilitato && (
+            <FormControlLabel
+              control={<Checkbox checked={osservatorioAttivo} onChange={(e) => setOsservatorioAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
+              label="Invio Osservatorio Turistico"
+            />
+          )}
+          {servizi.payTouristAbilitato && (
+            <FormControlLabel
+              control={<Checkbox checked={payTouristAttivo} onChange={(e) => setPayTouristAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
+              label="Invio PayTourist"
+            />
+          )}
 
-        <TextField
-          label="Orario invio giornaliero"
-          type="time"
-          value={oraInvioGiornaliero}
-          onChange={(e) => setOraInvioGiornaliero(e.target.value)}
-          sx={{ width: 200 }}
-          slotProps={{ inputLabel: { shrink: true } }}
-          disabled={aggiorna.isPending}
-        />
-      </Box>
+          <TextField
+            label="Orario invio giornaliero"
+            type="time"
+            value={oraInvioGiornaliero}
+            onChange={(e) => setOraInvioGiornaliero(e.target.value)}
+            sx={{ width: 200 }}
+            slotProps={{ inputLabel: { shrink: true } }}
+            disabled={aggiorna.isPending}
+          />
+        </Box>
+      )}
+
+      {nessunServizioInvii && (errore || salvato) && (
+        <Box>
+          {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
+          {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Impostazioni salvate.</Alert>}
+        </Box>
+      )}
 
       <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tassa di soggiorno</Typography>

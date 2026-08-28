@@ -18,4 +18,14 @@ public class ClienteRepository(GestiSoftDbContext db) : IClienteRepository
         db.Clienti.Add(cliente);
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task UpdateAsync(Cliente cliente, CancellationToken cancellationToken)
+    {
+        if (db.Entry(cliente).State == EntityState.Detached)
+        {
+            db.Clienti.Update(cliente);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }

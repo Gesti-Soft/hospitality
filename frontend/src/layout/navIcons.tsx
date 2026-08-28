@@ -15,6 +15,15 @@ export function IconCruscotto(props: IconProps) {
   )
 }
 
+export function IconSuperAdmin(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 2L15 4V8.5C15 12 12.5 14.8 9 16C5.5 14.8 3 12 3 8.5V4L9 2Z" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" />
+      <path d="M6.3 8.8L8 10.5L11.5 7" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function IconCalendario(props: IconProps) {
   return (
     <svg {...base} {...props}>

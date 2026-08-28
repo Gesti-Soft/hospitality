@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Alert from '@mui/material/Alert'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
+import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -25,6 +27,7 @@ import {
   type OspiteDto,
   type SalvaSchedaOspitiRequest,
 } from '../api/ospiti'
+import { type ComuneDto, useComuni, useDocumenti, useStati, useTipiAlloggiato } from '../api/riferimenti'
 import { differenzaGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { fontDisplay, tokens } from '../theme'
 
@@ -56,6 +59,142 @@ export function OspiteDialog({ strutturaId, prenotazione, onClose }: Props) {
 
 const permanenzaDefault = (p: PrenotazioneDto) => (p.checkIn && p.checkOut ? Math.max(differenzaGiorni(new Date(p.checkOut), new Date(p.checkIn)), 1) : 1)
 
+/** Ritarda l'aggiornamento di un valore, per non interrogare il server ad ogni tasto premuto. */
+function useValoreConRitardo<T>(valore: T, ritardoMs: number): T {
+  const [valoreRitardato, setValoreRitardato] = useState(valore)
+  useEffect(() => {
+    const timer = setTimeout(() => setValoreRitardato(valore), ritardoMs)
+    return () => clearTimeout(timer)
+  }, [valore, ritardoMs])
+  return valoreRitardato
+}
+
+/** Select con autocompletamento sopra un elenco statico già caricato (Stati, Documenti, Tipo ospite). */
+function SelectRiferimento({
+  label,
+  value,
+  onChange,
+  opzioni,
+  loading,
+  disabled,
+  size,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  opzioni: string[]
+  loading: boolean
+  disabled?: boolean
+  size?: 'small' | 'medium'
+}) {
+  // Se il valore salvato non combacia con nessuna opzione ufficiale (es. dato storico digitato a
+  // mano), lo mostriamo comunque come opzione extra invece di farlo sparire silenziosamente.
+  const opzioniConValoreCorrente = value && !opzioni.includes(value) ? [value, ...opzioni] : opzioni
+
+  return (
+    <Autocomplete
+      fullWidth
+      size={size}
+      disabled={disabled}
+      loading={loading}
+      options={opzioniConValoreCorrente}
+      value={value || null}
+      onChange={(_, v) => onChange(v ?? '')}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label={label}
+          slotProps={{
+            ...params.slotProps,
+            input: {
+              ...params.slotProps.input,
+              endAdornment: (
+                <>
+                  {loading && <CircularProgress color="inherit" size={16} />}
+                  {params.slotProps.input.endAdornment}
+                </>
+              ),
+            },
+          }}
+        />
+      )}
+    />
+  )
+}
+
+/** Select con ricerca lato server sui comuni italiani (~11.283 righe, non caricati tutti insieme). */
+function SelectComune({
+  label,
+  value,
+  onChange,
+  disabled,
+  size,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+  size?: 'small' | 'medium'
+}) {
+  const [testo, setTesto] = useState(value)
+  // Provincia del comune scelto l'ultima volta (per disambiguare in etichetta gli omonimi, es.
+  // "CASTELLAMMARE DEL GOLFO (TP)") — tenuta a parte invece di essere ri-derivata cercandola negli
+  // ultimi risultati di ricerca: dopo una selezione il testo digitato include già "(TP)", quindi
+  // ricercarlo per intero non troverebbe più nulla (il campo Descrizione non contiene la provincia)
+  // e si perderebbe/ritroverebbe la provincia ad ogni giro di ricerca, con un fastidioso lampeggio.
+  const [provinciaSelezionata, setProvinciaSelezionata] = useState<string | null>(null)
+  const ricerca = useValoreConRitardo(testo, 300)
+  const comuni = useComuni(ricerca)
+  const opzioni = comuni.data ?? []
+
+  const opzioneSelezionata: ComuneDto | null =
+    value ? { id: '', codice: 0, descrizione: value, provincia: provinciaSelezionata, codiceBelfiore: null, cap: null } : null
+
+  return (
+    <Autocomplete
+      fullWidth
+      size={size}
+      disabled={disabled}
+      loading={comuni.isFetching}
+      options={opzioni}
+      filterOptions={(x) => x}
+      value={opzioneSelezionata}
+      inputValue={testo}
+      onInputChange={(_, v, reason) => {
+        setTesto(v)
+        if (reason === 'input') {
+          setProvinciaSelezionata(null)
+        }
+      }}
+      isOptionEqualToValue={(o, v) => o.descrizione === v.descrizione}
+      getOptionLabel={(o) => (o.provincia ? `${o.descrizione} (${o.provincia})` : o.descrizione)}
+      onChange={(_, v) => {
+        onChange(v?.descrizione ?? '')
+        setProvinciaSelezionata(v?.provincia ?? null)
+      }}
+      noOptionsText={ricerca.trim().length < 2 ? 'Digita per cercare...' : 'Nessun comune trovato'}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label={label}
+          slotProps={{
+            ...params.slotProps,
+            input: {
+              ...params.slotProps.input,
+              endAdornment: (
+                <>
+                  {comuni.isFetching && <CircularProgress color="inherit" size={16} />}
+                  {params.slotProps.input.endAdornment}
+                </>
+              ),
+            },
+          }}
+        />
+      )}
+    />
+  )
+}
+
 function SchedaOspitiForm({
   strutturaId,
   prenotazione,
@@ -67,6 +206,16 @@ function SchedaOspitiForm({
   ospite: OspiteDto | null
   onClose: () => void
 }) {
+  const stati = useStati()
+  const documenti = useDocumenti()
+  const tipiAlloggiato = useTipiAlloggiato()
+
+  const opzioniStati = (stati.data ?? []).map((s) => s.descrizione)
+  const opzioniDocumenti = (documenti.data ?? []).map((d) => d.descrizione)
+  // FAMILIARE/MEMBRO GRUPPO (codici 19/20) sono classificazioni valide solo per gli "altri ospiti"
+  // della schedina, mai per il capofamiglia — stesso filtro del gestionale legacy.
+  const opzioniTipoOspite = (tipiAlloggiato.data ?? []).filter((t) => t.codice !== '19' && t.codice !== '20').map((t) => t.descrizione)
+
   const [tipoOspite, setTipoOspite] = useState(ospite?.tipoOspite ?? '')
   const [permanenza, setPermanenza] = useState(String(ospite?.permanenza ?? permanenzaDefault(prenotazione)))
   const [dataNascita, setDataNascita] = useState(ospite?.dataNascita ? formatoInputData(new Date(ospite.dataNascita)) : '')
@@ -83,8 +232,17 @@ function SchedaOspitiForm({
   const [rilascioDocumento, setRilascioDocumento] = useState(ospite?.rilascioDocumento ?? '')
   const [esenteDaTassa, setEsenteDaTassa] = useState(ospite?.esenteDaTassa ?? false)
 
-  const [membri, setMembri] = useState<MembroOspiteRequest[]>(
+  // Un "Ospite singolo" non ha altri membri per definizione — la sezione "Altri ospiti" non ha
+  // senso e va nascosta; per Capo famiglia/Capo gruppo, invece, serve almeno un membro (controllato
+  // al salvataggio più sotto), stessa regola del gestionale legacy.
+  const isOspiteSingolo = tipoOspite.trim().toUpperCase() === 'OSPITE SINGOLO'
+
+  // _key identifica la riga in modo stabile per React (a differenza dell'indice nell'array, non
+  // cambia quando una riga precedente viene rimossa) — altrimenti, riusando la stessa istanza di
+  // SelectComune per una riga diversa, il testo digitato al suo interno resterebbe quello vecchio.
+  const [membri, setMembri] = useState<(MembroOspiteRequest & { _key: string })[]>(
     (ospite?.membri ?? []).map((m) => ({
+      _key: m.id ?? crypto.randomUUID(),
       id: m.id,
       cameraId: m.cameraId,
       permanenza: m.permanenza,
@@ -113,6 +271,7 @@ function SchedaOspitiForm({
     setMembri((prec) => [
       ...prec,
       {
+        _key: crypto.randomUUID(),
         id: null,
         cameraId: prenotazione.cameraId,
         permanenza: Number(permanenza) || null,
@@ -139,6 +298,10 @@ function SchedaOspitiForm({
       setErrore('Cognome e nome del capofamiglia sono obbligatori.')
       return
     }
+    if (!isOspiteSingolo && membri.length === 0) {
+      setErrore('Aggiungi almeno un ospite, oppure imposta "Tipo ospite" su Ospite singolo.')
+      return
+    }
     setErrore(null)
 
     const request: SalvaSchedaOspitiRequest = {
@@ -157,7 +320,7 @@ function SchedaOspitiForm({
       numeroDocumento: numeroDocumento.trim() === '' ? null : numeroDocumento.trim(),
       rilascioDocumento: rilascioDocumento.trim() === '' ? null : rilascioDocumento.trim(),
       esenteDaTassa,
-      membri,
+      membri: membri.map(({ _key, ...m }) => m),
     }
 
     salva.mutate(request, {
@@ -204,24 +367,31 @@ function SchedaOspitiForm({
         </Box>
 
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField label="Cittadinanza" value={cittadinanza} onChange={(e) => setCittadinanza(e.target.value)} fullWidth disabled={salva.isPending} />
-          <TextField label="Stato di nascita" value={statoNascita} onChange={(e) => setStatoNascita(e.target.value)} fullWidth disabled={salva.isPending} />
-          <TextField label="Comune di nascita" value={luogoNascita} onChange={(e) => setLuogoNascita(e.target.value)} fullWidth disabled={salva.isPending} />
+          <SelectRiferimento label="Cittadinanza" value={cittadinanza} onChange={setCittadinanza} opzioni={opzioniStati} loading={stati.isLoading} disabled={salva.isPending} />
+          <SelectRiferimento label="Stato di nascita" value={statoNascita} onChange={setStatoNascita} opzioni={opzioniStati} loading={stati.isLoading} disabled={salva.isPending} />
+          <SelectComune label="Comune di nascita" value={luogoNascita} onChange={setLuogoNascita} disabled={salva.isPending} />
         </Box>
 
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField label="Comune di residenza" value={luogoResidenza} onChange={(e) => setLuogoResidenza(e.target.value)} fullWidth disabled={salva.isPending} />
+          <SelectComune label="Comune di residenza" value={luogoResidenza} onChange={setLuogoResidenza} disabled={salva.isPending} />
           <TextField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth disabled={salva.isPending} />
         </Box>
 
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField label="Tipo documento" value={documento} onChange={(e) => setDocumento(e.target.value)} fullWidth disabled={salva.isPending} />
+          <SelectRiferimento label="Tipo documento" value={documento} onChange={setDocumento} opzioni={opzioniDocumenti} loading={documenti.isLoading} disabled={salva.isPending} />
           <TextField label="Numero documento" value={numeroDocumento} onChange={(e) => setNumeroDocumento(e.target.value)} fullWidth disabled={salva.isPending} />
-          <TextField label="Rilasciato da" value={rilascioDocumento} onChange={(e) => setRilascioDocumento(e.target.value)} fullWidth disabled={salva.isPending} />
+          <SelectComune label="Rilasciato da" value={rilascioDocumento} onChange={setRilascioDocumento} disabled={salva.isPending} />
         </Box>
 
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <TextField label="Tipo ospite (classificazione schedina)" value={tipoOspite} onChange={(e) => setTipoOspite(e.target.value)} fullWidth disabled={salva.isPending} />
+          <SelectRiferimento
+            label="Tipo ospite (classificazione schedina)"
+            value={tipoOspite}
+            onChange={setTipoOspite}
+            opzioni={opzioniTipoOspite}
+            loading={tipiAlloggiato.isLoading}
+            disabled={salva.isPending}
+          />
           <FormControlLabel
             control={<Checkbox checked={esenteDaTassa} onChange={(e) => setEsenteDaTassa(e.target.checked)} disabled={salva.isPending} />}
             label="Esente tassa di soggiorno"
@@ -229,65 +399,85 @@ function SchedaOspitiForm({
           />
         </Box>
 
-        <Divider sx={{ mt: 1 }} />
+        {!isOspiteSingolo && (
+          <>
+            <Divider sx={{ mt: 1 }} />
 
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 13.5 }}>Altri ospiti ({membri.length})</Typography>
-          <Button size="small" onClick={aggiungiMembro} disabled={salva.isPending}>
-            + Aggiungi ospite
-          </Button>
-        </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 13.5 }}>Altri ospiti ({membri.length})</Typography>
+              <Button size="small" onClick={aggiungiMembro} disabled={salva.isPending}>
+                + Aggiungi ospite
+              </Button>
+            </Box>
 
-        {membri.map((m, indice) => (
-          <Box key={indice} sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 1.5, p: 1.75, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField label="Cognome" value={m.cognome ?? ''} onChange={(e) => aggiornaMembro(indice, { cognome: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
-              <TextField label="Nome" value={m.nome ?? ''} onChange={(e) => aggiornaMembro(indice, { nome: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
-              <TextField
-                label="Data di nascita"
-                type="date"
-                value={m.dataNascita ? formatoInputData(new Date(m.dataNascita)) : ''}
-                onChange={(e) => aggiornaMembro(indice, { dataNascita: e.target.value === '' ? null : isoLocale(parsaInputData(e.target.value)) })}
-                fullWidth
-                size="small"
-                slotProps={{ inputLabel: { shrink: true } }}
-                disabled={salva.isPending}
-              />
-              <TextField
-                select
-                label="Sesso"
-                value={m.sesso != null ? String(m.sesso) : ''}
-                onChange={(e) => aggiornaMembro(indice, { sesso: e.target.value === '' ? null : (Number(e.target.value) as Sesso) })}
-                sx={{ minWidth: 130 }}
-                size="small"
-                disabled={salva.isPending}
-              >
-                <MenuItem value="">—</MenuItem>
-                <MenuItem value={String(Sesso.Maschio)}>Maschio</MenuItem>
-                <MenuItem value={String(Sesso.Femmina)}>Femmina</MenuItem>
-              </TextField>
-              <IconButton size="small" onClick={() => rimuoviMembro(indice)} disabled={salva.isPending}>
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Box>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField label="Cittadinanza" value={m.cittadinanza ?? ''} onChange={(e) => aggiornaMembro(indice, { cittadinanza: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
-              <TextField label="Stato di nascita" value={m.statoNascita ?? ''} onChange={(e) => aggiornaMembro(indice, { statoNascita: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
-              <TextField label="Comune di nascita" value={m.luogoNascita ?? ''} onChange={(e) => aggiornaMembro(indice, { luogoNascita: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
-              <TextField label="Comune di residenza" value={m.luogoResidenza ?? ''} onChange={(e) => aggiornaMembro(indice, { luogoResidenza: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
-            </Box>
-            <Box sx={{ display: 'flex', gap: 3 }}>
-              <FormControlLabel
-                control={<Checkbox size="small" checked={m.postoLetto ?? false} onChange={(e) => aggiornaMembro(indice, { postoLetto: e.target.checked })} disabled={salva.isPending} />}
-                label="Occupa un posto letto"
-              />
-              <FormControlLabel
-                control={<Checkbox size="small" checked={m.esenteDaTassa} onChange={(e) => aggiornaMembro(indice, { esenteDaTassa: e.target.checked })} disabled={salva.isPending} />}
-                label="Esente tassa di soggiorno"
-              />
-            </Box>
-          </Box>
-        ))}
+            {membri.map((m, indice) => (
+              <Box key={m._key} sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 1.5, p: 1.75, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField label="Cognome" value={m.cognome ?? ''} onChange={(e) => aggiornaMembro(indice, { cognome: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
+                  <TextField label="Nome" value={m.nome ?? ''} onChange={(e) => aggiornaMembro(indice, { nome: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
+                  <TextField
+                    label="Data di nascita"
+                    type="date"
+                    value={m.dataNascita ? formatoInputData(new Date(m.dataNascita)) : ''}
+                    onChange={(e) => aggiornaMembro(indice, { dataNascita: e.target.value === '' ? null : isoLocale(parsaInputData(e.target.value)) })}
+                    fullWidth
+                    size="small"
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    disabled={salva.isPending}
+                  />
+                  <TextField
+                    select
+                    label="Sesso"
+                    value={m.sesso != null ? String(m.sesso) : ''}
+                    onChange={(e) => aggiornaMembro(indice, { sesso: e.target.value === '' ? null : (Number(e.target.value) as Sesso) })}
+                    sx={{ minWidth: 130 }}
+                    size="small"
+                    disabled={salva.isPending}
+                  >
+                    <MenuItem value="">—</MenuItem>
+                    <MenuItem value={String(Sesso.Maschio)}>Maschio</MenuItem>
+                    <MenuItem value={String(Sesso.Femmina)}>Femmina</MenuItem>
+                  </TextField>
+                  <IconButton size="small" onClick={() => rimuoviMembro(indice)} disabled={salva.isPending}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <SelectRiferimento
+                    label="Cittadinanza"
+                    value={m.cittadinanza ?? ''}
+                    onChange={(v) => aggiornaMembro(indice, { cittadinanza: v })}
+                    opzioni={opzioniStati}
+                    loading={stati.isLoading}
+                    disabled={salva.isPending}
+                    size="small"
+                  />
+                  <SelectRiferimento
+                    label="Stato di nascita"
+                    value={m.statoNascita ?? ''}
+                    onChange={(v) => aggiornaMembro(indice, { statoNascita: v })}
+                    opzioni={opzioniStati}
+                    loading={stati.isLoading}
+                    disabled={salva.isPending}
+                    size="small"
+                  />
+                  <SelectComune label="Comune di nascita" value={m.luogoNascita ?? ''} onChange={(v) => aggiornaMembro(indice, { luogoNascita: v })} disabled={salva.isPending} size="small" />
+                  <SelectComune label="Comune di residenza" value={m.luogoResidenza ?? ''} onChange={(v) => aggiornaMembro(indice, { luogoResidenza: v })} disabled={salva.isPending} size="small" />
+                </Box>
+                <Box sx={{ display: 'flex', gap: 3 }}>
+                  <FormControlLabel
+                    control={<Checkbox size="small" checked={m.postoLetto ?? false} onChange={(e) => aggiornaMembro(indice, { postoLetto: e.target.checked })} disabled={salva.isPending} />}
+                    label="Occupa un posto letto"
+                  />
+                  <FormControlLabel
+                    control={<Checkbox size="small" checked={m.esenteDaTassa} onChange={(e) => aggiornaMembro(indice, { esenteDaTassa: e.target.checked })} disabled={salva.isPending} />}
+                    label="Esente tassa di soggiorno"
+                  />
+                </Box>
+              </Box>
+            ))}
+          </>
+        )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
         <Button onClick={onClose} disabled={salva.isPending}>

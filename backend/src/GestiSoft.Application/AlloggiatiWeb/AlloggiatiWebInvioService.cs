@@ -24,7 +24,8 @@ public class AlloggiatiWebInvioService(
     IAlloggiatiWebIntegrazioneRepository integrazioni,
     IAnagraficaAlloggiatiWebRepository anagrafica,
     IAlloggiatiWebClient client,
-    PermessoStrutturaGuard permessoGuard)
+    PermessoStrutturaGuard permessoGuard,
+    ConcessioneServiziGuard concessioneGuard)
 {
     public async Task<RisultatoInvioAlloggiatiWeb> InviaOraAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -35,6 +36,8 @@ public class AlloggiatiWebInvioService(
     /// <summary>Usato dal job Quartz schedulato (Worker) — nessun ICurrentUser, gira per conto del sistema.</summary>
     public async Task<RisultatoInvioAlloggiatiWeb> InviaSistemaAsync(Guid strutturaId, CancellationToken cancellationToken)
     {
+        await concessioneGuard.EnsureAlloggiatiWebAsync(strutturaId, cancellationToken);
+
         var integrazione = await integrazioni.GetByStrutturaIdAsync(strutturaId, cancellationToken)
             ?? new AlloggiatiWebIntegrazione { StrutturaId = strutturaId };
 

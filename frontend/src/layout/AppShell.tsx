@@ -1,14 +1,27 @@
-import type { ReactNode } from 'react'
+import { useState, type MouseEvent, type ReactNode } from 'react'
 import { Link as RouterLink, useLocation } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Skeleton from '@mui/material/Skeleton'
+import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
+import AddIcon from '@mui/icons-material/AddOutlined'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useAuth } from '../auth/AuthContext'
 import { useStruttura } from '../struttura/StrutturaContext'
+import { useAggiornaStruttura, useCreaStruttura, useImpostaAttivoStruttura } from '../api/strutture'
+import { ApiError } from '../api/client'
 import { fontDisplay, tokens } from '../theme'
 import { GestiSoftMark } from '../components/GestiSoftMark'
 import { navItemsFlat, navSections } from './navItems'
@@ -24,6 +37,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const paginaCorrente = navItemsFlat.find((item) => item.path === location.pathname)
   const inizialiUtente = (sessione?.email ?? '?').slice(0, 2).toUpperCase()
+  const [nuovaStrutturaAperta, setNuovaStrutturaAperta] = useState(false)
+  const [strutturaInModifica, setStrutturaInModifica] = useState<{ id: string; nome: string } | null>(null)
+  const [strutturaDaEliminare, setStrutturaDaEliminare] = useState<{ id: string; nome: string } | null>(null)
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: tokens.paper }}>
@@ -61,6 +77,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               opzioni={strutture.map((s) => ({ id: s.id, nome: s.nome }))}
               caricamento={loading && strutture.length === 0}
               onChange={selezionaStruttura}
+              onAggiungi={clienteId ? () => setNuovaStrutturaAperta(true) : undefined}
+              onModificaOpzione={setStrutturaInModifica}
+              onEliminaOpzione={setStrutturaDaEliminare}
             />
           </Box>
         )}
@@ -72,14 +91,21 @@ export function AppShell({ children }: { children: ReactNode }) {
             opzioni={strutture.map((s) => ({ id: s.id, nome: s.nome }))}
             caricamento={loading && strutture.length === 0}
             onChange={selezionaStruttura}
+            onAggiungi={() => setNuovaStrutturaAperta(true)}
+            onModificaOpzione={setStrutturaInModifica}
+            onEliminaOpzione={setStrutturaDaEliminare}
           />
         )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, overflowY: 'auto' }}>
-          {navSections.map((section) => (
+          {navSections
+            .filter((section) => !section.soloSuperAdmin || isSuperAdmin)
+            .map((section) => (
             <Box key={section.title} sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <Typography sx={sezioneLabelSx}>{section.title}</Typography>
-              {section.items.map((item) => {
+              {section.items
+                .filter((item) => !item.richiedeServizio || strutturaCorrente?.[item.richiedeServizio] !== false)
+                .map((item) => {
                 const attivo = item.path === location.pathname
                 const Icon = item.icon
                 return (
@@ -169,7 +195,173 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <Box sx={{ flex: 1, overflow: 'auto', p: 4.5 }}>{children}</Box>
       </Box>
+
+      {nuovaStrutturaAperta && (
+        <NuovaStrutturaDialog
+          clienteId={isSuperAdmin ? clienteId : null}
+          onClose={() => setNuovaStrutturaAperta(false)}
+          onCreata={selezionaStruttura}
+        />
+      )}
+      {strutturaInModifica && <ModificaStrutturaDialog struttura={strutturaInModifica} onClose={() => setStrutturaInModifica(null)} />}
+      {strutturaDaEliminare && <EliminaStrutturaDialog struttura={strutturaDaEliminare} onClose={() => setStrutturaDaEliminare(null)} />}
     </Box>
+  )
+}
+
+function NuovaStrutturaDialog({
+  clienteId,
+  onClose,
+  onCreata,
+}: {
+  clienteId: string | null
+  onClose: () => void
+  onCreata: (id: string) => void
+}) {
+  const [nome, setNome] = useState('')
+  const [errore, setErrore] = useState<string | null>(null)
+  const crea = useCreaStruttura()
+  const queryClient = useQueryClient()
+
+  function salva() {
+    if (nome.trim() === '') {
+      setErrore('Indica il nome della struttura.')
+      return
+    }
+    setErrore(null)
+    crea.mutate(
+      { nome: nome.trim(), clienteId },
+      {
+        onSuccess: (struttura) => {
+          queryClient.invalidateQueries({ queryKey: ['strutture'] })
+          onCreata(struttura.id)
+          onClose()
+        },
+        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      },
+    )
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Nuova struttura</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        {errore && <Alert severity="error">{errore}</Alert>}
+        <TextField
+          label="Nome struttura"
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          fullWidth
+          disabled={crea.isPending}
+          autoFocus
+          onKeyDown={(e) => e.key === 'Enter' && salva()}
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} disabled={crea.isPending}>
+          Annulla
+        </Button>
+        <Button variant="contained" color="secondary" onClick={salva} disabled={crea.isPending}>
+          Crea
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+function ModificaStrutturaDialog({ struttura, onClose }: { struttura: { id: string; nome: string }; onClose: () => void }) {
+  const [nome, setNome] = useState(struttura.nome)
+  const [errore, setErrore] = useState<string | null>(null)
+  const aggiorna = useAggiornaStruttura()
+  const queryClient = useQueryClient()
+
+  function salva() {
+    if (nome.trim() === '') {
+      setErrore('Indica il nome della struttura.')
+      return
+    }
+    setErrore(null)
+    aggiorna.mutate(
+      { strutturaId: struttura.id, nome: nome.trim() },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['strutture'] })
+          onClose()
+        },
+        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      },
+    )
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Modifica struttura</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        {errore && <Alert severity="error">{errore}</Alert>}
+        <TextField
+          label="Nome struttura"
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          fullWidth
+          disabled={aggiorna.isPending}
+          autoFocus
+          onKeyDown={(e) => e.key === 'Enter' && salva()}
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} disabled={aggiorna.isPending}>
+          Annulla
+        </Button>
+        <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
+          Salva
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+function EliminaStrutturaDialog({ struttura, onClose }: { struttura: { id: string; nome: string }; onClose: () => void }) {
+  const [errore, setErrore] = useState<string | null>(null)
+  const impostaAttivo = useImpostaAttivoStruttura()
+  const queryClient = useQueryClient()
+
+  function elimina() {
+    setErrore(null)
+    impostaAttivo.mutate(
+      { strutturaId: struttura.id, attivo: false },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['strutture'] })
+          onClose()
+        },
+        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      },
+    )
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Elimina struttura</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        {errore && <Alert severity="error">{errore}</Alert>}
+        <Alert severity="warning">
+          Stai per eliminare <strong>{struttura.nome}</strong>. Non sarà più utilizzabile né visibile nel gestionale, e nessuno dei suoi
+          utenti potrà più accedervi.
+        </Alert>
+        <Typography sx={{ fontSize: 13, color: tokens.textSecondary }}>
+          Camere, prenotazioni, ospiti, fatture e tutti gli altri dati collegati NON vengono cancellati: restano conservati e recuperabili
+          contattando l'assistenza, in caso di errore.
+        </Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} disabled={impostaAttivo.isPending}>
+          Annulla
+        </Button>
+        <Button variant="contained" color="error" onClick={elimina} disabled={impostaAttivo.isPending}>
+          Elimina struttura
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
@@ -199,23 +391,56 @@ interface SelettoreScuroProps {
   opzioni: { id: string; nome: string }[]
   caricamento: boolean
   onChange: (id: string) => void
+  onAggiungi?: () => void
+  onModificaOpzione?: (opzione: { id: string; nome: string }) => void
+  onEliminaOpzione?: (opzione: { id: string; nome: string }) => void
 }
 
-function SelettoreScuro({ etichetta, valore, opzioni, caricamento, onChange }: SelettoreScuroProps) {
+function SelettoreScuro({
+  etichetta,
+  valore,
+  opzioni,
+  caricamento,
+  onChange,
+  onAggiungi,
+  onModificaOpzione,
+  onEliminaOpzione,
+}: SelettoreScuroProps) {
+  const [aperto, setAperto] = useState(false)
+
   if (caricamento) {
     return <Skeleton variant="rounded" height={54} sx={{ bgcolor: 'rgba(255,255,255,0.06)' }} />
   }
 
+  function azione(e: MouseEvent, callback: () => void) {
+    e.stopPropagation()
+    setAperto(false)
+    callback()
+  }
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <Typography sx={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.07em', color: '#7E899A', textTransform: 'uppercase', px: 0.25 }}>
-        {etichetta}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 0.25 }}>
+        <Typography sx={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.07em', color: '#7E899A', textTransform: 'uppercase' }}>
+          {etichetta}
+        </Typography>
+        {onAggiungi && (
+          <Tooltip title="Aggiungi nuova struttura">
+            <IconButton size="small" onClick={onAggiungi} sx={{ color: '#7E899A', p: 0.25, '&:hover': { color: '#fff' } }}>
+              <AddIcon sx={{ fontSize: 15 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
       <Select
         value={valore && opzioni.some((o) => o.id === valore) ? valore : ''}
         onChange={(e) => onChange(e.target.value)}
+        open={aperto}
+        onOpen={() => setAperto(true)}
+        onClose={() => setAperto(false)}
         displayEmpty
         disabled={opzioni.length === 0}
+        renderValue={(id) => opzioni.find((o) => o.id === id)?.nome ?? ''}
         sx={{
           bgcolor: '#20262F',
           color: '#fff',
@@ -229,8 +454,18 @@ function SelettoreScuro({ etichetta, valore, opzioni, caricamento, onChange }: S
       >
         {opzioni.length === 0 && <MenuItem value="">Nessuna struttura disponibile</MenuItem>}
         {opzioni.map((o) => (
-          <MenuItem key={o.id} value={o.id}>
-            {o.nome}
+          <MenuItem key={o.id} value={o.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.nome}</Box>
+            {onModificaOpzione && (
+              <IconButton size="small" onClick={(e) => azione(e, () => onModificaOpzione(o))}>
+                <EditOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            )}
+            {onEliminaOpzione && (
+              <IconButton size="small" onClick={(e) => azione(e, () => onEliminaOpzione(o))}>
+                <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            )}
           </MenuItem>
         ))}
       </Select>

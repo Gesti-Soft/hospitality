@@ -42,6 +42,13 @@ public class ClienteController(ClienteService service, UtenteManagementService u
         return CreatedAtAction(nameof(Get), new { id = dto.Id }, dto);
     }
 
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Aggiorna(Guid id, [FromBody] AggiornaClienteRequest request, CancellationToken cancellationToken)
+    {
+        var cliente = await service.AggiornaAsync(currentUser, id, request, cancellationToken);
+        return Ok(ToDto(cliente));
+    }
+
     private static ClienteDto ToDto(Domain.Entities.Cliente cliente) =>
         new(cliente.Id, cliente.RagioneSociale, cliente.PartitaIva, cliente.Attivo, cliente.CreatedAtUtc);
 }

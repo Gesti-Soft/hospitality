@@ -1,3 +1,4 @@
+using GestiSoft.Application.Clienti;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -8,6 +9,7 @@ public record LoginResult(string Token, DateTime ScadeAtUtc, Guid UtenteId, stri
 
 public class AuthService(
     IUtenteRepository utenti,
+    IClienteRepository clienti,
     IPasswordHasher<Utente> passwordHasher,
     IJwtTokenGenerator tokenGenerator)
 {
@@ -19,9 +21,20 @@ public class AuthService(
 
         // Stesso messaggio sia per utente inesistente che per password errata: non rivelare
         // quale dei due sia il problema (evita di confermare a un attaccante che un'email esiste).
+        // Stesso trattamento per un Cliente sospeso dal Super Admin (mancato pagamento, ecc.):
+        // nessun utente di quel Cliente deve poter accedere, anche con credenziali corrette.
         if (utente is null || !utente.Attivo)
         {
             throw new UnauthorizedAppException(CredenzialiNonValideMessage);
+        }
+
+        if (utente.ClienteId is { } clienteId)
+        {
+            var cliente = await clienti.GetByIdAsync(clienteId, cancellationToken);
+            if (cliente is null || !cliente.Attivo)
+            {
+                throw new UnauthorizedAppException(CredenzialiNonValideMessage);
+            }
         }
 
         var esito = passwordHasher.VerifyHashedPassword(utente, utente.PasswordHash, password);

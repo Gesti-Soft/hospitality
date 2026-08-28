@@ -11,22 +11,38 @@ import {
   IconOsservatorio,
   IconPayTourist,
   IconPolizia,
+  IconSuperAdmin,
   IconUtenti,
   IconWubook,
 } from './navIcons'
+
+export type ServizioConcedibile = 'wubookAbilitato' | 'alloggiatiWebAbilitato' | 'osservatorioAbilitato' | 'payTouristAbilitato'
 
 export interface NavItem {
   label: string
   path: string
   icon: ComponentType<SVGProps<SVGSVGElement>>
+  /**
+   * Se il Super Admin non ha concesso questo servizio al Cliente della struttura corrente, la voce
+   * non deve comparire affatto (non solo bloccata/in errore) — vedi StrutturaDto sulla struttura
+   * selezionata.
+   */
+  richiedeServizio?: ServizioConcedibile
 }
 
 export interface NavSection {
   title: string
+  /** Se true, la sezione compare solo per il Super Admin (staff GestiSoft), mai per un Cliente. */
+  soloSuperAdmin?: boolean
   items: NavItem[]
 }
 
 export const navSections: NavSection[] = [
+  {
+    title: 'Super Admin',
+    soloSuperAdmin: true,
+    items: [{ label: 'Dashboard Super Admin', path: '/super-admin', icon: IconSuperAdmin }],
+  },
   {
     title: 'Operativo',
     items: [
@@ -41,10 +57,10 @@ export const navSections: NavSection[] = [
   {
     title: 'Invii automatici',
     items: [
-      { label: 'Polizia di Stato', path: '/polizia-di-stato', icon: IconPolizia },
-      { label: 'Osservatorio', path: '/osservatorio', icon: IconOsservatorio },
-      { label: 'PayTourist', path: '/paytourist', icon: IconPayTourist },
-      { label: 'OTA · Wubook', path: '/wubook', icon: IconWubook },
+      { label: 'Polizia di Stato', path: '/polizia-di-stato', icon: IconPolizia, richiedeServizio: 'alloggiatiWebAbilitato' },
+      { label: 'Osservatorio', path: '/osservatorio', icon: IconOsservatorio, richiedeServizio: 'osservatorioAbilitato' },
+      { label: 'PayTourist', path: '/paytourist', icon: IconPayTourist, richiedeServizio: 'payTouristAbilitato' },
+      { label: 'OTA · Wubook', path: '/wubook', icon: IconWubook, richiedeServizio: 'wubookAbilitato' },
     ],
   },
   {

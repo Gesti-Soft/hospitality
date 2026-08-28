@@ -16,7 +16,8 @@ public record AggiornaWubookLicenzaRequest(string? GestisoftUsername, string? Ge
 public class WubookLicenzaService(
     IWubookIntegrazioneRepository repository,
     IGestisoftLicenzaClient licenzaClient,
-    PermessoStrutturaGuard permessoGuard)
+    PermessoStrutturaGuard permessoGuard,
+    ConcessioneServiziGuard concessioneGuard)
 {
     /// <summary>Soglia oltre la quale la cache credenziali è considerata scaduta e va rinnovata prima di operare — il job periodico (ogni ~2h) dovrebbe sempre restare sotto questa soglia in condizioni normali.</summary>
     private static readonly TimeSpan ScadenzaCache = TimeSpan.FromHours(3);
@@ -32,6 +33,10 @@ public class WubookLicenzaService(
     public async Task<WubookIntegrazione> AggiornaConfigAsync(ICurrentUser currentUser, Guid strutturaId, AggiornaWubookConfigRequest request, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomWrite, cancellationToken);
+        if (request.Attivo)
+        {
+            await concessioneGuard.EnsureWubookAsync(strutturaId, cancellationToken);
+        }
 
         var entity = await repository.GetByStrutturaIdAsync(strutturaId, cancellationToken)
             ?? new WubookIntegrazione { StrutturaId = strutturaId };
@@ -96,6 +101,8 @@ public class WubookLicenzaService(
     /// <summary>Credenziali pronte all'uso per una Struttura — rinnova al volo se la cache è scaduta o assente.</summary>
     public async Task<(string Token, string Lcode)> GetCredenzialiValideAsync(Guid strutturaId, CancellationToken cancellationToken)
     {
+        await concessioneGuard.EnsureWubookAsync(strutturaId, cancellationToken);
+
         var integrazione = await repository.GetByStrutturaIdAsync(strutturaId, cancellationToken)
             ?? throw new ConflictException("Integrazione Wubook non configurata per questa struttura.");
 

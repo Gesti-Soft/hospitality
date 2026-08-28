@@ -121,6 +121,7 @@ public class OspitiService(
             if (riga is null)
             {
                 riga = new OspiteRiga { StrutturaId = strutturaId };
+                ospiti.AddMembro(riga);
                 ospite.Membri.Add(riga);
             }
 

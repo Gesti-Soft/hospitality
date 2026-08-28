@@ -12,7 +12,7 @@ public record AggiornaImpostazioniRequest(
     int? TassaSoggiornoMaxGiorni,
     string? ComuneAttivita);
 
-public class ImpostazioniStrutturaService(IImpostazioniStrutturaRepository repository, TenantAccessGuard accessGuard)
+public class ImpostazioniStrutturaService(IImpostazioniStrutturaRepository repository, TenantAccessGuard accessGuard, ConcessioneServiziGuard concessioneGuard)
 {
     public async Task<ImpostazioniStruttura> GetOrDefaultAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -29,6 +29,21 @@ public class ImpostazioniStrutturaService(IImpostazioniStrutturaRepository repos
         CancellationToken cancellationToken)
     {
         await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
+
+        // La revoca del Super Admin prevale sempre sul toggle self-service: non basta nasconderlo
+        // in UI, il salvataggio stesso va rifiutato se il servizio non è concesso al Cliente.
+        if (request.PoliziaStatoAttiva)
+        {
+            await concessioneGuard.EnsureAlloggiatiWebAsync(strutturaId, cancellationToken);
+        }
+        if (request.OsservatorioAttivo)
+        {
+            await concessioneGuard.EnsureOsservatorioAsync(strutturaId, cancellationToken);
+        }
+        if (request.PayTouristAttivo)
+        {
+            await concessioneGuard.EnsurePayTouristAsync(strutturaId, cancellationToken);
+        }
 
         var impostazioni = await repository.GetByStrutturaIdAsync(strutturaId, cancellationToken)
             ?? new ImpostazioniStruttura { StrutturaId = strutturaId };

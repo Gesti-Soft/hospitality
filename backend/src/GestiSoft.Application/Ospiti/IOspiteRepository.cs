@@ -66,6 +66,16 @@ public interface IOspiteRepository
     void Add(Ospite entity);
 
     /// <summary>
+    /// Aggiunta esplicita di una riga Membro nuova a un Ospite già esistente e tracciato: la sola
+    /// <c>ospite.Membri.Add(riga)</c> non basta in questo caso — con la chiave Guid già valorizzata
+    /// lato client (vedi Entity.Id) e un genitore in stato Modified (non Added), EF Core la scopre
+    /// via graph-fixup e la classifica come Modified invece che Added (la chiave non-default lo fa
+    /// sembrare un record preesistente), generando un UPDATE su una riga che non esiste ancora e
+    /// fallendo con DbUpdateConcurrencyException. Va marcata Added esplicitamente sul DbContext.
+    /// </summary>
+    void AddMembro(OspiteRiga riga);
+
+    /// <summary>
     /// Rimozione esplicita di una riga Membro: OspiteId è nullable, quindi EF Core non la
     /// cancellerebbe automaticamente rimuovendola dalla collection Ospite.Membri (la orfanerebbe
     /// soltanto) — va marcata Removed esplicitamente sul DbContext.

@@ -12,4 +12,6 @@ public interface IStrutturaRepository
     Task<IReadOnlyList<Struttura>> ListByClienteAsync(Guid? clienteId, CancellationToken cancellationToken);
 
     Task AddAsync(Struttura struttura, CancellationToken cancellationToken);
+
+    Task UpdateAsync(Struttura struttura, CancellationToken cancellationToken);
 }

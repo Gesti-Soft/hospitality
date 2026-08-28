@@ -39,7 +39,8 @@ public class PayTouristInvioService(
     IImpostazioniStrutturaRepository impostazioniStruttura,
     IPayTouristClient client,
     WubookLicenzaService wubookLicenzaService,
-    PermessoStrutturaGuard permessoGuard)
+    PermessoStrutturaGuard permessoGuard,
+    ConcessioneServiziGuard concessioneGuard)
 {
     private record AnagraficaPayTourist(
         IReadOnlyList<VoceAnagrafica> Luoghi,
@@ -56,6 +57,8 @@ public class PayTouristInvioService(
     /// <summary>Usato dal job Quartz schedulato (Worker) — nessun ICurrentUser, gira per conto del sistema.</summary>
     public async Task<RisultatoInvioPayTourist> InviaSistemaAsync(Guid strutturaId, CancellationToken cancellationToken)
     {
+        await concessioneGuard.EnsurePayTouristAsync(strutturaId, cancellationToken);
+
         var lista = await payTouristStrutture.ListByStrutturaAsync(strutturaId, cancellationToken);
         if (lista.Count == 0)
         {

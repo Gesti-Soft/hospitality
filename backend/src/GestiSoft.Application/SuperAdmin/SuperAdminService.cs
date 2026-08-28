@@ -1,0 +1,143 @@
+using GestiSoft.Application.Auth;
+using GestiSoft.Application.Clienti;
+using GestiSoft.Application.Exceptions;
+using GestiSoft.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
+
+namespace GestiSoft.Application.SuperAdmin;
+
+public record ServiziStrutturaRequest(bool WubookAbilitato, bool AlloggiatiWebAbilitato, bool OsservatorioAbilitato, bool PayTouristAbilitato);
+
+public record ResettaPasswordRequest(string NuovaPassword);
+
+public record AggiornaUtenteRequest(string Email, string? Nome, string? Cognome);
+
+/// <summary>
+/// Vista d'insieme cross-Cliente per il Super Admin (staff GestiSoft): Clienti/Strutture/Utenti,
+/// stato delle integrazioni esterne, e le "leve" di gestione discusse esplicitamente con l'utente
+/// (sospensione Cliente, concessione servizi esterni per Cliente, reset password di supporto) —
+/// finora tutte assenti dall'interfaccia, solo raggiungibili via API diretta o mai applicate a
+/// runtime (vedi Cliente.Attivo, mai controllato prima d'ora).
+/// </summary>
+public class SuperAdminService(
+    ISuperAdminRepository repository,
+    IClienteRepository clienti,
+    IStrutturaRepository strutture,
+    IUtenteRepository utenti,
+    IPasswordHasher<Utente> passwordHasher)
+{
+    public async Task<DashboardSuperAdminInfo> GetDashboardAsync(ICurrentUser currentUser, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+        return await repository.GetDashboardAsync(cancellationToken);
+    }
+
+    public async Task<Cliente> ImpostaAttivoAsync(ICurrentUser currentUser, Guid clienteId, bool attivo, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        var cliente = await clienti.GetByIdAsync(clienteId, cancellationToken)
+            ?? throw new NotFoundException("Cliente non trovato.");
+
+        cliente.Attivo = attivo;
+        await clienti.UpdateAsync(cliente, cancellationToken);
+        return cliente;
+    }
+
+    /// <summary>
+    /// Concessione dei servizi esterni per singola Struttura (non più per l'intero Cliente): due
+    /// Strutture dello stesso Cliente possono avere concessioni diverse.
+    /// </summary>
+    public async Task<Domain.Entities.Struttura> AggiornaServiziAsync(ICurrentUser currentUser, Guid strutturaId, ServiziStrutturaRequest request, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)
+            ?? throw new NotFoundException("Struttura non trovata.");
+
+        struttura.WubookAbilitato = request.WubookAbilitato;
+        struttura.AlloggiatiWebAbilitato = request.AlloggiatiWebAbilitato;
+        struttura.OsservatorioAbilitato = request.OsservatorioAbilitato;
+        struttura.PayTouristAbilitato = request.PayTouristAbilitato;
+
+        await strutture.UpdateAsync(struttura, cancellationToken);
+        return struttura;
+    }
+
+    /// <summary>
+    /// Reset password di supporto/assistenza: il Super Admin imposta una nuova password per conto
+    /// del Cliente senza dover conoscere quella attuale (a differenza di CambiaPasswordAsync, che
+    /// un utente usa su se stesso e richiede la password attuale).
+    /// </summary>
+    public async Task ResettaPasswordAsync(ICurrentUser currentUser, Guid utenteId, ResettaPasswordRequest request, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        utente.PasswordHash = passwordHasher.HashPassword(utente, request.NuovaPassword);
+        await utenti.UpdateAsync(utente, cancellationToken);
+    }
+
+    /// <summary>
+    /// Modifica i dati anagrafici di base di un Utente (email/nome/cognome) — non tocca Cliente,
+    /// ruolo Super Admin o assegnazioni Struttura, che restano decisi alla creazione/tramite
+    /// AssegnaRuoloAsync per evitare di orfanizzare permessi legati a un Cliente diverso.
+    /// </summary>
+    public async Task<Utente> AggiornaUtenteAsync(ICurrentUser currentUser, Guid utenteId, AggiornaUtenteRequest request, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        var email = request.Email.Trim().ToLowerInvariant();
+        if (email != utente.Email)
+        {
+            if (await utenti.GetByEmailAsync(email, cancellationToken) is not null)
+            {
+                throw new ConflictException("Esiste già un utente con questa email.");
+            }
+
+            utente.Email = email;
+        }
+
+        utente.Nome = request.Nome;
+        utente.Cognome = request.Cognome;
+
+        await utenti.UpdateAsync(utente, cancellationToken);
+        return utente;
+    }
+
+    /// <summary>
+    /// Attiva/disattiva un Utente: a differenza della sospensione di un Cliente (blocca tutti i suoi
+    /// utenti insieme), qui si disattiva un singolo account — es. un dipendente che ha lasciato la
+    /// struttura, senza sospendere l'intero Cliente. Bloccata l'auto-disattivazione per evitare che
+    /// il Super Admin si chiuda fuori da solo.
+    /// </summary>
+    public async Task<Utente> ImpostaAttivoUtenteAsync(ICurrentUser currentUser, Guid utenteId, bool attivo, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        if (!attivo && utenteId == currentUser.UtenteId)
+        {
+            throw new ConflictException("Non puoi disattivare il tuo stesso account.");
+        }
+
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        utente.Attivo = attivo;
+        await utenti.UpdateAsync(utente, cancellationToken);
+        return utente;
+    }
+
+    private static void RichiediSuperAdmin(ICurrentUser currentUser)
+    {
+        if (!currentUser.IsSuperAdmin)
+        {
+            throw new ForbiddenException("Solo il Super Admin può accedere a questa dashboard.");
+        }
+    }
+}

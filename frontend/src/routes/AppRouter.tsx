@@ -13,6 +13,7 @@ import { WubookPage } from '../pages/WubookPage'
 import { UtentiPage } from '../pages/UtentiPage'
 import { ImpostazioniPage } from '../pages/ImpostazioniPage'
 import { LogPage } from '../pages/LogPage'
+import { SuperAdminDashboardPage } from '../pages/SuperAdminDashboardPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
 const router = createBrowserRouter([
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
       { path: '/utenti', element: <UtentiPage /> },
       { path: '/impostazioni', element: <ImpostazioniPage /> },
       { path: '/log', element: <LogPage /> },
+      { path: '/super-admin', element: <SuperAdminDashboardPage /> },
     ],
   },
 ])

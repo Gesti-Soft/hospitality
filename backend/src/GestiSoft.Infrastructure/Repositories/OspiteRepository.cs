@@ -149,6 +149,8 @@ public class OspiteRepository(GestiSoftDbContext db) : IOspiteRepository
 
     public void Add(Ospite entity) => db.Ospiti.Add(entity);
 
+    public void AddMembro(OspiteRiga riga) => db.OspitiRighe.Add(riga);
+
     public void RemoveMembro(OspiteRiga riga) => db.OspitiRighe.Remove(riga);
 
     public Task SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);

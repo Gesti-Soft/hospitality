@@ -33,6 +33,27 @@ public class StrutturaController(StrutturaService service, ICurrentUser currentU
         return CreatedAtAction(nameof(Get), new { id = dto.Id }, dto);
     }
 
-    private static StrutturaDto ToDto(Domain.Entities.Struttura struttura) =>
-        new(struttura.Id, struttura.ClienteId, struttura.Nome, struttura.CreatedAtUtc);
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Aggiorna(Guid id, [FromBody] AggiornaStrutturaRequest request, CancellationToken cancellationToken)
+    {
+        var struttura = await service.AggiornaAsync(currentUser, id, request, cancellationToken);
+        return Ok(ToDto(struttura));
+    }
+
+    [HttpPut("{id:guid}/attivo")]
+    public async Task<IActionResult> ImpostaAttivo(Guid id, [FromBody] ImpostaAttivoStrutturaRequest request, CancellationToken cancellationToken)
+    {
+        var struttura = await service.ImpostaAttivoAsync(currentUser, id, request.Attivo, cancellationToken);
+        return Ok(new { struttura.Id, struttura.Attivo });
+    }
+
+    private static StrutturaDto ToDto(Domain.Entities.Struttura struttura) => new(
+        struttura.Id,
+        struttura.ClienteId,
+        struttura.Nome,
+        struttura.CreatedAtUtc,
+        struttura.WubookAbilitato,
+        struttura.AlloggiatiWebAbilitato,
+        struttura.OsservatorioAbilitato,
+        struttura.PayTouristAbilitato);
 }

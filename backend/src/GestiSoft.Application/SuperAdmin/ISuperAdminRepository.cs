@@ -1,0 +1,44 @@
+namespace GestiSoft.Application.SuperAdmin;
+
+public record StrutturaAdminInfo(
+    Guid Id,
+    string Nome,
+    bool Attivo,
+    bool WubookAttivo,
+    string? WubookUltimoErrore,
+    DateTime? WubookCacheAggiornataAtUtc,
+    bool PoliziaStatoAttiva,
+    bool OsservatorioAttivo,
+    bool PayTouristAttivo,
+    bool WubookAbilitato,
+    bool AlloggiatiWebAbilitato,
+    bool OsservatorioAbilitato,
+    bool PayTouristAbilitato);
+
+public record ClienteAdminInfo(
+    Guid Id,
+    string RagioneSociale,
+    string? PartitaIva,
+    bool Attivo,
+    DateTime CreatedAtUtc,
+    int NumeroUtenti,
+    int NumeroUtentiAttivi,
+    IReadOnlyList<StrutturaAdminInfo> Strutture);
+
+public record UtenteAdminInfo(
+    Guid Id,
+    string Email,
+    string? Nome,
+    string? Cognome,
+    bool IsSuperAdmin,
+    bool Attivo,
+    Guid? ClienteId,
+    string? ClienteRagioneSociale,
+    DateTime CreatedAtUtc);
+
+public record DashboardSuperAdminInfo(IReadOnlyList<ClienteAdminInfo> Clienti, IReadOnlyList<UtenteAdminInfo> Utenti);
+
+public interface ISuperAdminRepository
+{
+    Task<DashboardSuperAdminInfo> GetDashboardAsync(CancellationToken cancellationToken);
+}

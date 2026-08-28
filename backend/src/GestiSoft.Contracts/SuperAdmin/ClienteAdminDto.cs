@@ -1,0 +1,11 @@
+namespace GestiSoft.Contracts.SuperAdmin;
+
+public record ClienteAdminDto(
+    Guid Id,
+    string RagioneSociale,
+    string? PartitaIva,
+    bool Attivo,
+    DateTime CreatedAtUtc,
+    int NumeroUtenti,
+    int NumeroUtentiAttivi,
+    IReadOnlyList<StrutturaAdminDto> Strutture);

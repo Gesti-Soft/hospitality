@@ -6,6 +6,8 @@ namespace GestiSoft.Application.Clienti;
 
 public record CreaClienteRequest(string RagioneSociale, string? PartitaIva);
 
+public record AggiornaClienteRequest(string RagioneSociale, string? PartitaIva);
+
 /// <summary>Solo il Super Admin gestisce i Clienti: sono la radice dei tenant, non qualcosa che un Cliente crea per sé stesso.</summary>
 public class ClienteService(IClienteRepository repository)
 {
@@ -33,6 +35,20 @@ public class ClienteService(IClienteRepository repository)
         };
 
         await repository.AddAsync(cliente, cancellationToken);
+        return cliente;
+    }
+
+    public async Task<Cliente> AggiornaAsync(ICurrentUser currentUser, Guid id, AggiornaClienteRequest request, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        var cliente = await repository.GetByIdAsync(id, cancellationToken)
+            ?? throw new NotFoundException("Cliente non trovato.");
+
+        cliente.RagioneSociale = request.RagioneSociale;
+        cliente.PartitaIva = request.PartitaIva;
+
+        await repository.UpdateAsync(cliente, cancellationToken);
         return cliente;
     }
 

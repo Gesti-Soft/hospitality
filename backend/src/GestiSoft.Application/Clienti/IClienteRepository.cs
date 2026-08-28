@@ -9,4 +9,6 @@ public interface IClienteRepository
     Task<IReadOnlyList<Cliente>> ListAsync(CancellationToken cancellationToken);
 
     Task AddAsync(Cliente cliente, CancellationToken cancellationToken);
+
+    Task UpdateAsync(Cliente cliente, CancellationToken cancellationToken);
 }
