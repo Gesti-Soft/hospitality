@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<TenantAccessGuard>();
         services.AddScoped<PermessoStrutturaGuard>();
         services.AddScoped<ConcessioneServiziGuard>();
+        services.AddScoped<GestioneUtentiGuard>();
         services.AddScoped<ImpostazioniStrutturaService>();
         services.AddScoped<ClienteService>();
         services.AddScoped<StrutturaService>();

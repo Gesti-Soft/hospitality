@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
@@ -6,7 +6,6 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import Button from '@mui/material/Button'
-import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import Table from '@mui/material/Table'
@@ -16,10 +15,10 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
-import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import { useStruttura } from '../struttura/StrutturaContext'
-import { CATEGORIE_LOG, LivelloLog, useLogs, type LogEventoDto } from '../api/log'
+import { useAuth } from '../auth/AuthContext'
+import { ApiError } from '../api/client'
+import { CATEGORIE_LOG, CATEGORIE_LOG_CLIENTE, LivelloLog, useLogs, type LogEventoDto } from '../api/log'
 import { fontMono, tokens } from '../theme'
 
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -39,14 +38,45 @@ const COLORE_LIVELLO: Record<LivelloLog, string> = {
 
 export function LogPage() {
   const { strutturaId } = useStruttura()
+  const { sessione } = useAuth()
+  const categorieDisponibili = sessione?.isSuperAdmin ? CATEGORIE_LOG : CATEGORIE_LOG_CLIENTE
   const [livello, setLivello] = useState<string>('')
   const [categoria, setCategoria] = useState<string>('')
-  const [page, setPage] = useState(1)
   const [dettaglio, setDettaglio] = useState<LogEventoDto | null>(null)
 
-  const logs = useLogs(strutturaId, livello === '' ? null : (Number(livello) as LivelloLog), categoria === '' ? null : categoria, page, PAGE_SIZE)
+  const logs = useLogs(strutturaId, livello === '' ? null : (Number(livello) as LivelloLog), categoria === '' ? null : categoria, PAGE_SIZE)
 
-  const totalPages = logs.data ? Math.max(1, Math.ceil(logs.data.totalCount / PAGE_SIZE)) : 1
+  const eventi = logs.data?.pages.flatMap((p) => p.items) ?? []
+  const totaleEventi = logs.data?.pages[0]?.totalCount ?? 0
+
+  const sentinellaRef = useRef<HTMLTableRowElement | null>(null)
+  useEffect(() => {
+    if (!logs.hasNextPage) return
+    const el = sentinellaRef.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !logs.isFetchingNextPage) {
+          logs.fetchNextPage()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs.hasNextPage, logs.isFetchingNextPage])
+
+  const accessoNegato = logs.error instanceof ApiError && logs.error.status === 403
+
+  if (accessoNegato) {
+    return (
+      <Box sx={{ border: `1px dashed ${tokens.surfaceBorder}`, borderRadius: 2, p: 6, textAlign: 'center', color: tokens.textSecondary }}>
+        Solo chi gestisce gli utenti di questa struttura può consultare il log.
+      </Box>
+    )
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -57,10 +87,7 @@ export function LogPage() {
             size="small"
             label="Livello"
             value={livello}
-            onChange={(e) => {
-              setLivello(e.target.value)
-              setPage(1)
-            }}
+            onChange={(e) => setLivello(e.target.value)}
             sx={{ minWidth: 160 }}
           >
             <MenuItem value="">Tutti</MenuItem>
@@ -74,14 +101,11 @@ export function LogPage() {
             size="small"
             label="Categoria"
             value={categoria}
-            onChange={(e) => {
-              setCategoria(e.target.value)
-              setPage(1)
-            }}
+            onChange={(e) => setCategoria(e.target.value)}
             sx={{ minWidth: 180 }}
           >
             <MenuItem value="">Tutte</MenuItem>
-            {CATEGORIE_LOG.map((c) => (
+            {categorieDisponibili.map((c) => (
               <MenuItem key={c} value={c}>
                 {c}
               </MenuItem>
@@ -89,17 +113,9 @@ export function LogPage() {
           </TextField>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
-            Pagina {page} di {totalPages} ({logs.data?.totalCount ?? 0} eventi)
-          </Typography>
-          <IconButton size="small" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
-            <ChevronLeftIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
-            <ChevronRightIcon fontSize="small" />
-          </IconButton>
-        </Box>
+        <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+          {eventi.length} di {totaleEventi} eventi
+        </Typography>
       </Box>
 
       {logs.isLoading && <Skeleton variant="rounded" height={320} />}
@@ -118,14 +134,14 @@ export function LogPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(logs.data?.items ?? []).length === 0 && (
+              {eventi.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                     Nessun evento registrato.
                   </TableCell>
                 </TableRow>
               )}
-              {(logs.data?.items ?? []).map((l) => (
+              {eventi.map((l) => (
                 <TableRow key={l.id} hover onClick={() => setDettaglio(l)} sx={{ cursor: l.dettaglio ? 'pointer' : 'default' }}>
                   <TableCell sx={{ fontFamily: fontMono, fontSize: 12.5, whiteSpace: 'nowrap' }}>{formattatoreDataOra.format(new Date(l.createdAtUtc))}</TableCell>
                   <TableCell>
@@ -137,6 +153,13 @@ export function LogPage() {
                   <TableCell sx={{ fontFamily: fontMono, fontSize: 11, color: tokens.textTertiary }}>{l.correlationId ?? '—'}</TableCell>
                 </TableRow>
               ))}
+              {logs.hasNextPage && (
+                <TableRow ref={sentinellaRef}>
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textTertiary, py: 2, fontSize: 12 }}>
+                    Caricamento altri eventi...
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </Box>

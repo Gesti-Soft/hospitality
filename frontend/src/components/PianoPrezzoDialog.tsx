@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Alert from '@mui/material/Alert'
+import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
@@ -57,7 +58,7 @@ export function PianoPrezzoDialog({ strutturaId, piano, piani, onClose }: Props)
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{piano ? 'Modifica piano prezzo' : 'Nuovo piano prezzo'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso} autoFocus />
 

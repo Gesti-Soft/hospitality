@@ -176,6 +176,22 @@ public class OsservatorioInvioService(
             appartamento.UltimoErrore = null;
             await appartamenti.UpdateAsync(appartamento, cancellationToken);
 
+            // Niente denominatore "X/Y" qui a differenza di Alloggiati Web/PayTourist: un invio
+            // arrivi/checkout è tutto-o-niente (un rifiuto del server fa fallire l'intera chiamata,
+            // vedi InviaArriviAsync/ChiudiGiornataAsync), non c'è un conteggio di "scartati" per
+            // singolo ospite. Log solo se è successo davvero qualcosa, non per un giro a vuoto.
+            if (arriviInviati > 0 || checkoutInviati > 0)
+            {
+                await logEventi.RegistraAsync(
+                    LivelloLog.Info,
+                    $"Invio Osservatorio Turistico ({appartamento.Nome}): {arriviInviati} arrivi e {checkoutInviati} partenze inviati.",
+                    origine: "Osservatorio",
+                    clienteId: await strutture.GetClienteIdAsync(appartamento.StrutturaId, cancellationToken),
+                    strutturaId: appartamento.StrutturaId,
+                    categoria: "Osservatorio",
+                    cancellationToken: cancellationToken);
+            }
+
             return new RisultatoInvioOsservatorio(arriviInviati, checkoutInviati, giorniChiusi, null);
         }
         catch (Exception ex)

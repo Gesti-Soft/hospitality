@@ -181,11 +181,17 @@ public class AlloggiatiWebInvioService(
         integrazione.UltimoErrore = errore;
         await integrazioni.UpsertAsync(integrazione, cancellationToken);
 
-        if (errore is not null)
+        // Un log solo se c'è stato davvero un invio da riportare (totale > 0) o un errore vero e
+        // proprio (es. credenziali mancanti) — non ogni giorno per "nessuna schedina da inviare".
+        if (errore is not null || totale > 0)
         {
+            var messaggio = errore is null
+                ? $"Invio Alloggiati Web (Polizia di Stato): {inviate}/{totale} schedine inviate."
+                : $"Invio Alloggiati Web (Polizia di Stato): {inviate}/{totale} schedine inviate — {errore}";
+
             await logEventi.RegistraAsync(
-                LivelloLog.Warning,
-                $"Invio Alloggiati Web (Polizia di Stato): {errore}",
+                errore is null ? LivelloLog.Info : LivelloLog.Warning,
+                messaggio,
                 origine: "AlloggiatiWeb",
                 clienteId: await strutture.GetClienteIdAsync(integrazione.StrutturaId, cancellationToken),
                 strutturaId: integrazione.StrutturaId,

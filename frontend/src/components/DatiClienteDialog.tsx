@@ -75,7 +75,7 @@ export function DatiClienteDialog({ strutturaId, cliente, onClose }: Props) {
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{cliente ? 'Modifica cliente' : 'Nuovo cliente'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <TextField label="Denominazione (se azienda)" value={denominazione} onChange={(e) => setDenominazione(e.target.value)} disabled={inCorso} autoFocus />
 

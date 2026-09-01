@@ -1,7 +1,9 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Clienti;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Logging;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 
 namespace GestiSoft.Application.SuperAdmin;
@@ -24,7 +26,8 @@ public class SuperAdminService(
     IClienteRepository clienti,
     IStrutturaRepository strutture,
     IUtenteRepository utenti,
-    IPasswordHasher<Utente> passwordHasher)
+    IPasswordHasher<Utente> passwordHasher,
+    ILogEventoService logEventi)
 {
     public async Task<DashboardSuperAdminInfo> GetDashboardAsync(ICurrentUser currentUser, CancellationToken cancellationToken)
     {
@@ -41,6 +44,18 @@ public class SuperAdminService(
 
         cliente.Attivo = attivo;
         await clienti.UpdateAsync(cliente, cancellationToken);
+
+        // Categoria "SuperAdmin": mai visibile al Cliente (vedi LogVisibilita) — sospendere/riattivare
+        // l'accesso di un intero Cliente è una leva del Super Admin, non un evento operativo suo.
+        await logEventi.RegistraAsync(
+            LivelloLog.Info,
+            $"Cliente {(attivo ? "riattivato" : "sospeso")}.",
+            origine: "SuperAdmin",
+            clienteId: clienteId,
+            categoria: "SuperAdmin",
+            operatore: currentUser.Email,
+            cancellationToken: cancellationToken);
+
         return cliente;
     }
 
@@ -55,12 +70,42 @@ public class SuperAdminService(
         var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)
             ?? throw new NotFoundException("Struttura non trovata.");
 
+        // Un log per ogni servizio che cambia davvero stato (non uno generico "servizi aggiornati"):
+        // categoria "Servizi", visibile anche al Cliente (vedi LogVisibilita) — deve sapere quando e
+        // perché un'integrazione smette/inizia a funzionare per la sua struttura.
+        var cambi = new (string Nome, bool Prima, bool Dopo)[]
+        {
+            ("Wubook", struttura.WubookAbilitato, request.WubookAbilitato),
+            ("Alloggiati Web", struttura.AlloggiatiWebAbilitato, request.AlloggiatiWebAbilitato),
+            ("Osservatorio Turistico", struttura.OsservatorioAbilitato, request.OsservatorioAbilitato),
+            ("PayTourist", struttura.PayTouristAbilitato, request.PayTouristAbilitato),
+        };
+
         struttura.WubookAbilitato = request.WubookAbilitato;
         struttura.AlloggiatiWebAbilitato = request.AlloggiatiWebAbilitato;
         struttura.OsservatorioAbilitato = request.OsservatorioAbilitato;
         struttura.PayTouristAbilitato = request.PayTouristAbilitato;
 
         await strutture.UpdateAsync(struttura, cancellationToken);
+
+        foreach (var (nome, prima, dopo) in cambi)
+        {
+            if (prima == dopo)
+            {
+                continue;
+            }
+
+            await logEventi.RegistraAsync(
+                LivelloLog.Info,
+                $"Servizio {nome} {(dopo ? "attivato" : "disattivato")} per questa struttura.",
+                origine: "SuperAdmin",
+                clienteId: struttura.ClienteId,
+                strutturaId: strutturaId,
+                categoria: "Servizi",
+                operatore: currentUser.Email,
+                cancellationToken: cancellationToken);
+        }
+
         return struttura;
     }
 
@@ -78,6 +123,7 @@ public class SuperAdminService(
 
         utente.PasswordHash = passwordHasher.HashPassword(utente, request.NuovaPassword);
         await utenti.UpdateAsync(utente, cancellationToken);
+        await LogUtenteAsync(currentUser, utente, $"Password reimpostata per {utente.Email} (supporto Super Admin).", cancellationToken);
     }
 
     /// <summary>
@@ -107,6 +153,7 @@ public class SuperAdminService(
         utente.Cognome = request.Cognome;
 
         await utenti.UpdateAsync(utente, cancellationToken);
+        await LogUtenteAsync(currentUser, utente, $"Profilo utente aggiornato ({utente.Email}) da Super Admin.", cancellationToken);
         return utente;
     }
 
@@ -130,6 +177,7 @@ public class SuperAdminService(
 
         utente.Attivo = attivo;
         await utenti.UpdateAsync(utente, cancellationToken);
+        await LogUtenteAsync(currentUser, utente, $"Utente {utente.Email} {(attivo ? "riattivato" : "disattivato")} da Super Admin.", cancellationToken);
         return utente;
     }
 
@@ -158,8 +206,39 @@ public class SuperAdminService(
             throw new ConflictException("La struttura può essere eliminata definitivamente solo dopo 90 giorni dalla disattivazione.");
         }
 
+        var clienteId = struttura.ClienteId;
+        var nomeStruttura = struttura.Nome;
         await repository.EliminaStrutturaAsync(strutturaId, cancellationToken);
+
+        // Loggato PRIMA della richiesta di eliminazione sarebbe scorretto (potrebbe fallire) — qui
+        // dopo, ma con Id/nome già letti perché la riga Struttura non esiste più. Categoria
+        // "SuperAdmin": azione irreversibile, mai visibile al Cliente.
+        await logEventi.RegistraAsync(
+            LivelloLog.Warning,
+            $"Struttura '{nomeStruttura}' eliminata definitivamente.",
+            origine: "SuperAdmin",
+            clienteId: clienteId,
+            categoria: "SuperAdmin",
+            operatore: currentUser.Email,
+            cancellationToken: cancellationToken);
     }
+
+    /// <summary>
+    /// Ogni metodo che chiama questo helper è già dietro RichiediSuperAdmin, quindi categoria
+    /// "SuperAdmin" sempre — mai "Utente" (quella è riservata alle stesse azioni quando è
+    /// davvero il Cliente ad agire sui propri utenti, vedi UtenteManagementService.LogUtenteAsync).
+    /// "Tutto quello che fa l'admin il cliente non deve vederlo", anche quando agisce per suo
+    /// conto (reset password di supporto, ecc.) — richiesta esplicita dell'utente.
+    /// </summary>
+    private Task LogUtenteAsync(ICurrentUser currentUser, Utente utenteTarget, string messaggio, CancellationToken cancellationToken) =>
+        logEventi.RegistraAsync(
+            LivelloLog.Info,
+            messaggio,
+            origine: "SuperAdmin",
+            clienteId: utenteTarget.ClienteId,
+            categoria: "SuperAdmin",
+            operatore: currentUser.Email,
+            cancellationToken: cancellationToken);
 
     private static void RichiediSuperAdmin(ICurrentUser currentUser)
     {

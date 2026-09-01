@@ -62,7 +62,7 @@ export function PianoRestrizioneDialog({ strutturaId, piano, onClose }: Props) {
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{piano ? 'Modifica piano restrizione' : 'Nuovo piano restrizione'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso} autoFocus />
 

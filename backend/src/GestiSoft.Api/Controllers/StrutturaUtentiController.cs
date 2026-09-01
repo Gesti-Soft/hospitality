@@ -23,4 +23,14 @@ public class StrutturaUtentiController(UtenteManagementService service, ICurrent
             a.SettingAgency, a.SettingUser, a.SettingRoomRead, a.SettingRoomWrite, a.RoomStatusUpdate,
             a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite)));
     }
+
+    /// <summary>Solo i propri permessi su questa struttura (non l'intero elenco) — usato dal frontend per decidere se mostrare pagine riservate a chi gestisce gli utenti (es. Log), senza dover scaricare il roster completo.</summary>
+    [HttpGet("me")]
+    public async Task<IActionResult> Mio(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var haGestioneUtenti = await service.HaGestioneUtentiAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(new MioPermessoStrutturaDto(haGestioneUtenti));
+    }
 }
+
+public record MioPermessoStrutturaDto(bool SettingUser);

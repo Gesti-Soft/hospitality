@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Skeleton from '@mui/material/Skeleton'
@@ -5,6 +6,8 @@ import Typography from '@mui/material/Typography'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useArriviInCorso, useArriviProssimi, type PrenotazioneDto } from '../api/prenotazioni'
 import { useCamere } from '../api/camere'
+import { useCanaliVendita } from '../api/canaliVendita'
+import { useTipologie } from '../api/tipologie'
 import { useRiepilogoCassa } from '../api/finanze'
 import {
   useAlloggiatiWebConfig,
@@ -14,6 +17,8 @@ import {
   useWubookConfig,
 } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { aggiungiGiorni, inizioGiornoLocale } from '../lib/date'
+import { PrenotazioneDialog, type StatoIniziale } from '../components/PrenotazioneDialog'
 
 /**
  * Le date arrivano dal backend come timestamp "locali alla struttura" ma serializzati con
@@ -34,18 +39,30 @@ const formattatoreData = new Intl.DateTimeFormat('it-IT', { weekday: 'long', day
 type EsitoIntegrazione = 'ok' | 'attesa' | 'errore' | 'non-configurato'
 
 export function DashboardPage() {
-  const { strutturaId } = useStruttura()
+  const { strutturaId, strutturaCorrente } = useStruttura()
+  const [dialogo, setDialogo] = useState<StatoIniziale | null>(null)
 
   const arriviInCorso = useArriviInCorso(strutturaId)
   const arriviProssimi = useArriviProssimi(strutturaId)
   const camere = useCamere(strutturaId)
+  const canali = useCanaliVendita(strutturaId)
+  const tipologie = useTipologie(strutturaId)
   const cassa = useRiepilogoCassa(strutturaId, new Date().getFullYear())
 
-  const wubook = useWubookConfig(strutturaId)
-  const alloggiatiWeb = useAlloggiatiWebConfig(strutturaId)
-  const osservatorio = useOsservatorioAppartamenti(strutturaId)
-  const payTouristConfig = usePayTouristConfig(strutturaId)
-  const payTouristStrutture = usePayTouristStrutture(strutturaId)
+  // Come nelle voci di menu "Invii automatici" e in Impostazioni: un servizio non concesso dal
+  // Super Admin a questa struttura non deve comparire affatto, non solo mostrare un pallino "non
+  // configurato" — né vale la pena interrogarne lo stato.
+  const wubookConcesso = strutturaCorrente?.wubookAbilitato ?? false
+  const alloggiatiWebConcesso = strutturaCorrente?.alloggiatiWebAbilitato ?? false
+  const osservatorioConcesso = strutturaCorrente?.osservatorioAbilitato ?? false
+  const payTouristConcesso = strutturaCorrente?.payTouristAbilitato ?? false
+  const nessunServizioConcesso = !wubookConcesso && !alloggiatiWebConcesso && !osservatorioConcesso && !payTouristConcesso
+
+  const wubook = useWubookConfig(wubookConcesso ? strutturaId : null)
+  const alloggiatiWeb = useAlloggiatiWebConfig(alloggiatiWebConcesso ? strutturaId : null)
+  const osservatorio = useOsservatorioAppartamenti(osservatorioConcesso ? strutturaId : null)
+  const payTouristConfig = usePayTouristConfig(payTouristConcesso ? strutturaId : null)
+  const payTouristStrutture = usePayTouristStrutture(payTouristConcesso ? strutturaId : null)
 
   const arriviOggi = (arriviProssimi.data ?? []).filter((p) => isOggi(p.checkIn))
   const partenzeOggi = (arriviInCorso.data ?? []).filter((p) => isOggi(p.checkOut))
@@ -104,7 +121,20 @@ export function DashboardPage() {
         <Typography sx={{ fontSize: 13, color: tokens.textSecondary, textTransform: 'capitalize' }}>
           {formattatoreData.format(new Date())}
         </Typography>
-        <Button variant="contained" color="secondary" size="medium">
+        <Button
+          variant="contained"
+          color="secondary"
+          size="medium"
+          disabled={!strutturaId || !camere.data || camere.data.length === 0}
+          onClick={() =>
+            setDialogo({
+              modo: 'crea',
+              cameraId: null,
+              checkIn: inizioGiornoLocale(new Date()),
+              checkOut: aggiungiGiorni(new Date(), 1),
+            })
+          }
+        >
           + Nuova prenotazione
         </Button>
       </Box>
@@ -133,7 +163,7 @@ export function DashboardPage() {
         />
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 2.5, alignItems: 'start' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: nessunServizioConcesso ? '1fr' : '1.55fr 1fr', gap: 2.5, alignItems: 'start' }}>
         <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: 3 }}>
           <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5, mb: 1.75 }}>Arrivi e partenze di oggi</Typography>
 
@@ -153,16 +183,29 @@ export function DashboardPage() {
           )}
         </Box>
 
-        <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: 3 }}>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5, mb: 1.75 }}>Stato invii automatici</Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-            <RigaIntegrazione nome="Wubook" stato={wubookStato} />
-            <RigaIntegrazione nome="Alloggiati Web" stato={alloggiatiWebStato} />
-            <RigaIntegrazione nome="Osservatorio Turistico" stato={osservatorioStato} />
-            <RigaIntegrazione nome="PayTourist" stato={payTouristStato} />
+        {!nessunServizioConcesso && (
+          <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: 3 }}>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5, mb: 1.75 }}>Stato invii automatici</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+              {wubookConcesso && <RigaIntegrazione nome="Wubook" stato={wubookStato} />}
+              {alloggiatiWebConcesso && <RigaIntegrazione nome="Alloggiati Web" stato={alloggiatiWebStato} />}
+              {osservatorioConcesso && <RigaIntegrazione nome="Osservatorio Turistico" stato={osservatorioStato} />}
+              {payTouristConcesso && <RigaIntegrazione nome="PayTourist" stato={payTouristStato} />}
+            </Box>
           </Box>
-        </Box>
+        )}
       </Box>
+
+      {dialogo && strutturaId && (
+        <PrenotazioneDialog
+          strutturaId={strutturaId}
+          stato={dialogo}
+          camere={camere.data ?? []}
+          canali={canali.data ?? []}
+          tipologie={tipologie.data ?? []}
+          onClose={() => setDialogo(null)}
+        />
+      )}
     </Box>
   )
 }

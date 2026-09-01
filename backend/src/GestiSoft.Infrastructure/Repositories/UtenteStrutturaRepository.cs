@@ -15,6 +15,12 @@ public class UtenteStrutturaRepository(GestiSoftDbContext db) : IUtenteStruttura
             .Where(us => us.StrutturaId == strutturaId)
             .ToListAsync(cancellationToken);
 
+    public Task<bool> HaGestioneUtentiClienteAsync(Guid utenteId, Guid clienteId, CancellationToken cancellationToken) =>
+        db.UtentiStrutture.AsNoTracking()
+            .Where(us => us.UtenteId == utenteId && us.SettingUser)
+            .Join(db.Strutture.AsNoTracking(), us => us.StrutturaId, s => s.Id, (us, s) => s.ClienteId)
+            .AnyAsync(strutturaClienteId => strutturaClienteId == clienteId, cancellationToken);
+
     public async Task UpsertAsync(UtenteStruttura assegnazione, CancellationToken cancellationToken)
     {
         // Come in ImpostazioniStrutturaRepository: un'entità già tracciata (arrivata da GetAsync

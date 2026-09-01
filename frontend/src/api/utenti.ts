@@ -69,6 +69,25 @@ export interface AssegnaRuoloRequest extends PermessiStruttura {
   ruolo: RuoloUtente
 }
 
+export interface AggiornaUtenteRequest {
+  nome: string | null
+  cognome: string | null
+  email: string
+}
+
+export interface MioPermessoStrutturaDto {
+  settingUser: boolean
+}
+
+/** Solo i propri permessi sulla struttura corrente — usato per decidere se mostrare pagine riservate a chi gestisce gli utenti (es. Log), senza scaricare il roster completo. */
+export function useMioPermessoStruttura(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['mio-permesso-struttura', strutturaId],
+    queryFn: () => apiGet<MioPermessoStrutturaDto>(`/strutture/${strutturaId}/utenti/me`),
+    enabled: !!strutturaId,
+  })
+}
+
 export function useUtentiCliente(clienteId: string | null) {
   return useQuery({
     queryKey: ['utenti-cliente', clienteId],
@@ -106,5 +125,24 @@ export function useAssegnaRuolo(strutturaId: string | null) {
 export function useCambiaPasswordPropria() {
   return useMutation({
     mutationFn: (request: { passwordAttuale: string; passwordNuova: string }) => apiPost<void>('/utenti/me/cambia-password', request),
+  })
+}
+
+export function useAggiornaUtente() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ utenteId, request }: { utenteId: string; request: AggiornaUtenteRequest }) =>
+      apiPut<UtenteDto>(`/utenti/${utenteId}`, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['utenti-cliente'] })
+      queryClient.invalidateQueries({ queryKey: ['assegnazioni-struttura'] })
+    },
+  })
+}
+
+export function useResetPasswordUtente() {
+  return useMutation({
+    mutationFn: ({ utenteId, passwordNuova }: { utenteId: string; passwordNuova: string }) =>
+      apiPost<void>(`/utenti/${utenteId}/reset-password`, { passwordNuova }),
   })
 }

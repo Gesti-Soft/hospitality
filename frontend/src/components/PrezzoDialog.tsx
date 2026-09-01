@@ -80,7 +80,7 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Nuovo periodo di prezzo</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <TextField
           select

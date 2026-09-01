@@ -432,7 +432,7 @@ function ModificaClienteDialog({ cliente, onClose }: { cliente: ClienteAdminDto;
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Modifica Cliente</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
         <TextField
           label="Ragione sociale"
           value={ragioneSociale}

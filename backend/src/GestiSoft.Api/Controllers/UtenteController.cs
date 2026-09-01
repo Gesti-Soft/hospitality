@@ -42,4 +42,19 @@ public class UtenteController(UtenteManagementService service, ICurrentUser curr
         await service.CambiaPasswordAsync(currentUser, request, cancellationToken);
         return NoContent();
     }
+
+    [HttpPut("{utenteId:guid}")]
+    public async Task<IActionResult> Aggiorna(Guid utenteId, [FromBody] AggiornaUtenteRequest request, CancellationToken cancellationToken)
+    {
+        var utente = await service.AggiornaAsync(currentUser, utenteId, request, cancellationToken);
+        var dto = new UtenteDto(utente.Id, utente.Email, utente.Nome, utente.Cognome, utente.IsSuperAdmin, utente.ClienteId, utente.Attivo);
+        return Ok(dto);
+    }
+
+    [HttpPost("{utenteId:guid}/reset-password")]
+    public async Task<IActionResult> ResetPassword(Guid utenteId, [FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        await service.ResetPasswordAsync(currentUser, utenteId, request, cancellationToken);
+        return NoContent();
+    }
 }

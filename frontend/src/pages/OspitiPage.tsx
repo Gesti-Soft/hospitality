@@ -35,21 +35,30 @@ const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', mont
 const formattatoreMese = new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' })
 
 type VistaOspiti = 'arrivi' | 'in-corso' | 'storico'
+type FormatoOspiti = 'lista' | 'calendario'
 
 // Righe caricate/mostrate alla volta: si parte con un'unica pagina (quante ce ne stanno a video),
 // poi se ne aggiunge un'altra ogni volta che si scorre fino in fondo alla tabella.
 const RIGHE_PER_PAGINA = 25
 
+// Preferenza Lista/Calendario dell'utente, ricordata tra una visita e l'altra — "Storico" non ha
+// una vista calendario (vedi calendarioDisponibile) e forza sempre "lista" senza intaccare questa preferenza.
+const CHIAVE_FORMATO_OSPITI = 'gestisoft.ospiti.formato'
+
+function leggiFormatoPreferito(): FormatoOspiti {
+  return localStorage.getItem(CHIAVE_FORMATO_OSPITI) === 'calendario' ? 'calendario' : 'lista'
+}
+
 export function OspitiPage() {
   const { strutturaId } = useStruttura()
   const [vista, setVista] = useState<VistaOspiti>('arrivi')
-  const [formato, setFormato] = useState<'lista' | 'calendario'>('lista')
+  const [formato, setFormato] = useState<FormatoOspiti>(leggiFormatoPreferito)
   const [giornoSelezionato, setGiornoSelezionato] = useState<Date | null>(null)
   const [meseVisibile, setMeseVisibile] = useState(() => inizioGiornoLocale(new Date()))
   const [prenotazioneAperta, setPrenotazioneAperta] = useState<PrenotazioneDto | null>(null)
   const [dialogoPrenotazione, setDialogoPrenotazione] = useState<StatoIniziale | null>(null)
   const [ricerca, setRicerca] = useState('')
-  const [filtroStato, setFiltroStato] = useState<StatoPrenotazione | 'tutti'>('tutti')
+  const [filtroStato, setFiltroStato] = useState<StatoPrenotazione | 'tutti'>(StatoPrenotazione.Completata)
   const [righeVisibili, setRigheVisibili] = useState(RIGHE_PER_PAGINA)
 
   const arrivi = useArriviProssimi(strutturaId)
@@ -126,9 +135,10 @@ export function OspitiPage() {
           value={vista}
           onChange={(_, v) => {
             setVista(v)
+            setFormato(v === 'storico' ? 'lista' : leggiFormatoPreferito())
             setGiornoSelezionato(null)
             setRicerca('')
-            setFiltroStato('tutti')
+            setFiltroStato(StatoPrenotazione.Completata)
           }}
           sx={{ minHeight: 0 }}
         >
@@ -144,6 +154,7 @@ export function OspitiPage() {
             onChange={(_, v) => {
               if (v) {
                 setFormato(v)
+                localStorage.setItem(CHIAVE_FORMATO_OSPITI, v)
                 setGiornoSelezionato(null)
               }
             }}
@@ -296,7 +307,7 @@ export function OspitiPage() {
   )
 }
 
-const NOMI_GIORNO_BREVI = ['D', 'L', 'M', 'M', 'G', 'V', 'S']
+const NOMI_GIORNO_BREVI = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM']
 
 function VistaMeseConteggio({
   dati,
@@ -318,21 +329,26 @@ function VistaMeseConteggio({
     const valore = p[campoData]
     if (!valore) continue
     const d = inizioGiornoLocale(new Date(valore))
-    if (d.getFullYear() !== meseVisibile.getFullYear() || d.getMonth() !== meseVisibile.getMonth()) continue
     conteggioPerGiorno.set(d.getTime(), (conteggioPerGiorno.get(d.getTime()) ?? 0) + 1)
   }
 
+  // Griglia lunedì-domenica a 6 settimane piene (come CampoData): i giorni dei mesi adiacenti
+  // restano visibili ma sbiaditi, invece di lasciare celle vuote a inizio/fine griglia.
   const primoDelMese = new Date(meseVisibile.getFullYear(), meseVisibile.getMonth(), 1)
-  const giorniNelMese = new Date(meseVisibile.getFullYear(), meseVisibile.getMonth() + 1, 0).getDate()
-  const offsetIniziale = primoDelMese.getDay()
-  const celle: (Date | null)[] = [
-    ...Array.from({ length: offsetIniziale }, () => null),
-    ...Array.from({ length: giorniNelMese }, (_, i) => new Date(meseVisibile.getFullYear(), meseVisibile.getMonth(), i + 1)),
-  ]
+  const offsetIniziale = (primoDelMese.getDay() + 6) % 7
+  const inizioGriglia = new Date(primoDelMese)
+  inizioGriglia.setDate(inizioGriglia.getDate() - offsetIniziale)
+  const celle = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(inizioGriglia)
+    d.setDate(d.getDate() + i)
+    return { data: inizioGiornoLocale(d), delMese: d.getMonth() === meseVisibile.getMonth() }
+  })
   const oggi = inizioGiornoLocale(new Date())
+  const etichettaConteggio = campoData === 'checkIn' ? 'arrivi' : 'partenze'
+  const coloreConteggio = campoData === 'checkIn' ? { testo: tokens.ok600, sfondo: tokens.ok100 } : { testo: tokens.blue600, sfondo: tokens.blue100 }
 
   return (
-    <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         <IconButton size="small" onClick={() => onCambiaMese(new Date(meseVisibile.getFullYear(), meseVisibile.getMonth() - 1, 1))}>
           <ChevronLeftIcon fontSize="small" />
@@ -345,43 +361,65 @@ function VistaMeseConteggio({
         </IconButton>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 0.75 }}>
-        {NOMI_GIORNO_BREVI.map((n, i) => (
-          <Typography key={i} sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.textTertiary, textAlign: 'center' }}>
-            {n}
-          </Typography>
-        ))}
-        {celle.map((giorno, i) => {
-          if (!giorno) return <Box key={i} />
-          const conteggio = conteggioPerGiorno.get(giorno.getTime()) ?? 0
-          const selezionato = giornoSelezionato?.getTime() === giorno.getTime()
-          const isOggi = giorno.getTime() === oggi.getTime()
-          return (
-            <Box
-              key={i}
-              onClick={() => onSelezionaGiorno(selezionato ? null : giorno)}
-              sx={{
-                aspectRatio: '1',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 1.5,
-                cursor: 'pointer',
-                border: `1px solid ${selezionato ? tokens.blue600 : isOggi ? tokens.blue400 : 'transparent'}`,
-                bgcolor: selezionato ? tokens.blue600 : conteggio > 0 ? tokens.blue100 : 'transparent',
-                '&:hover': { bgcolor: selezionato ? tokens.blue600 : tokens.paper },
-              }}
-            >
-              <Typography sx={{ fontSize: 12, fontWeight: isOggi ? 700 : 500, color: selezionato ? '#fff' : tokens.textPrimary }}>
-                {giorno.getDate()}
-              </Typography>
-              {conteggio > 0 && (
-                <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: selezionato ? '#fff' : tokens.blue600 }}>{conteggio}</Typography>
-              )}
-            </Box>
-          )
-        })}
+      <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: `1px solid ${tokens.surfaceBorder}` }}>
+          {NOMI_GIORNO_BREVI.map((n) => (
+            <Typography key={n} sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.textTertiary, textAlign: 'center', py: 1, letterSpacing: '.04em' }}>
+              {n}
+            </Typography>
+          ))}
+        </Box>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+          {celle.map(({ data, delMese }, i) => {
+            const conteggio = conteggioPerGiorno.get(data.getTime()) ?? 0
+            const selezionato = giornoSelezionato?.getTime() === data.getTime()
+            const isOggi = data.getTime() === oggi.getTime()
+            return (
+              <Box
+                key={i}
+                onClick={() => onSelezionaGiorno(selezionato ? null : data)}
+                sx={{
+                  height: 84,
+                  p: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 0.625,
+                  cursor: 'pointer',
+                  borderRight: (i + 1) % 7 === 0 ? 'none' : `1px solid ${tokens.surfaceBorder}`,
+                  borderBottom: i >= 35 ? 'none' : `1px solid ${tokens.surfaceBorder}`,
+                  boxShadow: selezionato ? `inset 0 0 0 1.5px ${tokens.blue600}` : isOggi ? `inset 0 0 0 1.5px ${tokens.blue400}` : 'none',
+                  opacity: delMese ? 1 : 0.4,
+                  '&:hover': { bgcolor: tokens.paper },
+                }}
+              >
+                <Typography sx={{ fontSize: 12.5, fontWeight: selezionato || isOggi ? 700 : 600, color: selezionato ? tokens.blue600 : tokens.textPrimary }}>
+                  {data.getDate()}
+                </Typography>
+                {conteggio > 0 && (
+                  <Box
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      color: coloreConteggio.testo,
+                      bgcolor: coloreConteggio.sfondo,
+                      borderRadius: 999,
+                      px: 0.875,
+                      py: 0.25,
+                      width: 'fit-content',
+                    }}
+                  >
+                    <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: coloreConteggio.testo }} />
+                    {conteggio} {etichettaConteggio}
+                  </Box>
+                )}
+              </Box>
+            )
+          })}
+        </Box>
       </Box>
     </Box>
   )

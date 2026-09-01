@@ -15,8 +15,10 @@ import Typography from '@mui/material/Typography'
 import { ApiError } from '../api/client'
 import {
   RuoloUtente,
+  useAggiornaUtente,
   useAssegnaRuolo,
   useCreaUtente,
+  useResetPasswordUtente,
   type AssegnaRuoloRequest,
   type AssegnazioneStrutturaDto,
   type PermessiStruttura,
@@ -147,19 +149,24 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
   const modifica = stato.modo === 'modifica' ? stato.assegnazione : null
 
   const [utenteEsistenteId, setUtenteEsistenteId] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(modifica?.email ?? '')
   const [password, setPassword] = useState('')
-  const [nome, setNome] = useState('')
-  const [cognome, setCognome] = useState('')
+  const [nome, setNome] = useState(modifica?.nome ?? '')
+  const [cognome, setCognome] = useState(modifica?.cognome ?? '')
   const [ruolo, setRuolo] = useState<string>(modifica ? String(modifica.ruolo) : String(RuoloUtente.Receptionist))
   const [permessi, setPermessi] = useState<PermessiStruttura>(
     modifica ?? { ...PERMESSI_VUOTI, ...PRESET_PERMESSI[Number(ruolo) as RuoloUtente] },
   )
   const [errore, setErrore] = useState<string | null>(null)
+  const [nuovaPassword, setNuovaPassword] = useState('')
+  const [passwordReimpostata, setPasswordReimpostata] = useState(false)
+  const [erroreReset, setErroreReset] = useState<string | null>(null)
 
   const creaUtente = useCreaUtente()
   const assegnaRuolo = useAssegnaRuolo(strutturaId)
-  const inCorso = creaUtente.isPending || assegnaRuolo.isPending
+  const aggiornaUtente = useAggiornaUtente()
+  const resetPassword = useResetPasswordUtente()
+  const inCorso = creaUtente.isPending || assegnaRuolo.isPending || aggiornaUtente.isPending
 
   function cambiaRuolo(nuovoRuolo: string) {
     setRuolo(nuovoRuolo)
@@ -172,7 +179,7 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
     setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
-  function salva() {
+  async function salva() {
     setErrore(null)
 
     if (stato.modo === 'assegna' && utenteEsistenteId === '') {
@@ -183,11 +190,24 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
       setErrore('Email e password sono obbligatorie.')
       return
     }
+    if (modifica && email.trim() === '') {
+      setErrore('Email obbligatoria.')
+      return
+    }
 
     const request: AssegnaRuoloRequest = { ruolo: Number(ruolo) as RuoloUtente, ...permessi }
 
     if (modifica) {
-      assegnaRuolo.mutate({ utenteId: modifica.utenteId, request }, { onSuccess: onClose, onError: gestisciErrore })
+      try {
+        await aggiornaUtente.mutateAsync({
+          utenteId: modifica.utenteId,
+          request: { email: email.trim(), nome: nome.trim() === '' ? null : nome.trim(), cognome: cognome.trim() === '' ? null : cognome.trim() },
+        })
+        await assegnaRuolo.mutateAsync({ utenteId: modifica.utenteId, request })
+        onClose()
+      } catch (err) {
+        gestisciErrore(err)
+      }
     } else if (stato.modo === 'assegna') {
       assegnaRuolo.mutate({ utenteId: utenteEsistenteId, request }, { onSuccess: onClose, onError: gestisciErrore })
     } else {
@@ -201,13 +221,33 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
     }
   }
 
+  function reimpostaPassword() {
+    if (!modifica) return
+    setErroreReset(null)
+    setPasswordReimpostata(false)
+    if (nuovaPassword.trim().length < 6) {
+      setErroreReset('La nuova password deve avere almeno 6 caratteri.')
+      return
+    }
+    resetPassword.mutate(
+      { utenteId: modifica.utenteId, passwordNuova: nuovaPassword },
+      {
+        onSuccess: () => {
+          setPasswordReimpostata(true)
+          setNuovaPassword('')
+        },
+        onError: (err) => setErroreReset(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      },
+    )
+  }
+
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
-        {modifica ? `Modifica ruolo — ${modifica.email}` : stato.modo === 'nuovo' ? 'Nuovo utente' : 'Assegna utente esistente'}
+        {modifica ? `Modifica utente — ${modifica.email}` : stato.modo === 'nuovo' ? 'Nuovo utente' : 'Assegna utente esistente'}
       </DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         {stato.modo === 'assegna' && (
           <TextField select label="Utente" value={utenteEsistenteId} onChange={(e) => setUtenteEsistenteId(e.target.value)} required disabled={inCorso}>
@@ -226,6 +266,16 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
               <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth disabled={inCorso} />
               <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required fullWidth disabled={inCorso} />
             </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={inCorso} />
+              <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={inCorso} />
+            </Box>
+          </>
+        )}
+
+        {modifica && (
+          <>
+            <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth disabled={inCorso} />
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={inCorso} />
               <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={inCorso} />
@@ -268,6 +318,28 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
             </Box>
           </Box>
         ))}
+
+        {modifica && (
+          <>
+            <Divider />
+            <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>Reimposta la password di questo utente (non serve conoscere quella attuale).</Typography>
+            <Box>{erroreReset && <Alert severity="error">{erroreReset}</Alert>}</Box>
+            {passwordReimpostata && <Alert severity="success">Password reimpostata.</Alert>}
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+              <TextField
+                label="Nuova password"
+                type="password"
+                value={nuovaPassword}
+                onChange={(e) => setNuovaPassword(e.target.value)}
+                fullWidth
+                disabled={resetPassword.isPending}
+              />
+              <Button variant="outlined" onClick={reimpostaPassword} disabled={resetPassword.isPending || nuovaPassword.trim() === ''} sx={{ whiteSpace: 'nowrap', flex: '0 0 auto' }}>
+                Reimposta
+              </Button>
+            </Box>
+          </>
+        )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
         <Button onClick={onClose} disabled={inCorso}>

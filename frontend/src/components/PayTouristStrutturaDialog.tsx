@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Alert from '@mui/material/Alert'
+import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
 import Dialog from '@mui/material/Dialog'
@@ -56,7 +57,7 @@ export function PayTouristStrutturaDialog({ strutturaId, strutturaPayTourist, ti
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{strutturaPayTourist ? 'Modifica struttura PayTourist' : 'Nuova struttura PayTourist'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso} autoFocus />
         <TextField

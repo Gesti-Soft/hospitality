@@ -162,6 +162,15 @@ public class WubookPrenotazioniService(
 
         if (nuova)
         {
+            // Stessa regola di PrenotazioniService.CreaAsync: una prenotazione (qui arrivata da OTA,
+            // non creata a mano) non deve mai comparire come "da inviare" per un servizio che la
+            // Struttura non ha (es. niente account PayTourist -> PayTourist già marcato "inviato").
+            // TassaSoggiornoAttiva resta al default true (Wubook non espone questo concetto), quindi
+            // qui conta solo se il servizio è concesso.
+            var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken);
+            entity.StatePolice = struttura is null || !struttura.AlloggiatiWebAbilitato;
+            entity.PMS = struttura is null || !struttura.OsservatorioAbilitato;
+            entity.PayTourist = struttura is null || !struttura.PayTouristAbilitato;
             await prenotazioni.AddAsync(entity, cancellationToken);
         }
         else

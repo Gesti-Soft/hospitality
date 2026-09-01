@@ -61,7 +61,7 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{appartamento ? 'Modifica appartamento' : 'Nuovo appartamento'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso} autoFocus />
 

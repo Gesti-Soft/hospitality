@@ -24,7 +24,10 @@ public class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepository
 
         if (filtro.StrutturaId is { } strutturaId)
         {
-            query = query.Where(l => l.StrutturaId == strutturaId);
+            // Include anche le righe non legate a una struttura specifica (es. modifica di un
+            // utente, che può avere accesso a più strutture): altrimenti sparirebbero del tutto
+            // filtrando per la struttura correntemente selezionata in UI.
+            query = query.Where(l => l.StrutturaId == strutturaId || l.StrutturaId == null);
         }
 
         if (filtro.Livello is { } livello)
@@ -35,6 +38,11 @@ public class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepository
         if (!string.IsNullOrWhiteSpace(filtro.Categoria))
         {
             query = query.Where(l => l.Categoria == filtro.Categoria);
+        }
+
+        if (filtro.CategorieVisibili is { } categorieVisibili)
+        {
+            query = query.Where(l => l.Categoria != null && categorieVisibili.Contains(l.Categoria));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);

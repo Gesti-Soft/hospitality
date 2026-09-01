@@ -60,7 +60,7 @@ export function SpesaDialog({ strutturaId, spesa, onClose }: Props) {
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{spesa ? 'Modifica spesa' : 'Nuova spesa'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required fullWidth disabled={inCorso} autoFocus />

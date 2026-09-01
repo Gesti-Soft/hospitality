@@ -116,7 +116,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{modifica ? `Modifica fattura n. ${modifica.numeroDocumento}` : 'Nuova fattura da prenotazione'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         {!modifica && (
           <TextField select label="Prenotazione da fatturare" value={prenotazioneId} onChange={(e) => setPrenotazioneId(e.target.value)} required disabled={inCorso}>

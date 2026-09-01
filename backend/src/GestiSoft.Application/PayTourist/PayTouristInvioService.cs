@@ -267,13 +267,13 @@ public class PayTouristInvioService(
     {
         if (payTouristStruttura.IdStrutturaPaytourist is not { } idStruttura)
         {
-            await SalvaEsitoAsync(payTouristStruttura, 0, "Id struttura PayTourist non configurato.", cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, 0, "Id struttura PayTourist non configurato.", cancellationToken);
             return (0, 0, 0, []);
         }
 
         if (payTouristStruttura.Tipologie.Count == 0)
         {
-            await SalvaEsitoAsync(payTouristStruttura, 0, "Nessuna tipologia camera associata a questa struttura PayTourist.", cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, 0, "Nessuna tipologia camera associata a questa struttura PayTourist.", cancellationToken);
             return (0, 0, 0, []);
         }
 
@@ -281,7 +281,7 @@ public class PayTouristInvioService(
         var daInviare = await ospiti.ListDaInviarePayTouristAsync(strutturaId, tipologieIds, cancellationToken);
         if (daInviare.Count == 0)
         {
-            await SalvaEsitoAsync(payTouristStruttura, 0, null, cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, 0, null, cancellationToken);
             return (0, 0, 0, []);
         }
 
@@ -289,7 +289,7 @@ public class PayTouristInvioService(
         if (!riduzioniOk)
         {
             var errore = riduzioniErrore ?? "Impossibile recuperare le riduzioni PayTourist.";
-            await SalvaEsitoAsync(payTouristStruttura, 0, errore, cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, daInviare.Count, errore, cancellationToken);
             return (0, daInviare.Count, daInviare.Count, [errore]);
         }
 
@@ -300,7 +300,7 @@ public class PayTouristInvioService(
             if (!portaliOk)
             {
                 var errore = portaliErrore ?? "Impossibile recuperare i portali online PayTourist.";
-                await SalvaEsitoAsync(payTouristStruttura, 0, errore, cancellationToken);
+                await SalvaEsitoAsync(payTouristStruttura, 0, daInviare.Count, errore, cancellationToken);
                 return (0, daInviare.Count, daInviare.Count, [errore]);
             }
 
@@ -343,7 +343,7 @@ public class PayTouristInvioService(
             }
         }
 
-        await SalvaEsitoAsync(payTouristStruttura, inviate, ultimoErrore, cancellationToken);
+        await SalvaEsitoAsync(payTouristStruttura, inviate, daInviare.Count, ultimoErrore, cancellationToken);
         return (inviate, daInviare.Count, daInviare.Count - inviate, messaggi);
     }
 
@@ -357,7 +357,7 @@ public class PayTouristInvioService(
     {
         foreach (var payTouristStruttura in lista)
         {
-            await SalvaEsitoAsync(payTouristStruttura, 0, errore, cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, 0, errore, cancellationToken);
         }
 
         return new RisultatoInvioPayTourist(0, 0, 0, errore);
@@ -381,18 +381,24 @@ public class PayTouristInvioService(
         await prenotazioni.UpdateAsync(prenotazione, cancellationToken);
     }
 
-    private async Task SalvaEsitoAsync(PayTouristStruttura entity, int inviate, string? errore, CancellationToken cancellationToken)
+    private async Task SalvaEsitoAsync(PayTouristStruttura entity, int inviate, int totale, string? errore, CancellationToken cancellationToken)
     {
         entity.UltimoInvioAtUtc = DateTime.UtcNow;
         entity.UltimeInviate = inviate;
         entity.UltimoErrore = errore;
         await payTouristStrutture.UpdateAsync(entity, cancellationToken);
 
-        if (errore is not null)
+        // Un log solo se c'è stato davvero un invio da riportare (totale > 0) o un errore vero e
+        // proprio (es. token non configurato) — non ogni giorno per "nessuna prenotazione da inviare".
+        if (errore is not null || totale > 0)
         {
+            var messaggio = errore is null
+                ? $"Invio PayTourist ({entity.Nome}): {inviate}/{totale} prenotazioni inviate."
+                : $"Invio PayTourist ({entity.Nome}): {inviate}/{totale} prenotazioni inviate — {errore}";
+
             await logEventi.RegistraAsync(
-                LivelloLog.Warning,
-                $"Invio PayTourist ({entity.Nome}): {errore}",
+                errore is null ? LivelloLog.Info : LivelloLog.Warning,
+                messaggio,
                 origine: "PayTourist",
                 clienteId: await strutture.GetClienteIdAsync(entity.StrutturaId, cancellationToken),
                 strutturaId: entity.StrutturaId,

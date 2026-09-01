@@ -2,10 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment'
+import MenuItem from '@mui/material/MenuItem'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import Skeleton from '@mui/material/Skeleton'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import SearchIcon from '@mui/icons-material/Search'
 import TodayIcon from '@mui/icons-material/Today'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { StatoCamera, useCamere, type CameraDto } from '../api/camere'
@@ -60,6 +64,8 @@ export function CalendarioPage() {
   const { strutturaId } = useStruttura()
   const [inizioFinestra, setInizioFinestra] = useState(() => inizioGiornoLocale(new Date()))
   const [dialogo, setDialogo] = useState<StatoIniziale | null>(null)
+  const [filtroTipologiaId, setFiltroTipologiaId] = useState('')
+  const [ricerca, setRicerca] = useState('')
 
   // La griglia occupa tutto lo spazio disponibile: il numero di giorni visibili si ricalcola in
   // base alla larghezza del contenitore, non è più un valore fisso.
@@ -92,8 +98,14 @@ export function CalendarioPage() {
 
   const gruppi = useMemo(() => {
     if (!camere.data) return []
+    const testoRicerca = ricerca.trim().toLowerCase()
+    const filtrate = camere.data.filter((c) => {
+      if (filtroTipologiaId && c.tipologiaId !== filtroTipologiaId) return false
+      if (testoRicerca && !c.nome.toLowerCase().includes(testoRicerca)) return false
+      return true
+    })
     const mappa = new Map<string, CameraDto[]>()
-    for (const c of camere.data) {
+    for (const c of filtrate) {
       const chiave = c.tipologiaNome ?? 'Senza tipologia'
       if (!mappa.has(chiave)) mappa.set(chiave, [])
       mappa.get(chiave)!.push(c)
@@ -101,7 +113,7 @@ export function CalendarioPage() {
     return Array.from(mappa.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([tipologia, elenco]) => ({ tipologia, camere: elenco.sort((x, y) => x.nome.localeCompare(y.nome)) }))
-  }, [camere.data])
+  }, [camere.data, filtroTipologiaId, ricerca])
 
   const prenotazioniPerCamera = useMemo(() => {
     const mappa = new Map<string, PrenotazioneDto[]>()
@@ -159,11 +171,46 @@ export function CalendarioPage() {
         </Box>
       </Box>
 
+      {!caricamento && camere.data && camere.data.length > 0 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.5, flexWrap: 'wrap' }}>
+          <TextField select size="small" label="Tipologia" value={filtroTipologiaId} onChange={(e) => setFiltroTipologiaId(e.target.value)} sx={{ minWidth: 180 }}>
+            <MenuItem value="">Tutte</MenuItem>
+            {(tipologie.data ?? []).map((t) => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.tipologiaCamera}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            size="small"
+            placeholder="Cerca camera..."
+            value={ricerca}
+            onChange={(e) => setRicerca(e.target.value)}
+            sx={{ minWidth: 220 }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" sx={{ color: tokens.textTertiary }} />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+        </Box>
+      )}
+
       {caricamento && <Skeleton variant="rounded" height={420} />}
 
       {!caricamento && camere.data && camere.data.length === 0 && (
         <Box sx={{ border: `1px dashed ${tokens.surfaceBorder}`, borderRadius: 2, p: 6, textAlign: 'center', color: tokens.textSecondary }}>
           Nessuna camera configurata per questa struttura. Aggiungila dalla sezione Camere prima di poter creare prenotazioni.
+        </Box>
+      )}
+
+      {!caricamento && camere.data && camere.data.length > 0 && gruppi.length === 0 && (
+        <Box sx={{ border: `1px dashed ${tokens.surfaceBorder}`, borderRadius: 2, p: 6, textAlign: 'center', color: tokens.textSecondary }}>
+          Nessuna camera corrisponde ai filtri selezionati.
         </Box>
       )}
 

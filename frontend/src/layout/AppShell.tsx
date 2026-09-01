@@ -18,9 +18,11 @@ import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/AddOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useAuth } from '../auth/AuthContext'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useAggiornaStruttura, useCreaStruttura, useImpostaAttivoStruttura, type StrutturaDto } from '../api/strutture'
+import { useMioPermessoStruttura } from '../api/utenti'
 import { ApiError } from '../api/client'
 import { fontDisplay, tokens } from '../theme'
 import { GestiSoftMark } from '../components/GestiSoftMark'
@@ -29,11 +31,36 @@ import { IconEsci } from './navIcons'
 
 const NAV_RAIL_WIDTH = 250
 
+// Sezioni collassate dall'utente, ricordate tra una visita e l'altra — non tocca "Operativo" etc.
+// di default (parte tutto espanso finché l'utente non comprime qualcosa di suo).
+const CHIAVE_SEZIONI_CHIUSE = 'gestisoft.menu.sezioniChiuse'
+
+function leggiSezioniChiuse(): Record<string, boolean> {
+  try {
+    const grezzo = localStorage.getItem(CHIAVE_SEZIONI_CHIUSE)
+    return grezzo ? JSON.parse(grezzo) : {}
+  } catch {
+    return {}
+  }
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation()
   const { sessione, esci } = useAuth()
   const { isSuperAdmin, clienti, clienteId, strutture, strutturaId, strutturaCorrente, loading, selezionaCliente, selezionaStruttura } =
     useStruttura()
+  const [sezioniChiuse, setSezioniChiuse] = useState<Record<string, boolean>>(leggiSezioniChiuse)
+
+  function alternaSezione(titolo: string) {
+    setSezioniChiuse((prec) => {
+      const aggiornato = { ...prec, [titolo]: !prec[titolo] }
+      localStorage.setItem(CHIAVE_SEZIONI_CHIUSE, JSON.stringify(aggiornato))
+      return aggiornato
+    })
+  }
+  // Solo per decidere se mostrare le voci "richiedeGestioneUtenti" (es. Log) — il Super Admin non
+  // ha bisogno di questo dato, ce l'ha sempre libero.
+  const mioPermesso = useMioPermessoStruttura(!isSuperAdmin ? strutturaId : null)
 
   const paginaCorrente = navItemsFlat.find((item) => item.path === location.pathname)
   const inizialiUtente = (sessione?.email ?? '?').slice(0, 2).toUpperCase()
@@ -103,15 +130,33 @@ export function AppShell({ children }: { children: ReactNode }) {
             // Per il SuperAdmin, le sezioni operative restano nascoste finché non seleziona
             // esplicitamente una Struttura (nessuna struttura precaricata all'accesso).
             .filter((section) => section.soloSuperAdmin || !isSuperAdmin || !!strutturaId)
+            .filter((section) => !section.richiedeGestioneUtenti || isSuperAdmin || mioPermesso.data?.settingUser === true)
             .map((section) => {
               const voci = section.items.filter((item) => !item.richiedeServizio || strutturaCorrente?.[item.richiedeServizio] !== false)
               // Una sezione i cui servizi sono tutti disabilitati (es. "Invii automatici" senza
               // alcun servizio esterno concesso) non deve comparire nemmeno col solo titolo.
               if (voci.length === 0) return null
+              // Non resta compressa se contiene la pagina corrente, altrimenti l'utente ci finirebbe
+              // dentro (via link diretto, refresh, ecc.) senza vedere alcun indicatore di sezione attiva.
+              const contieneAttiva = voci.some((item) => item.path === location.pathname)
+              const chiusa = !!section.collassabile && !!sezioniChiuse[section.title] && !contieneAttiva
               return (
                 <Box key={section.title} sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <Typography sx={sezioneLabelSx}>{section.title}</Typography>
-                  {voci.map((item) => {
+                  {section.collassabile ? (
+                    <Box
+                      onClick={() => alternaSezione(section.title)}
+                      sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', px: '14px', py: '2px', '&:hover': { '& .sezione-chevron': { opacity: 1 } } }}
+                    >
+                      <Typography sx={{ ...sezioneLabelSx, px: 0 }}>{section.title}</Typography>
+                      <ExpandMoreIcon
+                        className="sezione-chevron"
+                        sx={{ fontSize: 15, color: '#5C6675', opacity: 0.6, transition: 'transform .15s', transform: chiusa ? 'rotate(-90deg)' : 'rotate(0deg)' }}
+                      />
+                    </Box>
+                  ) : (
+                    <Typography sx={sezioneLabelSx}>{section.title}</Typography>
+                  )}
+                  {!chiusa && voci.map((item) => {
                     const attivo = item.path === location.pathname
                     const Icon = item.icon
                     return (
@@ -260,7 +305,7 @@ function NuovaStrutturaDialog({
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Nuova struttura</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
         <TextField
           label="Nome struttura"
           value={nome}
@@ -311,7 +356,7 @@ function ModificaStrutturaDialog({ struttura, onClose }: { struttura: { id: stri
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Modifica struttura</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
         <TextField
           label="Nome struttura"
           value={nome}

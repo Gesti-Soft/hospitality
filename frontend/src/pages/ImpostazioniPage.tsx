@@ -72,24 +72,43 @@ function EtichettaConPallino({ testo, inserito }: { testo: string; inserito: boo
 }
 
 export function ImpostazioniPage() {
-  const { strutturaId } = useStruttura()
+  const { strutturaId, strutturaCorrente } = useStruttura()
   const [tab, setTab] = useState<TabImpostazioni>('generali')
+
+  // Ogni tab di credenziali/configurazione ha senso solo se il Super Admin ha concesso il relativo
+  // servizio a questa struttura — stesso principio già applicato alle voci di menu "Invii automatici"
+  // (vedi navItems.ts) e alla sezione "Invii automatici" di questa stessa pagina. "Licenza gestisoft.it"
+  // è condivisa da Wubook e PayTourist (restituisce credenziali Wubook + Id Software PayTourist),
+  // quindi resta visibile se almeno uno dei due è concesso.
+  const mostraLicenza = (strutturaCorrente?.wubookAbilitato ?? false) || (strutturaCorrente?.payTouristAbilitato ?? false)
+  const mostraPolizia = strutturaCorrente?.alloggiatiWebAbilitato ?? false
+  const mostraOsservatorio = strutturaCorrente?.osservatorioAbilitato ?? false
+  const mostraPayTourist = strutturaCorrente?.payTouristAbilitato ?? false
+
+  const tabVisibile: Record<TabImpostazioni, boolean> = {
+    generali: true,
+    licenza: mostraLicenza,
+    polizia: mostraPolizia,
+    osservatorio: mostraOsservatorio,
+    paytourist: mostraPayTourist,
+  }
+  const tabEffettivo = tabVisibile[tab] ? tab : 'generali'
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 0 }}>
+      <Tabs value={tabEffettivo} onChange={(_, v) => setTab(v)} sx={{ minHeight: 0 }}>
         <Tab label="Generali" value="generali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
-        <Tab label="Licenza gestisoft.it" value="licenza" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
-        <Tab label="Alloggiati Web" value="polizia" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
-        <Tab label="Osservatorio Turistico" value="osservatorio" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
-        <Tab label="PayTourist" value="paytourist" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+        {mostraLicenza && <Tab label="Licenza gestisoft.it" value="licenza" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
+        {mostraPolizia && <Tab label="Alloggiati Web" value="polizia" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
+        {mostraOsservatorio && <Tab label="Osservatorio Turistico" value="osservatorio" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
+        {mostraPayTourist && <Tab label="PayTourist" value="paytourist" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
       </Tabs>
 
-      {tab === 'generali' && <TabGenerali strutturaId={strutturaId} />}
-      {tab === 'licenza' && <TabLicenzaGestisoft strutturaId={strutturaId} />}
-      {tab === 'polizia' && <TabAlloggiatiWeb strutturaId={strutturaId} />}
-      {tab === 'osservatorio' && <TabOsservatorio strutturaId={strutturaId} />}
-      {tab === 'paytourist' && <TabPayTourist strutturaId={strutturaId} />}
+      {tabEffettivo === 'generali' && <TabGenerali strutturaId={strutturaId} />}
+      {tabEffettivo === 'licenza' && <TabLicenzaGestisoft strutturaId={strutturaId} />}
+      {tabEffettivo === 'polizia' && <TabAlloggiatiWeb strutturaId={strutturaId} />}
+      {tabEffettivo === 'osservatorio' && <TabOsservatorio strutturaId={strutturaId} />}
+      {tabEffettivo === 'paytourist' && <TabPayTourist strutturaId={strutturaId} />}
     </Box>
   )
 }
