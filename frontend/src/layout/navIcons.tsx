@@ -44,6 +44,15 @@ export function IconCamere(props: IconProps) {
   )
 }
 
+export function IconTipologie(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9.5 2.5H14.5C15.05 2.5 15.5 2.95 15.5 3.5V8.5C15.5 8.9 15.34 9.28 15.06 9.56L9.56 15.06C8.98 15.64 8.02 15.64 7.44 15.06L2.94 10.56C2.36 9.98 2.36 9.02 2.94 8.44L8.44 2.94C8.72 2.66 9.1 2.5 9.5 2.5Z" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" />
+      <circle cx="12" cy="6" r="1.1" stroke="currentColor" strokeWidth={1.3} />
+    </svg>
+  )
+}
+
 export function IconOspiti(props: IconProps) {
   return (
     <svg {...base} {...props}>

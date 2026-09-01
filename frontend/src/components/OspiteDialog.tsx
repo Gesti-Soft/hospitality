@@ -29,6 +29,7 @@ import {
 } from '../api/ospiti'
 import { type ComuneDto, useComuni, useDocumenti, useStati, useTipiAlloggiato } from '../api/riferimenti'
 import { differenzaGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { CampoData } from './CampoData'
 import { fontDisplay, tokens } from '../theme'
 
 interface Props {
@@ -352,15 +353,7 @@ function SchedaOspitiForm({
         </Box>
 
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField
-            label="Data di nascita"
-            type="date"
-            value={dataNascita}
-            onChange={(e) => setDataNascita(e.target.value)}
-            fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
-            disabled={salva.isPending}
-          />
+          <CampoData label="Data di nascita" value={dataNascita} onChange={setDataNascita} fullWidth disabled={salva.isPending} />
           <TextField select label="Sesso" value={sesso} onChange={(e) => setSesso(e.target.value)} fullWidth disabled={salva.isPending}>
             <MenuItem value="">—</MenuItem>
             <MenuItem value={String(Sesso.Maschio)}>Maschio</MenuItem>
@@ -425,14 +418,12 @@ function SchedaOspitiForm({
                 <Box sx={{ display: 'flex', gap: 2 }}>
                   <TextField label="Cognome" value={m.cognome ?? ''} onChange={(e) => aggiornaMembro(indice, { cognome: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
                   <TextField label="Nome" value={m.nome ?? ''} onChange={(e) => aggiornaMembro(indice, { nome: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
-                  <TextField
+                  <CampoData
                     label="Data di nascita"
-                    type="date"
                     value={m.dataNascita ? formatoInputData(new Date(m.dataNascita)) : ''}
-                    onChange={(e) => aggiornaMembro(indice, { dataNascita: e.target.value === '' ? null : isoLocale(parsaInputData(e.target.value)) })}
+                    onChange={(v) => aggiornaMembro(indice, { dataNascita: v === '' ? null : isoLocale(parsaInputData(v)) })}
                     fullWidth
                     size="small"
-                    slotProps={{ inputLabel: { shrink: true } }}
                     disabled={salva.isPending}
                   />
                   <TextField

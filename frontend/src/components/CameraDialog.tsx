@@ -23,12 +23,13 @@ interface Props {
   strutturaId: string
   camera: CameraDto | null
   tipologie: TipologiaCameraDto[]
+  tipologiaDiDefault?: string
   onClose: () => void
 }
 
-export function CameraDialog({ strutturaId, camera, tipologie, onClose }: Props) {
+export function CameraDialog({ strutturaId, camera, tipologie, tipologiaDiDefault, onClose }: Props) {
   const [nome, setNome] = useState(camera?.nome ?? '')
-  const [tipologiaId, setTipologiaId] = useState(camera?.tipologiaId ?? '')
+  const [tipologiaId, setTipologiaId] = useState(camera?.tipologiaId ?? tipologiaDiDefault ?? '')
   const [stateRoom, setStateRoom] = useState<StatoCamera>(camera?.stateRoom ?? StatoCamera.Pronta)
   const [capacitaOspiti, setCapacitaOspiti] = useState(camera?.capacitaOspiti != null ? String(camera.capacitaOspiti) : '')
   const [soggiornoMinimo, setSoggiornoMinimo] = useState(camera?.soggiornoMinimo != null ? String(camera.soggiornoMinimo) : '')

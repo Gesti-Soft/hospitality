@@ -78,6 +78,13 @@ export const theme = createTheme({
     MuiTextField: {
       defaultProps: { size: 'small' },
     },
+    MuiAutocomplete: {
+      // Senza questo, un <Autocomplete> senza `size` esplicito rende il suo TextField interno a
+      // "medium" (default MUI) mentre il resto dell'app è tutto "small" — il disallineamento nelle
+      // metriche fa sì che la label ristretta finisca a cavallo del bordo del notch invece che
+      // sopra, tagliata a metà (bug reale riscontrato in PrezzoDialog/PrenotazioneDialog).
+      defaultProps: { size: 'small' },
+    },
     MuiOutlinedInput: {
       styleOverrides: {
         root: { borderRadius: 6, backgroundColor: '#fff' },

@@ -1,0 +1,109 @@
+import { useState } from 'react'
+import Alert from '@mui/material/Alert'
+import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import Skeleton from '@mui/material/Skeleton'
+import Table from '@mui/material/Table'
+import TableBody from '@mui/material/TableBody'
+import TableCell from '@mui/material/TableCell'
+import TableHead from '@mui/material/TableHead'
+import TableRow from '@mui/material/TableRow'
+import Typography from '@mui/material/Typography'
+import EditIcon from '@mui/icons-material/EditOutlined'
+import DeleteIcon from '@mui/icons-material/DeleteOutlined'
+import { useStruttura } from '../struttura/StrutturaContext'
+import { useEliminaTipologia, useTipologie, type TipologiaCameraDto } from '../api/tipologie'
+import { ApiError } from '../api/client'
+import { fontDisplay, fontMono, tokens } from '../theme'
+import { TipologiaDialog } from '../components/TipologiaDialog'
+
+const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
+
+export function TipologiePage() {
+  const { strutturaId } = useStruttura()
+  const [errore, setErrore] = useState<string | null>(null)
+  const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | TipologiaCameraDto>('chiuso')
+
+  const tipologie = useTipologie(strutturaId)
+  const elimina = useEliminaTipologia(strutturaId)
+
+  function eliminaTipologia(t: TipologiaCameraDto) {
+    if (!window.confirm(`Eliminare la tipologia "${t.tipologiaCamera}"?`)) return
+    elimina.mutate(t.id, { onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.') })
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tipologie camera</Typography>
+        <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo('nuova')} disabled={!strutturaId}>
+          + Nuova tipologia
+        </Button>
+      </Box>
+
+      {errore && (
+        <Alert severity="error" onClose={() => setErrore(null)}>
+          {errore}
+        </Alert>
+      )}
+
+      {tipologie.isLoading && <Skeleton variant="rounded" height={220} />}
+
+      {!tipologie.isLoading && (
+        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Nome</TableCell>
+                <TableCell align="right">Prezzo default</TableCell>
+                <TableCell align="right">Ospiti inclusi</TableCell>
+                <TableCell align="right">Supplemento persona</TableCell>
+                <TableCell align="right">Cauzione</TableCell>
+                <TableCell align="right">Azioni</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(tipologie.data ?? []).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                    Nessuna tipologia configurata.
+                  </TableCell>
+                </TableRow>
+              )}
+              {(tipologie.data ?? []).map((t) => (
+                <TableRow key={t.id} hover>
+                  <TableCell sx={{ fontWeight: 700 }}>{t.tipologiaCamera}</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
+                    {t.prezzoDefault != null ? formattatoreValuta.format(t.prezzoDefault) : '—'}
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
+                    {t.numeroImplementoPersona}
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
+                    {formattatoreValuta.format(t.implemento)}
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
+                    {t.cauzione != null ? formattatoreValuta.format(t.cauzione) : '—'}
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton size="small" onClick={() => setDialogo(t)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => eliminaTipologia(t)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
+      {dialogo !== 'chiuso' && strutturaId && (
+        <TipologiaDialog strutturaId={strutturaId} tipologia={dialogo === 'nuova' ? null : dialogo} onClose={() => setDialogo('chiuso')} />
+      )}
+    </Box>
+  )
+}

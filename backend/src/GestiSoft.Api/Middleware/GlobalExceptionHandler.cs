@@ -4,6 +4,7 @@ using GestiSoft.Application.Logging;
 using GestiSoft.Domain.Enums;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace GestiSoft.Api.Middleware;
 
@@ -13,10 +14,10 @@ namespace GestiSoft.Api.Middleware;
 /// LogEvento per gli errori 500) va invece il dettaglio completo, collegato allo stesso
 /// correlationId mostrato all'utente così il supporto può ritrovarlo.
 /// </summary>
-public class GlobalExceptionHandler(
-    ILogger<GlobalExceptionHandler> logger,
-    ILogEventoService logEventoService,
-    ICurrentUser currentUser) : IExceptionHandler
+// Registrato come singleton (AddExceptionHandler<T>): i servizi scoped (ILogEventoService,
+// ICurrentUser) non possono essere iniettati nel costruttore e vanno risolti da
+// HttpContext.RequestServices per ogni richiesta.
+public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
@@ -43,6 +44,9 @@ public class GlobalExceptionHandler(
         {
             try
             {
+                var logEventoService = httpContext.RequestServices.GetRequiredService<ILogEventoService>();
+                var currentUser = httpContext.RequestServices.GetRequiredService<ICurrentUser>();
+
                 await logEventoService.RegistraAsync(
                     livello: LivelloLog.Error,
                     messaggio: userMessage,

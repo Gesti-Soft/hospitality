@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Alert from '@mui/material/Alert'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
@@ -31,7 +32,8 @@ import {
   type PrenotazioneRequest,
 } from '../api/prenotazioni'
 import { ApiError } from '../api/client'
-import { formatoInputData, inizioGiornoLocale, isoLocale, parsaInputData } from '../lib/date'
+import { aggiungiGiorni, formatoInputData, inizioGiornoLocale, isoLocale, parsaInputData } from '../lib/date'
+import { CampoData } from './CampoData'
 import { tokens } from '../theme'
 import { OspiteDialog } from './OspiteDialog'
 
@@ -60,7 +62,7 @@ function messaggioConflitto(conflitto: DisponibilitaCameraDto): string {
   const al = conflitto.checkOut ? formattatoreData.format(new Date(conflitto.checkOut)) : '?'
   const nomeOspite = conflitto.ospiteNome || conflitto.ospiteCognome ? `${conflitto.ospiteNome ?? ''} ${conflitto.ospiteCognome ?? ''}`.trim() : null
   const dettaglio = [conflitto.numeroPrenotazione ? `#${conflitto.numeroPrenotazione}` : null, nomeOspite].filter(Boolean).join(', ')
-  return `Questa camera è già prenotata dal ${dal} al ${al}${dettaglio ? ` (${dettaglio})` : ''}.`
+  return `Questa camera è già prenotata dal ${dal} al ${al}}.`
 }
 
 interface Props {
@@ -76,7 +78,14 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const modifica = stato.modo === 'modifica' ? stato.prenotazione : null
   const creaIniziale = stato.modo === 'crea' ? stato : null
 
-  const [cameraId, setCameraId] = useState<string>(modifica ? modifica.cameraId ?? '' : creaIniziale!.cameraId ?? '')
+  const cameraInizialeId = modifica ? modifica.cameraId ?? '' : creaIniziale!.cameraId ?? ''
+  const tipologiaInizialeId = camere.find((c) => c.id === cameraInizialeId)?.tipologiaId ?? ''
+
+  // Nel form la Tipologia va scelta per prima: appena selezionata, la Camera si filtra a quelle di
+  // quella tipologia (entrambe cercabili). Non è un campo inviato al backend, solo la guida alla
+  // scelta della Camera.
+  const [tipologiaFiltroId, setTipologiaFiltroId] = useState(tipologiaInizialeId)
+  const [cameraId, setCameraId] = useState<string>(cameraInizialeId)
   const [agenzia, setAgenzia] = useState(modifica?.agenzia ?? '')
   const [numeroPrenotazione, setNumeroPrenotazione] = useState(modifica?.numeroPrenotazione ?? '')
   const [checkIn, setCheckIn] = useState(formatoInputData(modifica ? inizioGiornoLocale(new Date(modifica.checkIn!)) : creaIniziale!.checkIn))
@@ -87,6 +96,9 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   // camera/date/checkbox si aggiorna da solo, senza dover recliccare "Usa" ogni volta.
   const [importoTotaleAuto, setImportoTotaleAuto] = useState(!modifica)
   const [importoPagato, setImportoPagato] = useState<string>(modifica?.importoPagato != null ? String(modifica.importoPagato) : '')
+  // La sezione (e questo checkbox) compare solo quando la cauzione si applica davvero a questa
+  // prenotazione (tipologia con importo configurato E toggle "Cauzione" attivo) — quando è
+  // mostrata, il default sensato è restituirla per intero.
   const [restituisciCauzione, setRestituisciCauzione] = useState(true)
   const [importoCauzioneTrattenuta, setImportoCauzioneTrattenuta] = useState('')
   const [tassaSoggiornoAttiva, setTassaSoggiornoAttiva] = useState(modifica?.tassaSoggiornoAttiva ?? true)
@@ -112,6 +124,10 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   // esterni): se la tipologia della camera non ne prevede un importo, non ha senso mostrare il toggle.
   const cauzionePrevista = (tipologiaSelezionata?.cauzione ?? 0) > 0
   const animaliPrevisti = (tipologiaSelezionata?.animali ?? 0) > 0
+
+  // Camere della tipologia scelta nel form — include comunque la camera già assegnata anche se non
+  // corrisponde più alla tipologia selezionata, per non nascondere un'associazione esistente.
+  const camereTipologia = camere.filter((c) => c.tipologiaId === tipologiaFiltroId || c.id === cameraId)
 
   const checkInDate = checkIn ? parsaInputData(checkIn) : null
   const checkOutDate = checkOut ? parsaInputData(checkOut) : null
@@ -236,34 +252,48 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       </DialogTitle>
 
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
-
-        <TextField select label="Camera" value={cameraId} onChange={(e) => setCameraId(e.target.value)} required disabled={inCorso || soloImporti}>
-          {camere.length === 0 && <MenuItem value="">Nessuna camera disponibile</MenuItem>}
-          {camere.map((c) => (
-            <MenuItem key={c.id} value={c.id}>
-              {c.nome} {c.tipologiaNome ? `— ${c.tipologiaNome}` : ''}
-            </MenuItem>
-          ))}
-        </TextField>
+        {/* Il Box (invece di renderizzare {errore && ...} nudo) garantisce che il campo Tipologia
+            sotto non sia mai il primo figlio letterale del contenitore flex quando non c'è errore:
+            un Autocomplete in quella posizione esatta mostra la label ristretta tagliata a metà dal
+            bordo (bug reale di rendering riprodotto e isolato, non specifico di un singolo campo). */}
+        <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField
-            label="Check-in"
-            type="date"
-            value={checkIn}
-            onChange={(e) => setCheckIn(e.target.value)}
-            fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
+          <Autocomplete
+            sx={{ flex: 1 }}
+            options={tipologie}
+            getOptionLabel={(t) => t.tipologiaCamera}
+            value={tipologie.find((t) => t.id === tipologiaFiltroId) ?? null}
+            onChange={(_, valore) => {
+              setTipologiaFiltroId(valore?.id ?? '')
+              setCameraId('')
+            }}
             disabled={inCorso || soloImporti}
+            noOptionsText="Nessuna tipologia disponibile"
+            renderInput={(params) => <TextField {...params} label="Tipologia" required placeholder="Cerca per nome…" />}
           />
-          <TextField
+          <Autocomplete
+            sx={{ flex: 1 }}
+            options={camereTipologia}
+            getOptionLabel={(c) => c.nome}
+            value={camereTipologia.find((c) => c.id === cameraId) ?? null}
+            onChange={(_, valore) => setCameraId(valore?.id ?? '')}
+            disabled={inCorso || soloImporti || tipologiaFiltroId === ''}
+            noOptionsText="Nessuna camera per questa tipologia"
+            renderInput={(params) => <TextField {...params} label="Camera" required placeholder="Cerca per nome…" />}
+          />
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <CampoData label="Check-in" value={checkIn} onChange={setCheckIn} fullWidth disabled={inCorso || soloImporti} />
+          <CampoData
             label="Check-out"
-            type="date"
             value={checkOut}
-            onChange={(e) => setCheckOut(e.target.value)}
+            onChange={setCheckOut}
+            // Il check-out non può mai essere uguale o precedente al check-in: il calendario si apre
+            // già sul mese del check-in (se in un mese futuro) e non permette di scegliere prima.
+            min={checkIn ? formatoInputData(aggiungiGiorni(parsaInputData(checkIn), 1)) : undefined}
             fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
             error={!dateValide}
             helperText={!dateValide ? 'Deve essere dopo il check-in' : ' '}
             disabled={inCorso || soloImporti}
@@ -356,7 +386,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           </Tooltip>
         </Box>
 
-        {modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && (
+        {modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && cauzionePrevista && cauzioneAttiva && (
           <>
             <Divider />
             <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.textSecondary }}>Check-out</Typography>

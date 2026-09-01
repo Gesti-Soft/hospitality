@@ -16,6 +16,7 @@ import type { CameraDto } from '../api/camere'
 import type { TipologiaCameraDto } from '../api/tipologie'
 import { useImpostaPrezzo, type ImpostaPrezzoRequest } from '../api/prezzi'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { CampoData } from './CampoData'
 
 interface Props {
   strutturaId: string
@@ -129,24 +130,8 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
         )}
 
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField
-            label="Dal"
-            type="date"
-            value={dataInizio}
-            onChange={(e) => setDataInizio(e.target.value)}
-            fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
-            disabled={imposta.isPending}
-          />
-          <TextField
-            label="Al"
-            type="date"
-            value={dataFine}
-            onChange={(e) => setDataFine(e.target.value)}
-            fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
-            disabled={imposta.isPending}
-          />
+          <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} fullWidth disabled={imposta.isPending} />
+          <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} fullWidth disabled={imposta.isPending} />
         </Box>
 
         <TextField

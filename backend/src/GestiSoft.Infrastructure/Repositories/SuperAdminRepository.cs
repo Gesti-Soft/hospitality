@@ -15,7 +15,10 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
     public async Task<DashboardSuperAdminInfo> GetDashboardAsync(CancellationToken cancellationToken)
     {
         var clienti = await db.Clienti.AsNoTracking().OrderBy(c => c.RagioneSociale).ToListAsync(cancellationToken);
-        var strutture = await db.Strutture.AsNoTracking().ToListAsync(cancellationToken);
+        // Senza OrderBy esplicito Postgres non garantisce un ordine stabile: un UPDATE (es. i toggle
+        // "Servizi concessi") può far tornare le righe in un ordine diverso alla query successiva,
+        // facendo "saltare" le strutture di posizione in UI — bug reale osservato e corretto qui.
+        var strutture = await db.Strutture.AsNoTracking().OrderBy(s => s.CreatedAtUtc).ToListAsync(cancellationToken);
         var wubook = await db.WubookIntegrazioni.AsNoTracking().ToListAsync(cancellationToken);
         var impostazioni = await db.ImpostazioniStruttura.AsNoTracking().ToListAsync(cancellationToken);
         var utenti = await db.Utenti.AsNoTracking().OrderBy(u => u.Email).ToListAsync(cancellationToken);

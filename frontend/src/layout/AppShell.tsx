@@ -20,7 +20,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useAuth } from '../auth/AuthContext'
 import { useStruttura } from '../struttura/StrutturaContext'
-import { useAggiornaStruttura, useCreaStruttura, useImpostaAttivoStruttura } from '../api/strutture'
+import { useAggiornaStruttura, useCreaStruttura, useImpostaAttivoStruttura, type StrutturaDto } from '../api/strutture'
 import { ApiError } from '../api/client'
 import { fontDisplay, tokens } from '../theme'
 import { GestiSoftMark } from '../components/GestiSoftMark'
@@ -103,41 +103,45 @@ export function AppShell({ children }: { children: ReactNode }) {
             // Per il SuperAdmin, le sezioni operative restano nascoste finché non seleziona
             // esplicitamente una Struttura (nessuna struttura precaricata all'accesso).
             .filter((section) => section.soloSuperAdmin || !isSuperAdmin || !!strutturaId)
-            .map((section) => (
-            <Box key={section.title} sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <Typography sx={sezioneLabelSx}>{section.title}</Typography>
-              {section.items
-                .filter((item) => !item.richiedeServizio || strutturaCorrente?.[item.richiedeServizio] !== false)
-                .map((item) => {
-                const attivo = item.path === location.pathname
-                const Icon = item.icon
-                return (
-                  <Box
-                    key={item.path}
-                    component={RouterLink}
-                    to={item.path}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      px: '14px',
-                      py: '9px',
-                      borderRadius: '10px',
-                      fontSize: 13.5,
-                      fontWeight: 600,
-                      textDecoration: 'none',
-                      color: attivo ? '#fff' : tokens.navText,
-                      bgcolor: attivo ? '#2A3745' : 'transparent',
-                      '&:hover': { bgcolor: attivo ? '#2A3745' : 'rgba(255,255,255,0.04)' },
-                    }}
-                  >
-                    <Icon width={17} height={17} style={{ opacity: attivo ? 1 : 0.85 }} />
-                    {item.label}
-                  </Box>
-                )
-              })}
-            </Box>
-          ))}
+            .map((section) => {
+              const voci = section.items.filter((item) => !item.richiedeServizio || strutturaCorrente?.[item.richiedeServizio] !== false)
+              // Una sezione i cui servizi sono tutti disabilitati (es. "Invii automatici" senza
+              // alcun servizio esterno concesso) non deve comparire nemmeno col solo titolo.
+              if (voci.length === 0) return null
+              return (
+                <Box key={section.title} sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <Typography sx={sezioneLabelSx}>{section.title}</Typography>
+                  {voci.map((item) => {
+                    const attivo = item.path === location.pathname
+                    const Icon = item.icon
+                    return (
+                      <Box
+                        key={item.path}
+                        component={RouterLink}
+                        to={item.path}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          px: '14px',
+                          py: '9px',
+                          borderRadius: '10px',
+                          fontSize: 13.5,
+                          fontWeight: 600,
+                          textDecoration: 'none',
+                          color: attivo ? '#fff' : tokens.navText,
+                          bgcolor: attivo ? '#2A3745' : 'transparent',
+                          '&:hover': { bgcolor: attivo ? '#2A3745' : 'rgba(255,255,255,0.04)' },
+                        }}
+                      >
+                        <Icon width={17} height={17} style={{ opacity: attivo ? 1 : 0.85 }} />
+                        {item.label}
+                      </Box>
+                    )
+                  })}
+                </Box>
+              )
+            })}
         </Box>
 
         <Box sx={{ mt: 'auto', display: 'flex', alignItems: 'center', gap: 1.25, p: 1.25, borderTop: '1px solid #262C36' }}>
@@ -236,7 +240,14 @@ function NuovaStrutturaDialog({
       { nome: nome.trim(), clienteId },
       {
         onSuccess: (struttura) => {
-          queryClient.invalidateQueries({ queryKey: ['strutture'] })
+          // Aggiorna subito la cache (non solo invalidateQueries, che rifetcha in background): lo
+          // Struttura Context riconcilia strutturaId/strutture in un effetto che, senza questo,
+          // vedrebbe per un istante la vecchia lista senza la nuova struttura appena selezionata e
+          // azzererebbe la selezione prima ancora che il refetch arrivi (bug reale riscontrato:
+          // creare una struttura da Super Admin non ci si spostava mai dentro).
+          const chiave = ['strutture', clienteId ?? 'proprie']
+          queryClient.setQueryData<StrutturaDto[]>(chiave, (attuali) => [...(attuali ?? []), struttura])
+          queryClient.invalidateQueries({ queryKey: chiave })
           onCreata(struttura.id)
           onClose()
         },

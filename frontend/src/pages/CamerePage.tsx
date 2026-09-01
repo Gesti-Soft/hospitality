@@ -28,13 +28,12 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import { aggiungiGiorni, differenzaGiorni, inizioGiornoLocale } from '../lib/date'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { StatoCamera, useCamere, useDuplicaCamere, useEliminaCamera, type CameraDto } from '../api/camere'
-import { useEliminaTipologia, useTipologie, type TipologiaCameraDto } from '../api/tipologie'
+import { useTipologie, type TipologiaCameraDto } from '../api/tipologie'
 import { usePrezzi, useEliminaPrezzo, type PrezzoCameraDto } from '../api/prezzi'
 import { useCanaliVendita, useCreaCanaleVendita, useAggiornaCanaleVendita, useEliminaCanaleVendita, type CanaleVenditaDto } from '../api/canaliVendita'
 import { ApiError } from '../api/client'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { CameraDialog } from '../components/CameraDialog'
-import { TipologiaDialog } from '../components/TipologiaDialog'
 import { PrezzoDialog } from '../components/PrezzoDialog'
 
 const ETICHETTA_STATO_CAMERA: Record<StatoCamera, string> = {
@@ -54,11 +53,12 @@ const COLORE_STATO_CAMERA: Record<StatoCamera, string> = {
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-type Tab_ = 'camere' | 'tipologie' | 'prezzi' | 'canali'
+type Tab_ = 'camere' | 'prezzi' | 'canali'
 
 export function CamerePage() {
   const { strutturaId, strutture } = useStruttura()
   const [tab, setTab] = useState<Tab_>('camere')
+  const [tipologiaSelezionataId, setTipologiaSelezionataId] = useState('')
   const [errore, setErrore] = useState<string | null>(null)
   const [duplicaAperto, setDuplicaAperto] = useState(false)
 
@@ -67,18 +67,43 @@ export function CamerePage() {
   const prezzi = usePrezzi(strutturaId)
   const canali = useCanaliVendita(strutturaId)
 
+  // La select Tipologia governa Camere/Prezzi (Canali vendita non dipende dalla tipologia, ma
+  // resta comunque dietro la stessa selezione): di default è sempre popolata con la prima
+  // disponibile, derivata al volo così segue automaticamente eliminazioni/cambio struttura senza
+  // un effetto dedicato.
+  const listaTipologie = tipologie.data ?? []
+  const tipologiaId = listaTipologie.some((t) => t.id === tipologiaSelezionataId) ? tipologiaSelezionataId : (listaTipologie[0]?.id ?? '')
+
   function segnalaErrore(err: unknown) {
     setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
   const altreStrutture = strutture.filter((s) => s.id !== strutturaId)
+  const nessunaTipologia = !tipologie.isLoading && listaTipologie.length === 0
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {!nessunaTipologia && (
+        <TextField
+          select
+          size="small"
+          label="Tipologia"
+          value={tipologiaId}
+          onChange={(e) => setTipologiaSelezionataId(e.target.value)}
+          disabled={tipologie.isLoading}
+          sx={{ alignSelf: 'flex-start', width: 220 }}
+        >
+          {listaTipologie.map((t) => (
+            <MenuItem key={t.id} value={t.id}>
+              {t.tipologiaCamera}
+            </MenuItem>
+          ))}
+        </TextField>
+      )}
+
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 0 }}>
           <Tab label="Camere" value="camere" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
-          <Tab label="Tipologie" value="tipologie" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
           <Tab label="Prezzi" value="prezzi" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
           <Tab label="Canali vendita" value="canali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
         </Tabs>
@@ -95,21 +120,36 @@ export function CamerePage() {
         </Alert>
       )}
 
-      {tab === 'camere' && (
-        <TabCamere strutturaId={strutturaId} camere={camere.data} caricamento={camere.isLoading} tipologie={tipologie.data ?? []} onErrore={segnalaErrore} />
+      {nessunaTipologia ? (
+        <Box sx={{ border: `1px dashed ${tokens.surfaceBorder}`, borderRadius: 2, p: 4, textAlign: 'center', color: tokens.textSecondary }}>
+          Nessuna tipologia configurata. Vai su "Tipologie" nel menu per crearne una prima di gestire camere, prezzi e canali vendita.
+        </Box>
+      ) : (
+        <>
+          {tab === 'camere' && (
+            <TabCamere
+              strutturaId={strutturaId}
+              camere={camere.data}
+              caricamento={camere.isLoading}
+              tipologie={tipologie.data ?? []}
+              tipologiaId={tipologiaId}
+              onErrore={segnalaErrore}
+            />
+          )}
+          {tab === 'prezzi' && (
+            <TabPrezzi
+              strutturaId={strutturaId}
+              prezzi={prezzi.data}
+              caricamento={prezzi.isLoading}
+              camere={camere.data ?? []}
+              tipologie={tipologie.data ?? []}
+              tipologiaId={tipologiaId}
+              onErrore={segnalaErrore}
+            />
+          )}
+          {tab === 'canali' && <TabCanali strutturaId={strutturaId} canali={canali.data} caricamento={canali.isLoading} onErrore={segnalaErrore} />}
+        </>
       )}
-      {tab === 'tipologie' && <TabTipologie strutturaId={strutturaId} tipologie={tipologie.data} caricamento={tipologie.isLoading} onErrore={segnalaErrore} />}
-      {tab === 'prezzi' && (
-        <TabPrezzi
-          strutturaId={strutturaId}
-          prezzi={prezzi.data}
-          caricamento={prezzi.isLoading}
-          camere={camere.data ?? []}
-          tipologie={tipologie.data ?? []}
-          onErrore={segnalaErrore}
-        />
-      )}
-      {tab === 'canali' && <TabCanali strutturaId={strutturaId} canali={canali.data} caricamento={canali.isLoading} onErrore={segnalaErrore} />}
 
       {duplicaAperto && strutturaId && <DuplicaDaAltraStrutturaDialog strutturaId={strutturaId} altreStrutture={altreStrutture} onClose={() => setDuplicaAperto(false)} />}
     </Box>
@@ -220,16 +260,17 @@ function TabCamere({
   camere,
   caricamento,
   tipologie,
+  tipologiaId,
   onErrore,
 }: {
   strutturaId: string | null
   camere: CameraDto[] | undefined
   caricamento: boolean
   tipologie: TipologiaCameraDto[]
+  tipologiaId: string
   onErrore: (err: unknown) => void
 }) {
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | CameraDto>('chiuso')
-  const [tipologiaFiltro, setTipologiaFiltro] = useState('')
   const elimina = useEliminaCamera(strutturaId)
 
   function eliminaCamera(camera: CameraDto) {
@@ -237,27 +278,11 @@ function TabCamere({
     elimina.mutate(camera.id, { onError: onErrore })
   }
 
-  const camereFiltrate = (camere ?? []).filter((c) => tipologiaFiltro === '' || c.tipologiaId === tipologiaFiltro)
+  const camereFiltrate = (camere ?? []).filter((c) => c.tipologiaId === tipologiaId)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <IntestazioneTab titolo="Camere" azione={{ etichetta: '+ Nuova camera', onClick: () => setDialogo('nuova'), disabilitato: !strutturaId }} />
-
-      <TextField
-        select
-        size="small"
-        label="Tipologia"
-        value={tipologiaFiltro}
-        onChange={(e) => setTipologiaFiltro(e.target.value)}
-        sx={{ minWidth: 240 }}
-      >
-        <MenuItem value="">Tutte le tipologie</MenuItem>
-        {tipologie.map((t) => (
-          <MenuItem key={t.id} value={t.id}>
-            {t.tipologiaCamera}
-          </MenuItem>
-        ))}
-      </TextField>
 
       {caricamento && <Skeleton variant="rounded" height={220} />}
 
@@ -267,7 +292,6 @@ function TabCamere({
             <TableHead>
               <TableRow>
                 <TableCell>Nome</TableCell>
-                <TableCell>Tipologia</TableCell>
                 <TableCell>Stato</TableCell>
                 <TableCell align="right">Capacità</TableCell>
                 <TableCell align="right">Soggiorno minimo</TableCell>
@@ -275,13 +299,10 @@ function TabCamere({
               </TableRow>
             </TableHead>
             <TableBody>
-              {camereFiltrate.length === 0 && (
-                <RigaVuota colSpan={6} messaggio={tipologiaFiltro === '' ? 'Nessuna camera configurata.' : 'Nessuna camera per questa tipologia.'} />
-              )}
+              {camereFiltrate.length === 0 && <RigaVuota colSpan={5} messaggio="Nessuna camera per questa tipologia." />}
               {camereFiltrate.map((c) => (
                 <TableRow key={c.id} hover>
                   <TableCell sx={{ fontWeight: 700 }}>{c.nome}</TableCell>
-                  <TableCell>{c.tipologiaNome ?? '—'}</TableCell>
                   <TableCell>
                     <Chip size="small" label={ETICHETTA_STATO_CAMERA[c.stateRoom]} sx={{ bgcolor: COLORE_STATO_CAMERA[c.stateRoom], color: '#fff', fontWeight: 700 }} />
                   </TableCell>
@@ -311,89 +332,9 @@ function TabCamere({
           strutturaId={strutturaId}
           camera={dialogo === 'nuova' ? null : dialogo}
           tipologie={tipologie}
+          tipologiaDiDefault={tipologiaId}
           onClose={() => setDialogo('chiuso')}
         />
-      )}
-    </Box>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Tipologie
-// ---------------------------------------------------------------------------
-
-function TabTipologie({
-  strutturaId,
-  tipologie,
-  caricamento,
-  onErrore,
-}: {
-  strutturaId: string | null
-  tipologie: TipologiaCameraDto[] | undefined
-  caricamento: boolean
-  onErrore: (err: unknown) => void
-}) {
-  const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | TipologiaCameraDto>('chiuso')
-  const elimina = useEliminaTipologia(strutturaId)
-
-  function eliminaTipologia(t: TipologiaCameraDto) {
-    if (!window.confirm(`Eliminare la tipologia "${t.tipologiaCamera}"?`)) return
-    elimina.mutate(t.id, { onError: onErrore })
-  }
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <IntestazioneTab titolo="Tipologie camera" azione={{ etichetta: '+ Nuova tipologia', onClick: () => setDialogo('nuova'), disabilitato: !strutturaId }} />
-
-      {caricamento && <Skeleton variant="rounded" height={220} />}
-
-      {!caricamento && (
-        <Cornice>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Nome</TableCell>
-                <TableCell align="right">Prezzo default</TableCell>
-                <TableCell align="right">Ospiti inclusi</TableCell>
-                <TableCell align="right">Supplemento persona</TableCell>
-                <TableCell align="right">Cauzione</TableCell>
-                <TableCell align="right">Azioni</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {(tipologie ?? []).length === 0 && <RigaVuota colSpan={6} messaggio="Nessuna tipologia configurata." />}
-              {(tipologie ?? []).map((t) => (
-                <TableRow key={t.id} hover>
-                  <TableCell sx={{ fontWeight: 700 }}>{t.tipologiaCamera}</TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                    {t.prezzoDefault != null ? formattatoreValuta.format(t.prezzoDefault) : '—'}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                    {t.numeroImplementoPersona}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                    {formattatoreValuta.format(t.implemento)}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                    {t.cauzione != null ? formattatoreValuta.format(t.cauzione) : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton size="small" onClick={() => setDialogo(t)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => eliminaTipologia(t)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Cornice>
-      )}
-
-      {dialogo !== 'chiuso' && strutturaId && (
-        <TipologiaDialog strutturaId={strutturaId} tipologia={dialogo === 'nuova' ? null : dialogo} onClose={() => setDialogo('chiuso')} />
       )}
     </Box>
   )
@@ -409,6 +350,7 @@ function TabPrezzi({
   caricamento,
   camere,
   tipologie,
+  tipologiaId,
   onErrore,
 }: {
   strutturaId: string | null
@@ -416,11 +358,17 @@ function TabPrezzi({
   caricamento: boolean
   camere: CameraDto[]
   tipologie: TipologiaCameraDto[]
+  tipologiaId: string
   onErrore: (err: unknown) => void
 }) {
   const [dialogoAperto, setDialogoAperto] = useState(false)
   const [vista, setVista] = useState<'lista' | 'calendario'>('lista')
   const elimina = useEliminaPrezzo(strutturaId)
+
+  const camereTipologia = camere.filter((c) => c.tipologiaId === tipologiaId)
+  const prezziTipologia = (prezzi ?? []).filter(
+    (p) => p.tipologiaId === tipologiaId || camereTipologia.some((c) => c.id === p.cameraId),
+  )
 
   const nomeCamera = (id: string | null) => camere.find((c) => c.id === id)?.nome ?? null
   const nomeTipologia = (id: string | null) => tipologie.find((t) => t.id === id)?.tipologiaCamera ?? null
@@ -466,8 +414,8 @@ function TabPrezzi({
               </TableRow>
             </TableHead>
             <TableBody>
-              {(prezzi ?? []).length === 0 && <RigaVuota colSpan={5} messaggio="Nessun periodo di prezzo configurato." />}
-              {(prezzi ?? [])
+              {prezziTipologia.length === 0 && <RigaVuota colSpan={5} messaggio="Nessun periodo di prezzo configurato per questa tipologia." />}
+              {prezziTipologia
                 .slice()
                 .sort((a, b) => (a.dataInizio ?? '').localeCompare(b.dataInizio ?? ''))
                 .map((p) => (
@@ -493,7 +441,12 @@ function TabPrezzi({
       )}
 
       {!caricamento && vista === 'calendario' && (
-        <VistaPrezziCalendario prezzi={prezzi ?? []} camere={camere} tipologie={tipologie} onEliminaPrezzo={eliminaPrezzo} />
+        <VistaPrezziCalendario
+          prezzi={prezziTipologia}
+          camere={camereTipologia}
+          tipologie={tipologie.filter((t) => t.id === tipologiaId)}
+          onEliminaPrezzo={eliminaPrezzo}
+        />
       )}
 
       {dialogoAperto && strutturaId && (

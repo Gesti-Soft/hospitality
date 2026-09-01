@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Checkbox from '@mui/material/Checkbox'
-import Chip from '@mui/material/Chip'
 import Collapse from '@mui/material/Collapse'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
@@ -11,7 +10,6 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
-import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import Switch from '@mui/material/Switch'
 import Table from '@mui/material/Table'
@@ -26,22 +24,17 @@ import Button from '@mui/material/Button'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import LockResetIcon from '@mui/icons-material/LockResetOutlined'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForeverOutlined'
 import { ApiError } from '../api/client'
 import {
   GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA,
   giorniDaDisattivazione,
   useAggiornaServiziStruttura,
-  useAggiornaUtente,
   useDashboardSuperAdmin,
   useEliminaStrutturaDefinitivamente,
   useImpostaAttivoCliente,
-  useImpostaAttivoUtente,
-  useResettaPasswordUtente,
   type ClienteAdminDto,
   type StrutturaAdminDto,
-  type UtenteAdminDto,
 } from '../api/superAdmin'
 import { useAggiornaCliente, useCreaCliente } from '../api/clienti'
 import { useImpostaAttivoStruttura } from '../api/strutture'
@@ -64,10 +57,8 @@ export function SuperAdminDashboardPage() {
   const dashboard = useDashboardSuperAdmin(isSuperAdmin)
 
   const [espansi, setEspansi] = useState<Set<string>>(new Set())
-  const [utenteResetPassword, setUtenteResetPassword] = useState<UtenteAdminDto | null>(null)
-  const [utenteInModifica, setUtenteInModifica] = useState<UtenteAdminDto | null>(null)
   const [clienteInModifica, setClienteInModifica] = useState<ClienteAdminDto | null>(null)
-  const [nuovoUtenteAperto, setNuovoUtenteAperto] = useState(false)
+  const [nuovoClienteAperto, setNuovoClienteAperto] = useState(false)
   const [strutturaDaEliminare, setStrutturaDaEliminare] = useState<{ struttura: StrutturaAdminDto; clienteRagioneSociale: string } | null>(null)
 
   function toggleEspanso(clienteId: string) {
@@ -92,11 +83,9 @@ export function SuperAdminDashboardPage() {
   }
 
   const clienti = dashboard.data?.clienti ?? []
-  const utenti = dashboard.data?.utenti ?? []
 
   const clientiAttivi = clienti.filter((c) => c.attivo).length
   const struttureTotali = clienti.reduce((tot, c) => tot + c.strutture.length, 0)
-  const utentiAttivi = utenti.filter((u) => u.attivo).length
   const struttureConErroreLicenza = clienti.reduce(
     (tot, c) => tot + c.strutture.filter((s) => s.wubookAttivo && s.wubookUltimoErrore).length,
     0,
@@ -110,10 +99,9 @@ export function SuperAdminDashboardPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
         <KpiCard etichetta="Clienti" valore={String(clienti.length)} dettaglio={`${clientiAttivi} attivi`} />
         <KpiCard etichetta="Strutture" valore={String(struttureTotali)} />
-        <KpiCard etichetta="Utenti" valore={String(utenti.length)} dettaglio={`${utentiAttivi} attivi`} />
         <KpiCard
           etichetta="Errori di licenza Wubook"
           valore={String(struttureConErroreLicenza)}
@@ -168,52 +156,46 @@ export function SuperAdminDashboardPage() {
 
       <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, overflow: 'hidden' }}>
         <Box sx={{ p: '18px 20px', borderBottom: `1px solid ${tokens.surfaceBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5 }}>Utenti</Typography>
-          <Button variant="contained" color="secondary" size="small" onClick={() => setNuovoUtenteAperto(true)}>
-            + Nuovo utente
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5 }}>Clienti</Typography>
+          <Button variant="contained" color="secondary" size="small" onClick={() => setNuovoClienteAperto(true)}>
+            + Nuovo Cliente
           </Button>
         </Box>
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell width={40} />
-              <TableCell>Email</TableCell>
-              <TableCell>Nome</TableCell>
-              <TableCell>Cliente</TableCell>
-              <TableCell>Ruolo</TableCell>
+              <TableCell>Ragione sociale</TableCell>
+              <TableCell>P.IVA</TableCell>
+              <TableCell align="right">Strutture</TableCell>
               <TableCell align="center">Stato</TableCell>
               <TableCell>Creato il</TableCell>
               <TableCell align="right">Azioni</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {utenti.length === 0 && (
+            {clienti.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                  Nessun utente presente.
+                <TableCell colSpan={7} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                  Nessun Cliente presente.
                 </TableCell>
               </TableRow>
             )}
-            {utenti.map((u) => (
-              <RigaUtente
-                key={u.id}
-                utente={u}
-                cliente={clienti.find((c) => c.id === u.clienteId) ?? null}
-                espanso={espansi.has(u.id)}
-                onToggle={() => toggleEspanso(u.id)}
-                onResettaPassword={() => setUtenteResetPassword(u)}
-                onModifica={() => setUtenteInModifica(u)}
-                onModificaCliente={(c) => setClienteInModifica(c)}
+            {clienti.map((c) => (
+              <RigaCliente
+                key={c.id}
+                cliente={c}
+                espanso={espansi.has(c.id)}
+                onToggle={() => toggleEspanso(c.id)}
+                onModifica={() => setClienteInModifica(c)}
               />
             ))}
           </TableBody>
         </Table>
       </Box>
 
-      {utenteResetPassword && <ResetPasswordDialog utente={utenteResetPassword} onClose={() => setUtenteResetPassword(null)} />}
-      {utenteInModifica && <ModificaUtenteDialog utente={utenteInModifica} onClose={() => setUtenteInModifica(null)} />}
       {clienteInModifica && <ModificaClienteDialog cliente={clienteInModifica} onClose={() => setClienteInModifica(null)} />}
-      {nuovoUtenteAperto && <NuovoUtenteDialog clienti={clienti} onClose={() => setNuovoUtenteAperto(false)} />}
+      {nuovoClienteAperto && <NuovoClienteDialog onClose={() => setNuovoClienteAperto(false)} />}
       {strutturaDaEliminare && (
         <EliminaStrutturaDialog
           struttura={strutturaDaEliminare.struttura}
@@ -338,38 +320,21 @@ function StatoIntegrazione({ nome, attivo, errore, dettaglio }: { nome: string; 
   )
 }
 
-function RigaUtente({
-  utente,
+function RigaCliente({
   cliente,
   espanso,
   onToggle,
-  onResettaPassword,
   onModifica,
-  onModificaCliente,
 }: {
-  utente: UtenteAdminDto
-  cliente: ClienteAdminDto | null
+  cliente: ClienteAdminDto
   espanso: boolean
   onToggle: () => void
-  onResettaPassword: () => void
   onModifica: () => void
-  onModificaCliente: (cliente: ClienteAdminDto) => void
 }) {
-  const nomeCompleto = [utente.nome, utente.cognome].filter(Boolean).join(' ')
-  const impostaAttivoUtente = useImpostaAttivoUtente()
   const impostaAttivoCliente = useImpostaAttivoCliente()
   const [errore, setErrore] = useState<string | null>(null)
 
   function cambiaAttivo(attivo: boolean) {
-    setErrore(null)
-    impostaAttivoUtente.mutate(
-      { utenteId: utente.id, attivo },
-      { onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita.') },
-    )
-  }
-
-  function cambiaClienteAttivo(attivo: boolean) {
-    if (!cliente) return
     setErrore(null)
     impostaAttivoCliente.mutate(
       { clienteId: cliente.id, attivo },
@@ -381,149 +346,59 @@ function RigaUtente({
     <>
       <TableRow hover>
         <TableCell>
-          {cliente && (
+          {cliente.strutture.length > 0 && (
             <IconButton size="small" onClick={onToggle}>
               {espanso ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
             </IconButton>
           )}
         </TableCell>
-        <TableCell sx={{ fontWeight: 600 }}>{utente.email}</TableCell>
-        <TableCell sx={{ color: tokens.textSecondary }}>{nomeCompleto || '—'}</TableCell>
-        <TableCell sx={{ color: tokens.textSecondary }}>{utente.clienteRagioneSociale ?? '—'}</TableCell>
-        <TableCell>
-          {utente.isSuperAdmin ? (
-            <Chip size="small" label="Super Admin" sx={{ bgcolor: tokens.orange100, color: tokens.orange700, fontWeight: 700 }} />
-          ) : (
-            <Chip size="small" label="Operatore" sx={{ bgcolor: tokens.blue100, color: tokens.blue700, fontWeight: 700 }} />
-          )}
+        <TableCell sx={{ fontWeight: 600 }}>{cliente.ragioneSociale}</TableCell>
+        <TableCell sx={{ color: tokens.textSecondary, fontFamily: fontMono }}>{cliente.partitaIva ?? '—'}</TableCell>
+        <TableCell align="right" sx={{ fontFamily: fontMono }}>
+          {cliente.strutture.length}
         </TableCell>
         <TableCell align="center">
-          <Tooltip title={utente.attivo ? 'Disattiva utente' : 'Riattiva utente'}>
+          <Tooltip title={cliente.attivo ? 'Sospendi il Cliente (nessun suo utente potrà più accedere)' : 'Riattiva il Cliente'}>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
               <Switch
                 size="small"
-                checked={utente.attivo}
+                checked={cliente.attivo}
                 onChange={(e) => cambiaAttivo(e.target.checked)}
-                disabled={impostaAttivoUtente.isPending}
+                disabled={impostaAttivoCliente.isPending}
               />
-              <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: utente.attivo ? tokens.ok600 : tokens.error600 }}>
-                {utente.attivo ? 'Attivo' : 'Disattivo'}
+              <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: cliente.attivo ? tokens.ok600 : tokens.error600 }}>
+                {cliente.attivo ? 'Attivo' : 'Sospeso'}
               </Typography>
             </Box>
           </Tooltip>
         </TableCell>
-        <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>{formattatoreData.format(new Date(utente.createdAtUtc))}</TableCell>
+        <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>{formattatoreData.format(new Date(cliente.createdAtUtc))}</TableCell>
         <TableCell align="right">
-          <Tooltip title="Modifica utente">
+          <Tooltip title="Modifica dati Cliente (ragione sociale, P.IVA)">
             <IconButton size="small" onClick={onModifica}>
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Reimposta password (supporto/assistenza)">
-            <IconButton size="small" onClick={onResettaPassword}>
-              <LockResetIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
         </TableCell>
       </TableRow>
-      {cliente && (
+      {cliente.strutture.length > 0 && (
         <TableRow>
-          <TableCell colSpan={8} sx={{ p: 0, border: espanso ? undefined : 'none' }}>
+          <TableCell colSpan={7} sx={{ p: 0, border: espanso ? undefined : 'none' }}>
             <Collapse in={espanso} unmountOnExit>
-              <Box sx={{ p: '10px 20px 18px 56px', bgcolor: tokens.paper, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ p: '10px 20px 18px 56px', bgcolor: tokens.paper, display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {errore && <Alert severity="error">{errore}</Alert>}
-
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>{cliente.ragioneSociale}</Typography>
-                    <Tooltip title="Modifica dati Cliente (ragione sociale, P.IVA)">
-                      <IconButton size="small" onClick={() => onModificaCliente(cliente)}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                  {cliente.partitaIva && (
-                    <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
-                      P.IVA <span style={{ fontFamily: fontMono }}>{cliente.partitaIva}</span>
-                    </Typography>
-                  )}
-                  <Tooltip title={cliente.attivo ? 'Sospendi il Cliente (nessun suo utente potrà più accedere)' : 'Riattiva il Cliente'}>
-                    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-                      <Switch
-                        size="small"
-                        checked={cliente.attivo}
-                        onChange={(e) => cambiaClienteAttivo(e.target.checked)}
-                        disabled={impostaAttivoCliente.isPending}
-                      />
-                      <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: cliente.attivo ? tokens.ok600 : tokens.error600 }}>
-                        Cliente {cliente.attivo ? 'attivo' : 'sospeso'}
-                      </Typography>
-                    </Box>
-                  </Tooltip>
-                </Box>
-
-                {cliente.strutture.length > 0 && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <Typography sx={{ fontSize: 11, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                      Strutture
-                    </Typography>
-                    {cliente.strutture.map((s) => (
-                      <RigaStruttura key={s.id} struttura={s} />
-                    ))}
-                  </Box>
-                )}
+                <Typography sx={{ fontSize: 11, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                  Strutture
+                </Typography>
+                {cliente.strutture.map((s) => (
+                  <RigaStruttura key={s.id} struttura={s} />
+                ))}
               </Box>
             </Collapse>
           </TableCell>
         </TableRow>
       )}
     </>
-  )
-}
-
-function ModificaUtenteDialog({ utente, onClose }: { utente: UtenteAdminDto; onClose: () => void }) {
-  const [email, setEmail] = useState(utente.email)
-  const [nome, setNome] = useState(utente.nome ?? '')
-  const [cognome, setCognome] = useState(utente.cognome ?? '')
-  const [errore, setErrore] = useState<string | null>(null)
-
-  const aggiorna = useAggiornaUtente()
-
-  function salva() {
-    if (email.trim() === '') {
-      setErrore('L\'email è obbligatoria.')
-      return
-    }
-    setErrore(null)
-    aggiorna.mutate(
-      { utenteId: utente.id, request: { email: email.trim(), nome: nome.trim() || null, cognome: cognome.trim() || null } },
-      {
-        onSuccess: onClose,
-        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
-      },
-    )
-  }
-
-  return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Modifica utente</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
-        <TextField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth disabled={aggiorna.isPending} autoFocus />
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={aggiorna.isPending} />
-          <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={aggiorna.isPending} />
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button onClick={onClose} disabled={aggiorna.isPending}>
-          Annulla
-        </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
-          Salva
-        </Button>
-      </DialogActions>
-    </Dialog>
   )
 }
 
@@ -580,14 +455,12 @@ function ModificaClienteDialog({ cliente, onClose }: { cliente: ClienteAdminDto;
   )
 }
 
-function NuovoUtenteDialog({ clienti, onClose }: { clienti: ClienteAdminDto[]; onClose: () => void }) {
+function NuovoClienteDialog({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [nome, setNome] = useState('')
   const [cognome, setCognome] = useState('')
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
-  const [nuovoCliente, setNuovoCliente] = useState(clienti.length === 0)
-  const [clienteId, setClienteId] = useState('')
   const [ragioneSociale, setRagioneSociale] = useState('')
   const [partitaIva, setPartitaIva] = useState('')
   const [errore, setErrore] = useState<string | null>(null)
@@ -602,22 +475,19 @@ function NuovoUtenteDialog({ clienti, onClose }: { clienti: ClienteAdminDto[]; o
       setErrore('Email obbligatoria, password di almeno 8 caratteri.')
       return
     }
-    if (!isSuperAdmin && !nuovoCliente && clienteId === '') {
-      setErrore('Seleziona il Cliente a cui appartiene questo utente, oppure creane uno nuovo.')
-      return
-    }
-    if (!isSuperAdmin && nuovoCliente && ragioneSociale.trim() === '') {
-      setErrore('Indica la ragione sociale del nuovo Cliente.')
+    if (!isSuperAdmin && ragioneSociale.trim() === '') {
+      setErrore('Indica la ragione sociale del Cliente.')
       return
     }
     setErrore(null)
     setSalvataggioInCorso(true)
     try {
+      // Il Super Admin crea solo il Cliente e il suo primo utente, che sarà automaticamente
+      // amministratore delle strutture che andrà a creare — la gestione degli utenti per singola
+      // struttura (colleghi, ruoli) resta poi al Cliente stesso, non riguarda più il Super Admin.
       let clienteIdFinale: string | null = null
       if (!isSuperAdmin) {
-        clienteIdFinale = nuovoCliente
-          ? (await creaCliente.mutateAsync({ ragioneSociale: ragioneSociale.trim(), partitaIva: partitaIva.trim() || null })).id
-          : clienteId
+        clienteIdFinale = (await creaCliente.mutateAsync({ ragioneSociale: ragioneSociale.trim(), partitaIva: partitaIva.trim() || null })).id
       }
 
       await creaUtente.mutateAsync({
@@ -640,9 +510,12 @@ function NuovoUtenteDialog({ clienti, onClose }: { clienti: ClienteAdminDto[]; o
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Nuovo utente</DialogTitle>
+      <DialogTitle>Nuovo Cliente</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         {errore && <Alert severity="error">{errore}</Alert>}
+        <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+          Crea il Cliente e le credenziali del suo primo utente, che sarà amministratore delle strutture che creerà.
+        </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth disabled={salvataggioInCorso} autoFocus />
           <TextField label="Password" type="text" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth disabled={salvataggioInCorso} />
@@ -656,39 +529,10 @@ function NuovoUtenteDialog({ clienti, onClose }: { clienti: ClienteAdminDto[]; o
           label="Super Admin (staff GestiSoft, non appartiene a un Cliente)"
         />
         {!isSuperAdmin && (
-          <>
-            <FormControlLabel
-              control={<Checkbox checked={nuovoCliente} onChange={(e) => setNuovoCliente(e.target.checked)} disabled={salvataggioInCorso} />}
-              label="Nuovo Cliente (crea anche l'azienda, non solo l'utente)"
-            />
-            {nuovoCliente ? (
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <TextField
-                  label="Ragione sociale"
-                  value={ragioneSociale}
-                  onChange={(e) => setRagioneSociale(e.target.value)}
-                  fullWidth
-                  disabled={salvataggioInCorso}
-                />
-                <TextField label="P.IVA (opzionale)" value={partitaIva} onChange={(e) => setPartitaIva(e.target.value)} fullWidth disabled={salvataggioInCorso} />
-              </Box>
-            ) : (
-              <TextField
-                select
-                label="Cliente"
-                value={clienteId}
-                onChange={(e) => setClienteId(e.target.value)}
-                fullWidth
-                disabled={salvataggioInCorso}
-              >
-                {clienti.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.ragioneSociale}
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
-          </>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <TextField label="Ragione sociale" value={ragioneSociale} onChange={(e) => setRagioneSociale(e.target.value)} fullWidth disabled={salvataggioInCorso} />
+            <TextField label="P.IVA (opzionale)" value={partitaIva} onChange={(e) => setPartitaIva(e.target.value)} fullWidth disabled={salvataggioInCorso} />
+          </Box>
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
@@ -698,66 +542,6 @@ function NuovoUtenteDialog({ clienti, onClose }: { clienti: ClienteAdminDto[]; o
         <Button variant="contained" color="secondary" onClick={salva} disabled={salvataggioInCorso}>
           Crea
         </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
-function ResetPasswordDialog({ utente, onClose }: { utente: UtenteAdminDto; onClose: () => void }) {
-  const [nuovaPassword, setNuovaPassword] = useState('')
-  const [errore, setErrore] = useState<string | null>(null)
-  const [fatto, setFatto] = useState(false)
-
-  const resetta = useResettaPasswordUtente()
-
-  function salva() {
-    if (nuovaPassword.trim().length < 8) {
-      setErrore('La password deve avere almeno 8 caratteri.')
-      return
-    }
-    setErrore(null)
-    resetta.mutate(
-      { utenteId: utente.id, nuovaPassword: nuovaPassword.trim() },
-      {
-        onSuccess: () => setFatto(true),
-        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
-      },
-    )
-  }
-
-  return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Reimposta password — {utente.email}</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
-        {fatto ? (
-          <Alert severity="success">Password aggiornata. Comunicala all'utente per un canale sicuro (telefono, non email).</Alert>
-        ) : (
-          <>
-            <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
-              Imposta una nuova password per conto dell'utente (supporto/assistenza) — non serve conoscere quella attuale.
-            </Typography>
-            <TextField
-              label="Nuova password"
-              type="text"
-              value={nuovaPassword}
-              onChange={(e) => setNuovaPassword(e.target.value)}
-              fullWidth
-              disabled={resetta.isPending}
-              autoFocus
-            />
-          </>
-        )}
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button onClick={onClose} disabled={resetta.isPending}>
-          {fatto ? 'Chiudi' : 'Annulla'}
-        </Button>
-        {!fatto && (
-          <Button variant="contained" color="secondary" onClick={salva} disabled={resetta.isPending}>
-            Reimposta
-          </Button>
-        )}
       </DialogActions>
     </Dialog>
   )

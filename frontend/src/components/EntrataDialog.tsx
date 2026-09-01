@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { useCreaEntrata, useAggiornaEntrata, type EntrataDto, type EntrataRequest } from '../api/entrate'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { CampoData } from './CampoData'
 
 interface Props {
   strutturaId: string
@@ -66,15 +67,7 @@ export function EntrataDialog({ strutturaId, entrata, onClose }: Props) {
 
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField label="Tipo entrata" value={tipoEntrata} onChange={(e) => setTipoEntrata(e.target.value)} fullWidth disabled={inCorso} />
-          <TextField
-            label="Data"
-            type="date"
-            value={data}
-            onChange={(e) => setData(e.target.value)}
-            fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
-            disabled={inCorso}
-          />
+          <CampoData label="Data" value={data} onChange={setData} fullWidth disabled={inCorso} />
         </Box>
 
         <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} multiline minRows={2} disabled={inCorso} />

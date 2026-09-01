@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { useCreaSpesa, useAggiornaSpesa, type SpesaDto, type SpesaRequest } from '../api/spese'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { CampoData } from './CampoData'
 
 interface Props {
   strutturaId: string
@@ -69,15 +70,7 @@ export function SpesaDialog({ strutturaId, spesa, onClose }: Props) {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField label="Tipo spesa" value={tipoSpesa} onChange={(e) => setTipoSpesa(e.target.value)} fullWidth disabled={inCorso} />
           <TextField label="Metodo di pagamento" value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value)} fullWidth disabled={inCorso} />
-          <TextField
-            label="Data"
-            type="date"
-            value={dataSpesa}
-            onChange={(e) => setDataSpesa(e.target.value)}
-            fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
-            disabled={inCorso}
-          />
+          <CampoData label="Data" value={dataSpesa} onChange={setDataSpesa} fullWidth disabled={inCorso} />
         </Box>
 
         <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} multiline minRows={2} disabled={inCorso} />

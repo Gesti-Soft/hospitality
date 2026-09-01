@@ -49,6 +49,7 @@ import {
   type WubookIntegrazioneDto,
 } from '../api/integrazioni'
 import { aggiungiGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { CampoData } from '../components/CampoData'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { ChiusureRestrizioniDialog } from '../components/ChiusureRestrizioniDialog'
 import { ImpostazioniWubookCameraDialog } from '../components/ImpostazioniWubookCameraDialog'
@@ -158,8 +159,8 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
       {messaggio && <Alert severity="success" onClose={() => setMessaggio(null)}>{messaggio}</Alert>}
 
       <Box sx={{ display: 'flex', gap: 2 }}>
-        <TextField label="Dal" type="date" value={dataInizio} onChange={(e) => setDataInizio(e.target.value)} fullWidth slotProps={{ inputLabel: { shrink: true } }} disabled={inCorso} />
-        <TextField label="Al" type="date" value={dataFine} onChange={(e) => setDataFine(e.target.value)} fullWidth slotProps={{ inputLabel: { shrink: true } }} disabled={inCorso} />
+        <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} fullWidth disabled={inCorso} />
+        <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} fullWidth disabled={inCorso} />
       </Box>
 
       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>

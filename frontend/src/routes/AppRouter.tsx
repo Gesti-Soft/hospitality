@@ -3,6 +3,7 @@ import { LoginPage } from '../pages/LoginPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { CalendarioPage } from '../pages/CalendarioPage'
 import { CamerePage } from '../pages/CamerePage'
+import { TipologiePage } from '../pages/TipologiePage'
 import { OspitiPage } from '../pages/OspitiPage'
 import { FinanzePage } from '../pages/FinanzePage'
 import { FatturazionePage } from '../pages/FatturazionePage'
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
       { path: '/', element: <DashboardPage /> },
       { path: '/calendario', element: <CalendarioPage /> },
       { path: '/camere', element: <CamerePage /> },
+      { path: '/tipologie', element: <TipologiePage /> },
       { path: '/ospiti', element: <OspitiPage /> },
       { path: '/finanze', element: <FinanzePage /> },
       { path: '/fatturazione', element: <FatturazionePage /> },

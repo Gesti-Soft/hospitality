@@ -12,6 +12,7 @@ import {
   IconPayTourist,
   IconPolizia,
   IconSuperAdmin,
+  IconTipologie,
   IconUtenti,
   IconWubook,
 } from './navIcons'
@@ -48,10 +49,11 @@ export const navSections: NavSection[] = [
     items: [
       { label: 'Cruscotto', path: '/', icon: IconCruscotto },
       { label: 'Calendario', path: '/calendario', icon: IconCalendario },
-      { label: 'Camere', path: '/camere', icon: IconCamere },
       { label: 'Ospiti', path: '/ospiti', icon: IconOspiti },
+      { label: 'Tipologie', path: '/tipologie', icon: IconTipologie },
+      { label: 'Camere', path: '/camere', icon: IconCamere },
       { label: 'Finanze', path: '/finanze', icon: IconFinanze },
-      { label: 'Fatturazione', path: '/fatturazione', icon: IconFatturazione },
+      { label: 'Fatture', path: '/fatturazione', icon: IconFatturazione },
     ],
   },
   {

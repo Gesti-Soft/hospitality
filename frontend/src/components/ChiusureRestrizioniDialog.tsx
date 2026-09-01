@@ -25,6 +25,7 @@ import {
   useRestrizioniPeriodoCamera,
 } from '../api/integrazioni'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { CampoData } from './CampoData'
 import { fontDisplay, fontMono, tokens } from '../theme'
 
 interface Props {
@@ -99,8 +100,8 @@ function SezioneChiusure({ strutturaId, cameraId }: { strutturaId: string; camer
       {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-        <TextField label="Filtro da" type="date" value={filtroDa} onChange={(e) => setFiltroDa(e.target.value)} size="small" slotProps={{ inputLabel: { shrink: true } }} />
-        <TextField label="Filtro a" type="date" value={filtroA} onChange={(e) => setFiltroA(e.target.value)} size="small" slotProps={{ inputLabel: { shrink: true } }} />
+        <CampoData label="Filtro da" value={filtroDa} onChange={setFiltroDa} size="small" />
+        <CampoData label="Filtro a" value={filtroA} onChange={setFiltroA} size="small" />
         {(filtroDa || filtroA) && (
           <Button size="small" onClick={() => { setFiltroDa(''); setFiltroA('') }}>Pulisci</Button>
         )}
@@ -145,8 +146,8 @@ function SezioneChiusure({ strutturaId, cameraId }: { strutturaId: string; camer
       </Box>
 
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-        <TextField label="Dal" type="date" value={dataInizio} onChange={(e) => setDataInizio(e.target.value)} size="small" slotProps={{ inputLabel: { shrink: true } }} disabled={crea.isPending} />
-        <TextField label="Al" type="date" value={dataFine} onChange={(e) => setDataFine(e.target.value)} size="small" slotProps={{ inputLabel: { shrink: true } }} disabled={crea.isPending} />
+        <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} size="small" disabled={crea.isPending} />
+        <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} size="small" disabled={crea.isPending} />
         <TextField label="Quantità" type="number" value={quantita} onChange={(e) => setQuantita(e.target.value)} size="small" sx={{ width: 110 }} disabled={crea.isPending} />
         <TextField label="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} size="small" disabled={crea.isPending} />
         <Button variant="outlined" size="small" onClick={aggiungi} disabled={crea.isPending} sx={{ whiteSpace: 'nowrap' }}>
@@ -207,8 +208,8 @@ function SezioneRestrizioni({ strutturaId, cameraId }: { strutturaId: string; ca
       {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-        <TextField label="Filtro da" type="date" value={filtroDa} onChange={(e) => setFiltroDa(e.target.value)} size="small" slotProps={{ inputLabel: { shrink: true } }} />
-        <TextField label="Filtro a" type="date" value={filtroA} onChange={(e) => setFiltroA(e.target.value)} size="small" slotProps={{ inputLabel: { shrink: true } }} />
+        <CampoData label="Filtro da" value={filtroDa} onChange={setFiltroDa} size="small" />
+        <CampoData label="Filtro a" value={filtroA} onChange={setFiltroA} size="small" />
         {(filtroDa || filtroA) && (
           <Button size="small" onClick={() => { setFiltroDa(''); setFiltroA('') }}>Pulisci</Button>
         )}
@@ -253,8 +254,8 @@ function SezioneRestrizioni({ strutturaId, cameraId }: { strutturaId: string; ca
       </Box>
 
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-        <TextField label="Dal" type="date" value={dataInizio} onChange={(e) => setDataInizio(e.target.value)} size="small" slotProps={{ inputLabel: { shrink: true } }} disabled={crea.isPending} />
-        <TextField label="Al" type="date" value={dataFine} onChange={(e) => setDataFine(e.target.value)} size="small" slotProps={{ inputLabel: { shrink: true } }} disabled={crea.isPending} />
+        <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} size="small" disabled={crea.isPending} />
+        <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} size="small" disabled={crea.isPending} />
         <TextField label="Min notti" type="number" value={minStay} onChange={(e) => setMinStay(e.target.value)} size="small" sx={{ width: 110 }} disabled={crea.isPending} />
         <TextField label="Max notti" type="number" value={maxStay} onChange={(e) => setMaxStay(e.target.value)} size="small" sx={{ width: 110 }} disabled={crea.isPending} />
         <TextField label="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} size="small" disabled={crea.isPending} />
