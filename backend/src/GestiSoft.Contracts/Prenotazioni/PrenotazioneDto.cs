@@ -23,6 +23,7 @@ public record PrenotazioneDto(
     StatoPrenotazione? StatoPrenotazione,
     bool TassaSoggiornoAttiva,
     bool SpesePuliziaAttiva,
+    bool AnimaliAttiva,
     bool CauzioneAttiva,
     string? OspiteNome,
     string? OspiteCognome);

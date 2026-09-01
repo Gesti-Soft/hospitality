@@ -41,8 +41,9 @@ public class Prenotazione : TenantEntity
     public bool PayTourist { get; set; }
 
     /// <summary>
-    /// I 3 toggle per prenotazione (Spese di pulizia/Cauzione/Tassa di soggiorno), fedeli al form
-    /// legacy AddOrUpdateOspitiView. Default true (attivi) per non alterare prenotazioni esistenti.
+    /// I 4 toggle per prenotazione (Spese di pulizia/Animali/Cauzione/Tassa di soggiorno), fedeli al
+    /// form legacy AddOrUpdateOspitiView (Animali era un ToggleButton analogo a Spese di pulizia,
+    /// vedi AnimaliCheckCommand). Default true (attivi) per non alterare prenotazioni esistenti.
     /// Se TassaSoggiornoAttiva è false alla creazione, PrenotazioniService marca StatePolice/PMS/
     /// PayTourist come già "inviati" senza inviare nulla — stessa logica di
     /// AddOrUpdateOspitiViewModel.Save() del legacy (vedi commento lì per i dettagli).
@@ -52,9 +53,15 @@ public class Prenotazione : TenantEntity
     public bool SpesePuliziaAttiva { get; set; } = true;
 
     /// <summary>
+    /// A differenza degli altri toggle, default false: si applica solo se l'ospite porta
+    /// effettivamente un animale, non è una spesa presente per default come pulizia/tassa.
+    /// </summary>
+    public bool AnimaliAttiva { get; set; }
+
+    /// <summary>
     /// A differenza del legacy (dove la cauzione non aveva un toggle, solo un importo di sola
-    /// visualizzazione), qui è un terzo toggle a richiesta esplicita dell'utente, per coerenza visiva
-    /// con gli altri due — nessun effetto sugli invii, solo sull'importo cauzione applicato.
+    /// visualizzazione), qui è un quarto toggle a richiesta esplicita dell'utente, per coerenza visiva
+    /// con gli altri — nessun effetto sugli invii, solo sull'importo cauzione applicato.
     /// </summary>
     public bool CauzioneAttiva { get; set; } = true;
 

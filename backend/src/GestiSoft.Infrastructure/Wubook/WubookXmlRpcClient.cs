@@ -475,7 +475,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
             return null;
         }
 
-        return DateTime.TryParse(testo, CultureInfo.InvariantCulture, DateTimeStyles.None, out var data) ? data.Date : null;
+        return DateTime.TryParseExact(testo, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var data) ? data.Date : null;
     }
 
     // --- Costruzione XML-RPC ---

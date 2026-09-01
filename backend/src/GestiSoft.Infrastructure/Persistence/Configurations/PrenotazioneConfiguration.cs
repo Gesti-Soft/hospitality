@@ -22,6 +22,8 @@ public class PrenotazioneConfiguration : IEntityTypeConfiguration<Prenotazione>
         // già imparato più volte in questo progetto (vedi Struttura.Attivo/WubookAbilitato ecc.).
         builder.Property(p => p.TassaSoggiornoAttiva).HasDefaultValue(true);
         builder.Property(p => p.SpesePuliziaAttiva).HasDefaultValue(true);
+        // A differenza degli altri: default false, si applica solo se l'ospite porta un animale.
+        builder.Property(p => p.AnimaliAttiva).HasDefaultValue(false);
         builder.Property(p => p.CauzioneAttiva).HasDefaultValue(true);
 
         builder.HasIndex(p => new { p.StrutturaId, p.CheckIn, p.CheckOut });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
@@ -11,11 +11,13 @@ import { useStruttura } from '../struttura/StrutturaContext'
 import { StatoCamera, useCamere, type CameraDto } from '../api/camere'
 import { usePrenotazioniPeriodo, StatoPrenotazione, type PrenotazioneDto } from '../api/prenotazioni'
 import { useCanaliVendita } from '../api/canaliVendita'
+import { useTipologie } from '../api/tipologie'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { aggiungiGiorni, differenzaGiorni, inizioGiornoLocale } from '../lib/date'
 import { PrenotazioneDialog, type StatoIniziale } from '../components/PrenotazioneDialog'
 
-const GIORNI_VISIBILI = 14
+const GIORNI_VISIBILI_DEFAULT = 14
+const GIORNI_VISIBILI_MIN = 7
 const COL_CAMERA = 184
 const COL_GIORNO = 74
 const RIGA_ALTEZZA = 56
@@ -59,15 +61,34 @@ export function CalendarioPage() {
   const [inizioFinestra, setInizioFinestra] = useState(() => inizioGiornoLocale(new Date()))
   const [dialogo, setDialogo] = useState<StatoIniziale | null>(null)
 
-  const fineFinestra = useMemo(() => aggiungiGiorni(inizioFinestra, GIORNI_VISIBILI), [inizioFinestra])
+  // La griglia occupa tutto lo spazio disponibile: il numero di giorni visibili si ricalcola in
+  // base alla larghezza del contenitore, non è più un valore fisso.
+  const contenitoreRef = useRef<HTMLDivElement>(null)
+  const [larghezzaContenitore, setLarghezzaContenitore] = useState(0)
+
+  useEffect(() => {
+    const el = contenitoreRef.current
+    if (!el) return
+    const observer = new ResizeObserver((entries) => setLarghezzaContenitore(entries[0].contentRect.width))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const giorniVisibili =
+    larghezzaContenitore > 0
+      ? Math.max(GIORNI_VISIBILI_MIN, Math.floor((larghezzaContenitore - COL_CAMERA) / COL_GIORNO))
+      : GIORNI_VISIBILI_DEFAULT
+
+  const fineFinestra = useMemo(() => aggiungiGiorni(inizioFinestra, giorniVisibili), [inizioFinestra, giorniVisibili])
   const giorni = useMemo(
-    () => Array.from({ length: GIORNI_VISIBILI }, (_, i) => aggiungiGiorni(inizioFinestra, i)),
-    [inizioFinestra],
+    () => Array.from({ length: giorniVisibili }, (_, i) => aggiungiGiorni(inizioFinestra, i)),
+    [inizioFinestra, giorniVisibili],
   )
 
   const camere = useCamere(strutturaId)
   const prenotazioni = usePrenotazioniPeriodo(strutturaId, inizioFinestra, fineFinestra)
   const canali = useCanaliVendita(strutturaId)
+  const tipologie = useTipologie(strutturaId)
 
   const gruppi = useMemo(() => {
     if (!camere.data) return []
@@ -100,7 +121,7 @@ export function CalendarioPage() {
   const caricamento = camere.isLoading || prenotazioni.isLoading
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+    <Box ref={contenitoreRef} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, -7))}>
@@ -168,7 +189,7 @@ export function CalendarioPage() {
                 Camera
               </Typography>
             </Box>
-            <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GIORNI_VISIBILI}, ${COL_GIORNO}px)` }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${giorniVisibili}, ${COL_GIORNO}px)` }}>
               {giorni.map((g) => {
                 const weekend = g.getDay() === 0 || g.getDay() === 6
                 const oggi = differenzaGiorni(g, new Date()) === 0
@@ -220,6 +241,7 @@ export function CalendarioPage() {
                   key={camera.id}
                   camera={camera}
                   giorni={giorni}
+                  giorniVisibili={giorniVisibili}
                   inizioFinestra={inizioFinestra}
                   fineFinestra={fineFinestra}
                   prenotazioni={prenotazioniPerCamera.get(camera.id) ?? []}
@@ -241,6 +263,7 @@ export function CalendarioPage() {
           stato={dialogo}
           camere={camere.data ?? []}
           canali={canali.data ?? []}
+          tipologie={tipologie.data ?? []}
           onClose={() => setDialogo(null)}
         />
       )}
@@ -265,6 +288,7 @@ function Legenda({ agenzieDistinct }: { agenzieDistinct: string[] }) {
 interface RigaCameraProps {
   camera: CameraDto
   giorni: Date[]
+  giorniVisibili: number
   inizioFinestra: Date
   fineFinestra: Date
   prenotazioni: PrenotazioneDto[]
@@ -273,7 +297,7 @@ interface RigaCameraProps {
   agenzieDistinct: string[]
 }
 
-function RigaCamera({ camera, giorni, inizioFinestra, fineFinestra, prenotazioni, onCellaVuota, onPrenotazione, agenzieDistinct }: RigaCameraProps) {
+function RigaCamera({ camera, giorni, giorniVisibili, inizioFinestra, fineFinestra, prenotazioni, onCellaVuota, onPrenotazione, agenzieDistinct }: RigaCameraProps) {
   const barre = useMemo(() => {
     return prenotazioni
       .map((p) => {
@@ -285,8 +309,8 @@ function RigaCamera({ camera, giorni, inizioFinestra, fineFinestra, prenotazioni
         const span = differenzaGiorni(fineClip, inizioClip)
         return { prenotazione: p, startIdx, span }
       })
-      .filter((b) => b.span > 0 && b.startIdx < GIORNI_VISIBILI && b.startIdx + b.span > 0)
-  }, [prenotazioni, inizioFinestra, fineFinestra])
+      .filter((b) => b.span > 0 && b.startIdx < giorniVisibili && b.startIdx + b.span > 0)
+  }, [prenotazioni, inizioFinestra, fineFinestra, giorniVisibili])
 
   return (
     <Box sx={{ display: 'flex', borderBottom: `1px solid ${tokens.surfaceBorder}` }}>
@@ -314,7 +338,7 @@ function RigaCamera({ camera, giorni, inizioFinestra, fineFinestra, prenotazioni
         </Box>
       </Box>
 
-      <Box sx={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${GIORNI_VISIBILI}, ${COL_GIORNO}px)`, height: RIGA_ALTEZZA }}>
+      <Box sx={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${giorniVisibili}, ${COL_GIORNO}px)`, height: RIGA_ALTEZZA }}>
         {giorni.map((g, idx) => {
           const weekend = g.getDay() === 0 || g.getDay() === 6
           return (
@@ -335,7 +359,8 @@ function RigaCamera({ camera, giorni, inizioFinestra, fineFinestra, prenotazioni
 
         {barre.map(({ prenotazione, startIdx, span }) => {
           const { colore, etichetta } = coloreCanale(prenotazione.agenzia, agenzieDistinct)
-          const nomeOspite = prenotazione.numeroPrenotazione ? `#${prenotazione.numeroPrenotazione}` : etichetta
+          const nomeOspite = prenotazione.ospiteNome || prenotazione.ospiteCognome ? `${prenotazione.ospiteNome ?? ''} ${prenotazione.ospiteCognome ?? ''}`.trim() : null
+          const testoBarra = nomeOspite || (prenotazione.numeroPrenotazione ? `#${prenotazione.numeroPrenotazione}` : etichetta)
           return (
             <Box
               key={prenotazione.id}
@@ -366,7 +391,7 @@ function RigaCamera({ camera, giorni, inizioFinestra, fineFinestra, prenotazioni
                 opacity: prenotazione.statoPrenotazione === StatoPrenotazione.Incompleta ? 0.72 : 1,
               }}
             >
-              {nomeOspite}
+              {testoBarra}
             </Box>
           )
         })}

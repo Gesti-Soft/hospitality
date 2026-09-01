@@ -129,7 +129,9 @@ public class PrezziCameraService(
     /// Calcolo preventivo giorno-per-giorno (GetImport del legacy): per ogni notte del
     /// soggiorno risolve il prezzo con priorità camera-specifica &gt; tipologia &gt; default
     /// tipologia, e somma il supplemento per-persona (giornaliero, non una tantum) se il numero
-    /// ospiti eccede la soglia della tipologia.
+    /// ospiti eccede la soglia della tipologia. Il supplemento Animali (se il toggle è attivo) è
+    /// anch'esso giornaliero — si somma una volta per notte, non una tantum. Spese di
+    /// pulizia/Cauzione restano invece extra fissi indipendenti dalla durata del soggiorno.
     /// </summary>
     public async Task<PreventivoResult> CalcolaPreventivoAsync(
         ICurrentUser currentUser,
@@ -138,6 +140,9 @@ public class PrezziCameraService(
         DateTime checkIn,
         DateTime checkOut,
         int numeroOspiti,
+        bool spesePuliziaAttiva,
+        bool animaliAttiva,
+        bool cauzioneAttiva,
         CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
@@ -176,7 +181,18 @@ public class PrezziCameraService(
                 totale += tipologia.Implemento * (numeroOspiti - tipologia.NumeroImplementoPersona);
             }
 
+            if (tipologia is not null && animaliAttiva)
+            {
+                totale += tipologia.Animali ?? 0m;
+            }
+
             notti++;
+        }
+
+        if (tipologia is not null)
+        {
+            if (spesePuliziaAttiva) totale += tipologia.SpesePulizia ?? 0m;
+            if (cauzioneAttiva) totale += tipologia.Cauzione ?? 0m;
         }
 
         return new PreventivoResult(notti, totale);

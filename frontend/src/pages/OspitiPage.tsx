@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
@@ -10,16 +10,24 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
+import TextField from '@mui/material/TextField'
+import MenuItem from '@mui/material/MenuItem'
+import InputAdornment from '@mui/material/InputAdornment'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import SearchIcon from '@mui/icons-material/Search'
 import { useStruttura } from '../struttura/StrutturaContext'
-import { useArriviInCorso, useArriviProssimi, useStoricoPrenotazioni, type PrenotazioneDto } from '../api/prenotazioni'
+import { useArriviInCorso, useArriviProssimi, useStoricoPrenotazioni, StatoPrenotazione, type PrenotazioneDto } from '../api/prenotazioni'
 import { useOspite } from '../api/ospiti'
+import { useCamere } from '../api/camere'
+import { useCanaliVendita } from '../api/canaliVendita'
+import { useTipologie } from '../api/tipologie'
 import { fontMono, tokens } from '../theme'
 import { OspiteDialog } from '../components/OspiteDialog'
+import { PrenotazioneDialog, type StatoIniziale, ETICHETTA_STATO, COLORE_STATO } from '../components/PrenotazioneDialog'
 import { inizioGiornoLocale } from '../lib/date'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
@@ -28,6 +36,10 @@ const formattatoreMese = new Intl.DateTimeFormat('it-IT', { month: 'long', year:
 
 type VistaOspiti = 'arrivi' | 'in-corso' | 'storico'
 
+// Righe caricate/mostrate alla volta: si parte con un'unica pagina (quante ce ne stanno a video),
+// poi se ne aggiunge un'altra ogni volta che si scorre fino in fondo alla tabella.
+const RIGHE_PER_PAGINA = 25
+
 export function OspitiPage() {
   const { strutturaId } = useStruttura()
   const [vista, setVista] = useState<VistaOspiti>('arrivi')
@@ -35,10 +47,17 @@ export function OspitiPage() {
   const [giornoSelezionato, setGiornoSelezionato] = useState<Date | null>(null)
   const [meseVisibile, setMeseVisibile] = useState(() => inizioGiornoLocale(new Date()))
   const [prenotazioneAperta, setPrenotazioneAperta] = useState<PrenotazioneDto | null>(null)
+  const [dialogoPrenotazione, setDialogoPrenotazione] = useState<StatoIniziale | null>(null)
+  const [ricerca, setRicerca] = useState('')
+  const [filtroStato, setFiltroStato] = useState<StatoPrenotazione | 'tutti'>('tutti')
+  const [righeVisibili, setRigheVisibili] = useState(RIGHE_PER_PAGINA)
 
   const arrivi = useArriviProssimi(strutturaId)
   const inCorso = useArriviInCorso(strutturaId)
   const storico = useStoricoPrenotazioni(strutturaId, new Date().getFullYear())
+  const camere = useCamere(strutturaId)
+  const canali = useCanaliVendita(strutturaId)
+  const tipologie = useTipologie(strutturaId)
 
   const { dati, caricamento } =
     vista === 'arrivi'
@@ -52,13 +71,53 @@ export function OspitiPage() {
   const campoData: 'checkIn' | 'checkOut' = vista === 'in-corso' ? 'checkOut' : 'checkIn'
   const calendarioDisponibile = vista !== 'storico'
 
-  const datiFiltrati =
+  let datiFiltrati =
     formato === 'calendario' && giornoSelezionato
       ? (dati ?? []).filter((p) => {
           const valore = p[campoData]
           return valore && inizioGiornoLocale(new Date(valore)).getTime() === giornoSelezionato.getTime()
         })
-      : dati
+      : (dati ?? [])
+
+  if (vista === 'storico' && filtroStato !== 'tutti') {
+    datiFiltrati = datiFiltrati.filter((p) => p.statoPrenotazione === filtroStato)
+  }
+
+  const testoRicerca = ricerca.trim().toLowerCase()
+  if (testoRicerca) {
+    datiFiltrati = datiFiltrati.filter((p) =>
+      [p.numeroPrenotazione, p.ospiteNome, p.ospiteCognome, p.cameraNome, p.agenzia].some((campo) => campo?.toLowerCase().includes(testoRicerca)),
+    )
+  }
+
+  // Ogni volta che cambia l'elenco effettivo (vista, filtro, ricerca...) si riparte dalla prima
+  // pagina, altrimenti restando su "in corso" con un filtro nuovo si vedrebbe una tabella vuota
+  // finché non si rifà lo scroll.
+  useEffect(() => {
+    setRigheVisibili(RIGHE_PER_PAGINA)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vista, formato, giornoSelezionato, filtroStato, testoRicerca])
+
+  const datiVisibili = datiFiltrati.slice(0, righeVisibili)
+  const altreDaCaricare = righeVisibili < datiFiltrati.length
+
+  const sentinellaRef = useRef<HTMLTableRowElement | null>(null)
+  useEffect(() => {
+    if (!altreDaCaricare) return
+    const el = sentinellaRef.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setRigheVisibili((n) => n + RIGHE_PER_PAGINA)
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [altreDaCaricare])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -68,6 +127,8 @@ export function OspitiPage() {
           onChange={(_, v) => {
             setVista(v)
             setGiornoSelezionato(null)
+            setRicerca('')
+            setFiltroStato('tutti')
           }}
           sx={{ minHeight: 0 }}
         >
@@ -90,6 +151,32 @@ export function OspitiPage() {
             <ToggleButton value="lista">Lista</ToggleButton>
             <ToggleButton value="calendario">Calendario</ToggleButton>
           </ToggleButtonGroup>
+        )}
+      </Box>
+
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.5, flexWrap: 'wrap' }}>
+        <TextField
+          size="small"
+          placeholder="Cerca per ospite, camera, numero prenotazione o agenzia..."
+          value={ricerca}
+          onChange={(e) => setRicerca(e.target.value)}
+          sx={{ minWidth: 300 }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" sx={{ color: tokens.textTertiary }} />
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
+        {vista === 'storico' && (
+          <TextField select size="small" label="Stato" value={filtroStato} onChange={(e) => setFiltroStato(e.target.value as StatoPrenotazione | 'tutti')} sx={{ minWidth: 160 }}>
+            <MenuItem value="tutti">Tutti</MenuItem>
+            <MenuItem value={StatoPrenotazione.Completata}>Completata</MenuItem>
+            <MenuItem value={StatoPrenotazione.Annullata}>Annullata</MenuItem>
+          </TextField>
         )}
       </Box>
 
@@ -126,6 +213,7 @@ export function OspitiPage() {
             <TableHead>
               <TableRow>
                 <TableCell>Prenotazione</TableCell>
+                <TableCell>Stato</TableCell>
                 <TableCell>Ospite</TableCell>
                 <TableCell>Camera</TableCell>
                 <TableCell>Check-in</TableCell>
@@ -136,16 +224,25 @@ export function OspitiPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(datiFiltrati ?? []).length === 0 && (
+              {datiFiltrati.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                  <TableCell colSpan={9} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                     Nessuna prenotazione in questa vista.
                   </TableCell>
                 </TableRow>
               )}
-              {(datiFiltrati ?? []).map((p) => (
+              {datiVisibili.map((p) => (
                 <TableRow key={p.id} hover onClick={() => setPrenotazioneAperta(p)} sx={{ cursor: 'pointer' }}>
                   <TableCell sx={{ fontWeight: 700 }}>{p.numeroPrenotazione ? `#${p.numeroPrenotazione}` : '—'}</TableCell>
+                  <TableCell>
+                    {p.statoPrenotazione != null && (
+                      <Chip
+                        size="small"
+                        label={ETICHETTA_STATO[p.statoPrenotazione]}
+                        sx={{ bgcolor: COLORE_STATO[p.statoPrenotazione], color: '#fff', fontWeight: 700 }}
+                      />
+                    )}
+                  </TableCell>
                   <TableCell>{p.ospiteNome || p.ospiteCognome ? `${p.ospiteNome ?? ''} ${p.ospiteCognome ?? ''}`.trim() : '—'}</TableCell>
                   <TableCell sx={{ fontFamily: fontMono }}>{p.cameraNome ?? '—'}</TableCell>
                   <TableCell sx={{ fontFamily: fontMono }}>{p.checkIn ? formattatoreData.format(new Date(p.checkIn)) : '—'}</TableCell>
@@ -161,13 +258,39 @@ export function OspitiPage() {
                   </TableCell>
                 </TableRow>
               ))}
+              {altreDaCaricare && (
+                <TableRow ref={sentinellaRef}>
+                  <TableCell colSpan={9} sx={{ textAlign: 'center', color: tokens.textTertiary, py: 2, fontSize: 12 }}>
+                    Caricamento altre prenotazioni...
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </Box>
       )}
 
       {prenotazioneAperta && strutturaId && (
-        <OspiteDialog strutturaId={strutturaId} prenotazione={prenotazioneAperta} onClose={() => setPrenotazioneAperta(null)} />
+        <OspiteDialog
+          strutturaId={strutturaId}
+          prenotazione={prenotazioneAperta}
+          onClose={() => setPrenotazioneAperta(null)}
+          onApriPrenotazione={() => {
+            setDialogoPrenotazione({ modo: 'modifica', prenotazione: prenotazioneAperta })
+            setPrenotazioneAperta(null)
+          }}
+        />
+      )}
+
+      {dialogoPrenotazione && strutturaId && (
+        <PrenotazioneDialog
+          strutturaId={strutturaId}
+          stato={dialogoPrenotazione}
+          camere={camere.data ?? []}
+          canali={canali.data ?? []}
+          tipologie={tipologie.data ?? []}
+          onClose={() => setDialogoPrenotazione(null)}
+        />
       )}
     </Box>
   )

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -16,6 +16,7 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import type { CameraDto } from '../api/camere'
 import type { CanaleVenditaDto } from '../api/canaliVendita'
+import type { TipologiaCameraDto } from '../api/tipologie'
 import {
   useAggiornaPrenotazione,
   useAnnullaPrenotazione,
@@ -23,43 +24,55 @@ import {
   useCheckOut,
   useCreaPrenotazione,
   usePreventivo,
+  useVerificaDisponibilita,
   StatoPrenotazione,
+  type DisponibilitaCameraDto,
   type PrenotazioneDto,
   type PrenotazioneRequest,
 } from '../api/prenotazioni'
 import { ApiError } from '../api/client'
 import { formatoInputData, inizioGiornoLocale, isoLocale, parsaInputData } from '../lib/date'
-import { fontMono, tokens } from '../theme'
+import { tokens } from '../theme'
+import { OspiteDialog } from './OspiteDialog'
 
 export type StatoIniziale =
   | { modo: 'crea'; cameraId: string | null; checkIn: Date; checkOut: Date }
   | { modo: 'modifica'; prenotazione: PrenotazioneDto }
 
-const ETICHETTA_STATO: Record<StatoPrenotazione, string> = {
+export const ETICHETTA_STATO: Record<StatoPrenotazione, string> = {
   [StatoPrenotazione.Incompleta]: 'Incompleta',
   [StatoPrenotazione.InCorso]: 'In corso',
   [StatoPrenotazione.Completata]: 'Completata',
   [StatoPrenotazione.Annullata]: 'Annullata',
 }
 
-const COLORE_STATO: Record<StatoPrenotazione, string> = {
+export const COLORE_STATO: Record<StatoPrenotazione, string> = {
   [StatoPrenotazione.Incompleta]: tokens.wait600,
   [StatoPrenotazione.InCorso]: tokens.blue600,
   [StatoPrenotazione.Completata]: tokens.ok600,
   [StatoPrenotazione.Annullata]: tokens.error600,
 }
 
-const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
+const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+function messaggioConflitto(conflitto: DisponibilitaCameraDto): string {
+  const dal = conflitto.checkIn ? formattatoreData.format(new Date(conflitto.checkIn)) : '?'
+  const al = conflitto.checkOut ? formattatoreData.format(new Date(conflitto.checkOut)) : '?'
+  const nomeOspite = conflitto.ospiteNome || conflitto.ospiteCognome ? `${conflitto.ospiteNome ?? ''} ${conflitto.ospiteCognome ?? ''}`.trim() : null
+  const dettaglio = [conflitto.numeroPrenotazione ? `#${conflitto.numeroPrenotazione}` : null, nomeOspite].filter(Boolean).join(', ')
+  return `Questa camera è già prenotata dal ${dal} al ${al}${dettaglio ? ` (${dettaglio})` : ''}.`
+}
 
 interface Props {
   strutturaId: string
   stato: StatoIniziale
   camere: CameraDto[]
   canali: CanaleVenditaDto[]
+  tipologie: TipologiaCameraDto[]
   onClose: () => void
 }
 
-export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose }: Props) {
+export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipologie, onClose }: Props) {
   const modifica = stato.modo === 'modifica' ? stato.prenotazione : null
   const creaIniziale = stato.modo === 'crea' ? stato : null
 
@@ -70,13 +83,22 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
   const [checkOut, setCheckOut] = useState(formatoInputData(modifica ? inizioGiornoLocale(new Date(modifica.checkOut!)) : creaIniziale!.checkOut))
   const [numeroOspiti, setNumeroOspiti] = useState<string>(String(modifica?.numeroOspiti ?? 2))
   const [importoTotale, setImportoTotale] = useState<string>(modifica?.importoTotale != null ? String(modifica.importoTotale) : '')
+  // Finché l'operatore non tocca il campo a mano, "Importo totale" segue il preventivo — se cambi
+  // camera/date/checkbox si aggiorna da solo, senza dover recliccare "Usa" ogni volta.
+  const [importoTotaleAuto, setImportoTotaleAuto] = useState(!modifica)
   const [importoPagato, setImportoPagato] = useState<string>(modifica?.importoPagato != null ? String(modifica.importoPagato) : '')
   const [restituisciCauzione, setRestituisciCauzione] = useState(true)
   const [importoCauzioneTrattenuta, setImportoCauzioneTrattenuta] = useState('')
   const [tassaSoggiornoAttiva, setTassaSoggiornoAttiva] = useState(modifica?.tassaSoggiornoAttiva ?? true)
   const [spesePuliziaAttiva, setSpesePuliziaAttiva] = useState(modifica?.spesePuliziaAttiva ?? true)
+  // A differenza degli altri toggle, default false: si applica solo se l'ospite porta un animale.
+  const [animaliAttiva, setAnimaliAttiva] = useState(modifica?.animaliAttiva ?? false)
   const [cauzioneAttiva, setCauzioneAttiva] = useState(modifica?.cauzioneAttiva ?? true)
   const [errore, setErrore] = useState<string | null>(null)
+  const [schedaOspitiAperta, setSchedaOspitiAperta] = useState(false)
+  // Appena creata una nuova prenotazione, si passa direttamente alla scheda ospiti (Nome/Cognome
+  // veri, non un testo libero da spezzare a indovinare) — compilabile subito o saltabile del tutto.
+  const [prenotazioneAppenaCreata, setPrenotazioneAppenaCreata] = useState<PrenotazioneDto | null>(null)
 
   const crea = useCreaPrenotazione(strutturaId)
   const aggiorna = useAggiornaPrenotazione(strutturaId)
@@ -84,20 +106,64 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
   const checkInMutation = useCheckIn(strutturaId)
   const checkOutMutation = useCheckOut(strutturaId)
 
+  const cameraSelezionata = camere.find((c) => c.id === cameraId)
+  const tipologiaSelezionata = tipologie.find((t) => t.id === cameraSelezionata?.tipologiaId)
+  // Cauzione/Animali sono solo informazioni interne (si gestiscono di persona, non generano invii
+  // esterni): se la tipologia della camera non ne prevede un importo, non ha senso mostrare il toggle.
+  const cauzionePrevista = (tipologiaSelezionata?.cauzione ?? 0) > 0
+  const animaliPrevisti = (tipologiaSelezionata?.animali ?? 0) > 0
+
   const checkInDate = checkIn ? parsaInputData(checkIn) : null
   const checkOutDate = checkOut ? parsaInputData(checkOut) : null
   const dateValide = !!checkInDate && !!checkOutDate && checkOutDate > checkInDate
   const numeroOspitiNumero = Number(numeroOspiti) || 0
 
+  // Il preventivo ha senso solo per una prenotazione nuova: su una già esistente il prezzo pattuito
+  // è quello salvato (Importo totale), non va ricalcolato/riproposto ogni volta che si riapre.
   const preventivo = usePreventivo(
     strutturaId,
     cameraId || null,
     dateValide ? isoLocale(checkInDate!) : null,
     dateValide ? isoLocale(checkOutDate!) : null,
     numeroOspitiNumero,
+    spesePuliziaAttiva,
+    animaliPrevisti && animaliAttiva,
+    cauzionePrevista && cauzioneAttiva,
+    !modifica,
   )
 
+  useEffect(() => {
+    if (importoTotaleAuto && preventivo.data) {
+      setImportoTotale(String(preventivo.data.totale))
+    }
+  }, [preventivo.data, importoTotaleAuto])
+
+  // Controllo live di sovrapposizione: appena camera+date sono selezionate, prima ancora di
+  // premere "Crea"/"Salva", segnala se quella camera è già occupata in quel periodo — il controllo
+  // autorevole (che blocca davvero il salvataggio con lo stesso messaggio) resta comunque lato server.
+  const disponibilita = useVerificaDisponibilita(
+    strutturaId,
+    cameraId || null,
+    dateValide ? isoLocale(checkInDate!) : null,
+    dateValide ? isoLocale(checkOutDate!) : null,
+    modifica?.id ?? null,
+    !!cameraId && dateValide,
+  )
+  const conflitto = disponibilita.data && !disponibilita.data.disponibile ? disponibilita.data : null
+
+  // Per "Diretta" il numero è sempre auto-generato dal backend al salvataggio: il campo si nasconde
+  // e si azzera per non lasciare in giro un valore digitato prima di passare a Diretta, che
+  // altrimenti verrebbe inviato come se fosse stato scelto a mano.
+  useEffect(() => {
+    if (agenzia === 'Diretta' && numeroPrenotazione !== '') {
+      setNumeroPrenotazione('')
+    }
+  }, [agenzia, numeroPrenotazione])
+
   const inCorso = crea.isPending || aggiorna.isPending || annulla.isPending || checkInMutation.isPending || checkOutMutation.isPending
+  // Un soggiorno Completato è chiuso: resta modificabile solo il saldo (Importo totale/Importo
+  // pagato), tutto il resto (camera, date, toggle...) è quello con cui si è effettivamente svolto.
+  const soloImporti = modifica?.statoPrenotazione === StatoPrenotazione.Completata
 
   function gestisciErrore(err: unknown) {
     setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
@@ -122,13 +188,14 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
       numeroOspiti: numeroOspitiNumero || null,
       tassaSoggiornoAttiva,
       spesePuliziaAttiva,
-      cauzioneAttiva,
+      animaliAttiva: animaliPrevisti && animaliAttiva,
+      cauzioneAttiva: cauzionePrevista && cauzioneAttiva,
     }
 
     if (modifica) {
       aggiorna.mutate({ prenotazioneId: modifica.id, request }, { onSuccess: onClose, onError: gestisciErrore })
     } else {
-      crea.mutate(request, { onSuccess: onClose, onError: gestisciErrore })
+      crea.mutate(request, { onSuccess: setPrenotazioneAppenaCreata, onError: gestisciErrore })
     }
   }
 
@@ -157,6 +224,10 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
 
   const stato_ = modifica?.statoPrenotazione ?? null
 
+  if (prenotazioneAppenaCreata) {
+    return <OspiteDialog strutturaId={strutturaId} prenotazione={prenotazioneAppenaCreata} onClose={onClose} />
+  }
+
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -167,7 +238,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         {errore && <Alert severity="error">{errore}</Alert>}
 
-        <TextField select label="Camera" value={cameraId} onChange={(e) => setCameraId(e.target.value)} required disabled={inCorso}>
+        <TextField select label="Camera" value={cameraId} onChange={(e) => setCameraId(e.target.value)} required disabled={inCorso || soloImporti}>
           {camere.length === 0 && <MenuItem value="">Nessuna camera disponibile</MenuItem>}
           {camere.map((c) => (
             <MenuItem key={c.id} value={c.id}>
@@ -184,7 +255,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
             onChange={(e) => setCheckIn(e.target.value)}
             fullWidth
             slotProps={{ inputLabel: { shrink: true } }}
-            disabled={inCorso}
+            disabled={inCorso || soloImporti}
           />
           <TextField
             label="Check-out"
@@ -195,9 +266,11 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
             slotProps={{ inputLabel: { shrink: true } }}
             error={!dateValide}
             helperText={!dateValide ? 'Deve essere dopo il check-in' : ' '}
-            disabled={inCorso}
+            disabled={inCorso || soloImporti}
           />
         </Box>
+
+        {conflitto && <Alert severity="warning">{messaggioConflitto(conflitto)}</Alert>}
 
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField
@@ -206,7 +279,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
             value={agenzia}
             onChange={(e) => setAgenzia(e.target.value)}
             fullWidth
-            disabled={inCorso}
+            disabled={inCorso || soloImporti}
             slotProps={{ select: { native: false } }}
           >
             <MenuItem value="Diretta">Diretta</MenuItem>
@@ -222,25 +295,29 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
             value={numeroOspiti}
             onChange={(e) => setNumeroOspiti(e.target.value)}
             fullWidth
-            disabled={inCorso}
+            disabled={inCorso || soloImporti}
             slotProps={{ htmlInput: { min: 1 } }}
           />
         </Box>
 
-        <TextField
-          label="Numero prenotazione"
-          value={numeroPrenotazione}
-          onChange={(e) => setNumeroPrenotazione(e.target.value)}
-          placeholder="Auto-generato se Diretta e lasciato vuoto"
-          disabled={inCorso}
-        />
+        {agenzia !== 'Diretta' && (
+          <TextField
+            label="Numero prenotazione"
+            value={numeroPrenotazione}
+            onChange={(e) => setNumeroPrenotazione(e.target.value)}
+            disabled={inCorso || soloImporti}
+          />
+        )}
 
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField
             label="Importo totale (€)"
             type="number"
             value={importoTotale}
-            onChange={(e) => setImportoTotale(e.target.value)}
+            onChange={(e) => {
+              setImportoTotale(e.target.value)
+              setImportoTotaleAuto(false)
+            }}
             fullWidth
             disabled={inCorso}
           />
@@ -256,42 +333,28 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
           <FormControlLabel
-            control={<Checkbox checked={spesePuliziaAttiva} onChange={(e) => setSpesePuliziaAttiva(e.target.checked)} disabled={inCorso} />}
+            control={<Checkbox checked={spesePuliziaAttiva} onChange={(e) => setSpesePuliziaAttiva(e.target.checked)} disabled={inCorso || soloImporti} />}
             label="Spese di pulizia"
           />
-          <FormControlLabel
-            control={<Checkbox checked={cauzioneAttiva} onChange={(e) => setCauzioneAttiva(e.target.checked)} disabled={inCorso} />}
-            label="Cauzione"
-          />
-          <Tooltip
-            title={
-              modifica
-                ? 'Decisa alla creazione: se disattivata, le schedine Alloggiati Web/Osservatorio/PayTourist erano state marcate già inviate senza inviare nulla. Non modificabile in seguito.'
-                : 'Se disattivata, le schedine Alloggiati Web/Osservatorio/PayTourist non verranno inviate per questa prenotazione — verranno segnate come già inviate.'
-            }
-          >
+          {animaliPrevisti && (
             <FormControlLabel
-              control={
-                <Checkbox checked={tassaSoggiornoAttiva} onChange={(e) => setTassaSoggiornoAttiva(e.target.checked)} disabled={inCorso || !!modifica} />
-              }
+              control={<Checkbox checked={animaliAttiva} onChange={(e) => setAnimaliAttiva(e.target.checked)} disabled={inCorso || soloImporti} />}
+              label="Animali"
+            />
+          )}
+          {cauzionePrevista && (
+            <FormControlLabel
+              control={<Checkbox checked={cauzioneAttiva} onChange={(e) => setCauzioneAttiva(e.target.checked)} disabled={inCorso || soloImporti} />}
+              label="Cauzione"
+            />
+          )}
+          <Tooltip title="Se disattivata, le schedine Alloggiati Web/Osservatorio/PayTourist non vengono inviate per questa prenotazione — vengono segnate come già inviate. Riattivandola tornano tra quelle da inviare.">
+            <FormControlLabel
+              control={<Checkbox checked={tassaSoggiornoAttiva} onChange={(e) => setTassaSoggiornoAttiva(e.target.checked)} disabled={inCorso || soloImporti} />}
               label="Tassa di soggiorno"
             />
           </Tooltip>
         </Box>
-
-        {preventivo.data && (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: tokens.paper, borderRadius: 1.5, px: 1.5, py: 1 }}>
-            <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
-              Preventivo: {preventivo.data.notti} nott{preventivo.data.notti === 1 ? 'e' : 'i'}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 14 }}>{formattatoreValuta.format(preventivo.data.totale)}</Typography>
-              <Button size="small" onClick={() => setImportoTotale(String(preventivo.data!.totale))} disabled={inCorso}>
-                Usa
-              </Button>
-            </Box>
-          </Box>
-        )}
 
         {modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && (
           <>
@@ -320,6 +383,11 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
             Annulla prenotazione
           </Button>
         )}
+        {modifica && (
+          <Button onClick={() => setSchedaOspitiAperta(true)} disabled={inCorso}>
+            Scheda ospiti
+          </Button>
+        )}
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
@@ -337,6 +405,15 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, onClose
           {modifica ? 'Salva modifiche' : 'Crea prenotazione'}
         </Button>
       </DialogActions>
+
+      {schedaOspitiAperta && modifica && (
+        <OspiteDialog
+          strutturaId={strutturaId}
+          prenotazione={modifica}
+          onClose={() => setSchedaOspitiAperta(false)}
+          onApriPrenotazione={() => setSchedaOspitiAperta(false)}
+        />
+      )}
     </Dialog>
   )
 }

@@ -35,9 +35,11 @@ interface Props {
   strutturaId: string
   prenotazione: PrenotazioneDto
   onClose: () => void
+  /** Se passata, mostra un bottone "Apri prenotazione" — assente quando non ha senso (es. non c'è dove navigare). */
+  onApriPrenotazione?: () => void
 }
 
-export function OspiteDialog({ strutturaId, prenotazione, onClose }: Props) {
+export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenotazione }: Props) {
   const ospite = useOspite(strutturaId, prenotazione.id)
 
   return (
@@ -51,7 +53,13 @@ export function OspiteDialog({ strutturaId, prenotazione, onClose }: Props) {
         </DialogContent>
       )}
       {!ospite.isLoading && (
-        <SchedaOspitiForm strutturaId={strutturaId} prenotazione={prenotazione} ospite={ospite.data ?? null} onClose={onClose} />
+        <SchedaOspitiForm
+          strutturaId={strutturaId}
+          prenotazione={prenotazione}
+          ospite={ospite.data ?? null}
+          onClose={onClose}
+          onApriPrenotazione={onApriPrenotazione}
+        />
       )}
     </Dialog>
   )
@@ -200,11 +208,13 @@ function SchedaOspitiForm({
   prenotazione,
   ospite,
   onClose,
+  onApriPrenotazione,
 }: {
   strutturaId: string
   prenotazione: PrenotazioneDto
   ospite: OspiteDto | null
   onClose: () => void
+  onApriPrenotazione?: () => void
 }) {
   const stati = useStati()
   const documenti = useDocumenti()
@@ -480,6 +490,11 @@ function SchedaOspitiForm({
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        {onApriPrenotazione && (
+          <Button onClick={onApriPrenotazione} disabled={salva.isPending} sx={{ mr: 'auto' }}>
+            Apri prenotazione
+          </Button>
+        )}
         <Button onClick={onClose} disabled={salva.isPending}>
           Chiudi
         </Button>

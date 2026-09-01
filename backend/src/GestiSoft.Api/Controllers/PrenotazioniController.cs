@@ -44,6 +44,26 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
         return Ok(ToDto(prenotazione));
     }
 
+    /// <summary>Controllo live di sovrapposizione mostrato nel form prima del salvataggio (il controllo autorevole resta quello su Crea/Aggiorna).</summary>
+    [HttpGet("verifica-disponibilita")]
+    public async Task<IActionResult> VerificaDisponibilita(
+        Guid strutturaId,
+        [FromQuery] Guid cameraId,
+        [FromQuery] DateTime checkIn,
+        [FromQuery] DateTime checkOut,
+        [FromQuery] Guid? escludiPrenotazioneId,
+        CancellationToken cancellationToken)
+    {
+        var conflitto = await service.VerificaDisponibilitaAsync(currentUser, strutturaId, cameraId, checkIn, checkOut, escludiPrenotazioneId, cancellationToken);
+        return Ok(new DisponibilitaCameraDto(
+            conflitto is null,
+            conflitto?.NumeroPrenotazione,
+            conflitto?.Ospite?.Nome,
+            conflitto?.Ospite?.Cognome,
+            conflitto?.CheckIn,
+            conflitto?.CheckOut));
+    }
+
     [HttpPost]
     public async Task<IActionResult> Crea(Guid strutturaId, [FromBody] CreaPrenotazioneRequest request, CancellationToken cancellationToken)
     {
@@ -90,5 +110,5 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
         p.Id, p.StrutturaId, p.CameraId, p.Camera?.Nome, p.Agenzia, p.NumeroPrenotazione,
         p.ImportoPrenotazione, p.ImportoPagato, p.ImportoTotale, p.CheckIn, p.CheckOut,
         p.NumeroOspiti, p.StatePolice, p.PMS, p.PayTourist, p.Anno, p.TotalTax, p.StatoPrenotazione,
-        p.TassaSoggiornoAttiva, p.SpesePuliziaAttiva, p.CauzioneAttiva, p.Ospite?.Nome, p.Ospite?.Cognome);
+        p.TassaSoggiornoAttiva, p.SpesePuliziaAttiva, p.AnimaliAttiva, p.CauzioneAttiva, p.Ospite?.Nome, p.Ospite?.Cognome);
 }

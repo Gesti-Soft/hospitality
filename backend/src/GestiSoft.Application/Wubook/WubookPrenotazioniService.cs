@@ -23,6 +23,7 @@ public class WubookPrenotazioniService(
     IPrenotazioneRepository prenotazioni,
     IOspiteRepository ospiti,
     ICameraRepository camere,
+    ICanaleVenditaRepository canaliVendita,
     IWubookClient wubookClient,
     WubookLicenzaService licenzaService,
     IStrutturaRepository strutture,
@@ -99,12 +100,43 @@ public class WubookPrenotazioniService(
                 return EsitoBooking.Ignorata;
             }
 
+            // Se l'ospite ha già fatto check-in (camera occupata, presenza reale in struttura), una
+            // cancellazione OTA tardiva non va applicata in automatico: importi/stato potrebbero non
+            // riflettere più la realtà (es. saldo incassato in loco). Si lascia intatta e si segnala
+            // per una verifica manuale, invece di annullare/azzerare silenziosamente.
+            if (esistente.StatoPrenotazione == StatoPrenotazione.InCorso)
+            {
+                await logEventi.RegistraAsync(
+                    LivelloLog.Warning,
+                    $"Wubook segnala come cancellata la prenotazione #{esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8]} (rcode={booking.RCode}), ma risulta già In corso (check-in effettuato): nessuna modifica automatica, verificare manualmente.",
+                    origine: "Wubook",
+                    clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                    strutturaId: strutturaId,
+                    categoria: "Wubook",
+                    cancellationToken: cancellationToken);
+                return EsitoBooking.Ignorata;
+            }
+
+            // Arrivati qui la prenotazione non era In corso (vedi controllo sopra), quindi il
+            // check-in non è mai avvenuto e la camera non è mai stata toccata da questa prenotazione
+            // — non c'è nulla da liberare. Se la camera risulta occupata/non pronta, è per un motivo
+            // indipendente (altro soggiorno in corso, blocco manuale) e non va alterato qui.
             esistente.StatoPrenotazione = StatoPrenotazione.Annullata;
             esistente.ImportoPrenotazione = 0;
             esistente.ImportoPagato = 0;
             esistente.ImportoTotale = 0;
             esistente.UpdatedAtUtc = DateTime.UtcNow;
             await prenotazioni.UpdateAsync(esistente, cancellationToken);
+
+            await logEventi.RegistraAsync(
+                LivelloLog.Info,
+                $"Prenotazione #{esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8]} annullata da Wubook (rcode={booking.RCode}).",
+                origine: "Wubook",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "Wubook",
+                cancellationToken: cancellationToken);
+
             return EsitoBooking.Annullata;
         }
 
@@ -118,6 +150,7 @@ public class WubookPrenotazioniService(
 
         entity.CameraId = camera.Id;
         entity.Agenzia = nomeCanale;
+        await AssicuraCanaleVenditaAsync(strutturaId, nomeCanale, cancellationToken);
         entity.NumeroPrenotazione = !string.IsNullOrWhiteSpace(booking.ChannelReservationCode) ? booking.ChannelReservationCode : booking.RCode.ToString();
         entity.ImportoPrenotazione = booking.Importo;
         entity.ImportoTotale = booking.Importo;
@@ -154,5 +187,21 @@ public class WubookPrenotazioniService(
         await ospiti.SaveChangesAsync(cancellationToken);
 
         return nuova ? EsitoBooking.Creata : EsitoBooking.Aggiornata;
+    }
+
+    /// <summary>
+    /// Registra il canale risolto da Wubook (es. "Sito Web" per id_channel non mappato/0, o il nome
+    /// del canale OTA) tra i canali/agenzie suggeriti della struttura, se non già presente — così il
+    /// dropdown "Agenzia/canale" in UI lo mostra subito, replicando il comportamento del legacy dove
+    /// la lista si autoalimentava dai valori effettivamente usati nelle prenotazioni.
+    /// </summary>
+    private async Task AssicuraCanaleVenditaAsync(Guid strutturaId, string nomeCanale, CancellationToken cancellationToken)
+    {
+        if (await canaliVendita.ExistsByDescrizioneAsync(strutturaId, nomeCanale, escludiId: null, cancellationToken))
+        {
+            return;
+        }
+
+        await canaliVendita.AddAsync(new SettingAgenzia { StrutturaId = strutturaId, Descrizione = nomeCanale }, cancellationToken);
     }
 }

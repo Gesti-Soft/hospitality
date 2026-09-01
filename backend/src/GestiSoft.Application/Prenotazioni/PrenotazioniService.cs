@@ -20,6 +20,7 @@ public record CreaPrenotazioneRequest(
     int? NumeroOspiti,
     bool TassaSoggiornoAttiva = true,
     bool SpesePuliziaAttiva = true,
+    bool AnimaliAttiva = false,
     bool CauzioneAttiva = true);
 
 public record AggiornaPrenotazioneRequest(
@@ -34,6 +35,7 @@ public record AggiornaPrenotazioneRequest(
     int? NumeroOspiti,
     bool TassaSoggiornoAttiva = true,
     bool SpesePuliziaAttiva = true,
+    bool AnimaliAttiva = false,
     bool CauzioneAttiva = true);
 
 public record CheckOutRequest(bool RestituisciCauzione, decimal? ImportoCauzioneTrattenuta);
@@ -54,6 +56,22 @@ public class PrenotazioniService(
     PermessoStrutturaGuard permessoGuard,
     ILogEventoService logEventi)
 {
+    /// <summary>
+    /// Se il numero non è stato scritto a mano e l'agenzia è "Diretta", genera il progressivo
+    /// annuale (conteggio prenotazioni dirette dell'anno + 1) — sia alla creazione sia quando una
+    /// prenotazione esistente viene modificata per diventare Diretta con il numero lasciato vuoto.
+    /// </summary>
+    private async Task<string?> NumeroPrenotazioneOAutoIncrementoAsync(Guid strutturaId, string? agenzia, string? numeroPrenotazione, int anno, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(numeroPrenotazione) || !string.Equals(agenzia, "Diretta", StringComparison.OrdinalIgnoreCase))
+        {
+            return numeroPrenotazione;
+        }
+
+        var conteggio = await prenotazioni.ContaDireteAnnoAsync(strutturaId, anno, cancellationToken);
+        return (conteggio + 1).ToString();
+    }
+
     private Task LogPrenotazioneAsync(ICurrentUser currentUser, Guid strutturaId, string messaggio, CancellationToken cancellationToken) =>
         logEventi.RegistraAsync(
             LivelloLog.Info,
@@ -75,6 +93,27 @@ public class PrenotazioniService(
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
         return await prenotazioni.ListInCorsoAsync(strutturaId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Controllo live di sovrapposizione, richiamato dal form appena si seleziona camera+date (prima
+    /// del salvataggio) — stessa regola di <see cref="EnsureNessunaSovrapposizioneAsync"/>, ma qui
+    /// ritorna la prenotazione in conflitto (se c'è) invece di lanciare, per poterne mostrare il
+    /// dettaglio in UI. Il controllo autorevole resta comunque quello al salvataggio: tra la verifica
+    /// live e il click su "Crea" un'altra prenotazione potrebbe nel frattempo occupare la camera.
+    /// </summary>
+    public async Task<Prenotazione?> VerificaDisponibilitaAsync(
+        ICurrentUser currentUser,
+        Guid strutturaId,
+        Guid cameraId,
+        DateTime checkIn,
+        DateTime checkOut,
+        Guid? escludiPrenotazioneId,
+        CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
+        var occupazioni = await prenotazioni.ListOccupazioneAsync(strutturaId, cameraId, checkIn, checkOut, cancellationToken);
+        return occupazioni.FirstOrDefault(p => p.Id != (escludiPrenotazioneId ?? Guid.Empty));
     }
 
     public async Task<IReadOnlyList<Prenotazione>> ListaStoricoAsync(ICurrentUser currentUser, Guid strutturaId, int anno, CancellationToken cancellationToken)
@@ -102,12 +141,7 @@ public class PrenotazioniService(
         await ValidaCameraECheckInOutAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, cancellationToken);
         await EnsureNessunaSovrapposizioneAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, escludiPrenotazioneId: null, cancellationToken);
 
-        var numeroPrenotazione = request.NumeroPrenotazione;
-        if (string.IsNullOrWhiteSpace(numeroPrenotazione) && string.Equals(request.Agenzia, "Diretta", StringComparison.OrdinalIgnoreCase))
-        {
-            var conteggio = await prenotazioni.ContaDireteAnnoAsync(strutturaId, request.CheckIn.Year, cancellationToken);
-            numeroPrenotazione = (conteggio + 1).ToString();
-        }
+        var numeroPrenotazione = await NumeroPrenotazioneOAutoIncrementoAsync(strutturaId, request.Agenzia, request.NumeroPrenotazione, request.CheckIn.Year, cancellationToken);
 
         var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)
             ?? throw new NotFoundException("Struttura non trovata.");
@@ -138,6 +172,7 @@ public class PrenotazioniService(
             StatoPrenotazione = StatoPrenotazione.Incompleta,
             TassaSoggiornoAttiva = request.TassaSoggiornoAttiva,
             SpesePuliziaAttiva = request.SpesePuliziaAttiva,
+            AnimaliAttiva = request.AnimaliAttiva,
             CauzioneAttiva = request.CauzioneAttiva,
             StatePolice = tassaDisattivata || !struttura.AlloggiatiWebAbilitato,
             PMS = tassaDisattivata || !struttura.OsservatorioAbilitato,
@@ -155,26 +190,50 @@ public class PrenotazioniService(
 
         var entity = await GetOwnedAsync(strutturaId, prenotazioneId, cancellationToken);
 
-        await ValidaCameraECheckInOutAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, cancellationToken);
-        await EnsureNessunaSovrapposizioneAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, escludiPrenotazioneId: prenotazioneId, cancellationToken);
+        // Un soggiorno Completato è chiuso: l'unica cosa che ha ancora senso correggere sono gli
+        // importi (es. un saldo incassato dopo il check-out). Camera/date/toggle restano quelli con
+        // cui il soggiorno si è effettivamente svolto — imposti a livello di servizio, non solo di
+        // UI, per non fidarsi ciecamente di un client che aggirasse i campi disabilitati.
+        var completata = entity.StatoPrenotazione == StatoPrenotazione.Completata;
 
-        entity.CameraId = request.CameraId;
-        entity.Agenzia = request.Agenzia;
-        entity.NumeroPrenotazione = request.NumeroPrenotazione;
-        entity.ImportoPrenotazione = request.ImportoPrenotazione;
+        if (!completata)
+        {
+            await ValidaCameraECheckInOutAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, cancellationToken);
+            await EnsureNessunaSovrapposizioneAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, escludiPrenotazioneId: prenotazioneId, cancellationToken);
+
+            entity.CameraId = request.CameraId;
+            entity.Agenzia = request.Agenzia;
+            entity.NumeroPrenotazione = await NumeroPrenotazioneOAutoIncrementoAsync(strutturaId, request.Agenzia, request.NumeroPrenotazione, request.CheckIn.Year, cancellationToken);
+            entity.CheckIn = request.CheckIn;
+            entity.CheckOut = request.CheckOut;
+            entity.NumeroOspiti = request.NumeroOspiti;
+            entity.Anno = request.CheckIn.Year;
+            // Spese di pulizia/Animali/Cauzione sono solo informativi: si correggono liberamente in
+            // ogni momento senza altri effetti. Tassa di soggiorno invece pilota le schedine
+            // Alloggiati Web/Osservatorio/PayTourist — se il valore cambia rispetto a quello
+            // attuale, le ricalcoliamo con la stessa formula della creazione: disattivata (o
+            // servizio non concesso alla struttura) → marcata "già inviata" senza inviare nulla;
+            // riattivata → torna "da inviare" per i soli servizi concessi. Se il toggle non cambia,
+            // i 3 flag non si toccano, per non sovrascrivere lo stato di un invio realmente già
+            // avvenuto nel frattempo.
+            if (request.TassaSoggiornoAttiva != entity.TassaSoggiornoAttiva)
+            {
+                var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)
+                    ?? throw new NotFoundException("Struttura non trovata.");
+                var tassaDisattivata = !request.TassaSoggiornoAttiva;
+                entity.StatePolice = tassaDisattivata || !struttura.AlloggiatiWebAbilitato;
+                entity.PMS = tassaDisattivata || !struttura.OsservatorioAbilitato;
+                entity.PayTourist = tassaDisattivata || !struttura.PayTouristAbilitato;
+            }
+
+            entity.TassaSoggiornoAttiva = request.TassaSoggiornoAttiva;
+            entity.SpesePuliziaAttiva = request.SpesePuliziaAttiva;
+            entity.AnimaliAttiva = request.AnimaliAttiva;
+            entity.CauzioneAttiva = request.CauzioneAttiva;
+        }
+
         entity.ImportoPagato = request.ImportoPagato;
         entity.ImportoTotale = request.ImportoTotale;
-        entity.CheckIn = request.CheckIn;
-        entity.CheckOut = request.CheckOut;
-        entity.NumeroOspiti = request.NumeroOspiti;
-        entity.Anno = request.CheckIn.Year;
-        // I 3 toggle si possono correggere anche dopo la creazione (es. capito solo dopo di non
-        // dover applicare le spese di pulizia), ma modificarli qui NON ritocca mai StatePolice/PMS/
-        // PayTourist: quella marcatura "già inviato" si decide solo alla creazione (fedele al
-        // legacy), per non rischiare di cancellare la prova di un invio reale già avvenuto.
-        entity.TassaSoggiornoAttiva = request.TassaSoggiornoAttiva;
-        entity.SpesePuliziaAttiva = request.SpesePuliziaAttiva;
-        entity.CauzioneAttiva = request.CauzioneAttiva;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await prenotazioni.UpdateAsync(entity, cancellationToken);
@@ -191,6 +250,13 @@ public class PrenotazioniService(
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationWrite, cancellationToken);
 
         var entity = await GetOwnedAsync(strutturaId, prenotazioneId, cancellationToken);
+        // La camera va liberata SOLO se era proprio questa prenotazione a tenerla occupata (check-in
+        // già fatto): se era ancora Incompleta (soggiorno futuro, check-in mai avvenuto), la camera
+        // non è mai stata toccata da lei — se risulta non Pronta è per un altro motivo (altro
+        // soggiorno in corso, blocco manuale) e non va alterato qui, altrimenti si libera una camera
+        // che è invece legittimamente occupata da qualcun altro.
+        var eraInCorso = entity.StatoPrenotazione == StatoPrenotazione.InCorso;
+
         entity.ImportoPrenotazione = 0;
         entity.ImportoPagato = 0;
         entity.ImportoTotale = 0;
@@ -198,8 +264,37 @@ public class PrenotazioniService(
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await prenotazioni.UpdateAsync(entity, cancellationToken);
+        if (eraInCorso)
+        {
+            await LiberaCameraAsync(entity.CameraId, cancellationToken);
+        }
+
         await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione #{entity.NumeroPrenotazione ?? entity.Id.ToString()[..8]} annullata.", cancellationToken);
         return entity;
+    }
+
+    /// <summary>
+    /// Riporta la camera a Pronta quando la prenotazione che la occupava (In corso, check-in già
+    /// fatto) viene annullata — va chiamata solo in quel caso, altrimenti rischia di liberare una
+    /// camera occupata per un motivo indipendente dalla prenotazione annullata. Non tocca camere già
+    /// Pronte, per non generare un UPDATE a vuoto.
+    /// </summary>
+    private async Task LiberaCameraAsync(Guid? cameraId, CancellationToken cancellationToken)
+    {
+        if (cameraId is not { } id)
+        {
+            return;
+        }
+
+        var camera = await camere.GetAsync(id, cancellationToken);
+        if (camera is null || camera.StateRoom == StatoCamera.Pronta)
+        {
+            return;
+        }
+
+        camera.StateRoom = StatoCamera.Pronta;
+        camera.UpdatedAtUtc = DateTime.UtcNow;
+        await camere.UpdateAsync(camera, cancellationToken);
     }
 
     public async Task<Prenotazione> CheckInAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)

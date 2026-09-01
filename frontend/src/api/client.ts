@@ -37,9 +37,13 @@ async function apiRequest<T>(method: string, path: string, body?: unknown): Prom
 
   if (!response.ok) {
     const corpo = await response.json().catch(() => null)
+    // "detail" (ProblemDetails, vedi GlobalExceptionHandler) porta sempre il messaggio specifico e
+    // comprensibile ("Questa camera è già prenotata..."); "title" è solo l'etichetta generica della
+    // categoria di errore ("Richiesta non valida") — va usato solo come ultima risorsa.
     const messaggio =
-      (corpo && typeof corpo === 'object' && 'title' in corpo && typeof corpo.title === 'string' && corpo.title) ||
+      (corpo && typeof corpo === 'object' && 'detail' in corpo && typeof corpo.detail === 'string' && corpo.detail) ||
       (corpo && typeof corpo === 'object' && 'message' in corpo && typeof corpo.message === 'string' && corpo.message) ||
+      (corpo && typeof corpo === 'object' && 'title' in corpo && typeof corpo.title === 'string' && corpo.title) ||
       `Richiesta a ${path} fallita (${response.status})`
     throw new ApiError(response.status, messaggio, corpo)
   }

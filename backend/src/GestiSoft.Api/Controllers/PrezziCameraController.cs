@@ -40,9 +40,12 @@ public class PrezziCameraController(PrezziCameraService service, ICurrentUser cu
         [FromQuery] DateTime checkIn,
         [FromQuery] DateTime checkOut,
         [FromQuery] int numeroOspiti,
-        CancellationToken cancellationToken)
+        [FromQuery] bool spesePulizia = true,
+        [FromQuery] bool animali = false,
+        [FromQuery] bool cauzione = true,
+        CancellationToken cancellationToken = default)
     {
-        var preventivo = await service.CalcolaPreventivoAsync(currentUser, strutturaId, cameraId, checkIn, checkOut, numeroOspiti, cancellationToken);
+        var preventivo = await service.CalcolaPreventivoAsync(currentUser, strutturaId, cameraId, checkIn, checkOut, numeroOspiti, spesePulizia, animali, cauzione, cancellationToken);
         return Ok(new PreventivoDto(preventivo.Notti, preventivo.Totale));
     }
 
