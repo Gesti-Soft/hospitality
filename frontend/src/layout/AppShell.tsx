@@ -69,7 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [strutturaDaEliminare, setStrutturaDaEliminare] = useState<{ id: string; nome: string } | null>(null)
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: tokens.paper }}>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: tokens.paper }}>
       {/* Nav rail */}
       <Box
         component="nav"
@@ -80,6 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           flexDirection: 'column',
           p: '22px 14px',
           gap: '20px',
+          overflowY: 'auto',
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1 }}>

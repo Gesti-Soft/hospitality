@@ -1,6 +1,7 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { LoginPage } from '../pages/LoginPage'
 import { DashboardPage } from '../pages/DashboardPage'
+import { useStruttura } from '../struttura/StrutturaContext'
 import { CalendarioPage } from '../pages/CalendarioPage'
 import { CamerePage } from '../pages/CamerePage'
 import { TipologiePage } from '../pages/TipologiePage'
@@ -17,12 +18,18 @@ import { LogPage } from '../pages/LogPage'
 import { SuperAdminDashboardPage } from '../pages/SuperAdminDashboardPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
+/** Il Super Admin non ha una struttura operativa propria: al login va sempre alla sua dashboard. */
+function RootRoute() {
+  const { isSuperAdmin } = useStruttura()
+  return isSuperAdmin ? <Navigate to="/super-admin" replace /> : <DashboardPage />
+}
+
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   {
     element: <ProtectedRoute />,
     children: [
-      { path: '/', element: <DashboardPage /> },
+      { path: '/', element: <RootRoute /> },
       { path: '/calendario', element: <CalendarioPage /> },
       { path: '/camere', element: <CamerePage /> },
       { path: '/tipologie', element: <TipologiePage /> },

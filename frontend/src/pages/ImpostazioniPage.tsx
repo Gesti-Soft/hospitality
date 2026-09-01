@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { useQueries } from '@tanstack/react-query'
+import { useState, type ReactNode } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -21,7 +20,7 @@ import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useTipologie } from '../api/tipologie'
-import { ApiError, apiGet } from '../api/client'
+import { ApiError } from '../api/client'
 import { useAggiornaImpostazioni, useImpostazioni, type ImpostazioniStrutturaDto, type ImpostazioniStrutturaRequest } from '../api/impostazioni'
 import {
   useAggiornaAlloggiatiWebConfig,
@@ -33,14 +32,11 @@ import {
   usePayTouristConfig,
   usePayTouristStrutture,
   useRinnovaWubookCredenziali,
-  useSchedineAlloggiatiWeb,
   useWubookConfig,
   type AlloggiatiWebIntegrazioneDto,
   type OsservatorioAppartamentoDto,
   type PayTouristIntegrazioneDto,
   type PayTouristStrutturaDto,
-  type PrenotazionePayTouristDto,
-  type SchedinaOsservatorioDto,
   type WubookIntegrazioneDto,
 } from '../api/integrazioni'
 import { fontDisplay, tokens } from '../theme'
@@ -123,118 +119,18 @@ function TabGenerali({ strutturaId }: { strutturaId: string | null }) {
   const wubookConfig = useWubookConfig(strutturaId)
   const wubookAbilitato = strutturaCorrente?.wubookAbilitato ?? false
 
+  const wubookBox = !wubookAbilitato ? null : wubookConfig.isLoading ? (
+    <Skeleton variant="rounded" height={80} />
+  ) : wubookConfig.data ? (
+    <WubookAttivoToggle strutturaId={strutturaId!} dati={wubookConfig.data} />
+  ) : null
+
   return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2.5, alignItems: 'flex-start' }}>
-      {impostazioni.isLoading && <Skeleton variant="rounded" height={380} sx={{ flex: '1 1 460px', maxWidth: 640 }} />}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {impostazioni.isLoading && <Skeleton variant="rounded" height={380} />}
       {!impostazioni.isLoading && impostazioni.data && strutturaCorrente && (
-        <Box sx={{ flex: '1 1 460px', maxWidth: 640 }}>
-          <ImpostazioniGeneraliForm strutturaId={strutturaId!} dati={impostazioni.data} servizi={strutturaCorrente} />
-        </Box>
+        <ImpostazioniGeneraliForm strutturaId={strutturaId!} dati={impostazioni.data} servizi={strutturaCorrente} extraColonnaDestra={wubookBox} />
       )}
-
-      {wubookAbilitato && wubookConfig.isLoading && <Skeleton variant="rounded" height={80} sx={{ flex: '1 1 460px', maxWidth: 640 }} />}
-      {wubookAbilitato && !wubookConfig.isLoading && wubookConfig.data && (
-        <Box sx={{ flex: '1 1 460px', maxWidth: 640 }}>
-          <WubookAttivoToggle strutturaId={strutturaId!} dati={wubookConfig.data} />
-        </Box>
-      )}
-
-      {strutturaId && strutturaCorrente && (
-        <Box sx={{ flex: '1 1 100%' }}>
-          <StoricoInviiAutomatici strutturaId={strutturaId} servizi={strutturaCorrente} />
-        </Box>
-      )}
-    </Box>
-  )
-}
-
-type RigaStoricoInvio = { modulo: string; ospite: string; camera: string | null; checkIn: string | null; checkOut: string | null }
-
-/**
- * Storico delle schedine/prenotazioni già inviate ai 3 servizi esterni fino ad oggi — utile perché
- * una prenotazione con Tassa di soggiorno disattivata (vedi PrenotazioneDialog) viene marcata
- * "inviata" senza che nulla venga davvero trasmesso: questa vista rende visibile anche quei casi,
- * non solo gli invii reali. Riusa gli stessi 3 endpoint "elenco schedine" già usati dalle pagine
- * operative (Polizia/Osservatorio/PayTourist, finestra 30 giorni), filtrati qui su "già inviata" —
- * nessuna nuova query backend.
- */
-function StoricoInviiAutomatici({ strutturaId, servizi }: { strutturaId: string; servizi: ServiziConcessi }) {
-  const schedineAlloggiati = useSchedineAlloggiatiWeb(servizi.alloggiatiWebAbilitato ? strutturaId : null)
-  const appartamenti = useOsservatorioAppartamenti(servizi.osservatorioAbilitato ? strutturaId : null)
-  const payTouristStrutture = usePayTouristStrutture(servizi.payTouristAbilitato ? strutturaId : null)
-
-  const schedineOsservatorio = useQueries({
-    queries: (appartamenti.data ?? []).map((a) => ({
-      queryKey: ['osservatorio-schedine', strutturaId, a.id],
-      queryFn: () => apiGet<SchedinaOsservatorioDto[]>(`/strutture/${strutturaId}/osservatorio/appartamenti/${a.id}/schedine`),
-    })),
-  })
-
-  const prenotazioniPayTourist = useQueries({
-    queries: (payTouristStrutture.data ?? []).map((s) => ({
-      queryKey: ['paytourist-prenotazioni', strutturaId, s.id],
-      queryFn: () => apiGet<PrenotazionePayTouristDto[]>(`/strutture/${strutturaId}/paytourist/strutture/${s.id}/prenotazioni`),
-    })),
-  })
-
-  if (!servizi.alloggiatiWebAbilitato && !servizi.osservatorioAbilitato && !servizi.payTouristAbilitato) {
-    return null
-  }
-
-  const righe: RigaStoricoInvio[] = [
-    ...(schedineAlloggiati.data ?? [])
-      .filter((s) => s.inviata)
-      .map((s) => ({ modulo: 'Polizia di Stato', ospite: s.nomeOspite, camera: s.camera, checkIn: s.checkIn, checkOut: s.checkOut })),
-    ...schedineOsservatorio.flatMap((q) =>
-      (q.data ?? [])
-        .filter((s) => s.arrivoInviato)
-        .map((s) => ({ modulo: 'Osservatorio', ospite: s.nomeOspite, camera: s.camera, checkIn: s.checkIn, checkOut: s.checkOut })),
-    ),
-    ...prenotazioniPayTourist.flatMap((q) =>
-      (q.data ?? [])
-        .filter((s) => s.inviata)
-        .map((s) => ({ modulo: 'PayTourist', ospite: s.nomeOspite, camera: s.camera, checkIn: s.checkIn, checkOut: s.checkOut })),
-    ),
-  ].sort((a, b) => new Date(b.checkIn ?? 0).getTime() - new Date(a.checkIn ?? 0).getTime())
-
-  return (
-    <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
-      <Box sx={{ p: '18px 20px' }}>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Storico invii (ultimi 30 giorni)</Typography>
-        <Typography sx={{ fontSize: 12, color: tokens.textTertiary, mt: 0.5 }}>
-          Schedine/prenotazioni già inviate ai servizi esterni — include anche quelle marcate come inviate automaticamente (es. tassa di
-          soggiorno disattivata per una prenotazione).
-        </Typography>
-      </Box>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Modulo</TableCell>
-            <TableCell>Ospite</TableCell>
-            <TableCell>Camera</TableCell>
-            <TableCell>Check-in</TableCell>
-            <TableCell>Check-out</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {righe.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                Nessun invio negli ultimi 30 giorni.
-              </TableCell>
-            </TableRow>
-          )}
-          {righe.map((r, i) => (
-            <TableRow key={i} hover>
-              <TableCell sx={{ fontWeight: 700 }}>{r.modulo}</TableCell>
-              <TableCell>{r.ospite}</TableCell>
-              <TableCell>{r.camera ?? '—'}</TableCell>
-              <TableCell>{r.checkIn ? formattatoreDataOra.format(new Date(r.checkIn)) : '—'}</TableCell>
-              <TableCell>{r.checkOut ? formattatoreDataOra.format(new Date(r.checkOut)) : '—'}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
     </Box>
   )
 }
@@ -271,7 +167,17 @@ export interface ServiziConcessi {
   payTouristAbilitato: boolean
 }
 
-export function ImpostazioniGeneraliForm({ strutturaId, dati, servizi }: { strutturaId: string; dati: ImpostazioniStrutturaDto; servizi: ServiziConcessi }) {
+export function ImpostazioniGeneraliForm({
+  strutturaId,
+  dati,
+  servizi,
+  extraColonnaDestra,
+}: {
+  strutturaId: string
+  dati: ImpostazioniStrutturaDto
+  servizi: ServiziConcessi
+  extraColonnaDestra?: ReactNode
+}) {
   const [poliziaStatoAttiva, setPoliziaStatoAttiva] = useState(dati.poliziaStatoAttiva)
   const [osservatorioAttivo, setOsservatorioAttivo] = useState(dati.osservatorioAttivo)
   const [payTouristAttivo, setPayTouristAttivo] = useState(dati.payTouristAttivo)
@@ -308,85 +214,84 @@ export function ImpostazioniGeneraliForm({ strutturaId, dati, servizi }: { strut
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      {!nessunServizioInvii && (
-        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Invii automatici</Typography>
-          <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
-            Attiva qui i servizi per cui hai già configurato le credenziali nelle rispettive sezioni. L'orario si applica a tutti gli invii
-            giornalieri di questa struttura.
-          </Typography>
+      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
+      {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Impostazioni salvate.</Alert>}
 
-          {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-          {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Impostazioni salvate.</Alert>}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2.5, alignItems: 'stretch' }}>
+        {!nessunServizioInvii && (
+          <Box sx={{ flex: '1 1 320px', border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Invii automatici</Typography>
+            <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+              Attiva qui i servizi per cui hai già configurato le credenziali nelle rispettive sezioni. L'orario si applica a tutti gli invii
+              giornalieri di questa struttura.
+            </Typography>
 
-          {servizi.alloggiatiWebAbilitato && (
-            <FormControlLabel
-              control={<Checkbox checked={poliziaStatoAttiva} onChange={(e) => setPoliziaStatoAttiva(e.target.checked)} disabled={aggiorna.isPending} />}
-              label="Invio schedine Polizia di Stato (Alloggiati Web)"
+            {servizi.alloggiatiWebAbilitato && (
+              <FormControlLabel
+                control={<Checkbox checked={poliziaStatoAttiva} onChange={(e) => setPoliziaStatoAttiva(e.target.checked)} disabled={aggiorna.isPending} />}
+                label="Invio schedine Polizia di Stato (Alloggiati Web)"
+              />
+            )}
+            {servizi.osservatorioAbilitato && (
+              <FormControlLabel
+                control={<Checkbox checked={osservatorioAttivo} onChange={(e) => setOsservatorioAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
+                label="Invio Osservatorio Turistico"
+              />
+            )}
+            {servizi.payTouristAbilitato && (
+              <FormControlLabel
+                control={<Checkbox checked={payTouristAttivo} onChange={(e) => setPayTouristAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
+                label="Invio PayTourist"
+              />
+            )}
+
+            <TextField
+              label="Orario invio giornaliero"
+              type="time"
+              value={oraInvioGiornaliero}
+              onChange={(e) => setOraInvioGiornaliero(e.target.value)}
+              sx={{ width: 200 }}
+              slotProps={{ inputLabel: { shrink: true } }}
+              disabled={aggiorna.isPending}
             />
-          )}
-          {servizi.osservatorioAbilitato && (
-            <FormControlLabel
-              control={<Checkbox checked={osservatorioAttivo} onChange={(e) => setOsservatorioAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
-              label="Invio Osservatorio Turistico"
+          </Box>
+        )}
+
+        <Box sx={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tassa di soggiorno</Typography>
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Prezzo per persona/notte (€)"
+                type="number"
+                value={tassaSoggiornoPrezzo}
+                onChange={(e) => setTassaSoggiornoPrezzo(e.target.value)}
+                fullWidth
+                disabled={aggiorna.isPending}
+              />
+              <TextField
+                label="Numero massimo di notti"
+                type="number"
+                value={tassaSoggiornoMaxGiorni}
+                onChange={(e) => setTassaSoggiornoMaxGiorni(e.target.value)}
+                fullWidth
+                disabled={aggiorna.isPending}
+                helperText="Oltre questa soglia le notti extra non sono tassate"
+              />
+            </Box>
+
+            <TextField
+              label="Comune di attività"
+              value={comuneAttivita}
+              onChange={(e) => setComuneAttivita(e.target.value)}
+              disabled={aggiorna.isPending}
+              helperText="Comune dove opera fisicamente la struttura (può differire dalla sede fiscale in Fatturazione) — usato per l'esenzione tassa di soggiorno e le riduzioni PayTourist per residenza"
             />
-          )}
-          {servizi.payTouristAbilitato && (
-            <FormControlLabel
-              control={<Checkbox checked={payTouristAttivo} onChange={(e) => setPayTouristAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
-              label="Invio PayTourist"
-            />
-          )}
+          </Box>
 
-          <TextField
-            label="Orario invio giornaliero"
-            type="time"
-            value={oraInvioGiornaliero}
-            onChange={(e) => setOraInvioGiornaliero(e.target.value)}
-            sx={{ width: 200 }}
-            slotProps={{ inputLabel: { shrink: true } }}
-            disabled={aggiorna.isPending}
-          />
+          {extraColonnaDestra}
         </Box>
-      )}
-
-      {nessunServizioInvii && (errore || salvato) && (
-        <Box>
-          {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-          {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Impostazioni salvate.</Alert>}
-        </Box>
-      )}
-
-      <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tassa di soggiorno</Typography>
-
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField
-            label="Prezzo per persona/notte (€)"
-            type="number"
-            value={tassaSoggiornoPrezzo}
-            onChange={(e) => setTassaSoggiornoPrezzo(e.target.value)}
-            fullWidth
-            disabled={aggiorna.isPending}
-          />
-          <TextField
-            label="Numero massimo di notti"
-            type="number"
-            value={tassaSoggiornoMaxGiorni}
-            onChange={(e) => setTassaSoggiornoMaxGiorni(e.target.value)}
-            fullWidth
-            disabled={aggiorna.isPending}
-            helperText="Oltre questa soglia le notti extra non sono tassate"
-          />
-        </Box>
-
-        <TextField
-          label="Comune di attività"
-          value={comuneAttivita}
-          onChange={(e) => setComuneAttivita(e.target.value)}
-          disabled={aggiorna.isPending}
-          helperText="Comune dove opera fisicamente la struttura (può differire dalla sede fiscale in Fatturazione) — usato per l'esenzione tassa di soggiorno e le riduzioni PayTourist per residenza"
-        />
       </Box>
 
       <Box>
