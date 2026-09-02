@@ -17,6 +17,7 @@ import { useEliminaTipologia, useTipologie, type TipologiaCameraDto } from '../a
 import { ApiError } from '../api/client'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { TipologiaDialog } from '../components/TipologiaDialog'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 
@@ -24,13 +25,17 @@ export function TipologiePage() {
   const { strutturaId } = useStruttura()
   const [errore, setErrore] = useState<string | null>(null)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | TipologiaCameraDto>('chiuso')
+  const [daEliminare, setDaEliminare] = useState<TipologiaCameraDto | null>(null)
 
   const tipologie = useTipologie(strutturaId)
   const elimina = useEliminaTipologia(strutturaId)
 
-  function eliminaTipologia(t: TipologiaCameraDto) {
-    if (!window.confirm(`Eliminare la tipologia "${t.tipologiaCamera}"?`)) return
-    elimina.mutate(t.id, { onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.') })
+  function confermaElimina() {
+    if (!daEliminare) return
+    elimina.mutate(daEliminare.id, {
+      onSuccess: () => setDaEliminare(null),
+      onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+    })
   }
 
   return (
@@ -90,7 +95,7 @@ export function TipologiePage() {
                     <IconButton size="small" onClick={() => setDialogo(t)}>
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => eliminaTipologia(t)}>
+                    <IconButton size="small" onClick={() => setDaEliminare(t)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>
@@ -103,6 +108,16 @@ export function TipologiePage() {
 
       {dialogo !== 'chiuso' && strutturaId && (
         <TipologiaDialog strutturaId={strutturaId} tipologia={dialogo === 'nuova' ? null : dialogo} onClose={() => setDialogo('chiuso')} />
+      )}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Eliminare tipologia"
+          messaggio={`Eliminare la tipologia "${daEliminare.tipologiaCamera}"?`}
+          inCorso={elimina.isPending}
+          onConferma={confermaElimina}
+          onAnnulla={() => setDaEliminare(null)}
+        />
       )}
     </Box>
   )

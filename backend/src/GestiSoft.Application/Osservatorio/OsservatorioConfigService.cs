@@ -52,6 +52,16 @@ public class OsservatorioConfigService(
         return entity;
     }
 
+    public async Task EliminaAsync(ICurrentUser currentUser, Guid strutturaId, Guid appartamentoId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceSettings, cancellationToken);
+
+        var entity = await repository.GetAsync(strutturaId, appartamentoId, cancellationToken)
+            ?? throw new NotFoundException("Appartamento Osservatorio Turistico non trovato.");
+
+        await repository.DeleteAsync(entity, cancellationToken);
+    }
+
     private void Applica(OsservatorioAppartamento entity, SalvaOsservatorioAppartamentoRequest request)
     {
         entity.Nome = request.Nome;

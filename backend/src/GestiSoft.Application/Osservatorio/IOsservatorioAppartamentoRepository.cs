@@ -12,6 +12,8 @@ public interface IOsservatorioAppartamentoRepository
 
     Task UpdateAsync(OsservatorioAppartamento entity, CancellationToken cancellationToken);
 
+    Task DeleteAsync(OsservatorioAppartamento entity, CancellationToken cancellationToken);
+
     void RimuoviTipologia(OsservatorioAppartamentoTipologia riga);
 
     /// <summary>

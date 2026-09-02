@@ -542,7 +542,7 @@ function SelettoreCercabile({
       options={opzioni}
       getOptionLabel={(o) => o.nome}
       isOptionEqualToValue={(o, v) => o.id === v.id}
-      value={opzioni.find((o) => o.id === valore) ?? null}
+      value={opzioni.find((o) => o.id === valore) ?? undefined}
       onChange={(_, v) => v && onChange(v.id)}
       disabled={opzioni.length === 0}
       disableClearable

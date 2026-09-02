@@ -213,6 +213,14 @@ export function useAggiornaOsservatorioAppartamento(strutturaId: string | null) 
   })
 }
 
+export function useEliminaOsservatorioAppartamento(strutturaId: string | null) {
+  const invalida = useInvalidaOsservatorio(strutturaId)
+  return useMutation({
+    mutationFn: (appartamentoId: string) => apiDelete<void>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}`),
+    onSuccess: invalida,
+  })
+}
+
 export function useInviaOsservatorioOra(strutturaId: string | null) {
   const invalida = useInvalidaOsservatorio(strutturaId)
   return useMutation({
@@ -279,6 +287,14 @@ export function useAggiornaPayTouristStruttura(strutturaId: string | null) {
   return useMutation({
     mutationFn: ({ payTouristStrutturaId, request }: { payTouristStrutturaId: string; request: PayTouristStrutturaRequest }) =>
       apiPut<PayTouristStrutturaDto>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}`, request),
+    onSuccess: invalida,
+  })
+}
+
+export function useEliminaPayTouristStruttura(strutturaId: string | null) {
+  const invalida = useInvalidaPayTouristStrutture(strutturaId)
+  return useMutation({
+    mutationFn: (payTouristStrutturaId: string) => apiDelete<void>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}`),
     onSuccess: invalida,
   })
 }

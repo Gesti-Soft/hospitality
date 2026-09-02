@@ -75,6 +75,16 @@ public class PayTouristConfigService(
         return entity;
     }
 
+    public async Task EliminaStrutturaAsync(ICurrentUser currentUser, Guid strutturaId, Guid payTouristStrutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceSettings, cancellationToken);
+
+        var entity = await strutture.GetAsync(strutturaId, payTouristStrutturaId, cancellationToken)
+            ?? throw new NotFoundException("Struttura PayTourist non trovata.");
+
+        await strutture.DeleteAsync(entity, cancellationToken);
+    }
+
     private void Applica(PayTouristStruttura entity, SalvaPayTouristStrutturaRequest request)
     {
         entity.Nome = request.Nome;

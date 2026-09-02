@@ -54,7 +54,8 @@ public class PrenotazioniService(
     IOspiteRepository ospiti,
     IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard,
-    ILogEventoService logEventi)
+    ILogEventoService logEventi,
+    OspitiService ospitiService)
 {
     /// <summary>
     /// Se il numero non è stato scritto a mano e l'agenzia è "Diretta", genera il progressivo
@@ -321,13 +322,15 @@ public class PrenotazioniService(
 
     /// <summary>
     /// Check-out: se il CheckOut previsto è nel futuro si tratta di un check-out anticipato (la
-    /// data viene aggiornata a oggi, e la Permanenza sulla scheda Ospiti viene ricalcolata di
+    /// data viene aggiornata a oggi, la Permanenza sulla scheda Ospiti viene ricalcolata di
     /// conseguenza — il legacy propagava questo ricalcolo in ChangeRoomStatus, gap segnalato nel
     /// report di Fase 3 e chiuso qui perché la Permanenza per-ospite conta per la schedina
-    /// Alloggiati Web di questa Fase 6). Se la cauzione non viene restituita al cliente, viene
-    /// registrato un movimento Cauzione. La camera passa sempre a DaPulire — il legacy aveva un
-    /// bypass a Pronta se l'integrazione desktop "SyncMobile" non era installata, concetto che
-    /// non esiste più nella versione web.
+    /// Alloggiati Web di questa Fase 6 — e la tassa di soggiorno viene rifatta sulle notti
+    /// effettive invece di restare ferma a quelle pianificate al check-in, richiesta esplicita
+    /// dell'utente: check-in 1→10 con checkout anticipato al 3 deve tassare 2 notti, non 9).
+    /// Se la cauzione non viene restituita al cliente, viene registrato un movimento Cauzione. La
+    /// camera passa sempre a DaPulire — il legacy aveva un bypass a Pronta se l'integrazione
+    /// desktop "SyncMobile" non era installata, concetto che non esiste più nella versione web.
     /// </summary>
     public async Task<Prenotazione> CheckOutAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CheckOutRequest request, CancellationToken cancellationToken)
     {
@@ -340,7 +343,7 @@ public class PrenotazioniService(
         if (prenotazione.CheckOut is { } checkOutPrevisto && checkOutPrevisto.Date > oggi && prenotazione.CheckIn is { } checkIn)
         {
             prenotazione.CheckOut = oggi;
-            await RicalcolaPermanenzaAsync(prenotazione.Id, checkIn.Date, oggi, cancellationToken);
+            await RicalcolaPermanenzaETassaAsync(strutturaId, prenotazione, checkIn.Date, oggi, cancellationToken);
         }
 
         if (!request.RestituisciCauzione && request.ImportoCauzioneTrattenuta is { } importo && importo > 0)
@@ -397,10 +400,14 @@ public class PrenotazioniService(
         return camera;
     }
 
-    /// <summary>Ricalcola Permanenza sulla scheda Ospiti (capofamiglia + membri) dopo un check-out anticipato.</summary>
-    private async Task RicalcolaPermanenzaAsync(Guid prenotazioneId, DateTime checkIn, DateTime nuovoCheckOut, CancellationToken cancellationToken)
+    /// <summary>
+    /// Ricalcola Permanenza sulla scheda Ospiti (capofamiglia + membri) e l'importo della tassa di
+    /// soggiorno dopo un check-out anticipato — entrambi erano calcolati sulle notti pianificate al
+    /// check-in/salvataggio scheda, non su quelle effettivamente soggiornate.
+    /// </summary>
+    private async Task RicalcolaPermanenzaETassaAsync(Guid strutturaId, Prenotazione prenotazione, DateTime checkIn, DateTime nuovoCheckOut, CancellationToken cancellationToken)
     {
-        var ospite = await ospiti.GetByPrenotazioneAsync(prenotazioneId, cancellationToken);
+        var ospite = await ospiti.GetByPrenotazioneAsync(prenotazione.Id, cancellationToken);
         if (ospite is null)
         {
             return;
@@ -415,6 +422,8 @@ public class PrenotazioniService(
             membro.Permanenza = permanenza;
             membro.UpdatedAtUtc = DateTime.UtcNow;
         }
+
+        prenotazione.TotalTax = await ospitiService.CalcolaTassaSoggiornoAsync(strutturaId, prenotazione, ospite, cancellationToken);
 
         await ospiti.SaveChangesAsync(cancellationToken);
     }

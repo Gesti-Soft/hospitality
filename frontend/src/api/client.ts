@@ -66,7 +66,10 @@ async function apiRequest<T>(method: string, path: string, body?: unknown): Prom
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 
-  if (response.status === 401) {
+  // Un 401 significa "sessione scaduta" solo se avevamo davvero un token da mandare (richiesta
+  // autenticata rifiutata) — senza sessione (es. /auth/login con credenziali sbagliate) è solo un
+  // errore applicativo come un altro, il messaggio specifico arriva dal corpo della risposta più sotto.
+  if (response.status === 401 && sessione) {
     cancellaSessione()
     window.dispatchEvent(new Event(SESSIONE_SCADUTA_EVENT))
     throw new ApiError(401, 'Sessione scaduta, effettua di nuovo l\'accesso.')
@@ -107,7 +110,7 @@ export async function apiScaricaFile(path: string, nomeFile: string): Promise<vo
     headers: sessione ? { Authorization: `Bearer ${sessione.token}` } : {},
   })
 
-  if (response.status === 401) {
+  if (response.status === 401 && sessione) {
     cancellaSessione()
     window.dispatchEvent(new Event(SESSIONE_SCADUTA_EVENT))
     throw new ApiError(401, 'Sessione scaduta, effettua di nuovo l\'accesso.')

@@ -33,6 +33,13 @@ public class PayTouristStruttureController(PayTouristConfigService service, ICur
         return Ok(ToDto(struttura));
     }
 
+    [HttpDelete("{payTouristStrutturaId:guid}")]
+    public async Task<IActionResult> Elimina(Guid strutturaId, Guid payTouristStrutturaId, CancellationToken cancellationToken)
+    {
+        await service.EliminaStrutturaAsync(currentUser, strutturaId, payTouristStrutturaId, cancellationToken);
+        return NoContent();
+    }
+
     private static PayTouristStrutturaDto ToDto(PayTouristStruttura p) => new(
         p.Id,
         p.StrutturaId,

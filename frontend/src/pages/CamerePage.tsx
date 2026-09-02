@@ -35,6 +35,7 @@ import { ApiError } from '../api/client'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { CameraDialog } from '../components/CameraDialog'
 import { PrezzoDialog } from '../components/PrezzoDialog'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 const ETICHETTA_STATO_CAMERA: Record<StatoCamera, string> = {
   [StatoCamera.Pronta]: 'Pronta',
@@ -271,11 +272,12 @@ function TabCamere({
   onErrore: (err: unknown) => void
 }) {
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | CameraDto>('chiuso')
+  const [daEliminare, setDaEliminare] = useState<CameraDto | null>(null)
   const elimina = useEliminaCamera(strutturaId)
 
-  function eliminaCamera(camera: CameraDto) {
-    if (!window.confirm(`Eliminare la camera "${camera.nome}"?`)) return
-    elimina.mutate(camera.id, { onError: onErrore })
+  function confermaEliminaCamera() {
+    if (!daEliminare) return
+    elimina.mutate(daEliminare.id, { onSuccess: () => setDaEliminare(null), onError: onErrore })
   }
 
   const camereFiltrate = (camere ?? []).filter((c) => c.tipologiaId === tipologiaId)
@@ -316,7 +318,7 @@ function TabCamere({
                     <IconButton size="small" onClick={() => setDialogo(c)}>
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => eliminaCamera(c)}>
+                    <IconButton size="small" onClick={() => setDaEliminare(c)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>
@@ -334,6 +336,16 @@ function TabCamere({
           tipologie={tipologie}
           tipologiaDiDefault={tipologiaId}
           onClose={() => setDialogo('chiuso')}
+        />
+      )}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Eliminare camera"
+          messaggio={`Eliminare la camera "${daEliminare.nome}"?`}
+          inCorso={elimina.isPending}
+          onConferma={confermaEliminaCamera}
+          onAnnulla={() => setDaEliminare(null)}
         />
       )}
     </Box>
@@ -363,6 +375,7 @@ function TabPrezzi({
 }) {
   const [dialogoAperto, setDialogoAperto] = useState(false)
   const [vista, setVista] = useState<'lista' | 'calendario'>('lista')
+  const [daEliminare, setDaEliminare] = useState<PrezzoCameraDto | null>(null)
   const elimina = useEliminaPrezzo(strutturaId)
 
   const camereTipologia = camere.filter((c) => c.tipologiaId === tipologiaId)
@@ -374,8 +387,12 @@ function TabPrezzi({
   const nomeTipologia = (id: string | null) => tipologie.find((t) => t.id === id)?.tipologiaCamera ?? null
 
   function eliminaPrezzo(p: PrezzoCameraDto) {
-    if (!window.confirm('Eliminare questo periodo di prezzo?')) return
-    elimina.mutate(p.id, { onError: onErrore })
+    setDaEliminare(p)
+  }
+
+  function confermaEliminaPrezzo() {
+    if (!daEliminare) return
+    elimina.mutate(daEliminare.id, { onSuccess: () => setDaEliminare(null), onError: onErrore })
   }
 
   return (
@@ -451,6 +468,16 @@ function TabPrezzi({
 
       {dialogoAperto && strutturaId && (
         <PrezzoDialog strutturaId={strutturaId} camere={camere} tipologie={tipologie} onClose={() => setDialogoAperto(false)} />
+      )}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Eliminare periodo di prezzo"
+          messaggio="Eliminare questo periodo di prezzo?"
+          inCorso={elimina.isPending}
+          onConferma={confermaEliminaPrezzo}
+          onAnnulla={() => setDaEliminare(null)}
+        />
       )}
     </Box>
   )
@@ -608,6 +635,7 @@ function TabCanali({
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | CanaleVenditaDto>('chiuso')
   const [descrizione, setDescrizione] = useState('')
   const [erroreDialogo, setErroreDialogo] = useState<string | null>(null)
+  const [daEliminare, setDaEliminare] = useState<CanaleVenditaDto | null>(null)
 
   const crea = useCreaCanaleVendita(strutturaId)
   const aggiorna = useAggiornaCanaleVendita(strutturaId)
@@ -632,9 +660,9 @@ function TabCanali({
     }
   }
 
-  function eliminaCanale(c: CanaleVenditaDto) {
-    if (!window.confirm(`Eliminare il canale "${c.descrizione}"?`)) return
-    elimina.mutate(c.id, { onError: onErrore })
+  function confermaEliminaCanale() {
+    if (!daEliminare) return
+    elimina.mutate(daEliminare.id, { onSuccess: () => setDaEliminare(null), onError: onErrore })
   }
 
   const inCorso = crea.isPending || aggiorna.isPending
@@ -667,7 +695,7 @@ function TabCanali({
                     <IconButton size="small" onClick={() => apriDialogo(c)}>
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => eliminaCanale(c)}>
+                    <IconButton size="small" onClick={() => setDaEliminare(c)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>
@@ -694,6 +722,16 @@ function TabCanali({
             </Button>
           </DialogActions>
         </Dialog>
+      )}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Eliminare canale vendita"
+          messaggio={`Eliminare il canale "${daEliminare.descrizione}"?`}
+          inCorso={elimina.isPending}
+          onConferma={confermaEliminaCanale}
+          onAnnulla={() => setDaEliminare(null)}
+        />
       )}
     </Box>
   )

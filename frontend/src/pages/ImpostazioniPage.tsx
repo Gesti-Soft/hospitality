@@ -18,6 +18,7 @@ import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
+import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useTipologie } from '../api/tipologie'
 import { ApiError } from '../api/client'
@@ -28,6 +29,8 @@ import {
   useAggiornaWubookConfig,
   useAggiornaWubookLicenza,
   useAlloggiatiWebConfig,
+  useEliminaOsservatorioAppartamento,
+  useEliminaPayTouristStruttura,
   useOsservatorioAppartamenti,
   usePayTouristConfig,
   usePayTouristStrutture,
@@ -40,6 +43,7 @@ import {
   type WubookIntegrazioneDto,
 } from '../api/integrazioni'
 import { fontDisplay, tokens } from '../theme'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { OsservatorioAppartamentoDialog } from '../components/OsservatorioAppartamentoDialog'
 import { PayTouristStrutturaDialog } from '../components/PayTouristStrutturaDialog'
 
@@ -489,7 +493,14 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
 function TabOsservatorio({ strutturaId }: { strutturaId: string | null }) {
   const appartamenti = useOsservatorioAppartamenti(strutturaId)
   const tipologie = useTipologie(strutturaId)
+  const elimina = useEliminaOsservatorioAppartamento(strutturaId)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | OsservatorioAppartamentoDto>('chiuso')
+  const [daEliminare, setDaEliminare] = useState<OsservatorioAppartamentoDto | null>(null)
+
+  function confermaElimina() {
+    if (!daEliminare) return
+    elimina.mutate(daEliminare.id, { onSuccess: () => setDaEliminare(null) })
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -540,6 +551,11 @@ function TabOsservatorio({ strutturaId }: { strutturaId: string | null }) {
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
+                    <Tooltip title="Elimina">
+                      <IconButton size="small" onClick={() => setDaEliminare(a)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}
@@ -556,6 +572,16 @@ function TabOsservatorio({ strutturaId }: { strutturaId: string | null }) {
           onClose={() => setDialogo('chiuso')}
         />
       )}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Eliminare appartamento"
+          messaggio={`Eliminare l'appartamento "${daEliminare.nome}"? L'associazione con l'Osservatorio Turistico verrà rimossa.`}
+          inCorso={elimina.isPending}
+          onConferma={confermaElimina}
+          onAnnulla={() => setDaEliminare(null)}
+        />
+      )}
     </Box>
   )
 }
@@ -568,7 +594,14 @@ function TabPayTourist({ strutturaId }: { strutturaId: string | null }) {
   const config = usePayTouristConfig(strutturaId)
   const strutture = usePayTouristStrutture(strutturaId)
   const tipologie = useTipologie(strutturaId)
+  const elimina = useEliminaPayTouristStruttura(strutturaId)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | PayTouristStrutturaDto>('chiuso')
+  const [daEliminare, setDaEliminare] = useState<PayTouristStrutturaDto | null>(null)
+
+  function confermaElimina() {
+    if (!daEliminare) return
+    elimina.mutate(daEliminare.id, { onSuccess: () => setDaEliminare(null) })
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -612,6 +645,11 @@ function TabPayTourist({ strutturaId }: { strutturaId: string | null }) {
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
+                    <Tooltip title="Elimina">
+                      <IconButton size="small" onClick={() => setDaEliminare(s)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}
@@ -626,6 +664,16 @@ function TabPayTourist({ strutturaId }: { strutturaId: string | null }) {
           strutturaPayTourist={dialogo === 'nuova' ? null : dialogo}
           tipologie={tipologie.data ?? []}
           onClose={() => setDialogo('chiuso')}
+        />
+      )}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Eliminare struttura PayTourist"
+          messaggio={`Eliminare la struttura PayTourist "${daEliminare.nome}"? L'associazione verrà rimossa.`}
+          inCorso={elimina.isPending}
+          onConferma={confermaElimina}
+          onAnnulla={() => setDaEliminare(null)}
         />
       )}
     </Box>

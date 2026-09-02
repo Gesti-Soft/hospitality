@@ -33,6 +33,13 @@ public class OsservatorioAppartamentiController(OsservatorioConfigService servic
         return Ok(ToDto(appartamento));
     }
 
+    [HttpDelete("{appartamentoId:guid}")]
+    public async Task<IActionResult> Elimina(Guid strutturaId, Guid appartamentoId, CancellationToken cancellationToken)
+    {
+        await service.EliminaAsync(currentUser, strutturaId, appartamentoId, cancellationToken);
+        return NoContent();
+    }
+
     private static OsservatorioAppartamentoDto ToDto(OsservatorioAppartamento a) => new(
         a.Id,
         a.StrutturaId,

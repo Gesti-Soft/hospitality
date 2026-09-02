@@ -23,6 +23,7 @@ import { ApiError } from '../api/client'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { SpesaDialog } from '../components/SpesaDialog'
 import { EntrataDialog } from '../components/EntrataDialog'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import Alert from '@mui/material/Alert'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
@@ -148,11 +149,12 @@ function TabSpese({
   onErrore: (err: unknown) => void
 }) {
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | SpesaDto>('chiuso')
+  const [daEliminare, setDaEliminare] = useState<SpesaDto | null>(null)
   const elimina = useEliminaSpesa(strutturaId)
 
-  function eliminaSpesa(s: SpesaDto) {
-    if (!window.confirm(`Eliminare la spesa "${s.nome}"?`)) return
-    elimina.mutate(s.id, { onError: onErrore })
+  function confermaEliminaSpesa() {
+    if (!daEliminare) return
+    elimina.mutate(daEliminare.id, { onSuccess: () => setDaEliminare(null), onError: onErrore })
   }
 
   const totale = (spese ?? []).reduce((acc, s) => acc + s.importoSpesa, 0)
@@ -191,7 +193,7 @@ function TabSpese({
                     <IconButton size="small" onClick={() => setDialogo(s)}>
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => eliminaSpesa(s)}>
+                    <IconButton size="small" onClick={() => setDaEliminare(s)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>
@@ -212,6 +214,16 @@ function TabSpese({
       )}
 
       {dialogo !== 'chiuso' && strutturaId && <SpesaDialog strutturaId={strutturaId} spesa={dialogo === 'nuova' ? null : dialogo} onClose={() => setDialogo('chiuso')} />}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Eliminare spesa"
+          messaggio={`Eliminare la spesa "${daEliminare.nome}"?`}
+          inCorso={elimina.isPending}
+          onConferma={confermaEliminaSpesa}
+          onAnnulla={() => setDaEliminare(null)}
+        />
+      )}
     </Box>
   )
 }
@@ -228,11 +240,12 @@ function TabEntrate({
   onErrore: (err: unknown) => void
 }) {
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | EntrataDto>('chiuso')
+  const [daEliminare, setDaEliminare] = useState<EntrataDto | null>(null)
   const elimina = useEliminaEntrata(strutturaId)
 
-  function eliminaEntrata(e: EntrataDto) {
-    if (!window.confirm(`Eliminare l'entrata "${e.nome}"?`)) return
-    elimina.mutate(e.id, { onError: onErrore })
+  function confermaEliminaEntrata() {
+    if (!daEliminare) return
+    elimina.mutate(daEliminare.id, { onSuccess: () => setDaEliminare(null), onError: onErrore })
   }
 
   const totale = (entrate ?? []).reduce((acc, e) => acc + e.importoEntrata, 0)
@@ -269,7 +282,7 @@ function TabEntrate({
                     <IconButton size="small" onClick={() => setDialogo(e)}>
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => eliminaEntrata(e)}>
+                    <IconButton size="small" onClick={() => setDaEliminare(e)}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>
@@ -290,6 +303,16 @@ function TabEntrate({
       )}
 
       {dialogo !== 'chiuso' && strutturaId && <EntrataDialog strutturaId={strutturaId} entrata={dialogo === 'nuova' ? null : dialogo} onClose={() => setDialogo('chiuso')} />}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Eliminare entrata"
+          messaggio={`Eliminare l'entrata "${daEliminare.nome}"?`}
+          inCorso={elimina.isPending}
+          onConferma={confermaEliminaEntrata}
+          onAnnulla={() => setDaEliminare(null)}
+        />
+      )}
     </Box>
   )
 }

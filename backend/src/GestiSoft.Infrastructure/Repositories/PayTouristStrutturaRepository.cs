@@ -34,5 +34,11 @@ public class PayTouristStrutturaRepository(GestiSoftDbContext db) : IPayTouristS
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task DeleteAsync(PayTouristStruttura entity, CancellationToken cancellationToken)
+    {
+        db.PayTouristStrutture.Remove(entity);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public void RimuoviTipologia(PayTouristStrutturaTipologia riga) => db.PayTouristStruttureTipologie.Remove(riga);
 }

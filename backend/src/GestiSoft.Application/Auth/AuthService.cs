@@ -16,23 +16,30 @@ public class AuthService(
     IJwtTokenGenerator tokenGenerator,
     ILogEventoService logEventi)
 {
-    private const string CredenzialiNonValideMessage = "Email o password non corretti.";
+    // Messaggio generico riservato al rinnovo silenzioso (RefreshAsync) — lì non è mai mostrato in
+    // un form, l'utente scopre la sessione scaduta solo al prossimo 401 su un'azione reale.
+    private const string CredenzialiNonValideMessage = "Sessione non valida.";
 
     public async Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken)
     {
         var emailNormalizzata = email.Trim().ToLowerInvariant();
         var utente = await utenti.GetByEmailAsync(emailNormalizzata, cancellationToken);
 
-        // Stesso messaggio sia per utente inesistente che per password errata: non rivelare
-        // quale dei due sia il problema (evita di confermare a un attaccante che un'email esiste).
-        // Stesso trattamento per un Cliente sospeso dal Super Admin (mancato pagamento, ecc.):
-        // nessun utente di quel Cliente deve poter accedere, anche con credenziali corrette.
-        // Categoria "Auth" non è mai visibile al Cliente (solo il Super Admin vede login/logout,
-        // vedi LogVisibilita) — libero di loggare anche i tentativi falliti senza rischio di fuga.
-        if (utente is null || !utente.Attivo)
+        // Messaggi specifici per caso, su richiesta esplicita dell'utente (rinuncia deliberata alla
+        // protezione anti-enumerazione che c'era prima — un messaggio unico per ogni causa di
+        // fallimento — perché qui conta di più poter distinguere a colpo d'occhio "email sbagliata"
+        // da "password sbagliata" da "utente disabilitato"). Categoria "Auth" non è mai visibile al
+        // Cliente (solo il Super Admin vede login/logout, vedi LogVisibilita).
+        if (utente is null)
         {
-            await LogFallitoAsync(emailNormalizzata, utente?.ClienteId, cancellationToken);
-            throw new UnauthorizedAppException(CredenzialiNonValideMessage);
+            await LogFallitoAsync(emailNormalizzata, null, cancellationToken);
+            throw new UnauthorizedAppException("Email non trovata.");
+        }
+
+        if (!utente.Attivo)
+        {
+            await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
+            throw new UnauthorizedAppException("Utente disabilitato. Contatta l'amministrazione.");
         }
 
         if (utente.ClienteId is { } clienteId)
@@ -41,7 +48,7 @@ public class AuthService(
             if (cliente is null || !cliente.Attivo)
             {
                 await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
-                throw new UnauthorizedAppException(CredenzialiNonValideMessage);
+                throw new UnauthorizedAppException("Il tuo account è stato sospeso. Contatta l'amministrazione.");
             }
         }
 
@@ -49,7 +56,7 @@ public class AuthService(
         if (esito == PasswordVerificationResult.Failed)
         {
             await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
-            throw new UnauthorizedAppException(CredenzialiNonValideMessage);
+            throw new UnauthorizedAppException("Password errata.");
         }
 
         var token = tokenGenerator.Generate(utente);

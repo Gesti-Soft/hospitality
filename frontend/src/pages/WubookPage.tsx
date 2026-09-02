@@ -52,6 +52,7 @@ import { aggiungiGiorni, formatoInputData, isoLocale, parsaInputData } from '../
 import { CampoData } from '../components/CampoData'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { ChiusureRestrizioniDialog } from '../components/ChiusureRestrizioniDialog'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ImpostazioniWubookCameraDialog } from '../components/ImpostazioniWubookCameraDialog'
 import { PianoPrezzoDialog } from '../components/PianoPrezzoDialog'
 import { PianoRestrizioneDialog } from '../components/PianoRestrizioneDialog'
@@ -192,15 +193,16 @@ function TabellaCamere({
   const [dialogoChiusure, setDialogoChiusure] = useState<{ cameraId: string; cameraNome: string } | null>(null)
   const [dialogoAssocia, setDialogoAssocia] = useState<CameraWubookInfoDto | null>(null)
   const [dialogoImpostazioni, setDialogoImpostazioni] = useState<CameraWubookInfoDto | null>(null)
+  const [daEliminare, setDaEliminare] = useState<CameraWubookInfoDto | null>(null)
   const rimuovi = useRimuoviWubookCamera(strutturaId)
 
   function gestisciErrore(err: unknown) {
     setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
-  function eliminaDaWubook(c: CameraWubookInfoDto) {
-    if (!window.confirm(`Eliminare "${c.cameraNome}" da Wubook? La camera locale resta, solo la camera su Wubook viene rimossa.`)) return
-    rimuovi.mutate(c.cameraId, { onError: gestisciErrore })
+  function confermaEliminaDaWubook() {
+    if (!daEliminare) return
+    rimuovi.mutate(daEliminare.cameraId, { onSuccess: () => setDaEliminare(null), onError: gestisciErrore })
   }
 
   // Come otaservice.web (legacy): select Tipologia prima di tutto, poi solo le camere di quella
@@ -297,7 +299,7 @@ function TabellaCamere({
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Elimina da Wubook">
-                        <IconButton size="small" onClick={() => eliminaDaWubook(c)} disabled={rimuovi.isPending}>
+                        <IconButton size="small" onClick={() => setDaEliminare(c)} disabled={rimuovi.isPending}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
@@ -330,6 +332,16 @@ function TabellaCamere({
           cameraNome={dialogoImpostazioni.cameraNome}
           wubookAttiva={dialogoImpostazioni.wubookAttiva}
           onClose={() => setDialogoImpostazioni(null)}
+        />
+      )}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Eliminare da Wubook"
+          messaggio={`Eliminare "${daEliminare.cameraNome}" da Wubook? La camera locale resta, solo la camera su Wubook viene rimossa.`}
+          inCorso={rimuovi.isPending}
+          onConferma={confermaEliminaDaWubook}
+          onAnnulla={() => setDaEliminare(null)}
         />
       )}
     </Box>

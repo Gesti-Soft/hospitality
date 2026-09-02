@@ -34,6 +34,12 @@ public class OsservatorioAppartamentoRepository(GestiSoftDbContext db) : IOsserv
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task DeleteAsync(OsservatorioAppartamento entity, CancellationToken cancellationToken)
+    {
+        db.OsservatorioAppartamenti.Remove(entity);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public void RimuoviTipologia(OsservatorioAppartamentoTipologia riga) => db.OsservatorioAppartamentiTipologie.Remove(riga);
 
     public void AggiungiTipologia(OsservatorioAppartamentoTipologia riga) => db.OsservatorioAppartamentiTipologie.Add(riga);

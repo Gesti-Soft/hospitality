@@ -146,8 +146,11 @@ public class OspitiService(
     /// ogni persona non esente e non residente nel comune della struttura. Le riduzioni per età
     /// (minori/anziani) del legacy dipendono da percentuali fornite dall'integrazione PayTourist
     /// (Fase 8) e non sono ancora applicate qui — TODO quando quell'integrazione sarà portata.
+    /// Pubblico perché riusato anche da <see cref="Prenotazioni.PrenotazioniService"/> per
+    /// ricalcolare l'importo dopo un check-out anticipato (le notti effettive sono minori di
+    /// quelle pianificate al momento del salvataggio della scheda ospiti).
     /// </summary>
-    private async Task<decimal> CalcolaTassaSoggiornoAsync(Guid strutturaId, Prenotazione prenotazione, Ospite ospite, CancellationToken cancellationToken)
+    public async Task<decimal> CalcolaTassaSoggiornoAsync(Guid strutturaId, Prenotazione prenotazione, Ospite ospite, CancellationToken cancellationToken)
     {
         var impostazioni = await impostazioniStruttura.GetByStrutturaIdAsync(strutturaId, cancellationToken);
         if (impostazioni is not { TassaSoggiornoPrezzo: > 0 } || prenotazione.CheckIn is null || prenotazione.CheckOut is null)

@@ -36,6 +36,7 @@ import { aggiungiGiorni, formatoInputData, inizioGiornoLocale, isoLocale, parsaI
 import { CampoData } from './CampoData'
 import { tokens } from '../theme'
 import { OspiteDialog } from './OspiteDialog'
+import { ConfirmDialog } from './ConfirmDialog'
 
 export type StatoIniziale =
   | { modo: 'crea'; cameraId: string | null; checkIn: Date; checkOut: Date }
@@ -60,9 +61,7 @@ const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', mont
 function messaggioConflitto(conflitto: DisponibilitaCameraDto): string {
   const dal = conflitto.checkIn ? formattatoreData.format(new Date(conflitto.checkIn)) : '?'
   const al = conflitto.checkOut ? formattatoreData.format(new Date(conflitto.checkOut)) : '?'
-  const nomeOspite = conflitto.ospiteNome || conflitto.ospiteCognome ? `${conflitto.ospiteNome ?? ''} ${conflitto.ospiteCognome ?? ''}`.trim() : null
-  const dettaglio = [conflitto.numeroPrenotazione ? `#${conflitto.numeroPrenotazione}` : null, nomeOspite].filter(Boolean).join(', ')
-  return `Questa camera è già prenotata dal ${dal} al ${al}}.`
+  return `Questa camera è già prenotata dal ${dal} al ${al}.`
 }
 
 interface Props {
@@ -108,6 +107,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const [cauzioneAttiva, setCauzioneAttiva] = useState(modifica?.cauzioneAttiva ?? true)
   const [errore, setErrore] = useState<string | null>(null)
   const [schedaOspitiAperta, setSchedaOspitiAperta] = useState(false)
+  const [confermaAnnullaAperta, setConfermaAnnullaAperta] = useState(false)
   // Appena creata una nuova prenotazione, si passa direttamente alla scheda ospiti (Nome/Cognome
   // veri, non un testo libero da spezzare a indovinare) — compilabile subito o saltabile del tutto.
   const [prenotazioneAppenaCreata, setPrenotazioneAppenaCreata] = useState<PrenotazioneDto | null>(null)
@@ -217,8 +217,18 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
 
   function eseguiAnnulla() {
     if (!modifica) return
-    if (!window.confirm('Annullare questa prenotazione? Gli importi verranno azzerati.')) return
-    annulla.mutate(modifica.id, { onSuccess: onClose, onError: gestisciErrore })
+    setConfermaAnnullaAperta(true)
+  }
+
+  function confermaAnnulla() {
+    if (!modifica) return
+    annulla.mutate(modifica.id, {
+      onSuccess: onClose,
+      onError: (err) => {
+        setConfermaAnnullaAperta(false)
+        gestisciErrore(err)
+      },
+    })
   }
 
   function eseguiCheckIn() {
@@ -442,6 +452,16 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           prenotazione={modifica}
           onClose={() => setSchedaOspitiAperta(false)}
           onApriPrenotazione={() => setSchedaOspitiAperta(false)}
+        />
+      )}
+
+      {confermaAnnullaAperta && (
+        <ConfirmDialog
+          titolo="Annullare prenotazione"
+          messaggio="Annullare questa prenotazione? Gli importi verranno azzerati."
+          inCorso={annulla.isPending}
+          onConferma={confermaAnnulla}
+          onAnnulla={() => setConfermaAnnullaAperta(false)}
         />
       )}
     </Dialog>

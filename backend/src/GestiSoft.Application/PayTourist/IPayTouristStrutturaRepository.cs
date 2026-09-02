@@ -12,5 +12,7 @@ public interface IPayTouristStrutturaRepository
 
     Task UpdateAsync(PayTouristStruttura entity, CancellationToken cancellationToken);
 
+    Task DeleteAsync(PayTouristStruttura entity, CancellationToken cancellationToken);
+
     void RimuoviTipologia(PayTouristStrutturaTipologia riga);
 }
