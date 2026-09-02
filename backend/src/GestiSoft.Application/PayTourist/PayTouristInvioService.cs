@@ -66,6 +66,14 @@ public class PayTouristInvioService(
         var lista = await payTouristStrutture.ListByStrutturaAsync(strutturaId, cancellationToken);
         if (lista.Count == 0)
         {
+            await logEventi.RegistraAsync(
+                LivelloLog.Info,
+                "Invio PayTourist: 0/0 prenotazioni inviate — nessuna struttura PayTourist configurata.",
+                origine: "PayTourist",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "PayTourist",
+                cancellationToken: cancellationToken);
             return new RisultatoInvioPayTourist(0, 0, 0, "Nessuna struttura PayTourist configurata.");
         }
 
@@ -388,22 +396,20 @@ public class PayTouristInvioService(
         entity.UltimoErrore = errore;
         await payTouristStrutture.UpdateAsync(entity, cancellationToken);
 
-        // Un log solo se c'è stato davvero un invio da riportare (totale > 0) o un errore vero e
-        // proprio (es. token non configurato) — non ogni giorno per "nessuna prenotazione da inviare".
-        if (errore is not null || totale > 0)
-        {
-            var messaggio = errore is null
-                ? $"Invio PayTourist ({entity.Nome}): {inviate}/{totale} prenotazioni inviate."
-                : $"Invio PayTourist ({entity.Nome}): {inviate}/{totale} prenotazioni inviate — {errore}";
+        // Un log ad ogni invio, anche "0/0 prenotazioni" (nessuna da inviare oggi) — l'utente deve
+        // poter verificare dalla pagina Log che il job gira regolarmente per questa struttura, non
+        // solo quando c'è stato un errore o un invio reale.
+        var messaggio = errore is null
+            ? $"Invio PayTourist ({entity.Nome}): {inviate}/{totale} prenotazioni inviate."
+            : $"Invio PayTourist ({entity.Nome}): {inviate}/{totale} prenotazioni inviate — {errore}";
 
-            await logEventi.RegistraAsync(
-                errore is null ? LivelloLog.Info : LivelloLog.Warning,
-                messaggio,
-                origine: "PayTourist",
-                clienteId: await strutture.GetClienteIdAsync(entity.StrutturaId, cancellationToken),
-                strutturaId: entity.StrutturaId,
-                categoria: "PayTourist",
-                cancellationToken: cancellationToken);
-        }
+        await logEventi.RegistraAsync(
+            errore is null ? LivelloLog.Info : LivelloLog.Warning,
+            messaggio,
+            origine: "PayTourist",
+            clienteId: await strutture.GetClienteIdAsync(entity.StrutturaId, cancellationToken),
+            strutturaId: entity.StrutturaId,
+            categoria: "PayTourist",
+            cancellationToken: cancellationToken);
     }
 }

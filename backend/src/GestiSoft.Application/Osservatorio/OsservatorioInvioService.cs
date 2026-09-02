@@ -52,6 +52,19 @@ public class OsservatorioInvioService(
     public async Task<IReadOnlyList<RisultatoInvioOsservatorio>> InviaSistemaAsync(Guid strutturaId, CancellationToken cancellationToken)
     {
         var lista = await appartamenti.ListByStrutturaAsync(strutturaId, cancellationToken);
+        if (lista.Count == 0)
+        {
+            await logEventi.RegistraAsync(
+                LivelloLog.Info,
+                "Invio Osservatorio Turistico: 0 arrivi e 0 partenze inviati — nessun appartamento configurato.",
+                origine: "Osservatorio",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "Osservatorio",
+                cancellationToken: cancellationToken);
+            return [];
+        }
+
         var risultati = new List<RisultatoInvioOsservatorio>();
 
         foreach (var appartamento in lista)
@@ -179,18 +192,18 @@ public class OsservatorioInvioService(
             // Niente denominatore "X/Y" qui a differenza di Alloggiati Web/PayTourist: un invio
             // arrivi/checkout è tutto-o-niente (un rifiuto del server fa fallire l'intera chiamata,
             // vedi InviaArriviAsync/ChiudiGiornataAsync), non c'è un conteggio di "scartati" per
-            // singolo ospite. Log solo se è successo davvero qualcosa, non per un giro a vuoto.
-            if (arriviInviati > 0 || checkoutInviati > 0)
-            {
-                await logEventi.RegistraAsync(
-                    LivelloLog.Info,
-                    $"Invio Osservatorio Turistico ({appartamento.Nome}): {arriviInviati} arrivi e {checkoutInviati} partenze inviati.",
-                    origine: "Osservatorio",
-                    clienteId: await strutture.GetClienteIdAsync(appartamento.StrutturaId, cancellationToken),
-                    strutturaId: appartamento.StrutturaId,
-                    categoria: "Osservatorio",
-                    cancellationToken: cancellationToken);
-            }
+            // singolo ospite. Log ad ogni giornata effettivamente processata, anche "0 e 0" (nessun
+            // arrivo/partenza oggi), con la data fino a cui risulta chiuso — l'utente deve poter
+            // verificare dalla pagina Log che il job gira regolarmente, non solo quando c'è stato
+            // un movimento reale.
+            await logEventi.RegistraAsync(
+                LivelloLog.Info,
+                $"Invio Osservatorio Turistico ({appartamento.Nome}): {arriviInviati} arrivi e {checkoutInviati} partenze inviati — chiuso fino al {appartamento.CursoreDataAtUtc:dd/MM/yyyy}.",
+                origine: "Osservatorio",
+                clienteId: await strutture.GetClienteIdAsync(appartamento.StrutturaId, cancellationToken),
+                strutturaId: appartamento.StrutturaId,
+                categoria: "Osservatorio",
+                cancellationToken: cancellationToken);
 
             return new RisultatoInvioOsservatorio(arriviInviati, checkoutInviati, giorniChiusi, null);
         }

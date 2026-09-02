@@ -181,23 +181,21 @@ public class AlloggiatiWebInvioService(
         integrazione.UltimoErrore = errore;
         await integrazioni.UpsertAsync(integrazione, cancellationToken);
 
-        // Un log solo se c'è stato davvero un invio da riportare (totale > 0) o un errore vero e
-        // proprio (es. credenziali mancanti) — non ogni giorno per "nessuna schedina da inviare".
-        if (errore is not null || totale > 0)
-        {
-            var messaggio = errore is null
-                ? $"Invio Alloggiati Web (Polizia di Stato): {inviate}/{totale} schedine inviate."
-                : $"Invio Alloggiati Web (Polizia di Stato): {inviate}/{totale} schedine inviate — {errore}";
+        // Un log ad ogni invio, anche "0/0 schedine" (nessuna da inviare oggi) — l'utente deve poter
+        // verificare dalla pagina Log che il job gira regolarmente per questa struttura, non solo
+        // quando c'è stato un errore o un invio reale.
+        var messaggio = errore is null
+            ? $"Invio Alloggiati Web (Polizia di Stato): {inviate}/{totale} schedine inviate."
+            : $"Invio Alloggiati Web (Polizia di Stato): {inviate}/{totale} schedine inviate — {errore}";
 
-            await logEventi.RegistraAsync(
-                errore is null ? LivelloLog.Info : LivelloLog.Warning,
-                messaggio,
-                origine: "AlloggiatiWeb",
-                clienteId: await strutture.GetClienteIdAsync(integrazione.StrutturaId, cancellationToken),
-                strutturaId: integrazione.StrutturaId,
-                categoria: "AlloggiatiWeb",
-                cancellationToken: cancellationToken);
-        }
+        await logEventi.RegistraAsync(
+            errore is null ? LivelloLog.Info : LivelloLog.Warning,
+            messaggio,
+            origine: "AlloggiatiWeb",
+            clienteId: await strutture.GetClienteIdAsync(integrazione.StrutturaId, cancellationToken),
+            strutturaId: integrazione.StrutturaId,
+            categoria: "AlloggiatiWeb",
+            cancellationToken: cancellationToken);
 
         return new RisultatoInvioAlloggiatiWeb(inviate, totale, totale - inviate, errore);
     }

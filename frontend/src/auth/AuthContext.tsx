@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { login as loginRequest } from '../api/auth'
 import { ApiError } from '../api/client'
-import { SESSIONE_SCADUTA_EVENT } from '../api/client'
+import { SESSIONE_RINNOVATA_EVENT, SESSIONE_SCADUTA_EVENT } from '../api/client'
 import { cancellaSessione, leggiSessione, salvaSessione, type Sessione } from './tokenStorage'
 
 interface AuthContextValue {
@@ -21,8 +21,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onSessioneScaduta = () => setSessione(null)
+    const onSessioneRinnovata = () => setSessione(leggiSessione())
     window.addEventListener(SESSIONE_SCADUTA_EVENT, onSessioneScaduta)
-    return () => window.removeEventListener(SESSIONE_SCADUTA_EVENT, onSessioneScaduta)
+    window.addEventListener(SESSIONE_RINNOVATA_EVENT, onSessioneRinnovata)
+    return () => {
+      window.removeEventListener(SESSIONE_SCADUTA_EVENT, onSessioneScaduta)
+      window.removeEventListener(SESSIONE_RINNOVATA_EVENT, onSessioneRinnovata)
+    }
   }, [])
 
   const accedi = async (email: string, password: string) => {

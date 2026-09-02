@@ -66,6 +66,34 @@ public class AuthService(
         return new LoginResult(token.Value, token.ScadeAtUtc, utente.Id, utente.Email, utente.IsSuperAdmin, utente.ClienteId);
     }
 
+    /// <summary>
+    /// Rinnova il token di un utente già autenticato (chiamato dal frontend in background mentre
+    /// l'utente è attivo) — stessi controlli del login (utente/Cliente attivi) ma senza password,
+    /// il chiamante deve già possedere un JWT valido e non scaduto (endpoint protetto da
+    /// [Authorize]). Nessun LogEvento qui: a differenza del login vero e proprio, un rinnovo può
+    /// avvenire più volte l'ora e non è un evento significativo da mostrare in pagina Log.
+    /// </summary>
+    public async Task<LoginResult> RefreshAsync(Guid utenteId, CancellationToken cancellationToken)
+    {
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken);
+        if (utente is null || !utente.Attivo)
+        {
+            throw new UnauthorizedAppException(CredenzialiNonValideMessage);
+        }
+
+        if (utente.ClienteId is { } clienteId)
+        {
+            var cliente = await clienti.GetByIdAsync(clienteId, cancellationToken);
+            if (cliente is null || !cliente.Attivo)
+            {
+                throw new UnauthorizedAppException(CredenzialiNonValideMessage);
+            }
+        }
+
+        var token = tokenGenerator.Generate(utente);
+        return new LoginResult(token.Value, token.ScadeAtUtc, utente.Id, utente.Email, utente.IsSuperAdmin, utente.ClienteId);
+    }
+
     private Task LogFallitoAsync(string emailTentata, Guid? clienteId, CancellationToken cancellationToken) =>
         logEventi.RegistraAsync(
             LivelloLog.Warning,

@@ -1,8 +1,45 @@
-import { cancellaSessione, leggiSessione } from '../auth/tokenStorage'
+import { cancellaSessione, leggiSessione, salvaSessione, type Sessione } from '../auth/tokenStorage'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5080'
 
 export const SESSIONE_SCADUTA_EVENT = 'gestisoft:sessione-scaduta'
+export const SESSIONE_RINNOVATA_EVENT = 'gestisoft:sessione-rinnovata'
+
+// Rinnova il token in background ad ogni richiesta autenticata andata a buon fine (non 401), con un
+// throttle per non chiamare /auth/refresh ad ogni singola azione — così la sessione resta viva
+// finché l'utente la usa davvero, e scade solo dopo un periodo di inattività reale pari alla durata
+// del token (Jwt:LifetimeMinutes lato backend). Se il rinnovo fallisce non succede nulla di
+// grave: la sessione scade semplicemente alla sua naturale scadenza.
+const REFRESH_THROTTLE_MS = 5 * 60 * 1000
+let ultimoRefreshMs = 0
+
+function rinnovaSessioneSeNecessario(sessione: Sessione | null): void {
+  if (!sessione) {
+    return
+  }
+
+  const ora = Date.now()
+  if (ora - ultimoRefreshMs < REFRESH_THROTTLE_MS) {
+    return
+  }
+  ultimoRefreshMs = ora
+
+  void fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${sessione.token}` },
+  })
+    .then((response) => (response.ok ? (response.json() as Promise<Sessione>) : null))
+    .then((risposta) => {
+      if (!risposta) {
+        return
+      }
+      salvaSessione(risposta)
+      window.dispatchEvent(new Event(SESSIONE_RINNOVATA_EVENT))
+    })
+    .catch(() => {
+      // Silenzioso, vedi commento sopra.
+    })
+}
 
 export class ApiError extends Error {
   status: number
@@ -34,6 +71,8 @@ async function apiRequest<T>(method: string, path: string, body?: unknown): Prom
     window.dispatchEvent(new Event(SESSIONE_SCADUTA_EVENT))
     throw new ApiError(401, 'Sessione scaduta, effettua di nuovo l\'accesso.')
   }
+
+  rinnovaSessioneSeNecessario(sessione)
 
   if (!response.ok) {
     const corpo = await response.json().catch(() => null)
@@ -73,6 +112,8 @@ export async function apiScaricaFile(path: string, nomeFile: string): Promise<vo
     window.dispatchEvent(new Event(SESSIONE_SCADUTA_EVENT))
     throw new ApiError(401, 'Sessione scaduta, effettua di nuovo l\'accesso.')
   }
+
+  rinnovaSessioneSeNecessario(sessione)
 
   if (!response.ok) {
     throw new ApiError(response.status, `Download di ${nomeFile} non riuscito (${response.status}).`)
