@@ -33,6 +33,8 @@ export interface NavItem {
 
 export interface NavSection {
   title: string
+  /** Icona della sezione, usata come tab nella barra di navigazione in alto (vedi AppShell). */
+  icon: ComponentType<SVGProps<SVGSVGElement>>
   /** Se true, la sezione compare solo per il Super Admin (staff GestiSoft), mai per un Cliente. */
   soloSuperAdmin?: boolean
   /**
@@ -41,20 +43,19 @@ export interface NavSection {
    * vede sempre.
    */
   richiedeGestioneUtenti?: boolean
-  /** Se true, la sezione ha un'intestazione cliccabile che espande/comprime le sue voci (stato ricordato per utente, vedi AppShell). */
-  collassabile?: boolean
   items: NavItem[]
 }
 
 export const navSections: NavSection[] = [
   {
     title: 'Super Admin',
+    icon: IconSuperAdmin,
     soloSuperAdmin: true,
     items: [{ label: 'Dashboard Super Admin', path: '/super-admin', icon: IconSuperAdmin }],
   },
   {
     title: 'Operativo',
-    collassabile: true,
+    icon: IconCruscotto,
     items: [
       { label: 'Cruscotto', path: '/', icon: IconCruscotto },
       { label: 'Calendario', path: '/calendario', icon: IconCalendario },
@@ -67,7 +68,7 @@ export const navSections: NavSection[] = [
   },
   {
     title: 'Invii automatici',
-    collassabile: true,
+    icon: IconWubook,
     items: [
       { label: 'Polizia di Stato', path: '/polizia-di-stato', icon: IconPolizia, richiedeServizio: 'alloggiatiWebAbilitato' },
       { label: 'Osservatorio', path: '/osservatorio', icon: IconOsservatorio, richiedeServizio: 'osservatorioAbilitato' },
@@ -77,8 +78,8 @@ export const navSections: NavSection[] = [
   },
   {
     title: 'Amministrazione',
+    icon: IconImpostazioni,
     richiedeGestioneUtenti: true,
-    collassabile: true,
     items: [
       { label: 'Utenti', path: '/utenti', icon: IconUtenti },
       { label: 'Impostazioni', path: '/impostazioni', icon: IconImpostazioni },

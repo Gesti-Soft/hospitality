@@ -139,7 +139,7 @@ export function DashboardPage() {
         </Button>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2 }}>
         <KpiCardDoppia
           etichetta="Arrivi e partenze oggi"
           voci={[

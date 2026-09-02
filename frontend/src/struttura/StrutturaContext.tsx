@@ -33,7 +33,9 @@ export function StrutturaProvider({ children }: { children: ReactNode }) {
   const [strutturaId, setStrutturaId] = useState<string | null>(() => (isSuperAdmin ? null : localStorage.getItem(CHIAVE_STRUTTURA)))
 
   const { data: clienti, isLoading: clientiLoading } = useClienti(isSuperAdmin)
-  const { data: strutture, isLoading: struttureLoading } = useStrutture(isSuperAdmin ? clienteId : null)
+  // Il SuperAdmin senza ancora un Cliente scelto non ha nessuna struttura sensata da elencare (la
+  // select Struttura resta nascosta, vedi AppShell): non interrogare l'endpoint finché non sceglie.
+  const { data: strutture, isLoading: struttureLoading } = useStrutture(isSuperAdmin ? clienteId : null, !isSuperAdmin || !!clienteId)
 
   // Se il Cliente scelto sparisce dalla lista (es. eliminato) durante la sessione, azzera la
   // selezione invece di sceglierne un altro a caso.
@@ -44,10 +46,8 @@ export function StrutturaProvider({ children }: { children: ReactNode }) {
   }, [isSuperAdmin, clienti, clienteId])
 
   // Quando la lista strutture cambia, assicurati che la struttura selezionata sia una di quelle
-  // disponibili — altrimenti scegli la prima. Per il SuperAdmin senza un Cliente scelto la select
-  // Struttura mostra comunque tutte le strutture di tutti i Clienti (nessuna nascosta, vedi
-  // useStrutture sopra), ma senza selezionarne una di default: l'auto-selezione scatta solo dopo
-  // aver scelto esplicitamente un Cliente, sulla prima struttura di quel Cliente.
+  // disponibili — altrimenti scegli la prima. Per il SuperAdmin la query è disabilitata finché non
+  // sceglie un Cliente (vedi sopra), quindi qui non scatta nulla fino a quel momento.
   useEffect(() => {
     if (!strutture) return // query ancora in caricamento, non toccare la selezione salvata
     if (strutture.length === 0) {

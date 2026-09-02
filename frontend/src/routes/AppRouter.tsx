@@ -18,10 +18,14 @@ import { LogPage } from '../pages/LogPage'
 import { SuperAdminDashboardPage } from '../pages/SuperAdminDashboardPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
-/** Il Super Admin non ha una struttura operativa propria: al login va sempre alla sua dashboard. */
+/**
+ * Il Super Admin senza ancora una Struttura scelta non ha nessun Cruscotto operativo da mostrare:
+ * va alla sua dashboard. Una volta scelta una Struttura (tab "Operativo" in alto, il cui primo
+ * elemento è proprio "/") deve invece vedere il Cruscotto di quella struttura come chiunque altro.
+ */
 function RootRoute() {
-  const { isSuperAdmin } = useStruttura()
-  return isSuperAdmin ? <Navigate to="/super-admin" replace /> : <DashboardPage />
+  const { isSuperAdmin, strutturaId } = useStruttura()
+  return isSuperAdmin && !strutturaId ? <Navigate to="/super-admin" replace /> : <DashboardPage />
 }
 
 const router = createBrowserRouter([

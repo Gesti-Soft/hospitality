@@ -13,10 +13,11 @@ export interface StrutturaDto {
   payTouristAbilitato: boolean
 }
 
-export function useStrutture(clienteId: string | null) {
+export function useStrutture(clienteId: string | null, abilitato = true) {
   return useQuery({
     queryKey: ['strutture', clienteId ?? 'proprie'],
     queryFn: () => apiGet<StrutturaDto[]>(clienteId ? `/strutture?clienteId=${clienteId}` : '/strutture'),
+    enabled: abilitato,
   })
 }
 

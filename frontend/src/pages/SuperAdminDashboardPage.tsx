@@ -3,13 +3,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Checkbox from '@mui/material/Checkbox'
-import Collapse from '@mui/material/Collapse'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
+import Divider from '@mui/material/Divider'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
+import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import Switch from '@mui/material/Switch'
 import Table from '@mui/material/Table'
@@ -21,20 +22,22 @@ import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
+import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined'
 import EditIcon from '@mui/icons-material/EditOutlined'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForeverOutlined'
 import { ApiError } from '../api/client'
 import {
   GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA,
   giorniDaDisattivazione,
   useAggiornaServiziStruttura,
+  useAggiornaUtente,
   useDashboardSuperAdmin,
   useEliminaStrutturaDefinitivamente,
   useImpostaAttivoCliente,
+  useResettaPasswordUtente,
   type ClienteAdminDto,
   type StrutturaAdminDto,
+  type UtenteAdminDto,
 } from '../api/superAdmin'
 import { useAggiornaCliente, useCreaCliente } from '../api/clienti'
 import { useImpostaAttivoStruttura } from '../api/strutture'
@@ -45,30 +48,50 @@ import { fontDisplay, fontMono, tokens } from '../theme'
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-const SERVIZI: { chiave: keyof Pick<StrutturaAdminDto, 'wubookAbilitato' | 'alloggiatiWebAbilitato' | 'osservatorioAbilitato' | 'payTouristAbilitato'>; etichetta: string }[] = [
-  { chiave: 'wubookAbilitato', etichetta: 'Wubook' },
-  { chiave: 'alloggiatiWebAbilitato', etichetta: 'Alloggiati Web' },
-  { chiave: 'osservatorioAbilitato', etichetta: 'Osservatorio' },
-  { chiave: 'payTouristAbilitato', etichetta: 'PayTourist' },
+interface EsitoServizio {
+  attivo: boolean
+  errore?: string | null
+  dettaglio?: string
+}
+
+const SERVIZI: {
+  chiave: keyof Pick<StrutturaAdminDto, 'wubookAbilitato' | 'alloggiatiWebAbilitato' | 'osservatorioAbilitato' | 'payTouristAbilitato'>
+  etichetta: string
+  // Nome dell'esito mostrato sotto lo switch — non sempre coincide con l'etichetta della
+  // concessione (es. si concede "Alloggiati Web" ma l'esito è l'invio "Polizia di Stato").
+  statoNome: string
+  // Esito dell'integrazione lato Cliente (es. "Alloggiati Web" attivata nelle sue Impostazioni) —
+  // mostrato sotto lo switch di concessione, non un'informazione separata: uno switch "concesso"
+  // senza sapere se il Cliente lo ha poi davvero attivato dice poco da solo.
+  stato: (s: StrutturaAdminDto) => EsitoServizio
+}[] = [
+  {
+    chiave: 'wubookAbilitato',
+    etichetta: 'Wubook',
+    statoNome: 'Wubook/licenza',
+    stato: (s) => ({
+      attivo: s.wubookAttivo,
+      errore: s.wubookUltimoErrore,
+      dettaglio: s.wubookCacheAggiornataAtUtc ? `agg. ${formattatoreDataOra.format(new Date(s.wubookCacheAggiornataAtUtc))}` : undefined,
+    }),
+  },
+  { chiave: 'alloggiatiWebAbilitato', etichetta: 'Alloggiati Web', statoNome: 'Polizia di Stato', stato: (s) => ({ attivo: s.poliziaStatoAttiva }) },
+  { chiave: 'osservatorioAbilitato', etichetta: 'Osservatorio', statoNome: 'Osservatorio', stato: (s) => ({ attivo: s.osservatorioAttivo }) },
+  { chiave: 'payTouristAbilitato', etichetta: 'PayTourist', statoNome: 'PayTourist', stato: (s) => ({ attivo: s.payTouristAttivo }) },
 ]
 
 export function SuperAdminDashboardPage() {
   const { isSuperAdmin } = useStruttura()
   const dashboard = useDashboardSuperAdmin(isSuperAdmin)
 
-  const [espansi, setEspansi] = useState<Set<string>>(new Set())
+  // Solo l'Id, non l'oggetto Cliente intero: dopo ogni switch (Attiva/riattiva struttura, Servizi
+  // concessi...) la dashboard viene invalidata e rifetchata — se il dialogo tenesse in state
+  // l'oggetto Cliente "fotografato" al click, resterebbe con i vecchi valori finché non lo si
+  // richiude e riapre (bug reale riscontrato: lo switch "Riattiva" sembrava non fare nulla).
+  const [clienteStruttureAperto, setClienteStruttureAperto] = useState<string | null>(null)
   const [clienteInModifica, setClienteInModifica] = useState<ClienteAdminDto | null>(null)
   const [nuovoClienteAperto, setNuovoClienteAperto] = useState(false)
   const [strutturaDaEliminare, setStrutturaDaEliminare] = useState<{ struttura: StrutturaAdminDto; clienteRagioneSociale: string } | null>(null)
-
-  function toggleEspanso(clienteId: string) {
-    setEspansi((prec) => {
-      const next = new Set(prec)
-      if (next.has(clienteId)) next.delete(clienteId)
-      else next.add(clienteId)
-      return next
-    })
-  }
 
   if (!isSuperAdmin) {
     return <Alert severity="error">Questa pagina è riservata al Super Admin.</Alert>
@@ -83,6 +106,16 @@ export function SuperAdminDashboardPage() {
   }
 
   const clienti = dashboard.data?.clienti ?? []
+  const utenti = dashboard.data?.utenti ?? []
+  const clienteConStruttureAperte = clienti.find((c) => c.id === clienteStruttureAperto) ?? null
+
+  // Un Cliente può avere più utenti (uno per struttura, gestiti poi dal Cliente stesso in Utenti) —
+  // qui interessa solo il primo, quello creato insieme al Cliente da "+ Nuovo Cliente".
+  function trovaAdminCliente(clienteId: string): UtenteAdminDto | null {
+    const utentiCliente = utenti.filter((u) => u.clienteId === clienteId)
+    if (utentiCliente.length === 0) return null
+    return utentiCliente.reduce((piuVecchio, u) => (new Date(u.createdAtUtc) < new Date(piuVecchio.createdAtUtc) ? u : piuVecchio))
+  }
 
   const clientiAttivi = clienti.filter((c) => c.attivo).length
   const struttureTotali = clienti.reduce((tot, c) => tot + c.strutture.length, 0)
@@ -99,7 +132,7 @@ export function SuperAdminDashboardPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2 }}>
         <KpiCard etichetta="Clienti" valore={String(clienti.length)} dettaglio={`${clientiAttivi} attivi`} />
         <KpiCard etichetta="Strutture" valore={String(struttureTotali)} />
         <KpiCard
@@ -119,82 +152,80 @@ export function SuperAdminDashboardPage() {
               (camere, prenotazioni, ospiti, fatture...). Nessuna cancellazione automatica: va confermata singolarmente.
             </Typography>
           </Box>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Cliente</TableCell>
-                <TableCell>Struttura</TableCell>
-                <TableCell>Disattivata il</TableCell>
-                <TableCell align="right">Giorni</TableCell>
-                <TableCell align="right">Azioni</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {struttureEliminabili.map(({ struttura, clienteRagioneSociale }) => (
-                <TableRow key={struttura.id} hover>
-                  <TableCell sx={{ color: tokens.textSecondary }}>{clienteRagioneSociale}</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>{struttura.nome}</TableCell>
-                  <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
-                    {struttura.disattivataAtUtc ? formattatoreData.format(new Date(struttura.disattivataAtUtc)) : '—'}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                    {struttura.disattivataAtUtc ? giorniDaDisattivazione(struttura.disattivataAtUtc) : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="Elimina definitivamente">
-                      <IconButton size="small" color="error" onClick={() => setStrutturaDaEliminare({ struttura, clienteRagioneSociale })}>
-                        <DeleteForeverIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Cliente</TableCell>
+                  <TableCell>Struttura</TableCell>
+                  <TableCell>Disattivata il</TableCell>
+                  <TableCell align="right">Giorni</TableCell>
+                  <TableCell align="right">Azioni</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {struttureEliminabili.map(({ struttura, clienteRagioneSociale }) => (
+                  <TableRow key={struttura.id} hover>
+                    <TableCell sx={{ color: tokens.textSecondary }}>{clienteRagioneSociale}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{struttura.nome}</TableCell>
+                    <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+                      {struttura.disattivataAtUtc ? formattatoreData.format(new Date(struttura.disattivataAtUtc)) : '—'}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontFamily: fontMono }}>
+                      {struttura.disattivataAtUtc ? giorniDaDisattivazione(struttura.disattivataAtUtc) : '—'}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="Elimina definitivamente">
+                        <IconButton size="small" color="error" onClick={() => setStrutturaDaEliminare({ struttura, clienteRagioneSociale })}>
+                          <DeleteForeverIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
         </Box>
       )}
 
-      <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, overflow: 'hidden' }}>
-        <Box sx={{ p: '18px 20px', borderBottom: `1px solid ${tokens.surfaceBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
           <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5 }}>Clienti</Typography>
           <Button variant="contained" color="secondary" size="small" onClick={() => setNuovoClienteAperto(true)}>
             + Nuovo Cliente
           </Button>
         </Box>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell width={40} />
-              <TableCell>Ragione sociale</TableCell>
-              <TableCell>P.IVA</TableCell>
-              <TableCell align="right">Strutture</TableCell>
-              <TableCell align="center">Stato</TableCell>
-              <TableCell>Creato il</TableCell>
-              <TableCell align="right">Azioni</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {clienti.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                  Nessun Cliente presente.
-                </TableCell>
-              </TableRow>
-            )}
+
+        {clienti.length === 0 ? (
+          <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: 4, textAlign: 'center', color: tokens.textSecondary }}>
+            Nessun Cliente presente.
+          </Box>
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
             {clienti.map((c) => (
-              <RigaCliente
+              <ClienteCard
                 key={c.id}
                 cliente={c}
-                espanso={espansi.has(c.id)}
-                onToggle={() => toggleEspanso(c.id)}
+                adminUtente={trovaAdminCliente(c.id)}
+                onVediStrutture={() => setClienteStruttureAperto(c.id)}
                 onModifica={() => setClienteInModifica(c)}
               />
             ))}
-          </TableBody>
-        </Table>
+          </Box>
+        )}
       </Box>
 
-      {clienteInModifica && <ModificaClienteDialog cliente={clienteInModifica} onClose={() => setClienteInModifica(null)} />}
+      {clienteConStruttureAperte && (
+        <StruttureClienteDialog cliente={clienteConStruttureAperte} onClose={() => setClienteStruttureAperto(null)} />
+      )}
+      {clienteInModifica && (
+        <ModificaClienteDialog
+          cliente={clienteInModifica}
+          adminUtente={trovaAdminCliente(clienteInModifica.id)}
+          onClose={() => setClienteInModifica(null)}
+        />
+      )}
       {nuovoClienteAperto && <NuovoClienteDialog onClose={() => setNuovoClienteAperto(false)} />}
       {strutturaDaEliminare && (
         <EliminaStrutturaDialog
@@ -256,7 +287,7 @@ function RigaStruttura({ struttura }: { struttura: StrutturaAdminDto }) {
     >
       {errore && <Alert severity="error">{errore}</Alert>}
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Typography sx={{ fontSize: 13, fontWeight: 700, minWidth: 160 }}>{struttura.nome}</Typography>
 
         <Tooltip title={struttura.attivo ? 'Elimina struttura (soft-delete)' : 'Riattiva struttura'}>
@@ -267,51 +298,45 @@ function RigaStruttura({ struttura }: { struttura: StrutturaAdminDto }) {
             </Typography>
           </Box>
         </Tooltip>
-
-        <StatoIntegrazione
-          nome="Wubook/licenza"
-          attivo={struttura.wubookAttivo}
-          errore={struttura.wubookUltimoErrore}
-          dettaglio={
-            struttura.wubookCacheAggiornataAtUtc
-              ? `agg. ${formattatoreDataOra.format(new Date(struttura.wubookCacheAggiornataAtUtc))}`
-              : undefined
-          }
-        />
-        <StatoIntegrazione nome="Polizia di Stato" attivo={struttura.poliziaStatoAttiva} />
-        <StatoIntegrazione nome="Osservatorio" attivo={struttura.osservatorioAttivo} />
-        <StatoIntegrazione nome="PayTourist" attivo={struttura.payTouristAttivo} />
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, pl: '160px', flexWrap: 'wrap' }}>
-        <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+      <Box>
+        <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em', mb: 0.75 }}>
           Servizi concessi
         </Typography>
-        {SERVIZI.map((s) => (
-          <Box key={s.chiave} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Switch
-              size="small"
-              checked={struttura[s.chiave]}
-              onChange={(e) => cambiaServizio(s.chiave, e.target.checked)}
-              disabled={aggiornaServizi.isPending}
-            />
-            <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{s.etichetta}</Typography>
-          </Box>
-        ))}
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2.5, flexWrap: 'wrap' }}>
+          {SERVIZI.map((s) => {
+            const esito = s.stato(struttura)
+            return (
+              <Box key={s.chiave} sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minWidth: 170 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Switch
+                    size="small"
+                    checked={struttura[s.chiave]}
+                    onChange={(e) => cambiaServizio(s.chiave, e.target.checked)}
+                    disabled={aggiornaServizi.isPending}
+                  />
+                  <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{s.etichetta}</Typography>
+                </Box>
+                <EsitoServizioBadge nome={s.statoNome} {...esito} />
+              </Box>
+            )
+          })}
+        </Box>
       </Box>
     </Box>
   )
 }
 
-function StatoIntegrazione({ nome, attivo, errore, dettaglio }: { nome: string; attivo: boolean; errore?: string | null; dettaglio?: string }) {
+function EsitoServizioBadge({ nome, attivo, errore, dettaglio }: EsitoServizio & { nome: string }) {
   const inErrore = attivo && !!errore
   const colore = inErrore ? tokens.error600 : attivo ? tokens.ok600 : tokens.textTertiary
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 170 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: '2px' }}>
       <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colore, flex: '0 0 auto' }} />
       <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, color: tokens.textPrimary }}>{nome}</Typography>
+        <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: tokens.textPrimary }}>{nome}</Typography>
         <Typography noWrap sx={{ fontSize: 11, color: inErrore ? tokens.error600 : tokens.textTertiary }}>
           {inErrore ? errore : attivo ? (dettaglio ?? 'attivo') : 'non attivo'}
         </Typography>
@@ -320,15 +345,15 @@ function StatoIntegrazione({ nome, attivo, errore, dettaglio }: { nome: string; 
   )
 }
 
-function RigaCliente({
+function ClienteCard({
   cliente,
-  espanso,
-  onToggle,
+  adminUtente,
+  onVediStrutture,
   onModifica,
 }: {
   cliente: ClienteAdminDto
-  espanso: boolean
-  onToggle: () => void
+  adminUtente: UtenteAdminDto | null
+  onVediStrutture: () => void
   onModifica: () => void
 }) {
   const impostaAttivoCliente = useImpostaAttivoCliente()
@@ -343,87 +368,206 @@ function RigaCliente({
   }
 
   return (
-    <>
-      <TableRow hover>
-        <TableCell>
-          {cliente.strutture.length > 0 && (
-            <IconButton size="small" onClick={onToggle}>
-              {espanso ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-            </IconButton>
+    <Box
+      sx={{
+        border: `1px solid ${tokens.surfaceBorder}`,
+        borderRadius: 2,
+        bgcolor: tokens.surface,
+        p: 2.25,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.5,
+        minWidth: 0,
+      }}
+    >
+      {errore && <Alert severity="error">{errore}</Alert>}
+
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, wordBreak: 'break-word' }}>{cliente.ragioneSociale}</Typography>
+          {adminUtente && (adminUtente.nome || adminUtente.cognome) && (
+            <Typography noWrap sx={{ fontSize: 12, color: tokens.textSecondary, mt: 0.25 }}>
+              {[adminUtente.nome, adminUtente.cognome].filter(Boolean).join(' ')}
+            </Typography>
           )}
-        </TableCell>
-        <TableCell sx={{ fontWeight: 600 }}>{cliente.ragioneSociale}</TableCell>
-        <TableCell sx={{ color: tokens.textSecondary, fontFamily: fontMono }}>{cliente.partitaIva ?? '—'}</TableCell>
-        <TableCell align="right" sx={{ fontFamily: fontMono }}>
-          {cliente.strutture.length}
-        </TableCell>
-        <TableCell align="center">
-          <Tooltip title={cliente.attivo ? 'Sospendi il Cliente (nessun suo utente potrà più accedere)' : 'Riattiva il Cliente'}>
-            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-              <Switch
-                size="small"
-                checked={cliente.attivo}
-                onChange={(e) => cambiaAttivo(e.target.checked)}
-                disabled={impostaAttivoCliente.isPending}
-              />
-              <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: cliente.attivo ? tokens.ok600 : tokens.error600 }}>
-                {cliente.attivo ? 'Attivo' : 'Sospeso'}
-              </Typography>
-            </Box>
+          <Typography sx={{ fontSize: 12, color: tokens.textSecondary, fontFamily: fontMono, mt: 0.25 }}>
+            {cliente.partitaIva ?? 'P.IVA non indicata'}
+          </Typography>
+          {adminUtente && (
+            <Typography noWrap sx={{ fontSize: 12, color: tokens.textSecondary, mt: 0.25 }}>
+              {adminUtente.email}
+            </Typography>
+          )}
+        </Box>
+        <Box sx={{ display: 'flex', gap: 0.25, flex: '0 0 auto' }}>
+          <Tooltip title="Strutture del Cliente">
+            <IconButton size="small" onClick={onVediStrutture} disabled={cliente.strutture.length === 0}>
+              <ApartmentOutlinedIcon fontSize="small" />
+            </IconButton>
           </Tooltip>
-        </TableCell>
-        <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>{formattatoreData.format(new Date(cliente.createdAtUtc))}</TableCell>
-        <TableCell align="right">
-          <Tooltip title="Modifica dati Cliente (ragione sociale, P.IVA)">
+          <Tooltip title="Modifica dati Cliente e amministratore">
             <IconButton size="small" onClick={onModifica}>
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-        </TableCell>
-      </TableRow>
-      {cliente.strutture.length > 0 && (
-        <TableRow>
-          <TableCell colSpan={7} sx={{ p: 0, border: espanso ? undefined : 'none' }}>
-            <Collapse in={espanso} unmountOnExit>
-              <Box sx={{ p: '10px 20px 18px 56px', bgcolor: tokens.paper, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {errore && <Alert severity="error">{errore}</Alert>}
-                <Typography sx={{ fontSize: 11, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                  Strutture
-                </Typography>
-                {cliente.strutture.map((s) => (
-                  <RigaStruttura key={s.id} struttura={s} />
-                ))}
-              </Box>
-            </Collapse>
-          </TableCell>
-        </TableRow>
-      )}
-    </>
+        </Box>
+      </Box>
+
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+        <Tooltip title={cliente.attivo ? 'Sospendi il Cliente (nessun suo utente potrà più accedere)' : 'Riattiva il Cliente'}>
+          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+            <Switch
+              size="small"
+              checked={cliente.attivo}
+              onChange={(e) => cambiaAttivo(e.target.checked)}
+              disabled={impostaAttivoCliente.isPending}
+            />
+            <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: cliente.attivo ? tokens.ok600 : tokens.error600 }}>
+              {cliente.attivo ? 'Attivo' : 'Sospeso'}
+            </Typography>
+          </Box>
+        </Tooltip>
+        <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+          Creato il {formattatoreData.format(new Date(cliente.createdAtUtc))}
+        </Typography>
+      </Box>
+
+      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.textSecondary }}>
+        {cliente.strutture.length === 0 ? 'Nessuna struttura' : `${cliente.strutture.length} ${cliente.strutture.length === 1 ? 'struttura' : 'strutture'}`}
+      </Typography>
+    </Box>
   )
 }
 
-function ModificaClienteDialog({ cliente, onClose }: { cliente: ClienteAdminDto; onClose: () => void }) {
+function StruttureClienteDialog({ cliente, onClose }: { cliente: ClienteAdminDto; onClose: () => void }) {
+  const [strutturaId, setStrutturaId] = useState(cliente.strutture[0]?.id ?? '')
+  const struttura = cliente.strutture.find((s) => s.id === strutturaId) ?? null
+  const [daEliminare, setDaEliminare] = useState(false)
+
+  // Stessa soglia della tabella "Strutture eliminabili" in dashboard — qui è comodo poterla
+  // eliminare subito dalla struttura che si sta già guardando, senza dover tornare indietro e
+  // ricercarla in quella tabella.
+  const eliminabile =
+    !!struttura && !struttura.attivo && !!struttura.disattivataAtUtc && giorniDaDisattivazione(struttura.disattivataAtUtc) >= GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Strutture di {cliente.ragioneSociale}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        {/* Il primo figlio letterale di questo contenitore flex non deve mai essere il campo con
+            floating label sottostante: senza qualcosa che lo preceda, MUI ne taglia a metà la label
+            (bug di rendering noto, vedi altri dialog dell'app con lo stesso pattern). */}
+        <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>Seleziona la struttura da gestire.</Typography>
+        <TextField select label="Struttura" value={strutturaId} onChange={(e) => setStrutturaId(e.target.value)} fullWidth>
+          {cliente.strutture.map((s) => (
+            <MenuItem key={s.id} value={s.id}>
+              {s.nome}
+            </MenuItem>
+          ))}
+        </TextField>
+        {struttura && <RigaStruttura struttura={struttura} />}
+        {eliminabile && (
+          <Alert
+            severity="warning"
+            action={
+              <Button color="error" size="small" onClick={() => setDaEliminare(true)}>
+                Elimina definitivamente
+              </Button>
+            }
+          >
+            Disattivata da {giorniDaDisattivazione(struttura!.disattivataAtUtc!)} giorni: può essere eliminata in modo definitivo.
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose}>Chiudi</Button>
+      </DialogActions>
+
+      {daEliminare && struttura && (
+        <EliminaStrutturaDialog
+          struttura={struttura}
+          clienteRagioneSociale={cliente.ragioneSociale}
+          onClose={() => setDaEliminare(false)}
+          onEliminata={() => {
+            setDaEliminare(false)
+            // La struttura appena eliminata non esiste più: l'elenco di questo dialogo (cliente.strutture)
+            // è uno snapshot passato dal genitore e non si aggiorna da solo — si chiude tutto, il
+            // genitore ha già invalidato la query e mostrerà i dati aggiornati alla riapertura.
+            onClose()
+          }}
+        />
+      )}
+    </Dialog>
+  )
+}
+
+function ModificaClienteDialog({
+  cliente,
+  adminUtente,
+  onClose,
+}: {
+  cliente: ClienteAdminDto
+  adminUtente: UtenteAdminDto | null
+  onClose: () => void
+}) {
   const [ragioneSociale, setRagioneSociale] = useState(cliente.ragioneSociale)
   const [partitaIva, setPartitaIva] = useState(cliente.partitaIva ?? '')
+  const [email, setEmail] = useState(adminUtente?.email ?? '')
+  const [nome, setNome] = useState(adminUtente?.nome ?? '')
+  const [cognome, setCognome] = useState(adminUtente?.cognome ?? '')
   const [errore, setErrore] = useState<string | null>(null)
 
+  const [nuovaPassword, setNuovaPassword] = useState('')
+  const [passwordReimpostata, setPasswordReimpostata] = useState(false)
+  const [erroreReset, setErroreReset] = useState<string | null>(null)
+
   const aggiorna = useAggiornaCliente()
+  const aggiornaUtente = useAggiornaUtente()
+  const resetPassword = useResettaPasswordUtente()
   const queryClient = useQueryClient()
 
-  function salva() {
+  const inCorso = aggiorna.isPending || aggiornaUtente.isPending
+
+  async function salva() {
     if (ragioneSociale.trim() === '') {
       setErrore('La ragione sociale è obbligatoria.')
       return
     }
+    if (adminUtente && email.trim() === '') {
+      setErrore('Email obbligatoria.')
+      return
+    }
     setErrore(null)
-    aggiorna.mutate(
-      { clienteId: cliente.id, request: { ragioneSociale: ragioneSociale.trim(), partitaIva: partitaIva.trim() || null } },
+    try {
+      await aggiorna.mutateAsync({ clienteId: cliente.id, request: { ragioneSociale: ragioneSociale.trim(), partitaIva: partitaIva.trim() || null } })
+      if (adminUtente) {
+        await aggiornaUtente.mutateAsync({
+          utenteId: adminUtente.id,
+          request: { email: email.trim(), nome: nome.trim() || null, cognome: cognome.trim() || null },
+        })
+      }
+      queryClient.invalidateQueries({ queryKey: ['super-admin', 'dashboard'] })
+      onClose()
+    } catch (err) {
+      setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    }
+  }
+
+  function reimpostaPassword() {
+    if (!adminUtente) return
+    if (nuovaPassword.trim().length < 8) {
+      setErroreReset('La password deve avere almeno 8 caratteri.')
+      return
+    }
+    setErroreReset(null)
+    resetPassword.mutate(
+      { utenteId: adminUtente.id, nuovaPassword: nuovaPassword.trim() },
       {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['super-admin', 'dashboard'] })
-          onClose()
+          setPasswordReimpostata(true)
+          setNuovaPassword('')
         },
-        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+        onError: (err) => setErroreReset(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
       },
     )
   }
@@ -438,16 +582,57 @@ function ModificaClienteDialog({ cliente, onClose }: { cliente: ClienteAdminDto;
           value={ragioneSociale}
           onChange={(e) => setRagioneSociale(e.target.value)}
           fullWidth
-          disabled={aggiorna.isPending}
+          disabled={inCorso}
           autoFocus
         />
-        <TextField label="P.IVA" value={partitaIva} onChange={(e) => setPartitaIva(e.target.value)} fullWidth disabled={aggiorna.isPending} />
+        <TextField label="P.IVA" value={partitaIva} onChange={(e) => setPartitaIva(e.target.value)} fullWidth disabled={inCorso} />
+
+        {adminUtente ? (
+          <>
+            <Divider />
+            <Typography sx={{ fontSize: 11, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+              Utente amministratore
+            </Typography>
+            <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth disabled={inCorso} />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={inCorso} />
+              <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={inCorso} />
+            </Box>
+
+            <Divider />
+            <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+              Reimposta la password di questo utente (non serve conoscere quella attuale).
+            </Typography>
+            <Box>{erroreReset && <Alert severity="error">{erroreReset}</Alert>}</Box>
+            {passwordReimpostata && <Alert severity="success">Password reimpostata.</Alert>}
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+              <TextField
+                label="Nuova password"
+                type="password"
+                value={nuovaPassword}
+                onChange={(e) => setNuovaPassword(e.target.value)}
+                fullWidth
+                disabled={resetPassword.isPending}
+              />
+              <Button
+                variant="outlined"
+                onClick={reimpostaPassword}
+                disabled={resetPassword.isPending || nuovaPassword.trim() === ''}
+                sx={{ whiteSpace: 'nowrap', flex: '0 0 auto' }}
+              >
+                Reimposta
+              </Button>
+            </Box>
+          </>
+        ) : (
+          <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>Nessun utente amministratore trovato per questo Cliente.</Typography>
+        )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button onClick={onClose} disabled={aggiorna.isPending}>
+        <Button onClick={onClose} disabled={inCorso}>
           Annulla
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
+        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
           Salva
         </Button>
       </DialogActions>
@@ -551,10 +736,13 @@ function EliminaStrutturaDialog({
   struttura,
   clienteRagioneSociale,
   onClose,
+  onEliminata,
 }: {
   struttura: StrutturaAdminDto
   clienteRagioneSociale: string
   onClose: () => void
+  /** Solo quando l'eliminazione va davvero a buon fine — distinto da onClose, chiamato anche su Annulla. */
+  onEliminata?: () => void
 }) {
   const [conferma, setConferma] = useState('')
   const [errore, setErrore] = useState<string | null>(null)
@@ -566,7 +754,7 @@ function EliminaStrutturaDialog({
     if (!confermaValida) return
     setErrore(null)
     elimina.mutate(struttura.id, {
-      onSuccess: onClose,
+      onSuccess: () => (onEliminata ?? onClose)(),
       onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
     })
   }
