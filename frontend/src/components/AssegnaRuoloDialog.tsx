@@ -25,6 +25,7 @@ import {
   type UtenteDto,
 } from '../api/utenti'
 import { tokens } from '../theme'
+import { useToast } from '../toast/ToastContext'
 
 export type StatoAssegnazioneIniziale = { modo: 'nuovo' } | { modo: 'assegna' } | { modo: 'modifica'; assegnazione: AssegnazioneStrutturaDto }
 
@@ -159,8 +160,7 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
   )
   const [errore, setErrore] = useState<string | null>(null)
   const [nuovaPassword, setNuovaPassword] = useState('')
-  const [passwordReimpostata, setPasswordReimpostata] = useState(false)
-  const [erroreReset, setErroreReset] = useState<string | null>(null)
+  const toast = useToast()
 
   const creaUtente = useCreaUtente()
   const assegnaRuolo = useAssegnaRuolo(strutturaId)
@@ -227,20 +227,18 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
 
   function reimpostaPassword() {
     if (!modifica) return
-    setErroreReset(null)
-    setPasswordReimpostata(false)
     if (nuovaPassword.trim().length < 6) {
-      setErroreReset('La nuova password deve avere almeno 6 caratteri.')
+      toast.errore('La nuova password deve avere almeno 6 caratteri.')
       return
     }
     resetPassword.mutate(
       { utenteId: modifica.utenteId, passwordNuova: nuovaPassword },
       {
         onSuccess: () => {
-          setPasswordReimpostata(true)
+          toast.successo('Password reimpostata.')
           setNuovaPassword('')
         },
-        onError: (err) => setErroreReset(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+        onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
       },
     )
   }
@@ -327,8 +325,6 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
           <>
             <Divider />
             <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>Reimposta la password di questo utente (non serve conoscere quella attuale).</Typography>
-            <Box>{erroreReset && <Alert severity="error">{erroreReset}</Alert>}</Box>
-            {passwordReimpostata && <Alert severity="success">Password reimpostata.</Alert>}
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
               <TextField
                 label="Nuova password"

@@ -51,6 +51,7 @@ import {
 import { aggiungiGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { CampoData } from '../components/CampoData'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { useToast } from '../toast/ToastContext'
 import { ChiusureRestrizioniDialog } from '../components/ChiusureRestrizioniDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ImpostazioniWubookCameraDialog } from '../components/ImpostazioniWubookCameraDialog'
@@ -117,18 +118,17 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
   const [dataInizio, setDataInizio] = useState(formatoInputData(oggi))
   const [dataFine, setDataFine] = useState(formatoInputData(aggiungiGiorni(oggi, 30)))
   const [messaggio, setMessaggio] = useState<string | null>(null)
-  const [errore, setErrore] = useState<string | null>(null)
+  const toast = useToast()
 
   const sincronizzaPrezzi = useSincronizzaWubookPrezzi(strutturaId)
   const sincronizzaDisponibilita = useSincronizzaWubookDisponibilita(strutturaId)
   const sincronizzaPrenotazioni = useSincronizzaWubookPrenotazioni(strutturaId)
 
   function gestisciErrore(err: unknown) {
-    setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
   function esegui(azione: 'prezzi' | 'disponibilita' | 'prenotazioni') {
-    setErrore(null)
     setMessaggio(null)
     const periodo = { dataInizio: isoLocale(parsaInputData(dataInizio)), dataFine: isoLocale(parsaInputData(dataFine)) }
 
@@ -156,7 +156,6 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
     <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Sincronizzazione manuale</Typography>
 
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
       {messaggio && <Alert severity="success" onClose={() => setMessaggio(null)}>{messaggio}</Alert>}
 
       <Box sx={{ display: 'flex', gap: 2 }}>
@@ -188,16 +187,16 @@ function TabellaCamere({
   camere: CameraWubookInfoDto[]
   tipologie: { id: string; tipologiaCamera: string }[]
 }) {
-  const [errore, setErrore] = useState<string | null>(null)
   const [tipologiaFiltro, setTipologiaFiltro] = useState('')
   const [dialogoChiusure, setDialogoChiusure] = useState<{ cameraId: string; cameraNome: string } | null>(null)
   const [dialogoAssocia, setDialogoAssocia] = useState<CameraWubookInfoDto | null>(null)
   const [dialogoImpostazioni, setDialogoImpostazioni] = useState<CameraWubookInfoDto | null>(null)
   const [daEliminare, setDaEliminare] = useState<CameraWubookInfoDto | null>(null)
   const rimuovi = useRimuoviWubookCamera(strutturaId)
+  const toast = useToast()
 
   function gestisciErrore(err: unknown) {
-    setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
   function confermaEliminaDaWubook() {
@@ -211,12 +210,6 @@ function TabellaCamere({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      {errore && (
-        <Alert severity="error" onClose={() => setErrore(null)}>
-          {errore}
-        </Alert>
-      )}
-
       <TextField select size="small" label="Tipologia" value={tipologiaFiltro} onChange={(e) => setTipologiaFiltro(e.target.value)} sx={{ minWidth: 240 }}>
         <MenuItem value="">Tutte le tipologie</MenuItem>
         {tipologie.map((t) => (
@@ -412,10 +405,10 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
   const piani = usePianiPrezzo(strutturaId)
   const elimina = useEliminaPianoPrezzo(strutturaId)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | PianoPrezzoDto>('chiuso')
-  const [errore, setErrore] = useState<string | null>(null)
+  const toast = useToast()
 
   function gestisciErrore(err: unknown) {
-    setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
   return (
@@ -424,8 +417,6 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
         Piani prezzo nominati/virtuali (es. "Non rimborsabile -10%"), derivati dal piano di partenza con una variazione fissa o
         percentuale. La mappatura piano→canale si fa nel pannello Wubook.
       </Typography>
-
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
       <Box>
         <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>
@@ -495,10 +486,10 @@ function TabPianiRestrizione({ strutturaId }: { strutturaId: string }) {
   const piani = usePianiRestrizione(strutturaId)
   const elimina = useEliminaPianoRestrizione(strutturaId)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | PianoRestrizioneDto>('chiuso')
-  const [errore, setErrore] = useState<string | null>(null)
+  const toast = useToast()
 
   function gestisciErrore(err: unknown) {
-    setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
   return (
@@ -507,8 +498,6 @@ function TabPianiRestrizione({ strutturaId }: { strutturaId: string }) {
         Piani restrizione nominati: regole di default (soggiorno min/max, chiusure arrivo/partenza) applicabili a un piano. Distinti dal
         soggiorno minimo/massimo per camera e periodo (tab Camere).
       </Typography>
-
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
       <Box>
         <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>

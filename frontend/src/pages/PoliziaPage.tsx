@@ -20,6 +20,7 @@ import {
   useSchedineAlloggiatiWeb,
 } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { useToast } from '../toast/ToastContext'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -28,17 +29,16 @@ export function PoliziaPage() {
   const { strutturaId } = useStruttura()
   const config = useAlloggiatiWebConfig(strutturaId)
   const schedine = useSchedineAlloggiatiWeb(strutturaId)
-  const [errore, setErrore] = useState<string | null>(null)
   const [risultatoInvio, setRisultatoInvio] = useState<{ inviate: number; totale: number; errori: number; messaggio: string | null } | null>(null)
+  const toast = useToast()
 
   const invia = useInviaAlloggiatiWebOra(strutturaId)
 
   function inviaOra() {
-    setErrore(null)
     setRisultatoInvio(null)
     invia.mutate(undefined, {
       onSuccess: (r) => setRisultatoInvio({ inviate: r.inviate, totale: r.totaleSchedine, errori: r.errori, messaggio: r.messaggio }),
-      onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
     })
   }
 
@@ -47,7 +47,7 @@ export function PoliziaPage() {
     try {
       await esportaSchedineAlloggiatiWeb(strutturaId)
     } catch (err) {
-      setErrore(err instanceof ApiError ? err.message : 'Download non riuscito.')
+      toast.errore(err instanceof ApiError ? err.message : 'Download non riuscito.')
     }
   }
 
@@ -56,7 +56,7 @@ export function PoliziaPage() {
     try {
       await esportaSchedinaAlloggiatiWebSingola(strutturaId, ospiteId)
     } catch (err) {
-      setErrore(err instanceof ApiError ? err.message : 'Download non riuscito.')
+      toast.errore(err instanceof ApiError ? err.message : 'Download non riuscito.')
     }
   }
 
@@ -66,8 +66,6 @@ export function PoliziaPage() {
         Invio giornaliero delle schedine di soggiorno alla Polizia di Stato (Alloggiati Web). Credenziali e orario di invio automatico si
         configurano in Impostazioni.
       </Typography>
-
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
       <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

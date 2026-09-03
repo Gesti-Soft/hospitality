@@ -26,6 +26,14 @@ public class PayTouristConfigController(PayTouristConfigService service, ICurren
         return Ok(ToDto(integrazione));
     }
 
+    /// <summary>Suggerimento (da confermare in UI, mai salvato in automatico) per le soglie età di Impostazioni → Tassa di soggiorno, letto da GET api/v1/reductions.</summary>
+    [HttpGet("suggerimento-eta-tassa")]
+    public async Task<IActionResult> SuggerimentoEtaTassa(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var suggerimento = await service.SuggerisciEtaEsenzioneTassaAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(suggerimento);
+    }
+
     private static PayTouristIntegrazioneDto ToDto(PayTouristIntegrazione p) => new(
         p.StrutturaId,
         TokenConfigurato: !string.IsNullOrWhiteSpace(p.Token),

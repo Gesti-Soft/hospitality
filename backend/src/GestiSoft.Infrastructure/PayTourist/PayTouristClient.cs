@@ -83,7 +83,7 @@ public class PayTouristClient(HttpClient http, IConfiguration configuration, ILo
             }
 
             var risultato = await response.Content.ReadFromJsonAsync<WireReductionResponse>(cancellationToken: cancellationToken);
-            var riduzioni = (risultato?.Data ?? []).Select(r => new PayTouristRiduzioneDto(r.Id, r.Name)).ToList();
+            var riduzioni = (risultato?.Data ?? []).Select(r => new PayTouristRiduzioneDto(r.Id, r.Name, r.Description, r.Percentage)).ToList();
             return (true, riduzioni, null);
         }
         catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException or JsonException)
@@ -426,7 +426,9 @@ public class PayTouristClient(HttpClient http, IConfiguration configuration, ILo
 
     private record WireReduction(
         [property: JsonPropertyName("id")] int Id,
-        [property: JsonPropertyName("name")] string Name);
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("description")] string? Description,
+        [property: JsonPropertyName("percentage")] string? Percentage);
 
     private record WirePortale(
         [property: JsonPropertyName("id")] int Id,

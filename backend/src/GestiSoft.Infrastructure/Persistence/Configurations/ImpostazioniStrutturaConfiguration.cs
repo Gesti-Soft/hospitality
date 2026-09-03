@@ -12,6 +12,9 @@ public class ImpostazioniStrutturaConfiguration : IEntityTypeConfiguration<Impos
         builder.ConfigureTenant();
 
         builder.Property(i => i.TassaSoggiornoPrezzo).HasPrecision(18, 2);
+        builder.Property(i => i.TassaSoggiornoPercentualeResidenti).HasPrecision(5, 2);
+        builder.Property(i => i.TassaSoggiornoPercentualeMinori).HasPrecision(5, 2);
+        builder.Property(i => i.TassaSoggiornoPercentualeAnziani).HasPrecision(5, 2);
 
         // Una sola riga di impostazioni per Struttura.
         builder.HasIndex(i => i.StrutturaId).IsUnique();

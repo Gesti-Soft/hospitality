@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -35,6 +35,7 @@ import {
   usePayTouristConfig,
   usePayTouristStrutture,
   useRinnovaWubookCredenziali,
+  useSuggerimentoEtaTassaPayTourist,
   useWubookConfig,
   type AlloggiatiWebIntegrazioneDto,
   type OsservatorioAppartamentoDto,
@@ -43,6 +44,7 @@ import {
   type WubookIntegrazioneDto,
 } from '../api/integrazioni'
 import { fontDisplay, tokens } from '../theme'
+import { useToast } from '../toast/ToastContext'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { OsservatorioAppartamentoDialog } from '../components/OsservatorioAppartamentoDialog'
 import { PayTouristStrutturaDialog } from '../components/PayTouristStrutturaDialog'
@@ -141,19 +143,17 @@ function TabGenerali({ strutturaId }: { strutturaId: string | null }) {
 
 function WubookAttivoToggle({ strutturaId, dati }: { strutturaId: string; dati: WubookIntegrazioneDto }) {
   const [attivo, setAttivo] = useState(dati.attivo)
-  const [errore, setErrore] = useState<string | null>(null)
+  const toast = useToast()
   const aggiorna = useAggiornaWubookConfig(strutturaId)
 
   function salvaAttivo(checked: boolean) {
     setAttivo(checked)
-    setErrore(null)
-    aggiorna.mutate({ attivo: checked }, { onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.') })
+    aggiorna.mutate({ attivo: checked }, { onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.') })
   }
 
   return (
     <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Wubook</Typography>
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
       <FormControlLabel
         control={<Checkbox checked={attivo} onChange={(e) => salvaAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
         label="Sincronizzazione Wubook attiva per questa struttura"
@@ -188,16 +188,68 @@ export function ImpostazioniGeneraliForm({
   const [oraInvioGiornaliero, setOraInvioGiornaliero] = useState(dati.oraInvioGiornaliero?.slice(0, 5) ?? '04:00')
   const [tassaSoggiornoPrezzo, setTassaSoggiornoPrezzo] = useState(dati.tassaSoggiornoPrezzo != null ? String(dati.tassaSoggiornoPrezzo) : '')
   const [tassaSoggiornoMaxGiorni, setTassaSoggiornoMaxGiorni] = useState(dati.tassaSoggiornoMaxGiorni != null ? String(dati.tassaSoggiornoMaxGiorni) : '')
+  const [tassaSoggiornoEtaEsenzioneMinori, setTassaSoggiornoEtaEsenzioneMinori] = useState(
+    dati.tassaSoggiornoEtaEsenzioneMinori != null ? String(dati.tassaSoggiornoEtaEsenzioneMinori) : '',
+  )
+  const [tassaSoggiornoEtaEsenzioneAnziani, setTassaSoggiornoEtaEsenzioneAnziani] = useState(
+    dati.tassaSoggiornoEtaEsenzioneAnziani != null ? String(dati.tassaSoggiornoEtaEsenzioneAnziani) : '',
+  )
+  const [tassaSoggiornoPercentualeResidenti, setTassaSoggiornoPercentualeResidenti] = useState(
+    dati.tassaSoggiornoPercentualeResidenti != null ? String(dati.tassaSoggiornoPercentualeResidenti) : '',
+  )
+  const [tassaSoggiornoPercentualeMinori, setTassaSoggiornoPercentualeMinori] = useState(
+    dati.tassaSoggiornoPercentualeMinori != null ? String(dati.tassaSoggiornoPercentualeMinori) : '',
+  )
+  const [tassaSoggiornoPercentualeAnziani, setTassaSoggiornoPercentualeAnziani] = useState(
+    dati.tassaSoggiornoPercentualeAnziani != null ? String(dati.tassaSoggiornoPercentualeAnziani) : '',
+  )
   const [comuneAttivita, setComuneAttivita] = useState(dati.comuneAttivita ?? '')
-  const [errore, setErrore] = useState<string | null>(null)
-  const [salvato, setSalvato] = useState(false)
-
+  const toast = useToast()
   const aggiorna = useAggiornaImpostazioni(strutturaId)
+  const suggerisciEta = useSuggerimentoEtaTassaPayTourist(strutturaId)
+
+  // Se PayTourist è attivo per la struttura e le soglie/percentuali non sono mai state impostate,
+  // si auto-compilano da sole all'apertura della pagina (nessun pulsante da premere) — altrimenti
+  // restano libere per l'inserimento manuale. Il ref evita di rilanciare la chiamata ad ogni
+  // render (dati/suggerisciEta cambiano riferimento spesso) — un solo tentativo per apertura pagina,
+  // mai un secondo silenzioso che sovrascriverebbe una correzione manuale già fatta dall'operatore.
+  const tentativoAutoSuggerimento = useRef(false)
+  useEffect(() => {
+    if (tentativoAutoSuggerimento.current || !servizi.payTouristAbilitato) {
+      return
+    }
+    const maiConfigurato =
+      dati.tassaSoggiornoEtaEsenzioneMinori == null && dati.tassaSoggiornoEtaEsenzioneAnziani == null && dati.tassaSoggiornoPercentualeResidenti == null
+    if (!maiConfigurato) {
+      return
+    }
+    tentativoAutoSuggerimento.current = true
+    suggerisciEta.mutate(undefined, {
+      onSuccess: (dato) => {
+        if (dato.etaMinori != null) setTassaSoggiornoEtaEsenzioneMinori(String(dato.etaMinori))
+        if (dato.etaAnziani != null) setTassaSoggiornoEtaEsenzioneAnziani(String(dato.etaAnziani))
+        if (dato.percentualeResidenti != null) setTassaSoggiornoPercentualeResidenti(String(dato.percentualeResidenti))
+        if (dato.percentualeMinori != null) setTassaSoggiornoPercentualeMinori(String(dato.percentualeMinori))
+        if (dato.percentualeAnziani != null) setTassaSoggiornoPercentualeAnziani(String(dato.percentualeAnziani))
+      },
+    })
+  }, [servizi.payTouristAbilitato, dati, suggerisciEta])
+
+  // Rilancio manuale (a differenza dell'effetto sopra, sempre disponibile anche a campi già
+  // valorizzati) — utile se il Comune cambia le regole su PayTourist dopo la prima configurazione.
+  function aggiornaDaPayTourist() {
+    suggerisciEta.mutate(undefined, {
+      onSuccess: (dato) => {
+        if (dato.etaMinori != null) setTassaSoggiornoEtaEsenzioneMinori(String(dato.etaMinori))
+        if (dato.etaAnziani != null) setTassaSoggiornoEtaEsenzioneAnziani(String(dato.etaAnziani))
+        if (dato.percentualeResidenti != null) setTassaSoggiornoPercentualeResidenti(String(dato.percentualeResidenti))
+        if (dato.percentualeMinori != null) setTassaSoggiornoPercentualeMinori(String(dato.percentualeMinori))
+        if (dato.percentualeAnziani != null) setTassaSoggiornoPercentualeAnziani(String(dato.percentualeAnziani))
+      },
+    })
+  }
 
   function salva() {
-    setErrore(null)
-    setSalvato(false)
-
     const request: ImpostazioniStrutturaRequest = {
       poliziaStatoAttiva,
       osservatorioAttivo,
@@ -205,12 +257,17 @@ export function ImpostazioniGeneraliForm({
       oraInvioGiornaliero: oraInvioGiornaliero === '' ? null : `${oraInvioGiornaliero}:00`,
       tassaSoggiornoPrezzo: tassaSoggiornoPrezzo.trim() === '' ? null : Number(tassaSoggiornoPrezzo),
       tassaSoggiornoMaxGiorni: tassaSoggiornoMaxGiorni.trim() === '' ? null : Number(tassaSoggiornoMaxGiorni),
+      tassaSoggiornoEtaEsenzioneMinori: tassaSoggiornoEtaEsenzioneMinori.trim() === '' ? null : Number(tassaSoggiornoEtaEsenzioneMinori),
+      tassaSoggiornoEtaEsenzioneAnziani: tassaSoggiornoEtaEsenzioneAnziani.trim() === '' ? null : Number(tassaSoggiornoEtaEsenzioneAnziani),
+      tassaSoggiornoPercentualeResidenti: tassaSoggiornoPercentualeResidenti.trim() === '' ? null : Number(tassaSoggiornoPercentualeResidenti),
+      tassaSoggiornoPercentualeMinori: tassaSoggiornoPercentualeMinori.trim() === '' ? null : Number(tassaSoggiornoPercentualeMinori),
+      tassaSoggiornoPercentualeAnziani: tassaSoggiornoPercentualeAnziani.trim() === '' ? null : Number(tassaSoggiornoPercentualeAnziani),
       comuneAttivita: comuneAttivita.trim() === '' ? null : comuneAttivita.trim(),
     }
 
     aggiorna.mutate(request, {
-      onSuccess: () => setSalvato(true),
-      onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      onSuccess: () => toast.successo('Impostazioni salvate.'),
+      onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
     })
   }
 
@@ -218,10 +275,113 @@ export function ImpostazioniGeneraliForm({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-      {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Impostazioni salvate.</Alert>}
-
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2.5, alignItems: 'stretch' }}>
+        <Box sx={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tassa di soggiorno</Typography>
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Prezzo per persona/notte (€)"
+                type="number"
+                value={tassaSoggiornoPrezzo}
+                onChange={(e) => setTassaSoggiornoPrezzo(e.target.value)}
+                fullWidth
+                disabled={aggiorna.isPending}
+              />
+              <TextField
+                label="Numero massimo di notti"
+                type="number"
+                value={tassaSoggiornoMaxGiorni}
+                onChange={(e) => setTassaSoggiornoMaxGiorni(e.target.value)}
+                fullWidth
+                disabled={aggiorna.isPending}
+                helperText="Oltre questa soglia le notti extra non sono tassate"
+              />
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Esenti/scontati minori sotto (anni)"
+                type="number"
+                value={tassaSoggiornoEtaEsenzioneMinori}
+                onChange={(e) => setTassaSoggiornoEtaEsenzioneMinori(e.target.value)}
+                fullWidth
+                disabled={aggiorna.isPending}
+                helperText="Vuoto = nessuna riduzione automatica per età"
+              />
+              <TextField
+                label="Riduzione minori (%)"
+                type="number"
+                value={tassaSoggiornoPercentualeMinori}
+                onChange={(e) => setTassaSoggiornoPercentualeMinori(e.target.value)}
+                fullWidth
+                disabled={aggiorna.isPending}
+                helperText="Vuoto = 100% (esenzione piena)"
+              />
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Esenti/scontati anziani dai (anni)"
+                type="number"
+                value={tassaSoggiornoEtaEsenzioneAnziani}
+                onChange={(e) => setTassaSoggiornoEtaEsenzioneAnziani(e.target.value)}
+                fullWidth
+                disabled={aggiorna.isPending}
+                helperText="Vuoto = nessuna riduzione automatica per età"
+              />
+              <TextField
+                label="Riduzione anziani (%)"
+                type="number"
+                value={tassaSoggiornoPercentualeAnziani}
+                onChange={(e) => setTassaSoggiornoPercentualeAnziani(e.target.value)}
+                fullWidth
+                disabled={aggiorna.isPending}
+                helperText="Vuoto = 100% (esenzione piena)"
+              />
+            </Box>
+
+            {servizi.payTouristAbilitato && (
+              <Button size="small" variant="outlined" onClick={aggiornaDaPayTourist} disabled={suggerisciEta.isPending} sx={{ alignSelf: 'flex-start' }}>
+                Aggiorna da PayTourist
+              </Button>
+            )}
+            {servizi.payTouristAbilitato && suggerisciEta.isError && (
+              <Alert severity="warning" onClose={() => suggerisciEta.reset()}>
+                {suggerisciEta.error instanceof ApiError ? suggerisciEta.error.message : 'Impossibile leggere le riduzioni da PayTourist.'}
+              </Alert>
+            )}
+            {servizi.payTouristAbilitato && suggerisciEta.isSuccess && (
+              <Alert severity="info" onClose={() => suggerisciEta.reset()}>
+                Valori proposti automaticamente in base al comune di {comuneAttivita.toLocaleLowerCase() || 'attività'}: si consiglia di verificarne l'esattezza prima di salvare.
+              </Alert>
+            )}
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Comune di attività"
+                value={comuneAttivita}
+                onChange={(e) => setComuneAttivita(e.target.value)}
+                disabled={aggiorna.isPending}
+                fullWidth
+                helperText="Comune dove opera fisicamente la struttura — usato per la riduzione residenza e le riduzioni PayTourist"
+              />
+              <TextField
+                label="Riduzione residenti (%)"
+                type="number"
+                value={tassaSoggiornoPercentualeResidenti}
+                onChange={(e) => setTassaSoggiornoPercentualeResidenti(e.target.value)}
+                disabled={aggiorna.isPending}
+                fullWidth
+                helperText="Vuoto = 100% (esenzione piena)"
+              />
+            </Box>
+          </Box>
+
+          {extraColonnaDestra}
+        </Box>
+
         {!nessunServizioInvii && (
           <Box sx={{ flex: '1 1 320px', border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Invii automatici</Typography>
@@ -260,42 +420,6 @@ export function ImpostazioniGeneraliForm({
             />
           </Box>
         )}
-
-        <Box sx={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-          <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tassa di soggiorno</Typography>
-
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField
-                label="Prezzo per persona/notte (€)"
-                type="number"
-                value={tassaSoggiornoPrezzo}
-                onChange={(e) => setTassaSoggiornoPrezzo(e.target.value)}
-                fullWidth
-                disabled={aggiorna.isPending}
-              />
-              <TextField
-                label="Numero massimo di notti"
-                type="number"
-                value={tassaSoggiornoMaxGiorni}
-                onChange={(e) => setTassaSoggiornoMaxGiorni(e.target.value)}
-                fullWidth
-                disabled={aggiorna.isPending}
-                helperText="Oltre questa soglia le notti extra non sono tassate"
-              />
-            </Box>
-
-            <TextField
-              label="Comune di attività"
-              value={comuneAttivita}
-              onChange={(e) => setComuneAttivita(e.target.value)}
-              disabled={aggiorna.isPending}
-              helperText="Comune dove opera fisicamente la struttura (può differire dalla sede fiscale in Fatturazione) — usato per l'esenzione tassa di soggiorno e le riduzioni PayTourist per residenza"
-            />
-          </Box>
-
-          {extraColonnaDestra}
-        </Box>
       </Box>
 
       <Box>
@@ -326,24 +450,21 @@ function TabLicenzaGestisoft({ strutturaId }: { strutturaId: string | null }) {
 function LicenzaGestisoftForm({ strutturaId, dati }: { strutturaId: string; dati: WubookIntegrazioneDto }) {
   const [gestisoftUsername, setGestisoftUsername] = useState(dati.gestisoftUsername ?? '')
   const [gestisoftToken, setGestisoftToken] = useState('')
-  const [errore, setErrore] = useState<string | null>(null)
-  const [salvato, setSalvato] = useState(false)
+  const toast = useToast()
 
   const aggiornaLicenza = useAggiornaWubookLicenza(strutturaId)
   const rinnova = useRinnovaWubookCredenziali(strutturaId)
 
   function segnalaErrore(err: unknown) {
-    setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
   function salvaLicenza() {
-    setErrore(null)
-    setSalvato(false)
     aggiornaLicenza.mutate(
       { gestisoftUsername: gestisoftUsername.trim() === '' ? null : gestisoftUsername.trim(), gestisoftToken: gestisoftToken.trim() === '' ? null : gestisoftToken.trim() },
       {
         onSuccess: () => {
-          setSalvato(true)
+          toast.successo('Licenza salvata.')
           setGestisoftToken('')
         },
         onError: segnalaErrore,
@@ -352,7 +473,6 @@ function LicenzaGestisoftForm({ strutturaId, dati }: { strutturaId: string; dati
   }
 
   function rinnovaOra() {
-    setErrore(null)
     rinnova.mutate(undefined, { onError: segnalaErrore })
   }
 
@@ -372,8 +492,6 @@ function LicenzaGestisoftForm({ strutturaId, dati }: { strutturaId: string; dati
         funzionare. Ogni Struttura ha la propria coppia Utente/Token.
       </Typography>
 
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-      {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Licenza salvata.</Alert>}
       {dati.ultimoErrore && <Alert severity="warning">{dati.ultimoErrore}</Alert>}
 
       <Box sx={{ display: 'flex', gap: 2 }}>
@@ -424,13 +542,12 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
   const [utente, setUtente] = useState(dati.utente ?? '')
   const [password, setPassword] = useState('')
   const [wsKey, setWsKey] = useState('')
-  const [errore, setErrore] = useState<string | null>(null)
   const [esitoConnessione, setEsitoConnessione] = useState<{ ok: boolean; errore: string | null } | null>(null)
+  const toast = useToast()
 
   const aggiorna = useAggiornaAlloggiatiWebConfig(strutturaId)
 
   function salva() {
-    setErrore(null)
     setEsitoConnessione(null)
     aggiorna.mutate(
       { utente: utente.trim() === '' ? null : utente.trim(), password: password.trim() === '' ? null : password.trim(), wsKey: wsKey.trim() === '' ? null : wsKey.trim() },
@@ -440,7 +557,7 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
           setPassword('')
           setWsKey('')
         },
-        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+        onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
       },
     )
   }
@@ -452,8 +569,7 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
         <Chip size="small" label={dati.credenzialiConfigurate ? 'Configurato' : 'Non configurato'} sx={{ bgcolor: dati.credenzialiConfigurate ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
       </Box>
 
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-      {esitoConnessione && !errore && (
+      {esitoConnessione && (
         <Alert severity={esitoConnessione.ok ? 'success' : 'warning'} onClose={() => setEsitoConnessione(null)}>
           {esitoConnessione.ok
             ? 'Credenziali salvate — connessione ad Alloggiati Web verificata con successo.'
@@ -689,22 +805,19 @@ function TabPayTourist({ strutturaId }: { strutturaId: string | null }) {
 function PayTouristConfigForm({ strutturaId, dati }: { strutturaId: string; dati: PayTouristIntegrazioneDto }) {
   const [token, setToken] = useState('')
   const [portaleOnlineAttivo, setPortaleOnlineAttivo] = useState(dati.portaleOnlineAttivo)
-  const [errore, setErrore] = useState<string | null>(null)
-  const [salvato, setSalvato] = useState(false)
+  const toast = useToast()
 
   const aggiorna = useAggiornaPayTouristConfig(strutturaId)
 
   function salva() {
-    setErrore(null)
-    setSalvato(false)
     aggiorna.mutate(
       { token: token.trim() === '' ? null : token.trim(), portaleOnlineAttivo },
       {
         onSuccess: () => {
-          setSalvato(true)
+          toast.successo('Configurazione salvata.')
           setToken('')
         },
-        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+        onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
       },
     )
   }
@@ -715,9 +828,6 @@ function PayTouristConfigForm({ strutturaId, dati }: { strutturaId: string; dati
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Token PayTourist</Typography>
         <Chip size="small" label={dati.tokenConfigurato ? 'Configurato' : 'Non configurato'} sx={{ bgcolor: dati.tokenConfigurato ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
       </Box>
-
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-      {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Configurazione salvata.</Alert>}
 
       <TextField
         label={<EtichettaConPallino testo="Token" inserito={dati.tokenConfigurato} />}

@@ -197,6 +197,18 @@ public class PrenotazioniService(
         // UI, per non fidarsi ciecamente di un client che aggirasse i campi disabilitati.
         var completata = entity.StatoPrenotazione == StatoPrenotazione.Completata;
 
+        // Snapshot "prima" dei soli campi con un impatto economico diretto — servono a registrare
+        // nel log un vecchio→nuovo esplicito (non solo "modificata"), perché un operatore potrebbe
+        // togliere una spunta o abbassare l'importo e incassare la differenza in nero: senza il
+        // dettaglio, il log non lo renderebbe rintracciabile.
+        var tassaSoggiornoPrima = entity.TassaSoggiornoAttiva;
+        var spesePuliziaPrima = entity.SpesePuliziaAttiva;
+        var animaliPrima = entity.AnimaliAttiva;
+        var cauzionePrima = entity.CauzioneAttiva;
+        var importoTotalePrima = entity.ImportoTotale;
+        var importoPagatoPrima = entity.ImportoPagato;
+        var totalTaxPrima = entity.TotalTax;
+
         if (!completata)
         {
             await ValidaCameraECheckInOutAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, cancellationToken);
@@ -225,6 +237,20 @@ public class PrenotazioniService(
                 entity.StatePolice = tassaDisattivata || !struttura.AlloggiatiWebAbilitato;
                 entity.PMS = tassaDisattivata || !struttura.OsservatorioAbilitato;
                 entity.PayTourist = tassaDisattivata || !struttura.PayTouristAbilitato;
+
+                // L'importo già calcolato non ha più senso se il servizio è disattivato — azzerato
+                // subito, non lasciato "congelato" al vecchio valore finché non si ritocca la scheda
+                // ospiti. Riattivandolo, si ricalcola subito sulla scheda già compilata (se esiste),
+                // altrimenti resta 0 finché non viene compilata/risalvata.
+                if (tassaDisattivata)
+                {
+                    entity.TotalTax = 0;
+                }
+                else
+                {
+                    var scheda = await ospitiService.GetSchedaAsync(currentUser, strutturaId, prenotazioneId, cancellationToken);
+                    entity.TotalTax = scheda is null ? 0 : await ospitiService.CalcolaTassaSoggiornoAsync(strutturaId, entity, scheda, cancellationToken);
+                }
             }
 
             entity.TassaSoggiornoAttiva = request.TassaSoggiornoAttiva;
@@ -238,7 +264,39 @@ public class PrenotazioniService(
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await prenotazioni.UpdateAsync(entity, cancellationToken);
-        await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione #{entity.NumeroPrenotazione ?? entity.Id.ToString()[..8]} modificata.", cancellationToken);
+
+        var modificheEconomiche = new List<string>();
+        if (tassaSoggiornoPrima != entity.TassaSoggiornoAttiva)
+        {
+            modificheEconomiche.Add($"Tassa di soggiorno {(tassaSoggiornoPrima ? "attiva" : "disattivata")}→{(entity.TassaSoggiornoAttiva ? "attiva" : "disattivata")}");
+        }
+        if (spesePuliziaPrima != entity.SpesePuliziaAttiva)
+        {
+            modificheEconomiche.Add($"Spese di pulizia {(spesePuliziaPrima ? "attive" : "disattivate")}→{(entity.SpesePuliziaAttiva ? "attive" : "disattivate")}");
+        }
+        if (animaliPrima != entity.AnimaliAttiva)
+        {
+            modificheEconomiche.Add($"Animali {(animaliPrima ? "attivo" : "disattivato")}→{(entity.AnimaliAttiva ? "attivo" : "disattivato")}");
+        }
+        if (cauzionePrima != entity.CauzioneAttiva)
+        {
+            modificheEconomiche.Add($"Cauzione {(cauzionePrima ? "attiva" : "disattivata")}→{(entity.CauzioneAttiva ? "attiva" : "disattivata")}");
+        }
+        if (importoTotalePrima != entity.ImportoTotale)
+        {
+            modificheEconomiche.Add($"Importo totale {importoTotalePrima?.ToString("0.00") ?? "—"}€→{entity.ImportoTotale?.ToString("0.00") ?? "—"}€");
+        }
+        if (importoPagatoPrima != entity.ImportoPagato)
+        {
+            modificheEconomiche.Add($"Importo pagato {importoPagatoPrima?.ToString("0.00") ?? "—"}€→{entity.ImportoPagato?.ToString("0.00") ?? "—"}€");
+        }
+        if (totalTaxPrima != entity.TotalTax)
+        {
+            modificheEconomiche.Add($"Tassa di soggiorno calcolata {totalTaxPrima?.ToString("0.00") ?? "—"}€→{entity.TotalTax?.ToString("0.00") ?? "—"}€");
+        }
+
+        var dettaglio = modificheEconomiche.Count > 0 ? $" ({string.Join("; ", modificheEconomiche)})" : string.Empty;
+        await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione #{entity.NumeroPrenotazione ?? entity.Id.ToString()[..8]} modificata{dettaglio}.", cancellationToken);
         return entity;
     }
 

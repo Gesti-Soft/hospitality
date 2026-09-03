@@ -2,7 +2,7 @@ namespace GestiSoft.Application.PayTourist;
 
 public record PayTouristEsitoOperazione(bool Ok, string? Errore);
 
-public record PayTouristRiduzioneDto(int Id, string Nome);
+public record PayTouristRiduzioneDto(int Id, string Nome, string? Descrizione, string? Percentuale);
 
 public record PayTouristPortaleDto(int Id, string Nome);
 

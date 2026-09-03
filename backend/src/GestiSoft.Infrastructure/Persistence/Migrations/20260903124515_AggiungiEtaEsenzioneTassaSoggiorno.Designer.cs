@@ -3,6 +3,7 @@ using System;
 using GestiSoft.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestiSoft.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GestiSoftDbContext))]
-    partial class GestiSoftDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903124515_AggiungiEtaEsenzioneTassaSoggiorno")]
+    partial class AggiungiEtaEsenzioneTassaSoggiorno
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -497,18 +500,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("TassaSoggiornoMaxGiorni")
                         .HasColumnType("integer");
-
-                    b.Property<decimal?>("TassaSoggiornoPercentualeAnziani")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<decimal?>("TassaSoggiornoPercentualeMinori")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<decimal?>("TassaSoggiornoPercentualeResidenti")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
 
                     b.Property<decimal?>("TassaSoggiornoPrezzo")
                         .HasPrecision(18, 2)

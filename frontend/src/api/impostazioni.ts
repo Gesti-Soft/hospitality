@@ -9,6 +9,11 @@ export interface ImpostazioniStrutturaDto {
   oraInvioGiornaliero: string | null
   tassaSoggiornoPrezzo: number | null
   tassaSoggiornoMaxGiorni: number | null
+  tassaSoggiornoEtaEsenzioneMinori: number | null
+  tassaSoggiornoEtaEsenzioneAnziani: number | null
+  tassaSoggiornoPercentualeResidenti: number | null
+  tassaSoggiornoPercentualeMinori: number | null
+  tassaSoggiornoPercentualeAnziani: number | null
   comuneAttivita: string | null
 }
 

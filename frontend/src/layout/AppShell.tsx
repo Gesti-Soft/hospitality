@@ -81,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <SelettoreCercabile
       etichetta="Cliente"
       valore={clienteId}
-      opzioni={clienti.map((c) => ({ id: c.id, nome: c.ragioneSociale }))}
+      opzioni={clienti.filter((c) => c.attivo).map((c) => ({ id: c.id, nome: c.ragioneSociale }))}
       caricamento={loading && clienti.length === 0}
       onChange={selezionaCliente}
       compatta={!mobile}
@@ -542,7 +542,15 @@ function SelettoreCercabile({
       options={opzioni}
       getOptionLabel={(o) => o.nome}
       isOptionEqualToValue={(o, v) => o.id === v.id}
-      value={opzioni.find((o) => o.id === valore) ?? undefined}
+      // MUI decide se un Autocomplete è controllato o no al primo render, guardando se `value` è
+      // `undefined` — se lo è (es. strutturaId ancora null appena finito il caricamento, prima che
+      // l'auto-selezione lo imposti un attimo dopo), l'Autocomplete si blocca in modalità "non
+      // controllato" e ignora per sempre i cambi successivi della prop, restando vuoto anche quando
+      // lo stato dell'app diventa corretto (bug reale segnalato: struttura auto-selezionata e dati
+      // giusti mostrati, ma la select restava vuota). `null` invece resta sempre "controllato" — il
+      // cast serve solo perché i tipi di MUI vietano `null` quando disableClearable è true, anche
+      // se a runtime è l'unico modo corretto di rappresentare "nessuna selezione ancora" qui.
+      value={opzioni.find((o) => o.id === valore) ?? (null as unknown as Opzione)}
       onChange={(_, v) => v && onChange(v.id)}
       disabled={opzioni.length === 0}
       disableClearable
@@ -557,7 +565,7 @@ function SelettoreCercabile({
           '&:hover fieldset': { borderColor: '#2C333D' },
           '&.Mui-focused fieldset': { borderColor: tokens.blue600 },
         },
-        '& .MuiInputBase-input': { color: '#fff', fontWeight: 700, fontSize: compatta ? 12.5 : undefined },
+        '& .MuiInputBase-input': { color: '#fff', fontWeight: 700, fontSize: 12.5 },
         '& .MuiInputLabel-root': { color: '#7E899A' },
         '& .MuiInputLabel-root.Mui-focused': { color: tokens.blue400 },
         '& .MuiSvgIcon-root': { color: '#7E899A' },

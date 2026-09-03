@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -17,6 +16,7 @@ import { useStruttura } from '../struttura/StrutturaContext'
 import { ApiError } from '../api/client'
 import { RuoloUtente, useAssegnazioniStruttura, useCambiaPasswordPropria, useUtentiCliente, type AssegnazioneStrutturaDto } from '../api/utenti'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { useToast } from '../toast/ToastContext'
 import { AssegnaRuoloDialog, type StatoAssegnazioneIniziale } from '../components/AssegnaRuoloDialog'
 
 const ETICHETTA_RUOLO: Record<RuoloUtente, string> = {
@@ -129,27 +129,24 @@ export function UtentiPage() {
 function CambiaPasswordCard() {
   const [passwordAttuale, setPasswordAttuale] = useState('')
   const [passwordNuova, setPasswordNuova] = useState('')
-  const [errore, setErrore] = useState<string | null>(null)
-  const [salvato, setSalvato] = useState(false)
+  const toast = useToast()
 
   const cambiaPassword = useCambiaPasswordPropria()
 
   function salva() {
-    setErrore(null)
-    setSalvato(false)
     if (passwordAttuale.trim() === '' || passwordNuova.trim() === '') {
-      setErrore('Compila entrambi i campi.')
+      toast.errore('Compila entrambi i campi.')
       return
     }
     cambiaPassword.mutate(
       { passwordAttuale, passwordNuova },
       {
         onSuccess: () => {
-          setSalvato(true)
+          toast.successo('Password aggiornata.')
           setPasswordAttuale('')
           setPasswordNuova('')
         },
-        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+        onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
       },
     )
   }
@@ -157,9 +154,6 @@ function CambiaPasswordCard() {
   return (
     <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 560 }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Cambia la tua password</Typography>
-
-      {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-      {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Password aggiornata.</Alert>}
 
       <Box sx={{ display: 'flex', gap: 2 }}>
         <TextField label="Password attuale" type="password" value={passwordAttuale} onChange={(e) => setPasswordAttuale(e.target.value)} fullWidth disabled={cambiaPassword.isPending} />

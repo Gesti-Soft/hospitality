@@ -33,6 +33,7 @@ import { usePrezzi, useEliminaPrezzo, type PrezzoCameraDto } from '../api/prezzi
 import { useCanaliVendita, useCreaCanaleVendita, useAggiornaCanaleVendita, useEliminaCanaleVendita, type CanaleVenditaDto } from '../api/canaliVendita'
 import { ApiError } from '../api/client'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { useToast } from '../toast/ToastContext'
 import { CameraDialog } from '../components/CameraDialog'
 import { PrezzoDialog } from '../components/PrezzoDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -60,8 +61,8 @@ export function CamerePage() {
   const { strutturaId, strutture } = useStruttura()
   const [tab, setTab] = useState<Tab_>('camere')
   const [tipologiaSelezionataId, setTipologiaSelezionataId] = useState('')
-  const [errore, setErrore] = useState<string | null>(null)
   const [duplicaAperto, setDuplicaAperto] = useState(false)
+  const toast = useToast()
 
   const camere = useCamere(strutturaId)
   const tipologie = useTipologie(strutturaId)
@@ -76,7 +77,7 @@ export function CamerePage() {
   const tipologiaId = listaTipologie.some((t) => t.id === tipologiaSelezionataId) ? tipologiaSelezionataId : (listaTipologie[0]?.id ?? '')
 
   function segnalaErrore(err: unknown) {
-    setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
   const altreStrutture = strutture.filter((s) => s.id !== strutturaId)
@@ -114,12 +115,6 @@ export function CamerePage() {
           </Button>
         )}
       </Box>
-
-      {errore && (
-        <Alert severity="error" onClose={() => setErrore(null)}>
-          {errore}
-        </Alert>
-      )}
 
       {nessunaTipologia ? (
         <Box sx={{ border: `1px dashed ${tokens.surfaceBorder}`, borderRadius: 2, p: 4, textAlign: 'center', color: tokens.textSecondary }}>

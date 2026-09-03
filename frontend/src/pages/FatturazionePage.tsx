@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
@@ -35,6 +34,7 @@ import {
   type DatiFatturaDto,
 } from '../api/fatturazione'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { useToast } from '../toast/ToastContext'
 import { DatiClienteDialog } from '../components/DatiClienteDialog'
 import { FatturaDialog, type StatoFatturaIniziale } from '../components/FatturaDialog'
 
@@ -50,14 +50,14 @@ export function FatturazionePage() {
   const { strutturaId } = useStruttura()
   const [tab, setTab] = useState<Tab_>('fatture')
   const [anno, setAnno] = useState(ANNO_CORRENTE)
-  const [errore, setErrore] = useState<string | null>(null)
+  const toast = useToast()
 
   const fatture = useFatture(strutturaId, anno)
   const clienti = useDatiClienti(strutturaId)
   const storico = useStoricoPrenotazioni(strutturaId, anno)
 
   function segnalaErrore(err: unknown) {
-    setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
   return (
@@ -79,12 +79,6 @@ export function FatturazionePage() {
           </TextField>
         )}
       </Box>
-
-      {errore && (
-        <Alert severity="error" onClose={() => setErrore(null)}>
-          {errore}
-        </Alert>
-      )}
 
       {tab === 'fatture' && (
         <TabFatture
@@ -249,14 +243,11 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
   const [comune, setComune] = useState(dati.comune ?? '')
   const [provincia, setProvincia] = useState(dati.provincia ?? '')
   const [nazione, setNazione] = useState(dati.nazione ?? 'Italia')
-  const [errore, setErrore] = useState<string | null>(null)
-  const [salvato, setSalvato] = useState(false)
+  const toast = useToast()
 
   const aggiorna = useAggiornaDatiAziendali(strutturaId)
 
   function salva() {
-    setErrore(null)
-    setSalvato(false)
     const vuoto = (v: string) => (v.trim() === '' ? null : v.trim())
     const request: DatiAziendaliRequest = {
       iso2: vuoto(iso2),
@@ -275,8 +266,8 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
     }
 
     aggiorna.mutate(request, {
-      onSuccess: () => setSalvato(true),
-      onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      onSuccess: () => toast.successo('Dati aziendali salvati.'),
+      onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
     })
   }
 
@@ -286,9 +277,6 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
       <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
         Questi dati compaiono come mittente su ogni fattura PDF/XML generata per questa struttura.
       </Typography>
-
-      {errore && <Alert severity="error">{errore}</Alert>}
-      {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Dati aziendali salvati.</Alert>}
 
       <TextField label="Denominazione (se azienda)" value={denominazione} onChange={(e) => setDenominazione(e.target.value)} disabled={aggiorna.isPending} />
 

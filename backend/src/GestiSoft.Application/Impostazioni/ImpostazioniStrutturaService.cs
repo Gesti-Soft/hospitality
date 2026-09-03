@@ -10,6 +10,11 @@ public record AggiornaImpostazioniRequest(
     TimeOnly? OraInvioGiornaliero,
     decimal? TassaSoggiornoPrezzo,
     int? TassaSoggiornoMaxGiorni,
+    int? TassaSoggiornoEtaEsenzioneMinori,
+    int? TassaSoggiornoEtaEsenzioneAnziani,
+    decimal? TassaSoggiornoPercentualeResidenti,
+    decimal? TassaSoggiornoPercentualeMinori,
+    decimal? TassaSoggiornoPercentualeAnziani,
     string? ComuneAttivita);
 
 public class ImpostazioniStrutturaService(
@@ -60,6 +65,11 @@ public class ImpostazioniStrutturaService(
         impostazioni.OraInvioGiornaliero = request.OraInvioGiornaliero;
         impostazioni.TassaSoggiornoPrezzo = request.TassaSoggiornoPrezzo;
         impostazioni.TassaSoggiornoMaxGiorni = request.TassaSoggiornoMaxGiorni;
+        impostazioni.TassaSoggiornoEtaEsenzioneMinori = request.TassaSoggiornoEtaEsenzioneMinori;
+        impostazioni.TassaSoggiornoEtaEsenzioneAnziani = request.TassaSoggiornoEtaEsenzioneAnziani;
+        impostazioni.TassaSoggiornoPercentualeResidenti = request.TassaSoggiornoPercentualeResidenti;
+        impostazioni.TassaSoggiornoPercentualeMinori = request.TassaSoggiornoPercentualeMinori;
+        impostazioni.TassaSoggiornoPercentualeAnziani = request.TassaSoggiornoPercentualeAnziani;
         impostazioni.ComuneAttivita = request.ComuneAttivita;
         impostazioni.UpdatedAtUtc = DateTime.UtcNow;
 

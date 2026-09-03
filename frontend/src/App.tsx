@@ -3,6 +3,7 @@ import CssBaseline from '@mui/material/CssBaseline'
 import { ThemeProvider } from '@mui/material/styles'
 import { AuthProvider } from './auth/AuthContext'
 import { AppRouter } from './routes/AppRouter'
+import { ToastProvider } from './toast/ToastContext'
 import { theme } from './theme'
 
 const queryClient = new QueryClient({
@@ -16,9 +17,11 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <AppRouter />
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <AppRouter />
+          </AuthProvider>
+        </ToastProvider>
       </QueryClientProvider>
     </ThemeProvider>
   )

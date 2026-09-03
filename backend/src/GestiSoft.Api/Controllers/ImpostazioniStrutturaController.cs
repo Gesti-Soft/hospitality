@@ -33,5 +33,10 @@ public class ImpostazioniStrutturaController(ImpostazioniStrutturaService servic
         impostazioni.OraInvioGiornaliero,
         impostazioni.TassaSoggiornoPrezzo,
         impostazioni.TassaSoggiornoMaxGiorni,
+        impostazioni.TassaSoggiornoEtaEsenzioneMinori,
+        impostazioni.TassaSoggiornoEtaEsenzioneAnziani,
+        impostazioni.TassaSoggiornoPercentualeResidenti,
+        impostazioni.TassaSoggiornoPercentualeMinori,
+        impostazioni.TassaSoggiornoPercentualeAnziani,
         impostazioni.ComuneAttivita);
 }

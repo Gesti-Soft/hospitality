@@ -44,6 +44,7 @@ import { useImpostaAttivoStruttura } from '../api/strutture'
 import { useCreaUtente } from '../api/utenti'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { useToast } from '../toast/ToastContext'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -242,10 +243,9 @@ function RigaStruttura({ struttura }: { struttura: StrutturaAdminDto }) {
   const aggiornaServizi = useAggiornaServiziStruttura()
   const impostaAttivo = useImpostaAttivoStruttura()
   const queryClient = useQueryClient()
-  const [errore, setErrore] = useState<string | null>(null)
+  const toast = useToast()
 
   function cambiaServizio(chiave: (typeof SERVIZI)[number]['chiave'], valore: boolean) {
-    setErrore(null)
     aggiornaServizi.mutate(
       {
         strutturaId: struttura.id,
@@ -257,17 +257,16 @@ function RigaStruttura({ struttura }: { struttura: StrutturaAdminDto }) {
           [chiave]: valore,
         },
       },
-      { onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita.') },
+      { onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita.') },
     )
   }
 
   function cambiaAttivo(attivo: boolean) {
-    setErrore(null)
     impostaAttivo.mutate(
       { strutturaId: struttura.id, attivo },
       {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['super-admin', 'dashboard'] }),
-        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita.'),
+        onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita.'),
       },
     )
   }
@@ -285,8 +284,6 @@ function RigaStruttura({ struttura }: { struttura: StrutturaAdminDto }) {
         opacity: struttura.attivo ? 1 : 0.7,
       }}
     >
-      {errore && <Alert severity="error">{errore}</Alert>}
-
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Typography sx={{ fontSize: 13, fontWeight: 700, minWidth: 160 }}>{struttura.nome}</Typography>
 
@@ -357,13 +354,12 @@ function ClienteCard({
   onModifica: () => void
 }) {
   const impostaAttivoCliente = useImpostaAttivoCliente()
-  const [errore, setErrore] = useState<string | null>(null)
+  const toast = useToast()
 
   function cambiaAttivo(attivo: boolean) {
-    setErrore(null)
     impostaAttivoCliente.mutate(
       { clienteId: cliente.id, attivo },
-      { onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita.') },
+      { onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita.') },
     )
   }
 
@@ -380,8 +376,6 @@ function ClienteCard({
         minWidth: 0,
       }}
     >
-      {errore && <Alert severity="error">{errore}</Alert>}
-
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, wordBreak: 'break-word' }}>{cliente.ragioneSociale}</Typography>
@@ -518,8 +512,7 @@ function ModificaClienteDialog({
   const [errore, setErrore] = useState<string | null>(null)
 
   const [nuovaPassword, setNuovaPassword] = useState('')
-  const [passwordReimpostata, setPasswordReimpostata] = useState(false)
-  const [erroreReset, setErroreReset] = useState<string | null>(null)
+  const toast = useToast()
 
   const aggiorna = useAggiornaCliente()
   const aggiornaUtente = useAggiornaUtente()
@@ -556,18 +549,17 @@ function ModificaClienteDialog({
   function reimpostaPassword() {
     if (!adminUtente) return
     if (nuovaPassword.trim().length < 8) {
-      setErroreReset('La password deve avere almeno 8 caratteri.')
+      toast.errore('La password deve avere almeno 8 caratteri.')
       return
     }
-    setErroreReset(null)
     resetPassword.mutate(
       { utenteId: adminUtente.id, nuovaPassword: nuovaPassword.trim() },
       {
         onSuccess: () => {
-          setPasswordReimpostata(true)
+          toast.successo('Password reimpostata.')
           setNuovaPassword('')
         },
-        onError: (err) => setErroreReset(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+        onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
       },
     )
   }
@@ -603,8 +595,6 @@ function ModificaClienteDialog({
             <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
               Reimposta la password di questo utente (non serve conoscere quella attuale).
             </Typography>
-            <Box>{erroreReset && <Alert severity="error">{erroreReset}</Alert>}</Box>
-            {passwordReimpostata && <Alert severity="success">Password reimpostata.</Alert>}
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
               <TextField
                 label="Nuova password"
@@ -745,17 +735,16 @@ function EliminaStrutturaDialog({
   onEliminata?: () => void
 }) {
   const [conferma, setConferma] = useState('')
-  const [errore, setErrore] = useState<string | null>(null)
+  const toast = useToast()
   const elimina = useEliminaStrutturaDefinitivamente()
 
   const confermaValida = conferma.trim() === struttura.nome
 
   function procedi() {
     if (!confermaValida) return
-    setErrore(null)
     elimina.mutate(struttura.id, {
       onSuccess: () => (onEliminata ?? onClose)(),
-      onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
     })
   }
 
@@ -763,7 +752,6 @@ function EliminaStrutturaDialog({
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ color: tokens.error600 }}>Elimina definitivamente "{struttura.nome}"</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
         <Alert severity="error">
           Questa azione è <strong>irreversibile</strong>: cancella per sempre la struttura "{struttura.nome}" del Cliente "{clienteRagioneSociale}"
           e tutti i dati collegati (camere, prenotazioni, ospiti, fatture, integrazioni). Non è un semplice disattiva/riattiva.

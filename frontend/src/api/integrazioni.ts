@@ -97,6 +97,24 @@ export interface EsitoVerificaConnessione {
   connessioneErrore: string | null
 }
 
+/** Una riduzione così come configurata su PayTourist (GET api/v1/reductions) — elenco grezzo, per la verifica manuale del suggerimento età. */
+export interface PayTouristRiduzioneDto {
+  id: number
+  nome: string
+  descrizione: string | null
+  percentuale: string | null
+}
+
+/** Suggerimento best-effort per soglie età e percentuali di riduzione di Impostazioni → Tassa di soggiorno — mai da salvare senza che l'operatore lo confermi (vedi PayTouristConfigService.SuggerisciEtaEsenzioneTassaAsync). */
+export interface SuggerimentoEtaTassaDto {
+  etaMinori: number | null
+  etaAnziani: number | null
+  percentualeResidenti: number | null
+  percentualeMinori: number | null
+  percentualeAnziani: number | null
+  riduzioni: PayTouristRiduzioneDto[]
+}
+
 export function useWubookConfig(strutturaId: string | null) {
   return useQuery({
     queryKey: ['wubook-config', strutturaId],
@@ -126,6 +144,13 @@ export function usePayTouristConfig(strutturaId: string | null) {
     queryKey: ['paytourist-config', strutturaId],
     queryFn: () => apiGet<PayTouristIntegrazioneDto>(`/strutture/${strutturaId}/paytourist/config`),
     enabled: !!strutturaId,
+  })
+}
+
+/** Azione on-demand (non una query in cache): l'operatore la lancia cliccando un pulsante in Impostazioni, non va rieseguita ad ogni render. */
+export function useSuggerimentoEtaTassaPayTourist(strutturaId: string | null) {
+  return useMutation({
+    mutationFn: () => apiGet<SuggerimentoEtaTassaDto>(`/strutture/${strutturaId}/paytourist/config/suggerimento-eta-tassa`),
   })
 }
 

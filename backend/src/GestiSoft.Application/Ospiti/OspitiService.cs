@@ -42,9 +42,8 @@ public record SalvaSchedaOspitiRequest(
 
 /// <summary>
 /// Scheda ospiti/alloggiati collegata a una Prenotazione — porta OspitiLogic.AddOrUpdateOspiti
-/// del legacy (vedi report Fase 3 sez. C.3) e il calcolo tassa di soggiorno (sez. C.7, limitato
-/// per ora all'importo pieno con esenzione per residenza: le riduzioni per età dipendono
-/// dall'integrazione PayTourist, non ancora portata — vedi Fase 8).
+/// del legacy (vedi report Fase 3 sez. C.3) e il calcolo tassa di soggiorno (sez. C.7: esenzione
+/// per residenza, per età via soglie configurate in Impostazioni, o manuale per persona).
 /// </summary>
 public class OspitiService(
     IOspiteRepository ospiti,
@@ -98,7 +97,11 @@ public class OspitiService(
         SincronizzaMembri(ospite, strutturaId, request.Membri);
 
         prenotazione.NumeroOspiti = 1 + request.Membri.Count;
-        prenotazione.TotalTax = await CalcolaTassaSoggiornoAsync(strutturaId, prenotazione, ospite, cancellationToken);
+        // Se il toggle è disattivato, l'importo resta 0 anche aggiungendo ospiti — non va
+        // "resuscitato" da un salvataggio della scheda che non c'entra col toggle stesso.
+        prenotazione.TotalTax = prenotazione.TassaSoggiornoAttiva
+            ? await CalcolaTassaSoggiornoAsync(strutturaId, prenotazione, ospite, cancellationToken)
+            : 0;
         prenotazione.UpdatedAtUtc = DateTime.UtcNow;
 
         await ospiti.SaveChangesAsync(cancellationToken);
@@ -142,10 +145,15 @@ public class OspitiService(
     }
 
     /// <summary>
-    /// Tassa di soggiorno: prezzo per notte (fino al tetto massimo di notti configurato) per
-    /// ogni persona non esente e non residente nel comune della struttura. Le riduzioni per età
-    /// (minori/anziani) del legacy dipendono da percentuali fornite dall'integrazione PayTourist
-    /// (Fase 8) e non sono ancora applicate qui — TODO quando quell'integrazione sarà portata.
+    /// Tassa di soggiorno: prezzo per notte (fino al tetto massimo di notti configurato) per ogni
+    /// persona, ridotto della percentuale applicabile (esenzione manuale, residenza, fascia d'età —
+    /// non necessariamente il 100%: un Comune può configurare uno sconto parziale, vedi
+    /// <see cref="PercentualeRiduzione"/>). PayTourist (GET api/v1/reductions) non espone età/
+    /// percentuale come dato strutturato in modo standard tra Comuni (solo testo libero nel nome —
+    /// es. "Esenzione Minore Anni 12", "Anziani Ultrasettantacinquenni" — percentuale sì, quella è
+    /// un campo vero), quindi soglie età e percentuali vengono proposte in automatico se PayTourist è
+    /// attivo (euristica sul testo, vedi PayTouristConfigService.SuggerisciEtaEsenzioneTassaAsync) o
+    /// impostate a mano altrimenti (vedi <see cref="ImpostazioniStruttura.TassaSoggiornoEtaEsenzioneMinori"/>).
     /// Pubblico perché riusato anche da <see cref="Prenotazioni.PrenotazioniService"/> per
     /// ricalcolare l'importo dopo un check-out anticipato (le notti effettive sono minori di
     /// quelle pianificate al momento del salvataggio della scheda ospiti).
@@ -170,32 +178,106 @@ public class OspitiService(
         var importoPerPersona = impostazioni.TassaSoggiornoPrezzo.Value * giorniEffettivi;
 
         decimal totale = 0;
-        foreach (var (esente, luogoResidenza) in PersoneScheda(ospite))
+        foreach (var (esente, luogoResidenza, dataNascita) in PersoneScheda(ospite))
         {
-            if (esente || EsenteResidenza(luogoResidenza, comuneStruttura))
-            {
-                continue;
-            }
-
-            totale += importoPerPersona;
+            var percentualeRiduzione = PercentualeRiduzione(esente, luogoResidenza, dataNascita, comuneStruttura, prenotazione.CheckIn.Value, impostazioni);
+            totale += importoPerPersona * (100m - percentualeRiduzione) / 100m;
         }
 
         return totale;
     }
 
-    private static IEnumerable<(bool EsenteDaTassa, string? LuogoResidenza)> PersoneScheda(Ospite ospite)
+    private static IEnumerable<(bool EsenteDaTassa, string? LuogoResidenza, DateTime? DataNascita)> PersoneScheda(Ospite ospite)
     {
-        yield return (ospite.EsenteDaTassa, ospite.LuogoResidenza);
+        yield return (ospite.EsenteDaTassa, ospite.LuogoResidenza, ospite.DataNascita);
         foreach (var membro in ospite.Membri)
         {
-            yield return (membro.EsenteDaTassa, membro.LuogoResidenza);
+            yield return (membro.EsenteDaTassa, membro.LuogoResidenza, membro.DataNascita);
         }
     }
 
-    private static bool EsenteResidenza(string? luogoResidenza, string? comuneStruttura) =>
-        !string.IsNullOrWhiteSpace(luogoResidenza)
-        && !string.IsNullOrWhiteSpace(comuneStruttura)
-        && string.Equals(luogoResidenza.Trim(), comuneStruttura.Trim(), StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Percentuale di riduzione (0-100) applicabile a una persona — non binario "esente sì/no": un
+    /// Comune può configurare uno sconto parziale (es. 50%) invece dell'esenzione piena su residenza
+    /// o età (vedi <see cref="ImpostazioniStruttura.TassaSoggiornoPercentualeResidenti"/>). Se più
+    /// motivi si applicano insieme (es. un residente minorenne), vince il più favorevole all'ospite
+    /// (percentuale più alta), non si sommano. Il checkbox manuale "Esente da tassa" resta sempre
+    /// 100% pieno — copre casi che non hanno una percentuale configurabile propria (disabili, forze
+    /// dell'ordine, ecc., vedi la categoria PayTourist "Esenzione").
+    /// </summary>
+    private static decimal PercentualeRiduzione(bool esenteManuale, string? luogoResidenza, DateTime? dataNascita, string? comuneStruttura, DateTime checkIn, ImpostazioniStruttura impostazioni)
+    {
+        decimal percentuale = esenteManuale ? 100m : 0m;
+
+        if (EsenteResidenza(luogoResidenza, comuneStruttura))
+        {
+            percentuale = Math.Max(percentuale, impostazioni.TassaSoggiornoPercentualeResidenti ?? 100m);
+        }
+
+        if (PercentualeEta(dataNascita, checkIn, impostazioni) is { } percentualeEta)
+        {
+            percentuale = Math.Max(percentuale, percentualeEta);
+        }
+
+        return percentuale;
+    }
+
+    /// <summary>
+    /// Soglie configurate in Impostazioni (età compiuta al check-in) — vedi
+    /// <see cref="ImpostazioniStruttura.TassaSoggiornoEtaEsenzioneMinori"/>. Nessuna soglia
+    /// impostata o data di nascita mancante → null (nessuna riduzione automatica per età).
+    /// </summary>
+    private static decimal? PercentualeEta(DateTime? dataNascita, DateTime checkIn, ImpostazioniStruttura impostazioni)
+    {
+        if (dataNascita is null)
+        {
+            return null;
+        }
+
+        var eta = checkIn.Year - dataNascita.Value.Year;
+        if (checkIn.Date < dataNascita.Value.Date.AddYears(eta))
+        {
+            eta--;
+        }
+
+        if (impostazioni.TassaSoggiornoEtaEsenzioneMinori is { } sogliaMinori && eta < sogliaMinori)
+        {
+            return impostazioni.TassaSoggiornoPercentualeMinori ?? 100m;
+        }
+
+        if (impostazioni.TassaSoggiornoEtaEsenzioneAnziani is { } sogliaAnziani && eta >= sogliaAnziani)
+        {
+            return impostazioni.TassaSoggiornoPercentualeAnziani ?? 100m;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Bug reale corretto: confrontava le stringhe intere, ma i campi Comune sono salvati come
+    /// "COMUNE (PROVINCIA)" (es. "Castellammare del Golfo (TP)") — un ospite residente lì non
+    /// risultava mai esente se il Comune Attività era scritto senza provincia (o viceversa). Estrae
+    /// il solo nome città prima di confrontare, stesso ExtractCity già duplicato in
+    /// PayTouristDtoBuilder/SchedinaAlloggiatiWebBuilder/StayBuilderOsservatorio/PayTouristClient.
+    /// internal per essere testabile direttamente (vedi OspitiServiceTests).
+    /// </summary>
+    internal static bool EsenteResidenza(string? luogoResidenza, string? comuneStruttura)
+    {
+        var residenza = ExtractCity(luogoResidenza);
+        var comune = ExtractCity(comuneStruttura);
+        return !string.IsNullOrWhiteSpace(residenza) && !string.IsNullOrWhiteSpace(comune) && string.Equals(residenza, comune, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ExtractCity(string? input)
+    {
+        if (string.IsNullOrEmpty(input))
+        {
+            return null;
+        }
+
+        var parts = input.Split(" (");
+        return parts.Length > 2 ? $"{parts[0].Trim()} ({parts[1].Trim()}" : parts[0].Trim();
+    }
 
     private async Task<Prenotazione> GetPrenotazioneOwnedAsync(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
     {

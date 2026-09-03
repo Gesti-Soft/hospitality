@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
@@ -108,6 +108,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const [errore, setErrore] = useState<string | null>(null)
   const [schedaOspitiAperta, setSchedaOspitiAperta] = useState(false)
   const [confermaAnnullaAperta, setConfermaAnnullaAperta] = useState(false)
+  const [confermaAzzeraTassaAperta, setConfermaAzzeraTassaAperta] = useState(false)
   // Appena creata una nuova prenotazione, si passa direttamente alla scheda ospiti (Nome/Cognome
   // veri, non un testo libero da spezzare a indovinare) — compilabile subito o saltabile del tutto.
   const [prenotazioneAppenaCreata, setPrenotazioneAppenaCreata] = useState<PrenotazioneDto | null>(null)
@@ -134,8 +135,9 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const dateValide = !!checkInDate && !!checkOutDate && checkOutDate > checkInDate
   const numeroOspitiNumero = Number(numeroOspiti) || 0
 
-  // Il preventivo ha senso solo per una prenotazione nuova: su una già esistente il prezzo pattuito
-  // è quello salvato (Importo totale), non va ricalcolato/riproposto ogni volta che si riapre.
+  // Su una prenotazione esistente il prezzo pattuito è quello salvato (Importo totale): il
+  // preventivo viene comunque ricalcolato per proporre l'aggiornamento, ma non lo sovrascrive da
+  // solo — l'operatore deve confermarlo nel popup sotto (vedi propostaImporto).
   const preventivo = usePreventivo(
     strutturaId,
     cameraId || null,
@@ -145,7 +147,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     spesePuliziaAttiva,
     animaliPrevisti && animaliAttiva,
     cauzionePrevista && cauzioneAttiva,
-    !modifica,
+    true,
   )
 
   useEffect(() => {
@@ -153,6 +155,72 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       setImportoTotale(String(preventivo.data.totale))
     }
   }, [preventivo.data, importoTotaleAuto])
+
+  // Snapshot dei soli campi che alimentano il preventivo — serve a poter "disfare" per intero il
+  // tocco dell'operatore (checkbox, camera, date, ospiti) se rifiuta il nuovo prezzo nel popup
+  // sotto, invece di lasciare uno stato incoerente (es. spunta tolta ma importo che la include ancora).
+  type InputPreventivo = {
+    cameraId: string
+    checkIn: string
+    checkOut: string
+    numeroOspiti: string
+    spesePuliziaAttiva: boolean
+    animaliAttiva: boolean
+    cauzioneAttiva: boolean
+  }
+  const snapshotInputPreventivo = (): InputPreventivo => ({ cameraId, checkIn, checkOut, numeroOspiti, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva })
+
+  // Su una prenotazione esistente il primo valore ricevuto è solo la "fotografia" di partenza (non
+  // va proposto subito riaprendo il dialog): si propone l'aggiornamento solo quando il preventivo
+  // cambia *dopo* quella fotografia, cioè in risposta a un tocco dell'operatore. I due ref restano
+  // fermi sull'ultimo stato "confermato" finché l'operatore non risponde al popup (Aggiorna/Annulla),
+  // non ad ogni render, altrimenti un Annulla che ripristina i campi vecchi farebbe ripartire subito
+  // un secondo popup invece di richiudersi in silenzio.
+  const preventivoPrecedenteRef = useRef<number | null>(null)
+  const inputPrecedenteRef = useRef<InputPreventivo | null>(null)
+  // "proposto" non è mai il preventivo di listino così com'è: è l'Importo totale attuale corretto
+  // della sola differenza introdotta dal tocco dell'operatore. Un totale già pattuito spesso non
+  // coincide col preventivo "pulito" (sconti, arrotondamenti, prezzo concordato via OTA con
+  // centesimi) — sovrascriverlo col listino da zero butterebbe via quello scarto ogni volta.
+  const [propostaImporto, setPropostaImporto] = useState<{ nuovoListino: number; proposto: number } | null>(null)
+
+  useEffect(() => {
+    if (!modifica || !preventivo.data) return
+    const nuovoListino = preventivo.data.totale
+    if (preventivoPrecedenteRef.current === null) {
+      preventivoPrecedenteRef.current = nuovoListino
+      inputPrecedenteRef.current = { cameraId, checkIn, checkOut, numeroOspiti, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva }
+      return
+    }
+    if (nuovoListino !== preventivoPrecedenteRef.current) {
+      const delta = nuovoListino - preventivoPrecedenteRef.current
+      const attuale = Number(importoTotale) || 0
+      const proposto = Math.round((attuale + delta) * 100) / 100
+      setPropostaImporto({ nuovoListino, proposto })
+    }
+  }, [preventivo.data, modifica, cameraId, checkIn, checkOut, numeroOspiti, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva, importoTotale])
+
+  function confermaAggiornaImporto() {
+    if (propostaImporto === null) return
+    setImportoTotale(String(propostaImporto.proposto))
+    preventivoPrecedenteRef.current = propostaImporto.nuovoListino
+    inputPrecedenteRef.current = snapshotInputPreventivo()
+    setPropostaImporto(null)
+  }
+
+  function annullaAggiornaImporto() {
+    const precedente = inputPrecedenteRef.current
+    if (precedente) {
+      setCameraId(precedente.cameraId)
+      setCheckIn(precedente.checkIn)
+      setCheckOut(precedente.checkOut)
+      setNumeroOspiti(precedente.numeroOspiti)
+      setSpesePuliziaAttiva(precedente.spesePuliziaAttiva)
+      setAnimaliAttiva(precedente.animaliAttiva)
+      setCauzioneAttiva(precedente.cauzioneAttiva)
+    }
+    setPropostaImporto(null)
+  }
 
   // Controllo live di sovrapposizione: appena camera+date sono selezionate, prima ancora di
   // premere "Crea"/"Salva", segnala se quella camera è già occupata in quel periodo — il controllo
@@ -192,6 +260,18 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     }
     setErrore(null)
 
+    // Disattivare la tassa azzera un importo già calcolato sulla scheda ospiti — un cambio che vale
+    // soldi, non solo un flag interno: va confermato esplicitamente prima di procedere, non solo
+    // eseguito silenziosamente al salvataggio.
+    if (modifica && modifica.tassaSoggiornoAttiva && !tassaSoggiornoAttiva && (modifica.totalTax ?? 0) > 0) {
+      setConfermaAzzeraTassaAperta(true)
+      return
+    }
+
+    eseguiSalvataggio()
+  }
+
+  function eseguiSalvataggio() {
     const request: PrenotazioneRequest = {
       cameraId,
       agenzia: agenzia.trim() === '' ? null : agenzia.trim(),
@@ -213,6 +293,11 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     } else {
       crea.mutate(request, { onSuccess: setPrenotazioneAppenaCreata, onError: gestisciErrore })
     }
+  }
+
+  function confermaAzzeraTassa() {
+    setConfermaAzzeraTassaAperta(false)
+    eseguiSalvataggio()
   }
 
   function eseguiAnnulla() {
@@ -462,6 +547,28 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           inCorso={annulla.isPending}
           onConferma={confermaAnnulla}
           onAnnulla={() => setConfermaAnnullaAperta(false)}
+        />
+      )}
+
+      {confermaAzzeraTassaAperta && (
+        <ConfirmDialog
+          titolo="Azzerare la tassa di soggiorno?"
+          messaggio={`Disattivando "Tassa di soggiorno" l'importo già calcolato di €${(modifica?.totalTax ?? 0).toFixed(2)} verrà azzerato. Confermi il salvataggio?`}
+          testoConferma="Salva e azzera"
+          inCorso={aggiorna.isPending}
+          onConferma={confermaAzzeraTassa}
+          onAnnulla={() => setConfermaAzzeraTassaAperta(false)}
+        />
+      )}
+
+      {propostaImporto !== null && (
+        <ConfirmDialog
+          titolo="Aggiornare l'importo totale?"
+          messaggio={`In base alla modifica appena fatta l'Importo totale corretto sarebbe €${propostaImporto.proposto.toFixed(2)} (attuale: €${importoTotale || '0'}). Vuoi aggiornarlo? Annullando, la modifica appena fatta viene ripristinata com'era.`}
+          testoConferma="Aggiorna"
+          pericoloso={false}
+          onConferma={confermaAggiornaImporto}
+          onAnnulla={annullaAggiornaImporto}
         />
       )}
     </Dialog>
