@@ -7,4 +7,5 @@ public record AlloggiatiWebIntegrazioneDto(
     bool CredenzialiConfigurate,
     DateTime? UltimoInvioAtUtc,
     int? UltimeSchedineInviate,
-    string? UltimoErrore);
+    string? UltimoErrore,
+    DateTime? UltimaVerificaOkAtUtc);

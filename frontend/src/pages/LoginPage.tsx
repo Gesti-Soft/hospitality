@@ -113,7 +113,7 @@ export function LoginPage() {
             </Box>
           </Box>
 
-          <Button type="submit" variant="contained" color="secondary" size="large" disabled={loading} fullWidth>
+          <Button type="submit" variant="contained" color="primary" size="large" disabled={loading} fullWidth>
             {loading ? 'Accesso in corso…' : 'Accedi'}
           </Button>
 

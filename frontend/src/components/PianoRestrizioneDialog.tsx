@@ -84,7 +84,7 @@ export function PianoRestrizioneDialog({ strutturaId, piano, onClose }: Props) {
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
           {piano ? 'Salva modifiche' : 'Crea piano'}
         </Button>
       </DialogActions>

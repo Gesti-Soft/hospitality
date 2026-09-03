@@ -211,7 +211,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
           {modifica ? 'Salva modifiche' : 'Crea fattura'}
         </Button>
       </DialogActions>

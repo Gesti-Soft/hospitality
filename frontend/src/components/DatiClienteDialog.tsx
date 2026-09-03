@@ -111,7 +111,7 @@ export function DatiClienteDialog({ strutturaId, cliente, onClose }: Props) {
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
           {cliente ? 'Salva modifiche' : 'Crea cliente'}
         </Button>
       </DialogActions>

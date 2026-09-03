@@ -22,8 +22,8 @@ public class AlloggiatiWebConfigController(AlloggiatiWebConfigService service, I
     [HttpPut]
     public async Task<IActionResult> Aggiorna(Guid strutturaId, [FromBody] AggiornaAlloggiatiWebConfigRequest request, CancellationToken cancellationToken)
     {
-        var integrazione = await service.AggiornaConfigAsync(currentUser, strutturaId, request, cancellationToken);
-        return Ok(ToDto(integrazione));
+        var (integrazione, connessioneOk, connessioneErrore) = await service.AggiornaConfigAsync(currentUser, strutturaId, request, cancellationToken);
+        return Ok(new AggiornaAlloggiatiWebConfigRisultatoDto(ToDto(integrazione), connessioneOk, connessioneErrore));
     }
 
     private static AlloggiatiWebIntegrazioneDto ToDto(AlloggiatiWebIntegrazione a) => new(
@@ -32,5 +32,6 @@ public class AlloggiatiWebConfigController(AlloggiatiWebConfigService service, I
         CredenzialiConfigurate: !string.IsNullOrWhiteSpace(a.Utente) && !string.IsNullOrWhiteSpace(a.Password) && !string.IsNullOrWhiteSpace(a.WsKey),
         a.UltimoInvioAtUtc,
         a.UltimeSchedineInviate,
-        a.UltimoErrore);
+        a.UltimoErrore,
+        a.UltimaVerificaOkAtUtc);
 }

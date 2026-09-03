@@ -8,4 +8,5 @@ public record PayTouristStrutturaDto(
     IReadOnlyList<Guid> TipologieIds,
     DateTime? UltimoInvioAtUtc,
     int? UltimeInviate,
-    string? UltimoErrore);
+    string? UltimoErrore,
+    DateTime? UltimaVerificaOkAtUtc);

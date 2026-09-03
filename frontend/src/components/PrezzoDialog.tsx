@@ -146,7 +146,7 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
         <Button onClick={onClose} disabled={imposta.isPending}>
           Chiudi
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={imposta.isPending}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={imposta.isPending}>
           Salva periodo
         </Button>
       </DialogActions>

@@ -350,7 +350,7 @@ function NuovaStrutturaDialog({
         <Button onClick={onClose} disabled={crea.isPending}>
           Annulla
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={crea.isPending}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={crea.isPending}>
           Crea
         </Button>
       </DialogActions>
@@ -401,7 +401,7 @@ function ModificaStrutturaDialog({ struttura, onClose }: { struttura: { id: stri
         <Button onClick={onClose} disabled={aggiorna.isPending}>
           Annulla
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
           Salva
         </Button>
       </DialogActions>

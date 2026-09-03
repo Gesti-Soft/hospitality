@@ -216,7 +216,7 @@ function DuplicaDaAltraStrutturaDialog({
           {risultato ? 'Chiudi' : 'Annulla'}
         </Button>
         {!risultato && (
-          <Button variant="contained" color="secondary" onClick={conferma} disabled={duplica.isPending}>
+          <Button variant="contained" color="primary" onClick={conferma} disabled={duplica.isPending}>
             Duplica
           </Button>
         )}
@@ -235,7 +235,7 @@ function IntestazioneTab({ titolo, azione }: { titolo: string; azione: { etichet
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>{titolo}</Typography>
-      <Button variant="contained" color="secondary" size="small" onClick={azione.onClick} disabled={azione.disabilitato}>
+      <Button variant="contained" color="primary" size="small" onClick={azione.onClick} disabled={azione.disabilitato}>
         {azione.etichetta}
       </Button>
     </Box>
@@ -406,7 +406,7 @@ function TabPrezzi({
           </ToggleButtonGroup>
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             size="small"
             onClick={() => setDialogoAperto(true)}
             disabled={!strutturaId || tipologie.length === 0}
@@ -717,7 +717,7 @@ function TabCanali({
             <Button onClick={() => setDialogo('chiuso')} disabled={inCorso}>
               Chiudi
             </Button>
-            <Button variant="contained" color="secondary" onClick={salvaCanale} disabled={inCorso}>
+            <Button variant="contained" color="primary" onClick={salvaCanale} disabled={inCorso}>
               Salva
             </Button>
           </DialogActions>

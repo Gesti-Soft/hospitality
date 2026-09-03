@@ -135,6 +135,8 @@ public class PayTouristInvioService(
         var tipologieIds = payTouristStruttura.Tipologie.Select(t => t.TipologiaId).ToHashSet();
         var daInviare = await ospiti.ListDaInviarePayTouristAsync(strutturaId, tipologieIds, cancellationToken);
 
+        var anagraficaDati = await CaricaAnagraficaAsync(strutturaId, cancellationToken);
+
         IReadOnlyList<PayTouristRiduzioneDto> riduzioni = [];
         IReadOnlyList<PayTouristPortaleDto> portali = [];
         int idSoftware = 0;
@@ -144,12 +146,12 @@ public class PayTouristInvioService(
             try
             {
                 idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(strutturaId, cancellationToken);
-                var (riduzioniOk, riduzioniRisultato, _) = await client.GetRiduzioniAsync(integrazione.Token, idStruttura, idSoftware, cancellationToken);
+                var (riduzioniOk, riduzioniRisultato, _) = await client.GetRiduzioniAsync(integrazione.Token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
                 riduzioni = riduzioniOk ? riduzioniRisultato : [];
 
                 if (integrazione.PortaleOnlineAttivo)
                 {
-                    var (portaliOk, portaliRisultato, _) = await client.GetPortaliOnlineAsync(integrazione.Token, idStruttura, idSoftware, cancellationToken);
+                    var (portaliOk, portaliRisultato, _) = await client.GetPortaliOnlineAsync(integrazione.Token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
                     portali = portaliOk ? portaliRisultato : [];
                 }
             }
@@ -159,7 +161,6 @@ public class PayTouristInvioService(
             }
         }
 
-        var anagraficaDati = await CaricaAnagraficaAsync(strutturaId, cancellationToken);
         var builder = new PayTouristDtoBuilder(anagraficaDati.Luoghi, anagraficaDati.Documenti, anagraficaDati.TipiAlloggiato, riduzioni, portali, anagraficaDati.ComuneStruttura);
 
         var righe = daInviare.Select(o =>
@@ -185,63 +186,98 @@ public class PayTouristInvioService(
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceWrite, cancellationToken);
         await concessioneGuard.EnsurePayTouristAsync(strutturaId, cancellationToken);
 
-        var payTouristStruttura = await payTouristStrutture.GetAsync(strutturaId, payTouristStrutturaId, cancellationToken)
-            ?? throw new NotFoundException("Struttura PayTourist non trovata.");
-
-        if (payTouristStruttura.IdStrutturaPaytourist is not { } idStruttura)
+        string? nomeStruttura = null;
+        try
         {
-            throw new ConflictException("Id struttura PayTourist non configurato.");
-        }
+            var payTouristStruttura = await payTouristStrutture.GetAsync(strutturaId, payTouristStrutturaId, cancellationToken)
+                ?? throw new NotFoundException("Struttura PayTourist non trovata.");
+            nomeStruttura = payTouristStruttura.Nome;
 
-        var integrazione = await integrazioni.GetByStrutturaIdAsync(strutturaId, cancellationToken)
-            ?? new PayTouristIntegrazione { StrutturaId = strutturaId };
-        if (string.IsNullOrWhiteSpace(integrazione.Token))
-        {
-            throw new ConflictException("Token PayTourist non configurato.");
-        }
-
-        var idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(strutturaId, cancellationToken);
-
-        var tipologieIds = payTouristStruttura.Tipologie.Select(t => t.TipologiaId).ToHashSet();
-        var daInviare = await ospiti.ListDaInviarePayTouristAsync(strutturaId, tipologieIds, cancellationToken);
-        var ospite = daInviare.FirstOrDefault(o => o.Id == ospiteId)
-            ?? throw new NotFoundException("Ospite non trovato tra quelli da inviare per questa struttura PayTourist.");
-
-        var (riduzioniOk, riduzioni, riduzioniErrore) = await client.GetRiduzioniAsync(integrazione.Token, idStruttura, idSoftware, cancellationToken);
-        if (!riduzioniOk)
-        {
-            throw new ConflictException(riduzioniErrore ?? "Impossibile recuperare le riduzioni PayTourist.");
-        }
-
-        IReadOnlyList<PayTouristPortaleDto> portali = [];
-        if (integrazione.PortaleOnlineAttivo)
-        {
-            var (portaliOk, portaliRisultato, portaliErrore) = await client.GetPortaliOnlineAsync(integrazione.Token, idStruttura, idSoftware, cancellationToken);
-            if (!portaliOk)
+            if (payTouristStruttura.IdStrutturaPaytourist is not { } idStruttura)
             {
-                throw new ConflictException(portaliErrore ?? "Impossibile recuperare i portali online PayTourist.");
+                throw new ConflictException("Id struttura PayTourist non configurato.");
             }
 
-            portali = portaliRisultato;
+            var integrazione = await integrazioni.GetByStrutturaIdAsync(strutturaId, cancellationToken)
+                ?? new PayTouristIntegrazione { StrutturaId = strutturaId };
+            if (string.IsNullOrWhiteSpace(integrazione.Token))
+            {
+                throw new ConflictException("Token PayTourist non configurato.");
+            }
+
+            var idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(strutturaId, cancellationToken);
+
+            var tipologieIds = payTouristStruttura.Tipologie.Select(t => t.TipologiaId).ToHashSet();
+            var daInviare = await ospiti.ListDaInviarePayTouristAsync(strutturaId, tipologieIds, cancellationToken);
+            var ospite = daInviare.FirstOrDefault(o => o.Id == ospiteId)
+                ?? throw new NotFoundException("Ospite non trovato tra quelli da inviare per questa struttura PayTourist.");
+
+            var anagraficaDati = await CaricaAnagraficaAsync(strutturaId, cancellationToken);
+
+            var (riduzioniOk, riduzioni, riduzioniErrore) = await client.GetRiduzioniAsync(integrazione.Token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
+            if (!riduzioniOk)
+            {
+                throw new ConflictException(riduzioniErrore ?? "Impossibile recuperare le riduzioni PayTourist.");
+            }
+
+            IReadOnlyList<PayTouristPortaleDto> portali = [];
+            if (integrazione.PortaleOnlineAttivo)
+            {
+                var (portaliOk, portaliRisultato, portaliErrore) = await client.GetPortaliOnlineAsync(integrazione.Token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
+                if (!portaliOk)
+                {
+                    throw new ConflictException(portaliErrore ?? "Impossibile recuperare i portali online PayTourist.");
+                }
+
+                portali = portaliRisultato;
+            }
+
+            var builder = new PayTouristDtoBuilder(anagraficaDati.Luoghi, anagraficaDati.Documenti, anagraficaDati.TipiAlloggiato, riduzioni, portali, anagraficaDati.ComuneStruttura);
+
+            var (reservation, motivoScarto) = builder.Costruisci(ospite, integrazione.PortaleOnlineAttivo);
+            if (reservation is null)
+            {
+                throw new ConflictException(motivoScarto ?? "Impossibile costruire la prenotazione per l'invio.");
+            }
+
+            var esito = await client.InviaPrenotazioneAsync(integrazione.Token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, reservation, cancellationToken);
+            if (!esito.Ok)
+            {
+                throw new ConflictException(esito.Errore ?? "Invio rifiutato da PayTourist.");
+            }
+
+            await MarcaInviataAsync(ospite.PrenotazioneId, cancellationToken);
+
+            await LogInvioSingoloAsync(
+                strutturaId,
+                LivelloLog.Info,
+                $"Invio singolo PayTourist ({payTouristStruttura.Nome}): {ospite.Nome} {ospite.Cognome} inviato.",
+                currentUser.Email,
+                cancellationToken);
         }
-
-        var anagraficaDati = await CaricaAnagraficaAsync(strutturaId, cancellationToken);
-        var builder = new PayTouristDtoBuilder(anagraficaDati.Luoghi, anagraficaDati.Documenti, anagraficaDati.TipiAlloggiato, riduzioni, portali, anagraficaDati.ComuneStruttura);
-
-        var (reservation, motivoScarto) = builder.Costruisci(ospite, integrazione.PortaleOnlineAttivo);
-        if (reservation is null)
+        catch (ConflictException ex)
         {
-            throw new ConflictException(motivoScarto ?? "Impossibile costruire la prenotazione per l'invio.");
+            await LogInvioSingoloAsync(
+                strutturaId,
+                LivelloLog.Warning,
+                nomeStruttura is null ? $"Invio singolo PayTourist: {ex.Message}" : $"Invio singolo PayTourist ({nomeStruttura}): {ex.Message}",
+                currentUser.Email,
+                cancellationToken);
+            throw;
         }
-
-        var esito = await client.InviaPrenotazioneAsync(integrazione.Token, idStruttura, idSoftware, reservation, cancellationToken);
-        if (!esito.Ok)
-        {
-            throw new ConflictException(esito.Errore ?? "Invio rifiutato da PayTourist.");
-        }
-
-        await MarcaInviataAsync(ospite.PrenotazioneId, cancellationToken);
     }
+
+    /// <summary>Invii/verifiche fatti a mano dall'operatore (a differenza di SalvaEsitoAsync, che copre solo il job automatico) devono comparire nel Log tanto quanto quelli automatici — gap reale: prima di questa aggiunta un invio singolo fallito non lasciava traccia da nessuna parte, scoperto testando con l'account PayTourist di prova.</summary>
+    private async Task LogInvioSingoloAsync(Guid strutturaId, LivelloLog livello, string messaggio, string? operatore, CancellationToken cancellationToken) =>
+        await logEventi.RegistraAsync(
+            livello,
+            messaggio,
+            origine: "PayTourist",
+            clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+            strutturaId: strutturaId,
+            categoria: "PayTourist",
+            operatore: operatore,
+            cancellationToken: cancellationToken);
 
     /// <summary>Elenco prenotazioni recenti (30 giorni sul check-out) di una struttura PayTourist per la schermata operativa — da inviare e già inviate.</summary>
     public async Task<IReadOnlyList<PrenotazionePayTourist>> ListPrenotazioniAsync(ICurrentUser currentUser, Guid strutturaId, Guid payTouristStrutturaId, CancellationToken cancellationToken)
@@ -293,7 +329,7 @@ public class PayTouristInvioService(
             return (0, 0, 0, []);
         }
 
-        var (riduzioniOk, riduzioni, riduzioniErrore) = await client.GetRiduzioniAsync(token, idStruttura, idSoftware, cancellationToken);
+        var (riduzioniOk, riduzioni, riduzioniErrore) = await client.GetRiduzioniAsync(token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
         if (!riduzioniOk)
         {
             var errore = riduzioniErrore ?? "Impossibile recuperare le riduzioni PayTourist.";
@@ -304,7 +340,7 @@ public class PayTouristInvioService(
         IReadOnlyList<PayTouristPortaleDto> portali = [];
         if (portaleOnlineAttivo)
         {
-            var (portaliOk, portaliRisultato, portaliErrore) = await client.GetPortaliOnlineAsync(token, idStruttura, idSoftware, cancellationToken);
+            var (portaliOk, portaliRisultato, portaliErrore) = await client.GetPortaliOnlineAsync(token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
             if (!portaliOk)
             {
                 var errore = portaliErrore ?? "Impossibile recuperare i portali online PayTourist.";
@@ -333,7 +369,7 @@ public class PayTouristInvioService(
 
             try
             {
-                var esito = await client.InviaPrenotazioneAsync(token, idStruttura, idSoftware, reservation, cancellationToken);
+                var esito = await client.InviaPrenotazioneAsync(token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, reservation, cancellationToken);
                 if (!esito.Ok)
                 {
                     ultimoErrore = esito.Errore ?? "Invio rifiutato.";

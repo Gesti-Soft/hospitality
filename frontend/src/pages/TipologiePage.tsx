@@ -42,7 +42,7 @@ export function TipologiePage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tipologie camera</Typography>
-        <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo('nuova')} disabled={!strutturaId}>
+        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuova')} disabled={!strutturaId}>
           + Nuova tipologia
         </Button>
       </Box>

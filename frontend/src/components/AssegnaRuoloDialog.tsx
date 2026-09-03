@@ -168,11 +168,15 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
   const resetPassword = useResetPasswordUtente()
   const inCorso = creaUtente.isPending || assegnaRuolo.isPending || aggiornaUtente.isPending
 
+  // L'autorizzazione vera è determinata solo dai permessi granulari, mai dal campo Ruolo (che è
+  // solo un'etichetta descrittiva, vedi RuoloUtente) — cambiare qui il ruolo deve quindi
+  // riapplicare subito il preset di permessi di quel ruolo, altrimenti selezionare "Amministratore"
+  // su un utente già assegnato come Receptionist cambierebbe solo l'etichetta mostrata, lasciando
+  // i permessi reali (e quindi il comportamento dell'utente nell'app) invariati — bug reale
+  // segnalato dall'utente ("ho messo admin ma mi lascia sempre receptionist").
   function cambiaRuolo(nuovoRuolo: string) {
     setRuolo(nuovoRuolo)
-    if (!modifica) {
-      setPermessi({ ...PERMESSI_VUOTI, ...PRESET_PERMESSI[Number(nuovoRuolo) as RuoloUtente] })
-    }
+    setPermessi({ ...PERMESSI_VUOTI, ...PRESET_PERMESSI[Number(nuovoRuolo) as RuoloUtente] })
   }
 
   function gestisciErrore(err: unknown) {
@@ -345,7 +349,7 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
           {modifica ? 'Salva modifiche' : 'Salva'}
         </Button>
       </DialogActions>

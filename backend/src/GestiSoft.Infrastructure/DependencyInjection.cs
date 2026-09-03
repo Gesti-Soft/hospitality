@@ -118,19 +118,13 @@ public static class DependencyInjection
             }
         });
 
-        // PayTourist (Fase 8): il legacy leggeva l'endpoint dalla env var "EndpointPayTourist", mai
-        // hardcoded; qui passa da configurazione standard (PayTourist:BaseUrl / env var
-        // PayTourist__BaseUrl), stesso trattamento delle altre integrazioni esterne — non
-        // configurato per default in dev, le chiamate falliscono solo quando l'integrazione viene
-        // effettivamente usata.
-        var payTouristBaseUrl = configuration["PayTourist:BaseUrl"];
-        services.AddHttpClient<IPayTouristClient, PayTouristClient>(client =>
-        {
-            if (!string.IsNullOrWhiteSpace(payTouristBaseUrl))
-            {
-                client.BaseAddress = new Uri(payTouristBaseUrl.TrimEnd('/') + "/");
-            }
-        });
+        // PayTourist (Fase 8): a differenza delle altre integrazioni esterne, l'host NON è unico —
+        // PayTourist assegna un sottodominio per Comune (es. https://palermo.paytourist.com). Qui
+        // "PayTourist:BaseUrl" resta un template con il segnaposto "{comune}" (env var
+        // PayTourist__BaseUrl, es. "https://{comune}.paytourist.com"), risolto da PayTouristClient
+        // ad ogni chiamata in base al Comune Attività della Struttura — quindi nessun
+        // HttpClient.BaseAddress fissato qui in DI, su istruzione esplicita dell'utente.
+        services.AddHttpClient<IPayTouristClient, PayTouristClient>();
 
         return services;
     }

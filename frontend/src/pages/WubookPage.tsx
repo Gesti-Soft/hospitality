@@ -400,7 +400,7 @@ function AssociaCameraWubookDialog({ strutturaId, camera, onClose }: { struttura
         <Button onClick={onClose} disabled={associa.isPending}>
           Annulla
         </Button>
-        <Button variant="contained" color="secondary" onClick={conferma} disabled={associa.isPending || remote.isLoading}>
+        <Button variant="contained" color="primary" onClick={conferma} disabled={associa.isPending || remote.isLoading}>
           Associa
         </Button>
       </DialogActions>
@@ -428,7 +428,7 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
       {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
       <Box>
-        <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo('nuovo')}>
+        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>
           + Nuovo piano
         </Button>
       </Box>
@@ -511,7 +511,7 @@ function TabPianiRestrizione({ strutturaId }: { strutturaId: string }) {
       {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
       <Box>
-        <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo('nuovo')}>
+        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>
           + Nuovo piano
         </Button>
       </Box>

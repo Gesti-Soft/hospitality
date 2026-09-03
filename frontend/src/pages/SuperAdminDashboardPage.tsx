@@ -192,7 +192,7 @@ export function SuperAdminDashboardPage() {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
           <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5 }}>Clienti</Typography>
-          <Button variant="contained" color="secondary" size="small" onClick={() => setNuovoClienteAperto(true)}>
+          <Button variant="contained" color="primary" size="small" onClick={() => setNuovoClienteAperto(true)}>
             + Nuovo Cliente
           </Button>
         </Box>
@@ -632,7 +632,7 @@ function ModificaClienteDialog({
         <Button onClick={onClose} disabled={inCorso}>
           Annulla
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
           Salva
         </Button>
       </DialogActions>
@@ -724,7 +724,7 @@ function NuovoClienteDialog({ onClose }: { onClose: () => void }) {
         <Button onClick={onClose} disabled={salvataggioInCorso}>
           Annulla
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={salvataggioInCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={salvataggioInCorso}>
           Crea
         </Button>
       </DialogActions>

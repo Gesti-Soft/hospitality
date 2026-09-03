@@ -92,7 +92,7 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
           {tipologia ? 'Salva modifiche' : 'Crea tipologia'}
         </Button>
       </DialogActions>

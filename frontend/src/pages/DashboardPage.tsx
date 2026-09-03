@@ -33,6 +33,12 @@ function isOggi(iso: string | null): boolean {
   return d.getFullYear() === oggi.getFullYear() && d.getMonth() === oggi.getMonth() && d.getDate() === oggi.getDate()
 }
 
+/** Oggi o prima — usato per le partenze: un check-out dimenticato non deve sparire dalla lista il giorno dopo, resta finché non viene fatto. */
+function isOggiOPrima(iso: string | null): boolean {
+  if (!iso) return false
+  return inizioGiornoLocale(new Date(iso)) <= inizioGiornoLocale(new Date())
+}
+
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
@@ -65,13 +71,15 @@ export function DashboardPage() {
   const payTouristStrutture = usePayTouristStrutture(payTouristConcesso ? strutturaId : null)
 
   const arriviOggi = (arriviProssimi.data ?? []).filter((p) => isOggi(p.checkIn))
-  const partenzeOggi = (arriviInCorso.data ?? []).filter((p) => isOggi(p.checkOut))
+  // "Oggi o prima", non solo "oggi": una partenza dimenticata resta InCorso e deve restare
+  // visibile e cliccabile finché non si fa il check-out, non sparire dalla lista il giorno dopo.
+  const partenzeDaFare = (arriviInCorso.data ?? []).filter((p) => isOggiOPrima(p.checkOut))
   const occupate = arriviInCorso.data?.length ?? null
   const totaleCamere = camere.data?.length ?? null
 
   const righeMovimenti: { prenotazione: PrenotazioneDto; tipo: 'check-in' | 'check-out' }[] = [
     ...arriviOggi.map((p) => ({ prenotazione: p, tipo: 'check-in' as const })),
-    ...partenzeOggi.map((p) => ({ prenotazione: p, tipo: 'check-out' as const })),
+    ...partenzeDaFare.map((p) => ({ prenotazione: p, tipo: 'check-out' as const })),
   ]
 
   const wubookStato: EsitoIntegrazione | undefined = wubook.data
@@ -89,7 +97,7 @@ export function DashboardPage() {
       ? 'non-configurato'
       : alloggiatiWeb.data.ultimoErrore
         ? 'errore'
-        : alloggiatiWeb.data.ultimoInvioAtUtc
+        : alloggiatiWeb.data.ultimoInvioAtUtc || alloggiatiWeb.data.ultimaVerificaOkAtUtc
           ? 'ok'
           : 'attesa'
     : undefined
@@ -99,7 +107,7 @@ export function DashboardPage() {
       ? 'non-configurato'
       : osservatorio.data.some((a) => a.ultimoErrore)
         ? 'errore'
-        : osservatorio.data.every((a) => a.ultimoInvioAtUtc)
+        : osservatorio.data.every((a) => a.ultimoInvioAtUtc || a.ultimaVerificaOkAtUtc)
           ? 'ok'
           : 'attesa'
     : undefined
@@ -110,7 +118,7 @@ export function DashboardPage() {
         ? 'non-configurato'
         : payTouristStrutture.data.some((s) => s.ultimoErrore)
           ? 'errore'
-          : payTouristStrutture.data.every((s) => s.ultimoInvioAtUtc)
+          : payTouristStrutture.data.every((s) => s.ultimoInvioAtUtc || s.ultimaVerificaOkAtUtc)
             ? 'ok'
             : 'attesa'
       : undefined
@@ -123,7 +131,7 @@ export function DashboardPage() {
         </Typography>
         <Button
           variant="contained"
-          color="secondary"
+          color="primary"
           size="medium"
           disabled={!strutturaId || !camere.data || camere.data.length === 0}
           onClick={() =>
@@ -144,7 +152,7 @@ export function DashboardPage() {
           etichetta="Arrivi e partenze oggi"
           voci={[
             { valore: arriviProssimi.isLoading ? null : String(arriviOggi.length), etichetta: 'arrivi' },
-            { valore: arriviInCorso.isLoading ? null : String(partenzeOggi.length), etichetta: 'partenze' },
+            { valore: arriviInCorso.isLoading ? null : String(partenzeDaFare.length), etichetta: 'partenze' },
           ]}
         />
         <KpiCard
@@ -165,19 +173,24 @@ export function DashboardPage() {
 
       <Box sx={{ display: 'grid', gridTemplateColumns: nessunServizioConcesso ? '1fr' : '1.55fr 1fr', gap: 2.5, alignItems: 'start' }}>
         <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: 3 }}>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5, mb: 1.75 }}>Arrivi e partenze di oggi</Typography>
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5, mb: 1.75 }}>Arrivi di oggi e partenze</Typography>
 
           {(arriviInCorso.isLoading || arriviProssimi.isLoading) && <Skeleton variant="rounded" height={140} />}
 
           {!arriviInCorso.isLoading && !arriviProssimi.isLoading && righeMovimenti.length === 0 && (
-            <Typography sx={{ fontSize: 13.5, color: tokens.textSecondary }}>Nessun arrivo o partenza previsti per oggi.</Typography>
+            <Typography sx={{ fontSize: 13.5, color: tokens.textSecondary }}>Nessun arrivo previsto per oggi, nessuna partenza da fare.</Typography>
           )}
 
           {righeMovimenti.length > 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column' }}>
               <RigaMovimento intestazione />
               {righeMovimenti.map(({ prenotazione, tipo }) => (
-                <RigaMovimento key={`${prenotazione.id}-${tipo}`} prenotazione={prenotazione} tipo={tipo} />
+                <RigaMovimento
+                  key={`${prenotazione.id}-${tipo}`}
+                  prenotazione={prenotazione}
+                  tipo={tipo}
+                  onClick={() => setDialogo({ modo: 'modifica', prenotazione })}
+                />
               ))}
             </Box>
           )}
@@ -254,7 +267,17 @@ function KpiCardDoppia({ etichetta, voci }: { etichetta: string; voci: { valore:
   )
 }
 
-function RigaMovimento({ intestazione, prenotazione, tipo }: { intestazione?: boolean; prenotazione?: PrenotazioneDto; tipo?: 'check-in' | 'check-out' }) {
+function RigaMovimento({
+  intestazione,
+  prenotazione,
+  tipo,
+  onClick,
+}: {
+  intestazione?: boolean
+  prenotazione?: PrenotazioneDto
+  tipo?: 'check-in' | 'check-out'
+  onClick?: () => void
+}) {
   if (intestazione) {
     return (
       <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr .8fr .8fr 1fr', p: '8px 4px', borderBottom: `1px solid ${tokens.surfaceBorder}` }}>
@@ -269,13 +292,29 @@ function RigaMovimento({ intestazione, prenotazione, tipo }: { intestazione?: bo
 
   if (!prenotazione || !tipo) return null
 
+  // Una partenza il cui check-out previsto è già passato (dimenticata) merita un colore diverso dal
+  // solito "Check-out" blu, per farla notare a colpo d'occhio invece di confonderla con quelle del giorno.
+  const inRitardo = tipo === 'check-out' && !isOggi(prenotazione.checkOut)
   const badge =
     tipo === 'check-in'
       ? { colore: tokens.ok600, sfondo: tokens.ok100, testo: 'Check-in' }
-      : { colore: tokens.blue600, sfondo: tokens.blue100, testo: 'Check-out' }
+      : inRitardo
+        ? { colore: tokens.orange600, sfondo: tokens.orange100, testo: 'Check-out in ritardo' }
+        : { colore: tokens.blue600, sfondo: tokens.blue100, testo: 'Check-out' }
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr .8fr .8fr 1fr', p: '12px 4px', alignItems: 'center', borderBottom: `1px solid ${tokens.surfaceBorder}` }}>
+    <Box
+      onClick={onClick}
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: '1.4fr .8fr .8fr 1fr',
+        p: '12px 4px',
+        alignItems: 'center',
+        borderBottom: `1px solid ${tokens.surfaceBorder}`,
+        cursor: onClick ? 'pointer' : 'default',
+        '&:hover': onClick ? { bgcolor: tokens.paper } : undefined,
+      }}
+    >
       <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>{prenotazione.numeroPrenotazione ?? '—'}</Typography>
       <Typography sx={{ fontFamily: fontMono, fontSize: 13, color: tokens.textSecondary }}>{prenotazione.cameraNome ?? '—'}</Typography>
       <Typography sx={{ fontSize: 13, color: tokens.textSecondary }}>{prenotazione.agenzia ?? '—'}</Typography>

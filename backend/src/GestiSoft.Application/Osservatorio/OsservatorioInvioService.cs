@@ -24,7 +24,11 @@ public record SchedinaOsservatorio(Guid OspiteId, Guid? PrenotazioneId, string N
 /// trovato leggendo il codice, non solo testando dal vivo); (3) gli arrivi/checkout di un intero
 /// appartamento in un giorno vengono raggruppati in una sola chiamata invece che una per ospite
 /// (batching esplicitamente autorizzato dall'utente per questa fase, non verificato contro un
-/// endpoint reale).
+/// endpoint reale); (4) enddayfrompms (chiusura giornata) avviene SOLO dal job automatico
+/// (<see cref="InviaSistemaAsync"/>), mai dall'invio manuale (<see cref="InviaOraAsync"/>, vedi
+/// il parametro <c>automatico</c> di ProcessaAppartamentoAsync) — su richiesta esplicita
+/// dell'utente: è un'operazione irreversibile lato Osservatorio (avanza il loro cursore) e non
+/// deve scattare solo perché l'operatore preme "Invia ora" per verificare che l'invio funzioni.
 /// </summary>
 public class OsservatorioInvioService(
     IOspiteRepository ospiti,
@@ -38,6 +42,12 @@ public class OsservatorioInvioService(
     ConcessioneServiziGuard concessioneGuard,
     ILogEventoService logEventi)
 {
+    /// <summary>
+    /// Invio manuale su richiesta esplicita dell'operatore — a differenza del job automatico, NON
+    /// chiude mai la giornata (enddayfrompms): quell'operazione è irreversibile lato Osservatorio
+    /// (avanza il loro cursore) e deve avvenire solo al momento previsto, non ogni volta che si
+    /// preme "Invia ora" per verificare che l'invio funzioni. Manda solo gli arrivi di oggi.
+    /// </summary>
     public async Task<RisultatoInvioOsservatorio> InviaOraAsync(ICurrentUser currentUser, Guid strutturaId, Guid appartamentoId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceWrite, cancellationToken);
@@ -45,7 +55,7 @@ public class OsservatorioInvioService(
         var appartamento = await appartamenti.GetAsync(strutturaId, appartamentoId, cancellationToken)
             ?? throw new NotFoundException("Appartamento Osservatorio Turistico non trovato.");
 
-        return await ProcessaAppartamentoAsync(strutturaId, appartamento, cancellationToken);
+        return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken);
     }
 
     /// <summary>Usato dal job Quartz schedulato (Worker) — nessun ICurrentUser, un appartamento alla volta: un fallimento su uno non blocca gli altri.</summary>
@@ -71,7 +81,7 @@ public class OsservatorioInvioService(
         {
             try
             {
-                risultati.Add(await ProcessaAppartamentoAsync(strutturaId, appartamento, cancellationToken));
+                risultati.Add(await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: true, cancellationToken));
             }
             catch (Exception ex)
             {
@@ -110,7 +120,7 @@ public class OsservatorioInvioService(
             o.Prenotazione?.CheckOut is { } checkOut ? appartamento.CursoreDataAtUtc?.Date > checkOut.Date : null)).ToList();
     }
 
-    private async Task<RisultatoInvioOsservatorio> ProcessaAppartamentoAsync(Guid strutturaId, OsservatorioAppartamento appartamento, CancellationToken cancellationToken)
+    private async Task<RisultatoInvioOsservatorio> ProcessaAppartamentoAsync(Guid strutturaId, OsservatorioAppartamento appartamento, bool automatico, CancellationToken cancellationToken)
     {
         await concessioneGuard.EnsureOsservatorioAsync(strutturaId, cancellationToken);
 
@@ -165,6 +175,37 @@ public class OsservatorioInvioService(
 
         try
         {
+            if (!automatico)
+            {
+                // Invio manuale: mai enddayfrompms, né per l'arretrato né per oggi — solo il job
+                // schedulato (automatico: true) può chiudere una giornata, sempre e solo all'orario
+                // configurato (OraInvioGiornaliero). Se c'è arretrato da chiudere, va lasciato al
+                // job: qui si mandano solo gli arrivi di oggi, il cursore non si tocca.
+                if (cursore < oggi)
+                {
+                    return new RisultatoInvioOsservatorio(0, 0, 0,
+                        $"Ci sono giornate non ancora chiuse (da {cursore:dd/MM/yyyy}) — la chiusura avviene solo automaticamente all'orario configurato, non con l'invio manuale.");
+                }
+
+                arriviInviati = await InviaArriviAsync(strutturaId, appartamento, login.Token, oggi, tipologieIds, cancellationToken);
+
+                appartamento.UltimoInvioAtUtc = DateTime.UtcNow;
+                appartamento.UltimeSchedineInviate = arriviInviati;
+                appartamento.UltimoErrore = null;
+                await appartamenti.UpdateAsync(appartamento, cancellationToken);
+
+                await logEventi.RegistraAsync(
+                    LivelloLog.Info,
+                    $"Invio manuale Osservatorio Turistico ({appartamento.Nome}): {arriviInviati} arrivi inviati — nessuna chiusura giornata (solo il job automatico chiude).",
+                    origine: "Osservatorio",
+                    clienteId: await strutture.GetClienteIdAsync(appartamento.StrutturaId, cancellationToken),
+                    strutturaId: appartamento.StrutturaId,
+                    categoria: "Osservatorio",
+                    cancellationToken: cancellationToken);
+
+                return new RisultatoInvioOsservatorio(arriviInviati, 0, 0, null);
+            }
+
             // Recupero arretrati: solo checkout + chiusura giornata, niente nuovi arrivi per giorni
             // passati (fedele al legacy — gli arrivi si inviano solo per il giorno corrente).
             while (cursore < oggi)

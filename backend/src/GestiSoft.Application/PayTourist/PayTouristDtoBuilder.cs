@@ -24,6 +24,7 @@ public class PayTouristDtoBuilder
     private readonly ILookup<string, VoceAnagrafica> _tipiAlloggiato;
     private readonly IReadOnlyList<PayTouristRiduzioneDto> _riduzioni;
     private readonly ILookup<string, PayTouristPortaleDto> _portali;
+    private readonly bool _nessunPortaleConfigurato;
     private readonly string? _comuneStruttura;
 
     public PayTouristDtoBuilder(
@@ -39,14 +40,20 @@ public class PayTouristDtoBuilder
         _tipiAlloggiato = tipiAlloggiato.ToLookup(v => v.Descrizione, StringComparer.OrdinalIgnoreCase);
         _riduzioni = riduzioni;
         _portali = portali.ToLookup(p => p.Nome, StringComparer.OrdinalIgnoreCase);
+        _nessunPortaleConfigurato = portali.Count == 0;
         _comuneStruttura = ExtractCity(comuneStruttura);
     }
 
     /// <summary>
-    /// Costruisce la prenotazione. Restituisce (null, motivo) se il portale online è richiesto
-    /// (impostazione PortaleOnlineAttivo) ma nessun portale configurato corrisponde al canale della
-    /// prenotazione (<see cref="Prenotazione.Agenzia"/>) — la prenotazione va allora saltata, stesso
-    /// comportamento del legacy (che loggava l'errore e passava alla successiva).
+    /// Costruisce la prenotazione. Restituisce (null, motivo) solo se il portale online è richiesto
+    /// (impostazione PortaleOnlineAttivo) ma l'account PayTourist non ha NESSUN portale configurato
+    /// — in quel caso la prenotazione va saltata, stesso comportamento del legacy (che loggava
+    /// l'errore e passava alla successiva). Se invece i portali esistono ma nessuno corrisponde al
+    /// canale di questa specifica prenotazione (<see cref="Prenotazione.Agenzia"/>, es. "Diretta"),
+    /// il legacy NON bloccava l'invio — mandava comunque la prenotazione senza l'arricchimento
+    /// portale (StatePoliceLogic.SendSchedinePayTourist: il controllo "portal != null" si limitava a
+    /// non valorizzare OnlinePortal/TotalFromOnlinePortal/OnlinePortalReservationId, mai a scartare):
+    /// fedele qui, non ogni prenotazione arriva da un portale online.
     /// </summary>
     public (PayTouristReservationDto? Prenotazione, string? MotivoScarto) Costruisci(Ospite ospite, bool portaleOnlineRichiesto)
     {
@@ -60,15 +67,18 @@ public class PayTouristDtoBuilder
 
         if (portaleOnlineRichiesto)
         {
-            var portale = _portali[prenotazione.Agenzia ?? string.Empty].FirstOrDefault();
-            if (portale is null)
+            if (_nessunPortaleConfigurato)
             {
-                return (null, $"Nessun portale online PayTourist configurato per il canale \"{prenotazione.Agenzia}\".");
+                return (null, "Nessun portale online PayTourist configurato per questo account.");
             }
 
-            portaleId = portale.Id;
-            totaleDaPortale = prenotazione.TotalTax;
-            idPrenotazionePortale = prenotazione.NumeroPrenotazione;
+            var portale = _portali[prenotazione.Agenzia ?? string.Empty].FirstOrDefault();
+            if (portale is not null)
+            {
+                portaleId = portale.Id;
+                totaleDaPortale = prenotazione.TotalTax;
+                idPrenotazionePortale = prenotazione.NumeroPrenotazione;
+            }
         }
 
         var guests = new List<PayTouristGuestDto> { CostruisciCapofamiglia(ospite, checkIn, checkOut) };

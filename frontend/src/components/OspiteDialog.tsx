@@ -489,7 +489,7 @@ function SchedaOspitiForm({
         <Button onClick={onClose} disabled={salva.isPending}>
           Chiudi
         </Button>
-        <Button variant="contained" color="secondary" onClick={onSalva} disabled={salva.isPending}>
+        <Button variant="contained" color="primary" onClick={onSalva} disabled={salva.isPending}>
           Salva scheda
         </Button>
       </DialogActions>

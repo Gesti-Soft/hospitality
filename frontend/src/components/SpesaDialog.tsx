@@ -79,7 +79,7 @@ export function SpesaDialog({ strutturaId, spesa, onClose }: Props) {
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
           {spesa ? 'Salva modifiche' : 'Crea spesa'}
         </Button>
       </DialogActions>

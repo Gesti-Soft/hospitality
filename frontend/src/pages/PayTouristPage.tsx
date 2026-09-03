@@ -110,7 +110,7 @@ export function PayTouristPage() {
             ))}
           </TextField>
 
-          <Button variant="contained" color="secondary" size="small" onClick={inviaOra} disabled={invia.isPending}>
+          <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending}>
             Invia ora tutte
           </Button>
           <Button variant="outlined" size="small" onClick={esporta} disabled={!payTouristStrutturaId || (prenotazioni.data ?? []).length === 0}>

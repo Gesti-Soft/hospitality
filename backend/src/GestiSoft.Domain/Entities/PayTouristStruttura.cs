@@ -29,5 +29,13 @@ public class PayTouristStruttura : TenantEntity
 
     public string? UltimoErrore { get; set; }
 
+    /// <summary>
+    /// Ultimo test di connessione (GetRiduzioniAsync, nessuna prenotazione inviata) riuscito,
+    /// eseguito al salvataggio — vedi PayTouristConfigService.VerificaConnessioneStrutturaAsync.
+    /// Conta come "attivo" nella dashboard Stato invii automatici anche prima del primo invio
+    /// giornaliero reale (<see cref="UltimoInvioAtUtc"/>), su richiesta esplicita dell'utente.
+    /// </summary>
+    public DateTime? UltimaVerificaOkAtUtc { get; set; }
+
     public ICollection<PayTouristStrutturaTipologia> Tipologie { get; set; } = new List<PayTouristStrutturaTipologia>();
 }

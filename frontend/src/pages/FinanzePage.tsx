@@ -130,7 +130,7 @@ function IntestazioneTab({ titolo, azione }: { titolo: string; azione: { etichet
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>{titolo}</Typography>
-      <Button variant="contained" color="secondary" size="small" onClick={azione.onClick} disabled={azione.disabilitato}>
+      <Button variant="contained" color="primary" size="small" onClick={azione.onClick} disabled={azione.disabilitato}>
         {azione.etichetta}
       </Button>
     </Box>

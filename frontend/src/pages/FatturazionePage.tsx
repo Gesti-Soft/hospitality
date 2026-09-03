@@ -121,7 +121,7 @@ function IntestazioneTab({ titolo, azione }: { titolo: string; azione?: { etiche
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>{titolo}</Typography>
       {azione && (
-        <Button variant="contained" color="secondary" size="small" onClick={azione.onClick} disabled={azione.disabilitato}>
+        <Button variant="contained" color="primary" size="small" onClick={azione.onClick} disabled={azione.disabilitato}>
           {azione.etichetta}
         </Button>
       )}
@@ -325,7 +325,7 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
       </Box>
 
       <Box>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
           Salva
         </Button>
       </Box>

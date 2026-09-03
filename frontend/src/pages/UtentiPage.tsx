@@ -64,7 +64,7 @@ export function UtentiPage() {
           <Button variant="outlined" size="small" onClick={() => setDialogo({ modo: 'assegna' })} disabled={!strutturaId}>
             + Assegna utente esistente
           </Button>
-          <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo({ modo: 'nuovo' })} disabled={!strutturaId}>
+          <Button variant="contained" color="primary" size="small" onClick={() => setDialogo({ modo: 'nuovo' })} disabled={!strutturaId}>
             + Nuovo utente
           </Button>
         </Box>
@@ -166,7 +166,7 @@ function CambiaPasswordCard() {
         <TextField label="Nuova password" type="password" value={passwordNuova} onChange={(e) => setPasswordNuova(e.target.value)} fullWidth disabled={cambiaPassword.isPending} />
       </Box>
       <Box>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={cambiaPassword.isPending}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={cambiaPassword.isPending}>
           Aggiorna password
         </Button>
       </Box>

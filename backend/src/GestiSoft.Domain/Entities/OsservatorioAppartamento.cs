@@ -40,5 +40,13 @@ public class OsservatorioAppartamento : TenantEntity
 
     public string? UltimoErrore { get; set; }
 
+    /// <summary>
+    /// Ultimo test di connessione (Login + GetCurrentStatusDate, nessuna Stay inviata) riuscito,
+    /// eseguito al salvataggio — vedi OsservatorioConfigService.VerificaConnessioneAsync. Conta come
+    /// "attivo" nella dashboard Stato invii automatici anche prima del primo invio giornaliero
+    /// reale (<see cref="UltimoInvioAtUtc"/>), su richiesta esplicita dell'utente.
+    /// </summary>
+    public DateTime? UltimaVerificaOkAtUtc { get; set; }
+
     public ICollection<OsservatorioAppartamentoTipologia> Tipologie { get; set; } = new List<OsservatorioAppartamentoTipologia>();
 }

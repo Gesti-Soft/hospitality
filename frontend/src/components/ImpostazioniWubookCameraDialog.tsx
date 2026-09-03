@@ -143,7 +143,7 @@ function Form({
         <Button onClick={onClose} disabled={inCorso}>
           Annulla
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
           {inCorso ? 'Salvataggio…' : wubookAttiva ? 'Salva e aggiorna su Wubook' : 'Salva e crea su Wubook'}
         </Button>
       </DialogActions>

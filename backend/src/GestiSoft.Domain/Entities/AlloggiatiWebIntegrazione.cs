@@ -28,4 +28,12 @@ public class AlloggiatiWebIntegrazione : TenantEntity
 
     /// <summary>Ultimo errore di invio, per mostrarlo in UI (null se l'ultimo invio è andato a buon fine).</summary>
     public string? UltimoErrore { get; set; }
+
+    /// <summary>
+    /// Ultimo test di connessione (GenerateToken, nessuna schedina inviata) riuscito, eseguito al
+    /// salvataggio delle credenziali — vedi AlloggiatiWebConfigService.VerificaConnessioneAsync.
+    /// Conta come "attivo" nella dashboard Stato invii automatici anche prima del primo invio
+    /// giornaliero reale (<see cref="UltimoInvioAtUtc"/>), su richiesta esplicita dell'utente.
+    /// </summary>
+    public DateTime? UltimaVerificaOkAtUtc { get; set; }
 }

@@ -19,18 +19,26 @@ public class PayTouristStruttureController(PayTouristConfigService service, ICur
         return Ok(strutture.Select(ToDto));
     }
 
+    /// <summary>Strutture abilitate su PayTourist per il Token già configurato — per farle scegliere all'operatore invece di digitare a mano lo structure_id.</summary>
+    [HttpGet("disponibili")]
+    public async Task<IActionResult> Disponibili(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var strutture = await service.ListaStruttureDisponibiliAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(strutture);
+    }
+
     [HttpPost]
     public async Task<IActionResult> Crea(Guid strutturaId, [FromBody] SalvaPayTouristStrutturaRequest request, CancellationToken cancellationToken)
     {
-        var struttura = await service.CreaStrutturaAsync(currentUser, strutturaId, request, cancellationToken);
-        return Ok(ToDto(struttura));
+        var (struttura, connessioneOk, connessioneErrore) = await service.CreaStrutturaAsync(currentUser, strutturaId, request, cancellationToken);
+        return Ok(new SalvaPayTouristStrutturaRisultatoDto(ToDto(struttura), connessioneOk, connessioneErrore));
     }
 
     [HttpPut("{payTouristStrutturaId:guid}")]
     public async Task<IActionResult> Aggiorna(Guid strutturaId, Guid payTouristStrutturaId, [FromBody] SalvaPayTouristStrutturaRequest request, CancellationToken cancellationToken)
     {
-        var struttura = await service.AggiornaStrutturaAsync(currentUser, strutturaId, payTouristStrutturaId, request, cancellationToken);
-        return Ok(ToDto(struttura));
+        var (struttura, connessioneOk, connessioneErrore) = await service.AggiornaStrutturaAsync(currentUser, strutturaId, payTouristStrutturaId, request, cancellationToken);
+        return Ok(new SalvaPayTouristStrutturaRisultatoDto(ToDto(struttura), connessioneOk, connessioneErrore));
     }
 
     [HttpDelete("{payTouristStrutturaId:guid}")]
@@ -48,5 +56,6 @@ public class PayTouristStruttureController(PayTouristConfigService service, ICur
         p.Tipologie.Select(t => t.TipologiaId).ToList(),
         p.UltimoInvioAtUtc,
         p.UltimeInviate,
-        p.UltimoErrore);
+        p.UltimoErrore,
+        p.UltimaVerificaOkAtUtc);
 }

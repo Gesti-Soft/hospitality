@@ -441,7 +441,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
             Check-out
           </Button>
         )}
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
           {modifica ? 'Salva modifiche' : 'Crea prenotazione'}
         </Button>
       </DialogActions>

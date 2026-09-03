@@ -28,10 +28,12 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
   const [hotelCode, setHotelCode] = useState(appartamento?.hotelCode ?? '')
   const [tipologieIds, setTipologieIds] = useState<string[]>(appartamento?.tipologieIds ?? [])
   const [errore, setErrore] = useState<string | null>(null)
+  const [esitoConnessione, setEsitoConnessione] = useState<{ ok: boolean; errore: string | null } | null>(null)
 
   const crea = useCreaOsservatorioAppartamento(strutturaId)
   const aggiorna = useAggiornaOsservatorioAppartamento(strutturaId)
   const inCorso = crea.isPending || aggiorna.isPending
+  const salvato = esitoConnessione !== null
 
   function salva() {
     if (nome.trim() === '') {
@@ -49,11 +51,13 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
     }
 
     const onError = (err: unknown) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    const onSuccess = (risultato: { connessioneOk: boolean; connessioneErrore: string | null }) =>
+      setEsitoConnessione({ ok: risultato.connessioneOk, errore: risultato.connessioneErrore })
 
     if (appartamento) {
-      aggiorna.mutate({ appartamentoId: appartamento.id, request }, { onSuccess: onClose, onError })
+      aggiorna.mutate({ appartamentoId: appartamento.id, request }, { onSuccess, onError })
     } else {
-      crea.mutate(request, { onSuccess: onClose, onError })
+      crea.mutate(request, { onSuccess, onError })
     }
   }
 
@@ -62,12 +66,19 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
       <DialogTitle>{appartamento ? 'Modifica appartamento' : 'Nuovo appartamento'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
+        {esitoConnessione && (
+          <Alert severity={esitoConnessione.ok ? 'success' : 'warning'}>
+            {esitoConnessione.ok
+              ? "Salvato — connessione a Osservatorio Turistico verificata con successo."
+              : `Salvato, ma la verifica della connessione non è riuscita: ${esitoConnessione.errore ?? 'errore sconosciuto'}`}
+          </Alert>
+        )}
 
-        <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso} autoFocus />
+        <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso || salvato} autoFocus />
 
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField label="Entity code" value={entityCode} onChange={(e) => setEntityCode(e.target.value)} fullWidth disabled={inCorso} />
-          <TextField label="Hotel code" value={hotelCode} onChange={(e) => setHotelCode(e.target.value)} fullWidth disabled={inCorso} />
+          <TextField label="Entity code" value={entityCode} onChange={(e) => setEntityCode(e.target.value)} fullWidth disabled={inCorso || salvato} />
+          <TextField label="Hotel code" value={hotelCode} onChange={(e) => setHotelCode(e.target.value)} fullWidth disabled={inCorso || salvato} />
         </Box>
 
         <TextField
@@ -75,7 +86,7 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          disabled={inCorso}
+          disabled={inCorso || salvato}
           helperText={appartamento?.credenzialiConfigurate ? "Già salvata: lasciarla vuota e salvare la AZZERA" : ' '}
         />
 
@@ -85,7 +96,7 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
           value={tipologieIds}
           onChange={(e) => setTipologieIds(typeof e.target.value === 'string' ? e.target.value.split(',') : (e.target.value as string[]))}
           slotProps={{ select: { multiple: true, renderValue: (selected) => (selected as string[]).length + ' selezionate' } }}
-          disabled={inCorso}
+          disabled={inCorso || salvato}
         >
           {tipologie.map((t) => (
             <MenuItem key={t.id} value={t.id}>
@@ -99,9 +110,11 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={inCorso}>
-          {appartamento ? 'Salva modifiche' : 'Crea appartamento'}
-        </Button>
+        {!salvato && (
+          <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
+            {appartamento ? 'Salva modifiche' : 'Crea appartamento'}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   )

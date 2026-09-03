@@ -39,7 +39,11 @@ public class OspiteRepository(GestiSoftDbContext db) : IOspiteRepository
             .Include(o => o.Prenotazione).ThenInclude(p => p!.Camera)
             .Where(o => o.StrutturaId == strutturaId
                 && o.Prenotazione != null
-                && o.Prenotazione.StatoPrenotazione != StatoPrenotazione.Annullata
+                // Solo prenotazioni già arrivate al check-in (InCorso) o già concluse (Completata) —
+                // non ancora "Incompleta" (check-in futuro non ancora effettuato): senza questo filtro
+                // il solo vincolo "CheckIn >= 30 giorni fa" (nessun limite superiore) lasciava passare
+                // anche prenotazioni con check-in nel futuro, mai arrivate in struttura.
+                && (o.Prenotazione.StatoPrenotazione == StatoPrenotazione.InCorso || o.Prenotazione.StatoPrenotazione == StatoPrenotazione.Completata)
                 && o.Prenotazione.CheckIn != null
                 && o.Prenotazione.CheckIn.Value.Date >= giorno)
             .OrderByDescending(o => o.Prenotazione!.CheckIn)

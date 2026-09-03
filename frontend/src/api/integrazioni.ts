@@ -18,6 +18,7 @@ export interface AlloggiatiWebIntegrazioneDto {
   ultimoInvioAtUtc: string | null
   ultimeSchedineInviate: number | null
   ultimoErrore: string | null
+  ultimaVerificaOkAtUtc: string | null
 }
 
 export interface SchedinaAlloggiatiWebDto {
@@ -63,6 +64,7 @@ export interface OsservatorioAppartamentoDto {
   ultimoInvioAtUtc: string | null
   ultimeSchedineInviate: number | null
   ultimoErrore: string | null
+  ultimaVerificaOkAtUtc: string | null
 }
 
 export interface PayTouristIntegrazioneDto {
@@ -80,6 +82,19 @@ export interface PayTouristStrutturaDto {
   ultimoInvioAtUtc: string | null
   ultimeInviate: number | null
   ultimoErrore: string | null
+  ultimaVerificaOkAtUtc: string | null
+}
+
+/** Struttura così come restituita da PayTourist (GET api/v1/structures) — non ancora associata a una struttura PayTourist locale. */
+export interface PayTouristStrutturaRemotaDto {
+  id: number
+  nome: string
+}
+
+/** Esito di un test di connessione reale eseguito lato server subito dopo il salvataggio — comune alle tre integrazioni esterne (Alloggiati Web, Osservatorio, PayTourist). */
+export interface EsitoVerificaConnessione {
+  connessioneOk: boolean
+  connessioneErrore: string | null
 }
 
 export function useWubookConfig(strutturaId: string | null) {
@@ -122,6 +137,16 @@ export function usePayTouristStrutture(strutturaId: string | null) {
   })
 }
 
+/** Strutture abilitate su PayTourist per il Token già configurato — per farle scegliere invece di digitare a mano lo structure_id. Disabilitato di default: va interrogato su richiesta esplicita dell'operatore (apertura dialog), non ad ogni render. */
+export function usePayTouristStruttureDisponibili(strutturaId: string | null, abilitato: boolean) {
+  return useQuery({
+    queryKey: ['paytourist-strutture-disponibili', strutturaId],
+    queryFn: () => apiGet<PayTouristStrutturaRemotaDto[]>(`/strutture/${strutturaId}/paytourist/strutture/disponibili`),
+    enabled: !!strutturaId && abilitato,
+    retry: false,
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Alloggiati Web (Polizia di Stato)
 // ---------------------------------------------------------------------------
@@ -140,10 +165,15 @@ export interface RisultatoInvioAlloggiatiWebDto {
   messaggio: string | null
 }
 
+export interface AggiornaAlloggiatiWebConfigRisultatoDto extends EsitoVerificaConnessione {
+  integrazione: AlloggiatiWebIntegrazioneDto
+}
+
 export function useAggiornaAlloggiatiWebConfig(strutturaId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (request: AlloggiatiWebConfigRequest) => apiPut<AlloggiatiWebIntegrazioneDto>(`/strutture/${strutturaId}/alloggiati-web/config`, request),
+    mutationFn: (request: AlloggiatiWebConfigRequest) =>
+      apiPut<AggiornaAlloggiatiWebConfigRisultatoDto>(`/strutture/${strutturaId}/alloggiati-web/config`, request),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alloggiati-web-config', strutturaId] }),
   })
 }
@@ -196,10 +226,15 @@ function useInvalidaOsservatorio(strutturaId: string | null) {
   return () => queryClient.invalidateQueries({ queryKey: ['osservatorio-appartamenti', strutturaId] })
 }
 
+export interface SalvaOsservatorioAppartamentoRisultatoDto extends EsitoVerificaConnessione {
+  appartamento: OsservatorioAppartamentoDto
+}
+
 export function useCreaOsservatorioAppartamento(strutturaId: string | null) {
   const invalida = useInvalidaOsservatorio(strutturaId)
   return useMutation({
-    mutationFn: (request: OsservatorioAppartamentoRequest) => apiPost<OsservatorioAppartamentoDto>(`/strutture/${strutturaId}/osservatorio/appartamenti`, request),
+    mutationFn: (request: OsservatorioAppartamentoRequest) =>
+      apiPost<SalvaOsservatorioAppartamentoRisultatoDto>(`/strutture/${strutturaId}/osservatorio/appartamenti`, request),
     onSuccess: invalida,
   })
 }
@@ -208,7 +243,7 @@ export function useAggiornaOsservatorioAppartamento(strutturaId: string | null) 
   const invalida = useInvalidaOsservatorio(strutturaId)
   return useMutation({
     mutationFn: ({ appartamentoId, request }: { appartamentoId: string; request: OsservatorioAppartamentoRequest }) =>
-      apiPut<OsservatorioAppartamentoDto>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}`, request),
+      apiPut<SalvaOsservatorioAppartamentoRisultatoDto>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}`, request),
     onSuccess: invalida,
   })
 }
@@ -274,10 +309,15 @@ function useInvalidaPayTouristStrutture(strutturaId: string | null) {
   return () => queryClient.invalidateQueries({ queryKey: ['paytourist-strutture', strutturaId] })
 }
 
+export interface SalvaPayTouristStrutturaRisultatoDto extends EsitoVerificaConnessione {
+  struttura: PayTouristStrutturaDto
+}
+
 export function useCreaPayTouristStruttura(strutturaId: string | null) {
   const invalida = useInvalidaPayTouristStrutture(strutturaId)
   return useMutation({
-    mutationFn: (request: PayTouristStrutturaRequest) => apiPost<PayTouristStrutturaDto>(`/strutture/${strutturaId}/paytourist/strutture`, request),
+    mutationFn: (request: PayTouristStrutturaRequest) =>
+      apiPost<SalvaPayTouristStrutturaRisultatoDto>(`/strutture/${strutturaId}/paytourist/strutture`, request),
     onSuccess: invalida,
   })
 }
@@ -286,7 +326,7 @@ export function useAggiornaPayTouristStruttura(strutturaId: string | null) {
   const invalida = useInvalidaPayTouristStrutture(strutturaId)
   return useMutation({
     mutationFn: ({ payTouristStrutturaId, request }: { payTouristStrutturaId: string; request: PayTouristStrutturaRequest }) =>
-      apiPut<PayTouristStrutturaDto>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}`, request),
+      apiPut<SalvaPayTouristStrutturaRisultatoDto>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}`, request),
     onSuccess: invalida,
   })
 }

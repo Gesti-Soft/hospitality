@@ -12,4 +12,5 @@ public record OsservatorioAppartamentoDto(
     DateTime? CursoreDataAtUtc,
     DateTime? UltimoInvioAtUtc,
     int? UltimeSchedineInviate,
-    string? UltimoErrore);
+    string? UltimoErrore,
+    DateTime? UltimaVerificaOkAtUtc);

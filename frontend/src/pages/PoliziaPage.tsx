@@ -98,7 +98,7 @@ export function PoliziaPage() {
         )}
 
         <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5 }}>
-          <Button variant="contained" color="secondary" onClick={inviaOra} disabled={invia.isPending}>
+          <Button variant="contained" color="primary" onClick={inviaOra} disabled={invia.isPending}>
             Invia ora
           </Button>
           <Button variant="outlined" onClick={esporta} disabled={(schedine.data ?? []).length === 0}>

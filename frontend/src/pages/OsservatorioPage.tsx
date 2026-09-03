@@ -91,7 +91,7 @@ export function OsservatorioPage() {
             />
           )}
 
-          <Button variant="contained" color="secondary" size="small" onClick={inviaOra} disabled={invia.isPending || !appartamentoId}>
+          <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending || !appartamentoId}>
             Invia ora
           </Button>
         </Box>

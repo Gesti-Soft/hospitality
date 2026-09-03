@@ -299,7 +299,7 @@ export function ImpostazioniGeneraliForm({
       </Box>
 
       <Box>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
           Salva impostazioni
         </Button>
       </Box>
@@ -394,7 +394,7 @@ function LicenzaGestisoftForm({ strutturaId, dati }: { strutturaId: string; dati
       </Typography>
 
       <Box sx={{ display: 'flex', gap: 1.5 }}>
-        <Button variant="contained" color="secondary" onClick={salvaLicenza} disabled={aggiornaLicenza.isPending}>
+        <Button variant="contained" color="primary" onClick={salvaLicenza} disabled={aggiornaLicenza.isPending}>
           Salva licenza
         </Button>
         <Button variant="outlined" onClick={rinnovaOra} disabled={rinnova.isPending || !dati.licenzaConfigurata}>
@@ -425,18 +425,18 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
   const [password, setPassword] = useState('')
   const [wsKey, setWsKey] = useState('')
   const [errore, setErrore] = useState<string | null>(null)
-  const [salvato, setSalvato] = useState(false)
+  const [esitoConnessione, setEsitoConnessione] = useState<{ ok: boolean; errore: string | null } | null>(null)
 
   const aggiorna = useAggiornaAlloggiatiWebConfig(strutturaId)
 
   function salva() {
     setErrore(null)
-    setSalvato(false)
+    setEsitoConnessione(null)
     aggiorna.mutate(
       { utente: utente.trim() === '' ? null : utente.trim(), password: password.trim() === '' ? null : password.trim(), wsKey: wsKey.trim() === '' ? null : wsKey.trim() },
       {
-        onSuccess: () => {
-          setSalvato(true)
+        onSuccess: (risultato) => {
+          setEsitoConnessione({ ok: risultato.connessioneOk, errore: risultato.connessioneErrore })
           setPassword('')
           setWsKey('')
         },
@@ -453,7 +453,13 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
       </Box>
 
       {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
-      {salvato && !errore && <Alert severity="success" onClose={() => setSalvato(false)}>Credenziali salvate.</Alert>}
+      {esitoConnessione && !errore && (
+        <Alert severity={esitoConnessione.ok ? 'success' : 'warning'} onClose={() => setEsitoConnessione(null)}>
+          {esitoConnessione.ok
+            ? 'Credenziali salvate — connessione ad Alloggiati Web verificata con successo.'
+            : `Credenziali salvate, ma la verifica della connessione non è riuscita: ${esitoConnessione.errore ?? 'errore sconosciuto'}`}
+        </Alert>
+      )}
 
       <TextField label="Utente" value={utente} onChange={(e) => setUtente(e.target.value)} disabled={aggiorna.isPending} />
       <Box sx={{ display: 'flex', gap: 2 }}>
@@ -478,7 +484,7 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
       </Box>
 
       <Box>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
           Salva credenziali
         </Button>
       </Box>
@@ -510,7 +516,7 @@ function TabOsservatorio({ strutturaId }: { strutturaId: string | null }) {
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Appartamenti</Typography>
-        <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo('nuovo')} disabled={!strutturaId}>
+        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')} disabled={!strutturaId}>
           + Nuovo appartamento
         </Button>
       </Box>
@@ -610,7 +616,7 @@ function TabPayTourist({ strutturaId }: { strutturaId: string | null }) {
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Strutture PayTourist</Typography>
-        <Button variant="contained" color="secondary" size="small" onClick={() => setDialogo('nuova')} disabled={!strutturaId}>
+        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuova')} disabled={!strutturaId}>
           + Nuova struttura
         </Button>
       </Box>
@@ -728,7 +734,7 @@ function PayTouristConfigForm({ strutturaId, dati }: { strutturaId: string; dati
       />
 
       <Box>
-        <Button variant="contained" color="secondary" onClick={salva} disabled={aggiorna.isPending}>
+        <Button variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
           Salva
         </Button>
       </Box>

@@ -115,7 +115,7 @@ function CreaStrutturaStep({ onCreata }: { onCreata: (s: StrutturaDto) => void }
           onKeyDown={(e) => e.key === 'Enter' && salva()}
         />
         <Box>
-          <Button variant="contained" color="secondary" onClick={salva} disabled={crea.isPending}>
+          <Button variant="contained" color="primary" onClick={salva} disabled={crea.isPending}>
             {crea.isPending ? 'Creazione…' : 'Crea struttura'}
           </Button>
         </Box>
@@ -147,7 +147,7 @@ function CompletaConfigurazioneStep({ struttura, onFine }: { struttura: Struttur
       {!datiAziendali.isLoading && datiAziendali.data && <DatiAziendaliForm strutturaId={struttura.id} dati={datiAziendali.data} />}
 
       <Box>
-        <Button variant="contained" color="secondary" size="large" onClick={onFine}>
+        <Button variant="contained" color="primary" size="large" onClick={onFine}>
           Vai al gestionale
         </Button>
       </Box>

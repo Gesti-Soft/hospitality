@@ -22,15 +22,15 @@ public class OsservatorioAppartamentiController(OsservatorioConfigService servic
     [HttpPost]
     public async Task<IActionResult> Crea(Guid strutturaId, [FromBody] SalvaOsservatorioAppartamentoRequest request, CancellationToken cancellationToken)
     {
-        var appartamento = await service.CreaAsync(currentUser, strutturaId, request, cancellationToken);
-        return Ok(ToDto(appartamento));
+        var (appartamento, connessioneOk, connessioneErrore) = await service.CreaAsync(currentUser, strutturaId, request, cancellationToken);
+        return Ok(new SalvaOsservatorioAppartamentoRisultatoDto(ToDto(appartamento), connessioneOk, connessioneErrore));
     }
 
     [HttpPut("{appartamentoId:guid}")]
     public async Task<IActionResult> Aggiorna(Guid strutturaId, Guid appartamentoId, [FromBody] SalvaOsservatorioAppartamentoRequest request, CancellationToken cancellationToken)
     {
-        var appartamento = await service.AggiornaAsync(currentUser, strutturaId, appartamentoId, request, cancellationToken);
-        return Ok(ToDto(appartamento));
+        var (appartamento, connessioneOk, connessioneErrore) = await service.AggiornaAsync(currentUser, strutturaId, appartamentoId, request, cancellationToken);
+        return Ok(new SalvaOsservatorioAppartamentoRisultatoDto(ToDto(appartamento), connessioneOk, connessioneErrore));
     }
 
     [HttpDelete("{appartamentoId:guid}")]
@@ -51,5 +51,6 @@ public class OsservatorioAppartamentiController(OsservatorioConfigService servic
         a.CursoreDataAtUtc,
         a.UltimoInvioAtUtc,
         a.UltimeSchedineInviate,
-        a.UltimoErrore);
+        a.UltimoErrore,
+        a.UltimaVerificaOkAtUtc);
 }

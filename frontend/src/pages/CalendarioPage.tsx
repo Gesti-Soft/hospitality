@@ -154,7 +154,7 @@ export function CalendarioPage() {
           <Legenda agenzieDistinct={agenzieDistinct} />
           <Button
             variant="contained"
-            color="secondary"
+            color="primary"
             size="medium"
             disabled={!strutturaId || !camere.data || camere.data.length === 0}
             onClick={() =>

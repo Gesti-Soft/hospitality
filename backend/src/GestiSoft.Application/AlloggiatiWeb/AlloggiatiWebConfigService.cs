@@ -1,5 +1,7 @@
 using GestiSoft.Application.Auth;
+using GestiSoft.Application.Logging;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.AlloggiatiWeb;
 
@@ -12,6 +14,9 @@ public record AggiornaAlloggiatiWebConfigRequest(string? Utente, string? Passwor
 /// </summary>
 public class AlloggiatiWebConfigService(
     IAlloggiatiWebIntegrazioneRepository repository,
+    IAlloggiatiWebClient client,
+    IStrutturaRepository strutture,
+    ILogEventoService logEventi,
     PermessoStrutturaGuard permessoGuard)
 {
     public async Task<AlloggiatiWebIntegrazione> GetOrDefaultAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
@@ -22,7 +27,7 @@ public class AlloggiatiWebConfigService(
             ?? new AlloggiatiWebIntegrazione { StrutturaId = strutturaId };
     }
 
-    public async Task<AlloggiatiWebIntegrazione> AggiornaConfigAsync(ICurrentUser currentUser, Guid strutturaId, AggiornaAlloggiatiWebConfigRequest request, CancellationToken cancellationToken)
+    public async Task<(AlloggiatiWebIntegrazione Integrazione, bool ConnessioneOk, string? ConnessioneErrore)> AggiornaConfigAsync(ICurrentUser currentUser, Guid strutturaId, AggiornaAlloggiatiWebConfigRequest request, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceSettings, cancellationToken);
 
@@ -34,7 +39,41 @@ public class AlloggiatiWebConfigService(
         entity.WsKey = request.WsKey;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
+        var (ok, errore) = await VerificaConnessioneAsync(entity, cancellationToken);
+        if (ok)
+        {
+            entity.UltimaVerificaOkAtUtc = DateTime.UtcNow;
+        }
+
         await repository.UpsertAsync(entity, cancellationToken);
-        return entity;
+
+        await logEventi.RegistraAsync(
+            ok ? LivelloLog.Info : LivelloLog.Warning,
+            ok ? "Verifica connessione Alloggiati Web riuscita." : $"Verifica connessione Alloggiati Web non riuscita: {errore}",
+            origine: "AlloggiatiWeb",
+            clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+            strutturaId: strutturaId,
+            categoria: "AlloggiatiWeb",
+            operatore: currentUser.Email,
+            cancellationToken: cancellationToken);
+
+        return (entity, ok, errore);
+    }
+
+    /// <summary>
+    /// Test di connessione reale eseguito subito dopo il salvataggio delle credenziali, su richiesta
+    /// esplicita dell'utente — invece di scoprire Utente/Password/WsKey sbagliati solo al primo
+    /// invio giornaliero reale. GenerateToken è la stessa operazione SOAP già usata da
+    /// AlloggiatiWebInvioService prima di ogni invio, qui chiamata da sola (nessuna schedina inviata).
+    /// </summary>
+    private async Task<(bool Ok, string? Errore)> VerificaConnessioneAsync(AlloggiatiWebIntegrazione entity, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(entity.Utente) || string.IsNullOrWhiteSpace(entity.Password) || string.IsNullOrWhiteSpace(entity.WsKey))
+        {
+            return (false, "Utente, password e WsKey sono obbligatori per la verifica.");
+        }
+
+        var risultato = await client.GenerateTokenAsync(entity.Utente, entity.Password, entity.WsKey, cancellationToken);
+        return (risultato.Ok, risultato.Ok ? null : risultato.Errore ?? "Credenziali non valide.");
     }
 }
