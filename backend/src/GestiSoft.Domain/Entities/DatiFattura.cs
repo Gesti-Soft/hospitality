@@ -9,6 +9,13 @@ namespace GestiSoft.Domain.Entities;
 /// </summary>
 public class DatiFattura : TenantEntity
 {
+    /// <summary>
+    /// Prenotazione da cui è nata questa fattura — null per le fatture create prima dell'introduzione
+    /// di questo campo (nessuno storico da recuperare, il legame andava già perso). Usata per mostrare
+    /// "Fattura generata" sulla scheda ospiti di una prenotazione già fatturata.
+    /// </summary>
+    public Guid? PrenotazioneId { get; set; }
+
     public Guid? DatiClienteId { get; set; }
 
     public DatiCliente? Cliente { get; set; }

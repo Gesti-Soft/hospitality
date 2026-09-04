@@ -6,6 +6,9 @@ public interface IDatiFatturaRepository
 {
     Task<DatiFattura?> GetAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>L'eventuale fattura più recente generata da questa Prenotazione — null se non ancora fatturata (o se creata prima dell'introduzione di questo legame).</summary>
+    Task<DatiFattura?> GetByPrenotazioneIdAsync(Guid prenotazioneId, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<DatiFattura>> ListAsync(Guid strutturaId, int? anno, CancellationToken cancellationToken);
 
     Task<int> GetMaxProgressivoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);

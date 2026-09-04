@@ -37,6 +37,8 @@ import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { DatiClienteDialog } from '../components/DatiClienteDialog'
 import { FatturaDialog, type StatoFatturaIniziale } from '../components/FatturaDialog'
+import { FiltriRicercaData, nelRangeData, RigaCaricamentoAltri } from '../components/finanze/FinanzeComuni'
+import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -139,6 +141,9 @@ function TabFatture({
   onErrore: (err: unknown) => void
 }) {
   const [dialogo, setDialogo] = useState<StatoFatturaIniziale | null>(null)
+  const [ricerca, setRicerca] = useState('')
+  const [dataDa, setDataDa] = useState('')
+  const [dataA, setDataA] = useState('')
 
   async function scarica(fn: (s: string, id: string, n: number) => Promise<void>, f: DatiFatturaDto) {
     try {
@@ -148,9 +153,32 @@ function TabFatture({
     }
   }
 
+  const testoRicerca = ricerca.trim().toLowerCase()
+  const fattureFiltrate = (fatture ?? [])
+    .filter(
+      (f) =>
+        (!testoRicerca || [String(f.numeroDocumento), f.clienteNome, f.descrizione].some((campo) => campo?.toString().toLowerCase().includes(testoRicerca))) &&
+        nelRangeData(f.dataDocumento, dataDa, dataA),
+    )
+    .sort((a, b) => b.progressivo - a.progressivo)
+  // "fatture" (non solo i filtri) tra le dipendenze del reset: cambia riferimento quando l'anno
+  // selezionato nella pagina genitore cambia (nuova query), anche se la lunghezza filtrata coincide.
+  const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(fattureFiltrate.length, [testoRicerca, dataDa, dataA, fatture])
+  const fattureVisibili = fattureFiltrate.slice(0, righeVisibili)
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <IntestazioneTab titolo="Fatture" azione={{ etichetta: '+ Nuova fattura', onClick: () => setDialogo({ modo: 'crea' }), disabilitato: !strutturaId }} />
+
+      <FiltriRicercaData
+        ricerca={ricerca}
+        onRicercaChange={setRicerca}
+        placeholderRicerca="Cerca per numero, cliente o descrizione..."
+        dataDa={dataDa}
+        onDataDaChange={setDataDa}
+        dataA={dataA}
+        onDataAChange={setDataA}
+      />
 
       {caricamento && <Skeleton variant="rounded" height={220} />}
 
@@ -168,40 +196,43 @@ function TabFatture({
               </TableRow>
             </TableHead>
             <TableBody>
-              {(fatture ?? []).length === 0 && <RigaVuota colSpan={6} messaggio="Nessuna fattura emessa per l'anno selezionato." />}
-              {(fatture ?? [])
-                .slice()
-                .sort((a, b) => b.progressivo - a.progressivo)
-                .map((f) => (
-                  <TableRow key={f.id} hover>
-                    <TableCell sx={{ fontFamily: fontMono, fontWeight: 700 }}>
-                      {f.numeroDocumento}/{f.anno}
-                    </TableCell>
-                    <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(f.dataDocumento))}</TableCell>
-                    <TableCell>{f.clienteNome ?? '—'}</TableCell>
-                    <TableCell>{f.descrizione ?? '—'}</TableCell>
-                    <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700 }}>
-                      {formattatoreValuta.format(f.importoTotale)}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip title="Modifica">
-                        <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', fattura: f })}>
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Scarica PDF">
-                        <IconButton size="small" onClick={() => scarica(scaricaFatturaPdf, f)}>
-                          <PictureAsPdfIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Scarica XML SDI">
-                        <IconButton size="small" onClick={() => scarica(scaricaFatturaXml, f)}>
-                          <CodeIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
+              {fattureFiltrate.length === 0 && (
+                <RigaVuota
+                  colSpan={6}
+                  messaggio={testoRicerca || dataDa || dataA ? 'Nessuna fattura corrisponde ai filtri applicati.' : "Nessuna fattura emessa per l'anno selezionato."}
+                />
+              )}
+              {fattureVisibili.map((f) => (
+                <TableRow key={f.id} hover>
+                  <TableCell sx={{ fontFamily: fontMono, fontWeight: 700 }}>
+                    {f.numeroDocumento}/{f.anno}
+                  </TableCell>
+                  <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(f.dataDocumento))}</TableCell>
+                  <TableCell>{f.clienteNome ?? '—'}</TableCell>
+                  <TableCell>{f.descrizione ?? '—'}</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700 }}>
+                    {formattatoreValuta.format(f.importoTotale)}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Tooltip title="Modifica">
+                      <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', fattura: f })}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Scarica PDF">
+                      <IconButton size="small" onClick={() => scarica(scaricaFatturaPdf, f)}>
+                        <PictureAsPdfIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Scarica XML SDI">
+                      <IconButton size="small" onClick={() => scarica(scaricaFatturaXml, f)}>
+                        <CodeIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {altreDaCaricare && <RigaCaricamentoAltri colSpan={6} ref={sentinellaRef} />}
             </TableBody>
           </Table>
         </Cornice>
@@ -323,6 +354,16 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
 
 function TabClienti({ strutturaId, clienti, caricamento }: { strutturaId: string | null; clienti: DatiClienteDto[] | undefined; caricamento: boolean }) {
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | DatiClienteDto>('chiuso')
+  const [ricerca, setRicerca] = useState('')
+
+  const testoRicerca = ricerca.trim().toLowerCase()
+  const clientiFiltrati = (clienti ?? []).filter(
+    (c) =>
+      !testoRicerca ||
+      [c.denominazione, c.nome, c.cognome, c.pIva, c.codiceFiscale, c.luogoResidenza, c.pec].some((campo) => campo?.toLowerCase().includes(testoRicerca)),
+  )
+  const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(clientiFiltrati.length, [testoRicerca, clienti])
+  const clientiVisibili = clientiFiltrati.slice(0, righeVisibili)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -330,6 +371,9 @@ function TabClienti({ strutturaId, clienti, caricamento }: { strutturaId: string
       <Typography sx={{ fontSize: 12, color: tokens.textTertiary, mt: -1.5 }}>
         Creati automaticamente alla prima fattura per un ospite (deduplicati); qui puoi anche aggiungerne o correggerne uno a mano.
       </Typography>
+
+      {/* Nessun filtro per data qui: un Cliente fatturabile è un'anagrafica, non ha una data propria — quella è sulle sue fatture, in "Fatture". */}
+      <FiltriRicercaData ricerca={ricerca} onRicercaChange={setRicerca} placeholderRicerca="Cerca per nominativo, P.IVA/CF, residenza o PEC..." />
 
       {caricamento && <Skeleton variant="rounded" height={220} />}
 
@@ -346,8 +390,10 @@ function TabClienti({ strutturaId, clienti, caricamento }: { strutturaId: string
               </TableRow>
             </TableHead>
             <TableBody>
-              {(clienti ?? []).length === 0 && <RigaVuota colSpan={5} messaggio="Nessun cliente registrato." />}
-              {(clienti ?? []).map((c) => (
+              {clientiFiltrati.length === 0 && (
+                <RigaVuota colSpan={5} messaggio={testoRicerca ? 'Nessun cliente corrisponde alla ricerca.' : 'Nessun cliente registrato.'} />
+              )}
+              {clientiVisibili.map((c) => (
                 <TableRow key={c.id} hover>
                   <TableCell sx={{ fontWeight: 700 }}>{c.denominazione || `${c.nome ?? ''} ${c.cognome ?? ''}`.trim() || '—'}</TableCell>
                   <TableCell>{c.pIva || c.codiceFiscale || '—'}</TableCell>
@@ -360,6 +406,7 @@ function TabClienti({ strutturaId, clienti, caricamento }: { strutturaId: string
                   </TableCell>
                 </TableRow>
               ))}
+              {altreDaCaricare && <RigaCaricamentoAltri colSpan={5} ref={sentinellaRef} />}
             </TableBody>
           </Table>
         </Cornice>

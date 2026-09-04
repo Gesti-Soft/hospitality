@@ -16,7 +16,19 @@ import { ApiError } from '../api/client'
 import { fontMono, tokens } from '../theme'
 import { EntrataDialog } from '../components/EntrataDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { ANNO_CORRENTE, AzioneNuovo, Cornice, formattatoreData, formattatoreValuta, IntestazioneFinanze, RigaVuota } from '../components/finanze/FinanzeComuni'
+import {
+  ANNO_CORRENTE,
+  AzioneNuovo,
+  Cornice,
+  FiltriRicercaData,
+  formattatoreData,
+  formattatoreValuta,
+  IntestazioneFinanze,
+  nelRangeData,
+  RigaCaricamentoAltri,
+  RigaVuota,
+} from '../components/finanze/FinanzeComuni'
+import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
 
 export function EntratePage() {
   const { strutturaId } = useStruttura()
@@ -24,6 +36,9 @@ export function EntratePage() {
   const [errore, setErrore] = useState<string | null>(null)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | EntrataDto>('chiuso')
   const [daEliminare, setDaEliminare] = useState<EntrataDto | null>(null)
+  const [ricerca, setRicerca] = useState('')
+  const [dataDa, setDataDa] = useState('')
+  const [dataA, setDataA] = useState('')
 
   const entrate = useEntrate(strutturaId, anno)
   const elimina = useEliminaEntrata(strutturaId)
@@ -36,8 +51,13 @@ export function EntratePage() {
     })
   }
 
-  const dati = entrate.data ?? []
+  const testoRicerca = ricerca.trim().toLowerCase()
+  const dati = (entrate.data ?? []).filter(
+    (e) => (!testoRicerca || [e.nome, e.tipoEntrata, e.descrizione].some((campo) => campo?.toLowerCase().includes(testoRicerca))) && nelRangeData(e.data, dataDa, dataA),
+  )
   const totale = dati.reduce((acc, e) => acc + e.importoEntrata, 0)
+  const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(dati.length, [anno, testoRicerca, dataDa, dataA])
+  const datiVisibili = dati.slice(0, righeVisibili)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -46,6 +66,16 @@ export function EntratePage() {
         anno={anno}
         onAnnoChange={setAnno}
         azioni={<AzioneNuovo etichetta="+ Nuova entrata" onClick={() => setDialogo('nuova')} disabilitato={!strutturaId} />}
+      />
+
+      <FiltriRicercaData
+        ricerca={ricerca}
+        onRicercaChange={setRicerca}
+        placeholderRicerca="Cerca per nome o tipo..."
+        dataDa={dataDa}
+        onDataDaChange={setDataDa}
+        dataA={dataA}
+        onDataAChange={setDataA}
       />
 
       {errore && (
@@ -69,8 +99,15 @@ export function EntratePage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {dati.length === 0 && <RigaVuota colSpan={5} messaggio="Nessuna entrata registrata per l'anno selezionato." />}
-              {dati.map((e) => (
+              {dati.length === 0 && (
+                <RigaVuota
+                  colSpan={5}
+                  messaggio={
+                    testoRicerca || dataDa || dataA ? 'Nessuna entrata corrisponde ai filtri applicati.' : "Nessuna entrata registrata per l'anno selezionato."
+                  }
+                />
+              )}
+              {datiVisibili.map((e) => (
                 <TableRow key={e.id} hover>
                   <TableCell sx={{ fontFamily: fontMono }}>{e.data ? formattatoreData.format(new Date(e.data)) : '—'}</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{e.nome}</TableCell>
@@ -88,6 +125,7 @@ export function EntratePage() {
                   </TableCell>
                 </TableRow>
               ))}
+              {altreDaCaricare && <RigaCaricamentoAltri colSpan={5} ref={sentinellaRef} />}
               {dati.length > 0 && (
                 <TableRow>
                   <TableCell colSpan={3} />

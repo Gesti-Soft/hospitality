@@ -18,3 +18,6 @@ public record DatiClienteDto(
     string? CodiceDestinatario,
     string? Pec,
     string? CustomerKey);
+
+/// <summary>Esito della risoluzione find-or-create del Cliente fatturabile per una Prenotazione — vedi FatturazioneService.RisolviClientePerPrenotazioneAsync.</summary>
+public record ClienteRisoltoDto(DatiClienteDto Cliente, bool AppenaCreato);

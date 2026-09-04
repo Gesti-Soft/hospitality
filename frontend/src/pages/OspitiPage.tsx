@@ -28,6 +28,7 @@ import { useTipologie } from '../api/tipologie'
 import { fontMono, tokens } from '../theme'
 import { OspiteDialog } from '../components/OspiteDialog'
 import { PrenotazioneDialog, type StatoIniziale, ETICHETTA_STATO, COLORE_STATO } from '../components/PrenotazioneDialog'
+import { FatturaDialog } from '../components/FatturaDialog'
 import { inizioGiornoLocale } from '../lib/date'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
@@ -49,6 +50,11 @@ function leggiFormatoPreferito(): FormatoOspiti {
   return localStorage.getItem(CHIAVE_FORMATO_OSPITI) === 'calendario' ? 'calendario' : 'lista'
 }
 
+/** "Genera fattura" ha senso solo per un soggiorno già iniziato: una prenotazione ancora da arrivare non ha nulla da fatturare. */
+function puoGenerareFattura(vista: VistaOspiti, p: PrenotazioneDto): boolean {
+  return vista === 'in-corso' || (vista === 'storico' && p.statoPrenotazione === StatoPrenotazione.Completata)
+}
+
 export function OspitiPage() {
   const { strutturaId } = useStruttura()
   const [vista, setVista] = useState<VistaOspiti>('arrivi')
@@ -57,6 +63,7 @@ export function OspitiPage() {
   const [meseVisibile, setMeseVisibile] = useState(() => inizioGiornoLocale(new Date()))
   const [prenotazioneAperta, setPrenotazioneAperta] = useState<PrenotazioneDto | null>(null)
   const [dialogoPrenotazione, setDialogoPrenotazione] = useState<StatoIniziale | null>(null)
+  const [fatturaDaPrenotazione, setFatturaDaPrenotazione] = useState<PrenotazioneDto | null>(null)
   const [ricerca, setRicerca] = useState('')
   const [filtroStato, setFiltroStato] = useState<StatoPrenotazione | 'tutti'>(StatoPrenotazione.Completata)
   const [righeVisibili, setRigheVisibili] = useState(RIGHE_PER_PAGINA)
@@ -290,6 +297,14 @@ export function OspitiPage() {
             setDialogoPrenotazione({ modo: 'modifica', prenotazione: prenotazioneAperta })
             setPrenotazioneAperta(null)
           }}
+          onGeneraFattura={
+            puoGenerareFattura(vista, prenotazioneAperta)
+              ? () => {
+                  setFatturaDaPrenotazione(prenotazioneAperta)
+                  setPrenotazioneAperta(null)
+                }
+              : undefined
+          }
         />
       )}
 
@@ -301,6 +316,16 @@ export function OspitiPage() {
           canali={canali.data ?? []}
           tipologie={tipologie.data ?? []}
           onClose={() => setDialogoPrenotazione(null)}
+        />
+      )}
+
+      {fatturaDaPrenotazione && strutturaId && (
+        <FatturaDialog
+          strutturaId={strutturaId}
+          stato={{ modo: 'crea' }}
+          prenotazioniDisponibili={[fatturaDaPrenotazione]}
+          clienti={[]}
+          onClose={() => setFatturaDaPrenotazione(null)}
         />
       )}
     </Box>

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPut, apiScaricaFile } from './client'
+import { apiGet, apiPost, apiPut, apiScaricaFile, ApiError } from './client'
 
 // Gli enum arrivano sul wire come numeri (vedi commento in api/camere.ts). Valori esatti da
 // GestiSoft.Domain.Enums — qui solo il sottoinsieme rilevante per la fatturazione di una
@@ -183,7 +183,12 @@ export function useFatture(strutturaId: string | null, anno: number) {
 
 function useInvalidaFatture(strutturaId: string | null) {
   const queryClient = useQueryClient()
-  return () => queryClient.invalidateQueries({ queryKey: ['fatture', strutturaId] })
+  return () => {
+    queryClient.invalidateQueries({ queryKey: ['fatture', strutturaId] })
+    // Chiave generica (non per singola prenotazione): invalida il badge "Fattura generata" della
+    // scheda ospiti per qualunque prenotazione, non solo quella appena fatturata qui.
+    queryClient.invalidateQueries({ queryKey: ['fattura-per-prenotazione', strutturaId] })
+  }
 }
 
 export function useCreaFattura(strutturaId: string | null) {
@@ -194,11 +199,42 @@ export function useCreaFattura(strutturaId: string | null) {
   })
 }
 
+/** L'eventuale fattura già generata per una prenotazione — null se non ancora fatturata (o se l'operatore non ha il permesso di consultare le fatture). */
+export function useFatturaPerPrenotazione(strutturaId: string | null, prenotazioneId: string | null) {
+  return useQuery({
+    queryKey: ['fattura-per-prenotazione', strutturaId, prenotazioneId],
+    queryFn: async () => {
+      try {
+        return await apiGet<DatiFatturaDto>(`/strutture/${strutturaId}/fatture/prenotazioni/${prenotazioneId}`)
+      } catch (err) {
+        if (err instanceof ApiError && (err.status === 404 || err.status === 403)) return null
+        throw err
+      }
+    },
+    enabled: !!strutturaId && !!prenotazioneId,
+  })
+}
+
 export function useAggiornaFattura(strutturaId: string | null) {
   const invalida = useInvalidaFatture(strutturaId)
   return useMutation({
     mutationFn: ({ fatturaId, request }: { fatturaId: string; request: AggiornaFatturaRequest }) =>
       apiPut<DatiFatturaDto>(`/strutture/${strutturaId}/fatture/${fatturaId}`, request),
+    onSuccess: invalida,
+  })
+}
+
+export interface ClienteRisoltoDto {
+  cliente: DatiClienteDto
+  /** True se non esisteva ancora un Cliente fatturabile per l'ospite di questa prenotazione ed è stato appena creato (bare-bones: solo nome/cognome/residenza/cittadinanza) — va completato con P.IVA/CF/indirizzo/PEC prima di procedere. */
+  appenaCreato: boolean
+}
+
+/** Risolve (trova o crea) il Cliente fatturabile per una prenotazione PRIMA di creare la fattura vera e propria — stesso Cliente che verrebbe usato comunque da useCreaFattura, mai un duplicato. */
+export function useRisolviClientePerPrenotazione(strutturaId: string | null) {
+  const invalida = useInvalidaDatiClienti(strutturaId)
+  return useMutation({
+    mutationFn: (prenotazioneId: string) => apiPost<ClienteRisoltoDto>(`/strutture/${strutturaId}/fatture/prenotazioni/${prenotazioneId}/cliente`, {}),
     onSuccess: invalida,
   })
 }

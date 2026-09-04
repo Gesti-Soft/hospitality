@@ -11,6 +11,12 @@ public class DatiFatturaRepository(GestiSoftDbContext db) : IDatiFatturaReposito
     public Task<DatiFattura?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         db.DatiFattura.Include(f => f.Cliente).FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
 
+    public Task<DatiFattura?> GetByPrenotazioneIdAsync(Guid prenotazioneId, CancellationToken cancellationToken) =>
+        db.DatiFattura.AsNoTracking().Include(f => f.Cliente)
+            .Where(f => f.PrenotazioneId == prenotazioneId)
+            .OrderByDescending(f => f.DataDocumento)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public async Task<IReadOnlyList<DatiFattura>> ListAsync(Guid strutturaId, int? anno, CancellationToken cancellationToken)
     {
         var query = db.DatiFattura.AsNoTracking().Include(f => f.Cliente).Where(f => f.StrutturaId == strutturaId);

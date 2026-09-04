@@ -4,6 +4,7 @@ import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
+import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
@@ -18,6 +19,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import { ApiError } from '../api/client'
+import { useFatturaPerPrenotazione, type DatiFatturaDto } from '../api/fatturazione'
 import type { PrenotazioneDto } from '../api/prenotazioni'
 import {
   Sesso,
@@ -38,10 +40,13 @@ interface Props {
   onClose: () => void
   /** Se passata, mostra un bottone "Apri prenotazione" — assente quando non ha senso (es. non c'è dove navigare). */
   onApriPrenotazione?: () => void
+  /** Se passata, mostra un bottone "Genera fattura" — solo per prenotazioni in corso o completate (vedi OspitiPage). */
+  onGeneraFattura?: () => void
 }
 
-export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenotazione }: Props) {
+export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenotazione, onGeneraFattura }: Props) {
   const ospite = useOspite(strutturaId, prenotazione.id)
+  const fattura = useFatturaPerPrenotazione(strutturaId, prenotazione.id)
 
   return (
     <Dialog open onClose={onClose} maxWidth="md" fullWidth>
@@ -60,6 +65,8 @@ export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenota
           ospite={ospite.data ?? null}
           onClose={onClose}
           onApriPrenotazione={onApriPrenotazione}
+          onGeneraFattura={onGeneraFattura}
+          fatturaGenerata={fattura.data ?? null}
         />
       )}
     </Dialog>
@@ -210,12 +217,16 @@ function SchedaOspitiForm({
   ospite,
   onClose,
   onApriPrenotazione,
+  onGeneraFattura,
+  fatturaGenerata,
 }: {
   strutturaId: string
   prenotazione: PrenotazioneDto
   ospite: OspiteDto | null
   onClose: () => void
   onApriPrenotazione?: () => void
+  onGeneraFattura?: () => void
+  fatturaGenerata: DatiFatturaDto | null
 }) {
   const stati = useStati()
   const documenti = useDocumenti()
@@ -481,11 +492,26 @@ function SchedaOspitiForm({
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        {onApriPrenotazione && (
-          <Button onClick={onApriPrenotazione} disabled={salva.isPending} sx={{ mr: 'auto' }}>
-            Apri prenotazione
-          </Button>
-        )}
+        <Box sx={{ display: 'flex', gap: 1, mr: 'auto' }}>
+          {onApriPrenotazione && (
+            <Button onClick={onApriPrenotazione} disabled={salva.isPending}>
+              Apri prenotazione
+            </Button>
+          )}
+          {fatturaGenerata ? (
+            <Chip
+              size="small"
+              label={`Fattura generata — n. ${fatturaGenerata.numeroDocumento}/${fatturaGenerata.anno}`}
+              sx={{ bgcolor: tokens.ok600, color: '#fff', fontWeight: 700, alignSelf: 'center' }}
+            />
+          ) : (
+            onGeneraFattura && (
+              <Button onClick={onGeneraFattura} disabled={salva.isPending}>
+                Genera fattura
+              </Button>
+            )
+          )}
+        </Box>
         <Button onClick={onClose} disabled={salva.isPending}>
           Chiudi
         </Button>

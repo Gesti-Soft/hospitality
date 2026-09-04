@@ -16,7 +16,19 @@ import { ApiError } from '../api/client'
 import { fontMono, tokens } from '../theme'
 import { SpesaDialog } from '../components/SpesaDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { ANNO_CORRENTE, AzioneNuovo, Cornice, formattatoreData, formattatoreValuta, IntestazioneFinanze, RigaVuota } from '../components/finanze/FinanzeComuni'
+import {
+  ANNO_CORRENTE,
+  AzioneNuovo,
+  Cornice,
+  FiltriRicercaData,
+  formattatoreData,
+  formattatoreValuta,
+  IntestazioneFinanze,
+  nelRangeData,
+  RigaCaricamentoAltri,
+  RigaVuota,
+} from '../components/finanze/FinanzeComuni'
+import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
 
 export function SpesePage() {
   const { strutturaId } = useStruttura()
@@ -24,6 +36,9 @@ export function SpesePage() {
   const [errore, setErrore] = useState<string | null>(null)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | SpesaDto>('chiuso')
   const [daEliminare, setDaEliminare] = useState<SpesaDto | null>(null)
+  const [ricerca, setRicerca] = useState('')
+  const [dataDa, setDataDa] = useState('')
+  const [dataA, setDataA] = useState('')
 
   const spese = useSpese(strutturaId, anno)
   const elimina = useEliminaSpesa(strutturaId)
@@ -36,8 +51,15 @@ export function SpesePage() {
     })
   }
 
-  const dati = spese.data ?? []
+  const testoRicerca = ricerca.trim().toLowerCase()
+  const dati = (spese.data ?? []).filter(
+    (s) =>
+      (!testoRicerca || [s.nome, s.tipoSpesa, s.metodoPagamento, s.descrizione].some((campo) => campo?.toLowerCase().includes(testoRicerca))) &&
+      nelRangeData(s.dataSpesa, dataDa, dataA),
+  )
   const totale = dati.reduce((acc, s) => acc + s.importoSpesa, 0)
+  const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(dati.length, [anno, testoRicerca, dataDa, dataA])
+  const datiVisibili = dati.slice(0, righeVisibili)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -46,6 +68,16 @@ export function SpesePage() {
         anno={anno}
         onAnnoChange={setAnno}
         azioni={<AzioneNuovo etichetta="+ Nuova spesa" onClick={() => setDialogo('nuova')} disabilitato={!strutturaId} />}
+      />
+
+      <FiltriRicercaData
+        ricerca={ricerca}
+        onRicercaChange={setRicerca}
+        placeholderRicerca="Cerca per nome, tipo o metodo di pagamento..."
+        dataDa={dataDa}
+        onDataDaChange={setDataDa}
+        dataA={dataA}
+        onDataAChange={setDataA}
       />
 
       {errore && (
@@ -70,8 +102,15 @@ export function SpesePage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {dati.length === 0 && <RigaVuota colSpan={6} messaggio="Nessuna spesa registrata per l'anno selezionato." />}
-              {dati.map((s) => (
+              {dati.length === 0 && (
+                <RigaVuota
+                  colSpan={6}
+                  messaggio={
+                    testoRicerca || dataDa || dataA ? 'Nessuna spesa corrisponde ai filtri applicati.' : "Nessuna spesa registrata per l'anno selezionato."
+                  }
+                />
+              )}
+              {datiVisibili.map((s) => (
                 <TableRow key={s.id} hover>
                   <TableCell sx={{ fontFamily: fontMono }}>{s.dataSpesa ? formattatoreData.format(new Date(s.dataSpesa)) : '—'}</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{s.nome}</TableCell>
@@ -90,6 +129,7 @@ export function SpesePage() {
                   </TableCell>
                 </TableRow>
               ))}
+              {altreDaCaricare && <RigaCaricamentoAltri colSpan={6} ref={sentinellaRef} />}
               {dati.length > 0 && (
                 <TableRow>
                   <TableCell colSpan={4} />
