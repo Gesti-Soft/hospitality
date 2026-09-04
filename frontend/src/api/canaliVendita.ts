@@ -37,6 +37,15 @@ export function useAggiornaCanaleVendita(strutturaId: string | null) {
   })
 }
 
+/** Crea un canale per ogni valore di Agenzia già presente sulle prenotazioni (es. da Wubook) che non corrisponde ancora a nessun canale configurato. */
+export function useImportaCanaliVendita(strutturaId: string | null) {
+  const invalida = useInvalidaCanali(strutturaId)
+  return useMutation({
+    mutationFn: () => apiPost<CanaleVenditaDto[]>(`/strutture/${strutturaId}/canali-vendita/importa-da-prenotazioni`),
+    onSuccess: invalida,
+  })
+}
+
 export function useEliminaCanaleVendita(strutturaId: string | null) {
   const invalida = useInvalidaCanali(strutturaId)
   return useMutation({

@@ -26,6 +26,13 @@ public class CanaliVenditaController(CanaliVenditaService service, ICurrentUser 
         return Ok(ToDto(canale));
     }
 
+    [HttpPost("importa-da-prenotazioni")]
+    public async Task<IActionResult> ImportaDaPrenotazioni(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var creati = await service.ImportaDaPrenotazioniAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(creati.Select(ToDto));
+    }
+
     [HttpPut("{canaleId:guid}")]
     public async Task<IActionResult> Aggiorna(Guid strutturaId, Guid canaleId, [FromBody] CreaCanaleVenditaRequest request, CancellationToken cancellationToken)
     {

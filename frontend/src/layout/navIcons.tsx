@@ -72,6 +72,44 @@ export function IconFinanze(props: IconProps) {
   )
 }
 
+export function IconRiepilogo(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 2.5H14V15.5H4V2.5Z" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" />
+      <path d="M6.3 6H11.7M6.3 9H11.7" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" />
+      <path d="M6.3 12.3H11.7" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconSpese(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M6 9H12" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconEntrate(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth={1.5} />
+      <path d="M9 6V12M6 9H12" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function IconCauzioni(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 2.2L14.5 4.3V8.7C14.5 12.1 12.2 14.7 9 15.8C5.8 14.7 3.5 12.1 3.5 8.7V4.3L9 2.2Z" stroke="currentColor" strokeWidth={1.4} strokeLinejoin="round" />
+      <circle cx="9" cy="8" r="1.3" stroke="currentColor" strokeWidth={1.2} />
+      <path d="M9 9.3V11" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function IconFatturazione(props: IconProps) {
   return (
     <svg {...base} {...props}>
@@ -138,6 +176,18 @@ export function IconImpostazioni(props: IconProps) {
         strokeWidth={1.5}
         strokeLinecap="round"
       />
+    </svg>
+  )
+}
+
+export function IconStatistiche(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M2.5 15.5V2.5" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M2.5 15.5H15.5" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <rect x="4.7" y="10" width="2.3" height="5.5" rx="0.6" stroke="currentColor" strokeWidth={1.4} />
+      <rect x="8.85" y="6.5" width="2.3" height="9" rx="0.6" stroke="currentColor" strokeWidth={1.4} />
+      <rect x="13" y="3.5" width="2.3" height="12" rx="0.6" stroke="currentColor" strokeWidth={1.4} />
     </svg>
   )
 }

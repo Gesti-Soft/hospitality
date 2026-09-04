@@ -11,6 +11,7 @@ using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.PayTourist;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Riferimenti;
+using GestiSoft.Application.Statistiche;
 using GestiSoft.Application.Strutture;
 using GestiSoft.Application.SuperAdmin;
 using GestiSoft.Application.Utenti;
@@ -65,6 +66,8 @@ public static class DependencyInjection
         services.AddScoped<PayTouristInvioService>();
         services.AddScoped<RiferimentiService>();
         services.AddScoped<SuperAdminService>();
+        services.AddScoped<StatisticheService>();
+        services.AddScoped<StatisticheSuperAdminService>();
 
         return services;
     }

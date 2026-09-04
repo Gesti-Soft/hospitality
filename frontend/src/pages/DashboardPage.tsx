@@ -19,6 +19,7 @@ import {
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { aggiungiGiorni, inizioGiornoLocale } from '../lib/date'
 import { PrenotazioneDialog, type StatoIniziale } from '../components/PrenotazioneDialog'
+import { KpiCard, KpiCardDoppia } from '../components/KpiCard'
 
 /**
  * Le date arrivano dal backend come timestamp "locali alla struttura" ma serializzati con
@@ -219,50 +220,6 @@ export function DashboardPage() {
           onClose={() => setDialogo(null)}
         />
       )}
-    </Box>
-  )
-}
-
-function KpiCard({ etichetta, valore, dettaglio, accento }: { etichetta: string; valore: string | null; dettaglio?: string; accento?: boolean }) {
-  return (
-    <Box
-      sx={{
-        bgcolor: tokens.surface,
-        border: `1px solid ${accento ? tokens.orange600 : tokens.surfaceBorder}`,
-        borderWidth: accento ? 1.5 : 1,
-        borderRadius: 2,
-        p: '20px 22px',
-      }}
-    >
-      <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: accento ? tokens.orange700 : tokens.textSecondary }}>{etichetta}</Typography>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mt: 1 }}>
-        {valore === null ? (
-          <Skeleton width={60} height={34} />
-        ) : (
-          <Typography sx={{ fontFamily: fontMono, fontSize: 28, fontWeight: 600 }}>{valore}</Typography>
-        )}
-        {dettaglio && valore !== null && <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>{dettaglio}</Typography>}
-      </Box>
-    </Box>
-  )
-}
-
-function KpiCardDoppia({ etichetta, voci }: { etichetta: string; voci: { valore: string | null; etichetta: string }[] }) {
-  return (
-    <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: '20px 22px' }}>
-      <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: tokens.textSecondary }}>{etichetta}</Typography>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 3, mt: 1 }}>
-        {voci.map((v) => (
-          <Box key={v.etichetta} sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-            {v.valore === null ? (
-              <Skeleton width={40} height={34} />
-            ) : (
-              <Typography sx={{ fontFamily: fontMono, fontSize: 28, fontWeight: 600 }}>{v.valore}</Typography>
-            )}
-            {v.valore !== null && <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>{v.etichetta}</Typography>}
-          </Box>
-        ))}
-      </Box>
     </Box>
   )
 }

@@ -30,7 +30,14 @@ import { useStruttura } from '../struttura/StrutturaContext'
 import { StatoCamera, useCamere, useDuplicaCamere, useEliminaCamera, type CameraDto } from '../api/camere'
 import { useTipologie, type TipologiaCameraDto } from '../api/tipologie'
 import { usePrezzi, useEliminaPrezzo, type PrezzoCameraDto } from '../api/prezzi'
-import { useCanaliVendita, useCreaCanaleVendita, useAggiornaCanaleVendita, useEliminaCanaleVendita, type CanaleVenditaDto } from '../api/canaliVendita'
+import {
+  useCanaliVendita,
+  useCreaCanaleVendita,
+  useAggiornaCanaleVendita,
+  useEliminaCanaleVendita,
+  useImportaCanaliVendita,
+  type CanaleVenditaDto,
+} from '../api/canaliVendita'
 import { ApiError } from '../api/client'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
@@ -468,7 +475,7 @@ function TabPrezzi({
       {daEliminare && (
         <ConfirmDialog
           titolo="Eliminare periodo di prezzo"
-          messaggio="Eliminare questo periodo di prezzo?"
+          messaggio={`Eliminare il periodo "${daEliminare.cameraId ? `Camera ${nomeCamera(daEliminare.cameraId) ?? '—'}` : `Tipologia ${nomeTipologia(daEliminare.tipologiaId) ?? '—'}`}" dal ${daEliminare.dataInizio ? formattatoreData.format(new Date(daEliminare.dataInizio)) : '—'} al ${daEliminare.dataFine ? formattatoreData.format(new Date(daEliminare.dataFine)) : '—'} (${daEliminare.prezzoPerNotte != null ? formattatoreValuta.format(daEliminare.prezzoPerNotte) : '—'}/notte)?`}
           inCorso={elimina.isPending}
           onConferma={confermaEliminaPrezzo}
           onAnnulla={() => setDaEliminare(null)}
@@ -543,7 +550,7 @@ function VistaPrezziCalendario({
           <Box sx={{ overflowX: 'auto' }}>
             <Box sx={{ display: 'flex' }}>
               <Box sx={{ width: COL_RIGA_PREZZI, flex: '0 0 auto', borderRight: `1px solid ${tokens.surfaceBorder}` }} />
-              <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GIORNI_VISIBILI_PREZZI}, ${COL_GIORNO_PREZZI}px)` }}>
+              <Box sx={{ flex: 1, minWidth: GIORNI_VISIBILI_PREZZI * COL_GIORNO_PREZZI, display: 'grid', gridTemplateColumns: `repeat(${GIORNI_VISIBILI_PREZZI}, minmax(${COL_GIORNO_PREZZI}px, 1fr))` }}>
                 {giorni.map((g) => {
                   const weekend = g.getDay() === 0 || g.getDay() === 6
                   const oggi = differenzaGiorni(g, new Date()) === 0
@@ -576,7 +583,7 @@ function VistaPrezziCalendario({
                     {riga.etichetta}
                   </Typography>
                 </Box>
-                <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GIORNI_VISIBILI_PREZZI}, ${COL_GIORNO_PREZZI}px)` }}>
+                <Box sx={{ flex: 1, minWidth: GIORNI_VISIBILI_PREZZI * COL_GIORNO_PREZZI, display: 'grid', gridTemplateColumns: `repeat(${GIORNI_VISIBILI_PREZZI}, minmax(${COL_GIORNO_PREZZI}px, 1fr))` }}>
                   {giorni.map((g) => {
                     const p = prezzoDelGiorno(riga, g)
                     return (
@@ -631,10 +638,20 @@ function TabCanali({
   const [descrizione, setDescrizione] = useState('')
   const [erroreDialogo, setErroreDialogo] = useState<string | null>(null)
   const [daEliminare, setDaEliminare] = useState<CanaleVenditaDto | null>(null)
+  const toast = useToast()
 
   const crea = useCreaCanaleVendita(strutturaId)
   const aggiorna = useAggiornaCanaleVendita(strutturaId)
   const elimina = useEliminaCanaleVendita(strutturaId)
+  const importa = useImportaCanaliVendita(strutturaId)
+
+  function importaDaPrenotazioni() {
+    importa.mutate(undefined, {
+      onSuccess: (creati) =>
+        toast.successo(creati.length > 0 ? `${creati.length} canale/i importato/i dalle prenotazioni esistenti.` : 'Nessun nuovo canale da importare: già tutti configurati.'),
+      onError: onErrore,
+    })
+  }
 
   function apriDialogo(canale: 'nuovo' | CanaleVenditaDto) {
     setDescrizione(canale === 'nuovo' ? '' : canale.descrizione)
@@ -664,10 +681,21 @@ function TabCanali({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <IntestazioneTab titolo="Canali vendita" azione={{ etichetta: '+ Nuovo canale', onClick: () => apriDialogo('nuovo'), disabilitato: !strutturaId }} />
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Canali vendita</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button variant="outlined" size="small" onClick={importaDaPrenotazioni} disabled={!strutturaId || importa.isPending}>
+            Importa da prenotazioni
+          </Button>
+          <Button variant="contained" color="primary" size="small" onClick={() => apriDialogo('nuovo')} disabled={!strutturaId}>
+            + Nuovo canale
+          </Button>
+        </Box>
+      </Box>
       <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
         Le fonti di provenienza delle prenotazioni (es. Booking.com, Diretta) — selezionabili quando crei una prenotazione e usate per
-        colorare i pallini nel Calendario.
+        colorare i pallini nel Calendario. "Importa da prenotazioni" aggiunge automaticamente i canali già presenti sulle prenotazioni
+        esistenti (es. da una sincronizzazione Wubook) ma non ancora configurati qui.
       </Typography>
 
       {caricamento && <Skeleton variant="rounded" height={160} />}

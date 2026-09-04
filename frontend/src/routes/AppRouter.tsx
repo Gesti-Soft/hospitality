@@ -6,7 +6,10 @@ import { CalendarioPage } from '../pages/CalendarioPage'
 import { CamerePage } from '../pages/CamerePage'
 import { TipologiePage } from '../pages/TipologiePage'
 import { OspitiPage } from '../pages/OspitiPage'
-import { FinanzePage } from '../pages/FinanzePage'
+import { RiepilogoCassaPage } from '../pages/RiepilogoCassaPage'
+import { SpesePage } from '../pages/SpesePage'
+import { EntratePage } from '../pages/EntratePage'
+import { CauzioniPage } from '../pages/CauzioniPage'
 import { FatturazionePage } from '../pages/FatturazionePage'
 import { PoliziaPage } from '../pages/PoliziaPage'
 import { OsservatorioPage } from '../pages/OsservatorioPage'
@@ -15,6 +18,8 @@ import { WubookPage } from '../pages/WubookPage'
 import { UtentiPage } from '../pages/UtentiPage'
 import { ImpostazioniPage } from '../pages/ImpostazioniPage'
 import { LogPage } from '../pages/LogPage'
+import { StatistichePage } from '../pages/StatistichePage'
+import { StatisticheSuperAdminPage } from '../pages/StatisticheSuperAdminPage'
 import { SuperAdminDashboardPage } from '../pages/SuperAdminDashboardPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
@@ -38,8 +43,13 @@ const router = createBrowserRouter([
       { path: '/camere', element: <CamerePage /> },
       { path: '/tipologie', element: <TipologiePage /> },
       { path: '/ospiti', element: <OspitiPage /> },
-      { path: '/finanze', element: <FinanzePage /> },
+      { path: '/finanze', element: <Navigate to="/finanze/riepilogo" replace /> },
+      { path: '/finanze/riepilogo', element: <RiepilogoCassaPage /> },
+      { path: '/finanze/spese', element: <SpesePage /> },
+      { path: '/finanze/entrate', element: <EntratePage /> },
+      { path: '/finanze/cauzioni', element: <CauzioniPage /> },
       { path: '/fatturazione', element: <FatturazionePage /> },
+      { path: '/statistiche', element: <StatistichePage /> },
       { path: '/polizia-di-stato', element: <PoliziaPage /> },
       { path: '/osservatorio', element: <OsservatorioPage /> },
       { path: '/paytourist', element: <PayTouristPage /> },
@@ -48,6 +58,7 @@ const router = createBrowserRouter([
       { path: '/impostazioni', element: <ImpostazioniPage /> },
       { path: '/log', element: <LogPage /> },
       { path: '/super-admin', element: <SuperAdminDashboardPage /> },
+      { path: '/super-admin/statistiche', element: <StatisticheSuperAdminPage /> },
     ],
   },
 ])

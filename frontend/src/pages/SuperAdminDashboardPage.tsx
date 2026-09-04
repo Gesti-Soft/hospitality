@@ -45,6 +45,7 @@ import { useCreaUtente } from '../api/utenti'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
+import { KpiCard } from '../components/KpiCard'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -141,6 +142,7 @@ export function SuperAdminDashboardPage() {
           valore={String(struttureConErroreLicenza)}
           dettaglio="strutture da controllare"
           accento={struttureConErroreLicenza > 0}
+          coloreAccento="error"
         />
       </Box>
 
@@ -777,25 +779,5 @@ function EliminaStrutturaDialog({
         </Button>
       </DialogActions>
     </Dialog>
-  )
-}
-
-function KpiCard({ etichetta, valore, dettaglio, accento }: { etichetta: string; valore: string; dettaglio?: string; accento?: boolean }) {
-  return (
-    <Box
-      sx={{
-        bgcolor: tokens.surface,
-        border: `1px solid ${accento ? tokens.error600 : tokens.surfaceBorder}`,
-        borderWidth: accento ? 1.5 : 1,
-        borderRadius: 2,
-        p: '20px 22px',
-      }}
-    >
-      <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: accento ? tokens.error600 : tokens.textSecondary }}>{etichetta}</Typography>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mt: 1 }}>
-        <Typography sx={{ fontFamily: fontMono, fontSize: 28, fontWeight: 600 }}>{valore}</Typography>
-        {dettaglio && <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>{dettaglio}</Typography>}
-      </Box>
-    </Box>
   )
 }

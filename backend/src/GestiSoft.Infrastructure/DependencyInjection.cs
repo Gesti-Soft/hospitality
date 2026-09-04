@@ -11,6 +11,7 @@ using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.PayTourist;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Riferimenti;
+using GestiSoft.Application.Statistiche;
 using GestiSoft.Application.SuperAdmin;
 using GestiSoft.Application.Utenti;
 using GestiSoft.Application.Wubook;
@@ -75,6 +76,8 @@ public static class DependencyInjection
         services.AddScoped<IPayTouristStrutturaRepository, PayTouristStrutturaRepository>();
         services.AddScoped<IRiferimentiRepository, RiferimentiRepository>();
         services.AddScoped<ISuperAdminRepository, SuperAdminRepository>();
+        services.AddScoped<IStatisticheRepository, StatisticheRepository>();
+        services.AddScoped<IStatisticheSuperAdminRepository, StatisticheSuperAdminRepository>();
         services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
 
         // Backend esterno "gestisoft" (licenze/abbonamenti, già in produzione): il legacy leggeva

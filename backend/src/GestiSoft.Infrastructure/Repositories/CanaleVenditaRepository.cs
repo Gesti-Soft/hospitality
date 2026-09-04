@@ -16,6 +16,13 @@ public class CanaleVenditaRepository(GestiSoftDbContext db) : ICanaleVenditaRepo
             .OrderBy(a => a.Descrizione)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<string>> ListaAgenzieDistinteDaPrenotazioniAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        await db.Prenotazioni.AsNoTracking()
+            .Where(p => p.StrutturaId == strutturaId && p.Agenzia != null && p.Agenzia != "")
+            .Select(p => p.Agenzia!)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public Task<bool> ExistsByDescrizioneAsync(Guid strutturaId, string descrizione, Guid? escludiId, CancellationToken cancellationToken) =>
         db.CanaliVendita.AnyAsync(
             a => a.StrutturaId == strutturaId && a.Descrizione == descrizione && a.Id != (escludiId ?? Guid.Empty),
