@@ -16,39 +16,49 @@ public class WubookConfigController(WubookLicenzaService service, ICurrentUser c
     public async Task<IActionResult> Get(Guid strutturaId, CancellationToken cancellationToken)
     {
         var integrazione = await service.GetOrDefaultAsync(currentUser, strutturaId, cancellationToken);
-        return Ok(ToDto(integrazione));
+        return Ok(await ToDtoAsync(integrazione, cancellationToken));
     }
 
     [HttpPut]
     public async Task<IActionResult> Aggiorna(Guid strutturaId, [FromBody] AggiornaWubookConfigRequest request, CancellationToken cancellationToken)
     {
         var integrazione = await service.AggiornaConfigAsync(currentUser, strutturaId, request, cancellationToken);
-        return Ok(ToDto(integrazione));
+        return Ok(await ToDtoAsync(integrazione, cancellationToken));
     }
 
-    /// <summary>Licenza gestisoft.it (Utente/Token) — endpoint separato, vedi <see cref="WubookLicenzaService.AggiornaLicenzaAsync"/>.</summary>
+    /// <summary>Lettura completa della licenza (valori segreti inclusi) — solo Super Admin.</summary>
+    [HttpGet("/strutture/{strutturaId:guid}/wubook/licenza")]
+    public async Task<IActionResult> GetLicenza(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var integrazione = await service.GetLicenzaSuperAdminAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(ToLicenzaDto(integrazione));
+    }
+
+    /// <summary>Licenza Wubook (token/codice struttura/scadenza + username/token gestisoft.it) — solo Super Admin, vedi WubookLicenzaService.</summary>
     [HttpPut("/strutture/{strutturaId:guid}/wubook/licenza")]
     public async Task<IActionResult> AggiornaLicenza(Guid strutturaId, [FromBody] AggiornaWubookLicenzaRequest request, CancellationToken cancellationToken)
     {
-        var integrazione = await service.AggiornaLicenzaAsync(currentUser, strutturaId, request, cancellationToken);
-        return Ok(ToDto(integrazione));
+        var integrazione = await service.AggiornaLicenzaSuperAdminAsync(currentUser, strutturaId, request, cancellationToken);
+        return Ok(ToLicenzaDto(integrazione));
     }
 
-    /// <summary>Forza un rinnovo immediato delle credenziali (utile subito dopo aver inserito la licenza, senza aspettare il job periodico).</summary>
-    [HttpPost("rinnova")]
-    public async Task<IActionResult> Rinnova(Guid strutturaId, CancellationToken cancellationToken)
+    /// <summary>Prenotazioni Wubook intercettate per questa Struttura (Lcode/Rcode/esito) — visibile a chi può leggere la configurazione Wubook, non solo al Super Admin.</summary>
+    [HttpGet("/strutture/{strutturaId:guid}/wubook/eventi-ricevuti")]
+    public async Task<IActionResult> GetEventiRicevuti(Guid strutturaId, CancellationToken cancellationToken)
     {
-        var integrazione = await service.GetOrDefaultAsync(currentUser, strutturaId, cancellationToken);
-        integrazione = await service.RinnovaCredenzialiAsync(integrazione, cancellationToken);
-        return Ok(ToDto(integrazione));
+        var eventi = await service.ListEventiRicevutiAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(eventi.Select(e => new WubookEventoRicevutoDto(e.Id, e.Lcode, e.Rcode, e.ImportazioneRiuscita, e.MessaggioErrore, e.CreatedAtUtc, e.UpdatedAtUtc)));
     }
 
-    private static WubookIntegrazioneDto ToDto(WubookIntegrazione w) => new(
+    private async Task<WubookIntegrazioneDto> ToDtoAsync(WubookIntegrazione w, CancellationToken cancellationToken) => new(
         w.StrutturaId,
         w.Attivo,
-        w.GestisoftUsername,
-        LicenzaConfigurata: !string.IsNullOrWhiteSpace(w.GestisoftUsername) && !string.IsNullOrWhiteSpace(w.GestisoftToken),
-        CredenzialiPronte: !string.IsNullOrWhiteSpace(w.ApiKeyCache) && !string.IsNullOrWhiteSpace(w.LcodeCache),
-        w.CacheAggiornataAtUtc,
+        await service.CredenzialiProntoAsync(w, cancellationToken),
         w.UltimoErrore);
+
+    private static WubookLicenzaDto ToLicenzaDto(WubookIntegrazione w) => new(
+        w.StrutturaId,
+        w.GestisoftUsername,
+        w.GestisoftToken,
+        w.CodiceStruttura);
 }

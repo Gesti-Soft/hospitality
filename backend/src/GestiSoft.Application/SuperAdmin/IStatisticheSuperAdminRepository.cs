@@ -6,9 +6,14 @@ public record PanoramicaBusinessResult(int ClientiAttivi, int ClientiTotali, int
 
 public record TrendMensileResult(int Mese, int Conteggio);
 
-public record IncassoPerClienteResult(Guid ClienteId, string RagioneSociale, decimal ImportoPagatoAnno, int NumeroStrutture);
+/// <summary>Incassi di GestiSoft stessa (rinnovi licenza Wubook pagati), non l'incasso del Cliente sulle proprie prenotazioni.</summary>
+public record IncassoRinnovoMensileResult(int Mese, decimal Importo);
 
-public record ClassificaStrutturaResult(Guid StrutturaId, string NomeStruttura, string RagioneSocialeCliente, decimal Valore);
+/// <summary>Licenza Wubook scaduta (o mai configurata) su una Struttura con Wubook concesso — il Cliente va sollecitato.</summary>
+public record LicenzaScadutaResult(Guid StrutturaId, string NomeStruttura, string RagioneSocialeCliente, DateTime? Scadenza);
+
+/// <summary>Licenza Wubook non ancora scaduta ma entro la finestra di preavviso — da rinnovare a breve.</summary>
+public record LicenzaInScadenzaResult(Guid StrutturaId, string NomeStruttura, string RagioneSocialeCliente, DateTime Scadenza, int GiorniRimanenti);
 
 public record EsitoIntegrazioneResult(EsitoIntegrazione Stato, DateTime? UltimoInvioAtUtc, string? UltimoErrore);
 
@@ -24,17 +29,18 @@ public record SaluteIntegrazioneStrutturaResult(
 public record StatisticheSuperAdminResult(
     PanoramicaBusinessResult Panoramica,
     IReadOnlyList<TrendMensileResult> NuoviClientiPerMese,
-    IReadOnlyList<IncassoPerClienteResult> IncassiPerCliente,
-    IReadOnlyList<ClassificaStrutturaResult> ClassificaStruttureFatturato,
-    IReadOnlyList<ClassificaStrutturaResult> ClassificaStruttureOccupazione,
+    IReadOnlyList<IncassoRinnovoMensileResult> IncassiRinnoviPerMese,
+    IReadOnlyList<LicenzaScadutaResult> LicenzeScadute,
+    IReadOnlyList<LicenzaInScadenzaResult> LicenzeInScadenza,
     IReadOnlyList<SaluteIntegrazioneStrutturaResult> SaluteIntegrazioni);
 
 /// <summary>
-/// Aggregazioni cross-Cliente/Struttura per la pagina Statistiche Super Admin. Stesso principio di
-/// ISuperAdminRepository.GetDashboardAsync: Clienti/Strutture/righe di integrazione (decine/centinaia
-/// di righe) caricate in memoria e ricomposte con dizionari; Prenotazioni/Ospiti (potenzialmente
-/// molte righe su tutti i tenant insieme) sempre aggregate in SQL per Struttura (mai caricate
-/// intere), poi ricongiunte in memoria al piccolo dizionario Struttura→Cliente.
+/// Aggregazioni cross-Cliente/Struttura per la pagina Statistiche Super Admin — solo il business di
+/// GestiSoft stessa (Clienti/Strutture attivi, incassi da rinnovi licenza, chi deve pagare/sta per
+/// scadere, salute integrazioni per supporto): niente sul fatturato/occupazione dei singoli Clienti,
+/// che è affar loro, non di GestiSoft. Stesso principio di ISuperAdminRepository.GetDashboardAsync:
+/// Clienti/Strutture/righe di integrazione (decine/centinaia di righe) caricate in memoria e
+/// ricomposte con dizionari; solo NuoviClientiPerMese/IncassiRinnoviPerMese aggregati in SQL.
 /// </summary>
 public interface IStatisticheSuperAdminRepository
 {

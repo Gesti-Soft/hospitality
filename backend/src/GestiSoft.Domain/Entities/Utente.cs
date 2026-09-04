@@ -29,6 +29,14 @@ public class Utente
 
     public bool Attivo { get; set; } = true;
 
+    /// <summary>
+    /// True solo per il titolare/account Cliente: accesso libero a tutte le Strutture del proprio
+    /// Cliente (comprese quelle non ancora assegnategli in UtenteStruttura), permessi granulari
+    /// sempre concessi, senza bisogno di alcuna riga UtenteStruttura. Un utente normale (dipendente
+    /// di una Struttura) resta invece limitato alle sole Strutture a cui è stato assegnato.
+    /// </summary>
+    public bool IsClienteAccount { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public ICollection<UtenteStruttura> Strutture { get; set; } = new List<UtenteStruttura>();

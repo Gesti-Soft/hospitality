@@ -68,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<SuperAdminService>();
         services.AddScoped<StatisticheService>();
         services.AddScoped<StatisticheSuperAdminService>();
+        services.AddScoped<ImpostazioniGlobaliService>();
 
         return services;
     }

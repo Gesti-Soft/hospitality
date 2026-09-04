@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: risposta.email,
         isSuperAdmin: risposta.isSuperAdmin,
         clienteId: risposta.clienteId,
+        isClienteAccount: risposta.isClienteAccount,
       }
       salvaSessione(nuovaSessione)
       setSessione(nuovaSessione)

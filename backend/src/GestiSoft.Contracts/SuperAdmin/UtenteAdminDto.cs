@@ -9,4 +9,5 @@ public record UtenteAdminDto(
     bool Attivo,
     Guid? ClienteId,
     string? ClienteRagioneSociale,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    bool IsClienteAccount);

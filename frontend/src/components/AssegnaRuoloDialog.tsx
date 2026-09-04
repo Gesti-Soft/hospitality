@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Alert from '@mui/material/Alert'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
@@ -252,14 +253,16 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         {stato.modo === 'assegna' && (
-          <TextField select label="Utente" value={utenteEsistenteId} onChange={(e) => setUtenteEsistenteId(e.target.value)} required disabled={inCorso}>
-            {utentiDisponibili.length === 0 && <MenuItem value="">Nessun utente disponibile (già tutti assegnati)</MenuItem>}
-            {utentiDisponibili.map((u) => (
-              <MenuItem key={u.id} value={u.id}>
-                {u.email} {u.nome ? `— ${u.nome} ${u.cognome ?? ''}` : ''}
-              </MenuItem>
-            ))}
-          </TextField>
+          <Autocomplete
+            options={utentiDisponibili}
+            getOptionLabel={(u) => `${u.email}${u.nome ? ` — ${u.nome} ${u.cognome ?? ''}` : ''}`}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            value={utentiDisponibili.find((u) => u.id === utenteEsistenteId) ?? null}
+            onChange={(_, v) => setUtenteEsistenteId(v?.id ?? '')}
+            disabled={inCorso}
+            noOptionsText="Nessun utente disponibile (già tutti assegnati)"
+            renderInput={(params) => <TextField {...params} label="Utente" required placeholder="Cerca per email o nome…" />}
+          />
         )}
 
         {stato.modo === 'nuovo' && (

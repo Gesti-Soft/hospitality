@@ -8,4 +8,4 @@ public record ServiziStrutturaRequest(bool WubookAbilitato, bool AlloggiatiWebAb
 
 public record ResettaPasswordRequest(string NuovaPassword);
 
-public record AggiornaUtenteRequest(string Email, string? Nome, string? Cognome);
+public record AggiornaUtenteRequest(string Email, string? Nome, string? Cognome, bool IsClienteAccount);

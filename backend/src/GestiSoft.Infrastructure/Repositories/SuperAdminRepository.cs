@@ -45,7 +45,7 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
                     s.DisattivataAtUtc,
                     w?.Attivo ?? false,
                     w?.UltimoErrore,
-                    w?.CacheAggiornataAtUtc,
+                    s.ScadenzaLicenza,
                     imp?.PoliziaStatoAttiva ?? false,
                     imp?.OsservatorioAttivo ?? false,
                     imp?.PayTouristAttivo ?? false,
@@ -61,7 +61,7 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
                 c.PartitaIva,
                 c.Attivo,
                 c.CreatedAtUtc,
-                c.QuotaMensile,
+                c.QuotaAnnua,
                 c.Note,
                 utentiCliente.Count(),
                 utentiCliente.Count(u => u.Attivo),
@@ -77,7 +77,8 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
             u.Attivo,
             u.ClienteId,
             u.ClienteId != null && clientiById.TryGetValue(u.ClienteId.Value, out var cliente) ? cliente.RagioneSociale : null,
-            u.CreatedAtUtc)).ToList();
+            u.CreatedAtUtc,
+            u.IsClienteAccount)).ToList();
 
         return new DashboardSuperAdminInfo(infoClienti, infoUtenti);
     }

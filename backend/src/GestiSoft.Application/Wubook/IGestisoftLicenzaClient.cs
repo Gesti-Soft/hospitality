@@ -1,21 +1,18 @@
 namespace GestiSoft.Application.Wubook;
 
-public record LicenzaRisultato(string Status, string? Messaggio, string? TokenWb, string? IdWoBook, string? IdPaytourist, bool IsRunning);
-
 public record EventiNonLettiRisultato(string Status, IReadOnlyList<string> RCodes);
 
 /// <summary>
-/// Client verso il backend esterno "gestisoft" (licenze/abbonamenti, già in produzione, NON
-/// riscritto — vedi GestiSoftWeb/UserService). Porta 1:1 il contratto di
-/// POST {baseUrl}/users/set-running e POST {baseUrl}/wubook/events/*: la licenza del cliente
-/// (username+token) e le credenziali Wubook (tokenWb/idWoBook) arrivano SEMPRE da qui, mai da
-/// configurazione locale — su richiesta esplicita dell'utente, fedele al comportamento del
-/// sistema legacy (GestiCache, mai persistito, sempre rinnovato).
+/// Client verso il backend esterno "gestisoft" (già in produzione, NON riscritto — vedi
+/// GestiSoftWeb/UserService), usato solo più per l'intercettazione delle prenotazioni Wubook
+/// (POST {baseUrl}/wubook/events/*): Wubook notifica le nuove prenotazioni a gestisoft.it, non
+/// direttamente a questo backend, quindi il polling minute-by-minute passa sempre da qui.
+/// La licenza/credenziali Wubook (token+lcode+scadenza) sono invece gestite direttamente dal Super
+/// Admin qui in GestiSoftGestionale (vedi WubookLicenzaService) — non più recuperate da
+/// gestisoft.it/users/set-running come nel comportamento precedente.
 /// </summary>
 public interface IGestisoftLicenzaClient
 {
-    Task<LicenzaRisultato> SetRunningAsync(string username, string token, bool? isRunning, CancellationToken cancellationToken);
-
     Task<EventiNonLettiRisultato> GetEventiNonLettiAsync(string token, CancellationToken cancellationToken);
 
     Task MarkReadAsync(string token, IReadOnlyList<string> rcodes, CancellationToken cancellationToken);

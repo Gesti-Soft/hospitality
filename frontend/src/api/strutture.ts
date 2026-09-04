@@ -11,6 +11,10 @@ export interface StrutturaDto {
   alloggiatiWebAbilitato: boolean
   osservatorioAbilitato: boolean
   payTouristAbilitato: boolean
+  /** True se la licenza software GestiSoft di questa struttura è scaduta (NON la licenza Wubook) — la struttura resta selezionabile in lista ma ogni operazione su di essa viene rifiutata finché il Super Admin non la rinnova. */
+  licenzaScaduta: boolean
+  /** False = struttura "eliminata" (soft-delete) — compare in questo elenco solo per il Super Admin, che vi ha comunque libero accesso. */
+  attivo: boolean
 }
 
 export function useStrutture(clienteId: string | null, abilitato = true) {

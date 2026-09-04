@@ -10,6 +10,7 @@ public class WubookIntegrazioneConfiguration : IEntityTypeConfiguration<WubookIn
     {
         builder.ToTable("wubook_integrazioni");
         builder.ConfigureTenant();
+        builder.Property(w => w.CodiceStruttura).HasMaxLength(50);
 
         // Una sola configurazione Wubook per Struttura.
         builder.HasIndex(w => w.StrutturaId).IsUnique();

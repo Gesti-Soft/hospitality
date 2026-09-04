@@ -8,12 +8,17 @@ namespace GestiSoft.Application.Wubook;
 /// Wubook, non da un timestamp incrementale nostro), recupera ciascuna prenotazione con
 /// fetch_booking e la marca come letta su gestisoft.it a elaborazione riuscita. Riusa
 /// WubookPrenotazioniService.ImportaBookingRicevutoAsync per non duplicare la logica di mapping.
+/// Ogni Lcode/Rcode intercettato viene anche registrato in locale (WubookEventoRicevuto,
+/// indipendentemente dall'esito): lo storico "letto/non letto" di gestisoft.it serve solo a sapere
+/// cosa manca da elaborare, non è pensato per recuperare a posteriori una prenotazione — questa
+/// copia locale sì.
 /// Chiamato solo dal job Quartz (Worker) — nessun controllo permessi utente, gira per il sistema.
 /// </summary>
 public class WubookEventiService(
     IWubookIntegrazioneRepository integrazioni,
     IGestisoftLicenzaClient licenzaClient,
     IWubookClient wubookClient,
+    IWubookEventoRicevutoRepository eventiRicevuti,
     WubookLicenzaService licenzaService,
     WubookPrenotazioniService prenotazioniService)
 {
@@ -45,6 +50,7 @@ public class WubookEventiService(
             var booking = await wubookClient.FetchBookingAsync(token, lcode, rcode, cancellationToken);
             if (booking is null)
             {
+                await RegistraEventoAsync(strutturaId, lcode, rcode, riuscita: false, errore: "Impossibile recuperare la prenotazione da Wubook (fetch_booking).", cancellationToken);
                 continue;
             }
 
@@ -52,11 +58,15 @@ public class WubookEventiService(
             {
                 var nomeCanale = canali.FirstOrDefault(c => c.Id == booking.IdChannel)?.Nome ?? "Sito Web";
                 await prenotazioniService.ImportaBookingRicevutoAsync(strutturaId, booking, nomeCanale, cancellationToken);
+                await RegistraEventoAsync(strutturaId, lcode, rcode, riuscita: true, errore: null, cancellationToken);
                 rcodesElaborati.Add(rcodeRaw);
             }
-            catch
+            catch (Exception ex)
             {
-                // Non marcato come letto: verrà ritentato al prossimo giro (nessun log qui, il job Worker logga l'eccezione a livello aggregato).
+                // Non marcato come letto su gestisoft.it: verrà ritentato al prossimo giro (il job
+                // Worker logga comunque l'eccezione a livello aggregato) — qui registriamo solo
+                // l'ultimo motivo del fallimento per chi dovrà recuperarlo a mano.
+                await RegistraEventoAsync(strutturaId, lcode, rcode, riuscita: false, errore: ex.Message, cancellationToken);
             }
         }
 
@@ -64,5 +74,17 @@ public class WubookEventiService(
         {
             await licenzaClient.MarkReadAsync(integrazione.GestisoftToken, rcodesElaborati, cancellationToken);
         }
+    }
+
+    private async Task RegistraEventoAsync(Guid strutturaId, string lcode, int rcode, bool riuscita, string? errore, CancellationToken cancellationToken)
+    {
+        var evento = await eventiRicevuti.GetByRcodeAsync(strutturaId, rcode, cancellationToken) ?? new WubookEventoRicevuto { StrutturaId = strutturaId, Rcode = rcode };
+
+        evento.Lcode = lcode;
+        evento.ImportazioneRiuscita = riuscita;
+        evento.MessaggioErrore = errore;
+        evento.UpdatedAtUtc = DateTime.UtcNow;
+
+        await eventiRicevuti.UpsertAsync(evento, cancellationToken);
     }
 }

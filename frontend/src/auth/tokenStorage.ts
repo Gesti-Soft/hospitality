@@ -5,6 +5,7 @@ export interface Sessione {
   email: string
   isSuperAdmin: boolean
   clienteId: string | null
+  isClienteAccount: boolean
 }
 
 const STORAGE_KEY = 'gestisoft.sessione'

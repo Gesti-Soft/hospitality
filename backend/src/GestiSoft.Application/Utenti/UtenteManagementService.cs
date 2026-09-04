@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace GestiSoft.Application.Utenti;
 
-public record CreaUtenteRequest(string Email, string Password, string? Nome, string? Cognome, bool IsSuperAdmin, Guid? ClienteId);
+public record CreaUtenteRequest(string Email, string Password, string? Nome, string? Cognome, bool IsSuperAdmin, Guid? ClienteId, bool IsClienteAccount = false);
 
 public record AssegnaRuoloRequest(
     RuoloUtente Ruolo,
@@ -38,6 +38,7 @@ public class UtenteManagementService(
     IUtenteRepository utenti,
     IUtenteStrutturaRepository utentiStrutture,
     IStrutturaRepository strutture,
+    TenantAccessGuard accessGuard,
     IPasswordHasher<Utente> passwordHasher,
     ILogEventoService logEventi)
 {
@@ -48,7 +49,7 @@ public class UtenteManagementService(
             throw new ForbiddenException("Non puoi consultare gli utenti di questo Cliente.");
         }
 
-        if (!currentUser.IsSuperAdmin && !await utentiStrutture.HaGestioneUtentiClienteAsync(currentUser.UtenteId, clienteId, cancellationToken))
+        if (!await HaGestioneUtentiClienteAsync(currentUser, clienteId, cancellationToken))
         {
             throw new ForbiddenException("Solo chi gestisce gli utenti può consultare questo elenco.");
         }
@@ -56,15 +57,33 @@ public class UtenteManagementService(
         return await utenti.ListByClienteIdAsync(clienteId, cancellationToken);
     }
 
+    /// <summary>
+    /// "Gestione utenti" a livello di Cliente (non di singola Struttura): il Super Admin e il
+    /// titolare (Utente.IsClienteAccount) hanno sempre accesso, per un utente normale basta il
+    /// permesso SettingUser su almeno una Struttura di quel Cliente.
+    /// </summary>
+    private async Task<bool> HaGestioneUtentiClienteAsync(ICurrentUser currentUser, Guid clienteId, CancellationToken cancellationToken)
+    {
+        if (currentUser.IsSuperAdmin)
+        {
+            return true;
+        }
+
+        var utenteCorrente = await utenti.GetByIdAsync(currentUser.UtenteId, cancellationToken);
+        if (utenteCorrente is { IsClienteAccount: true })
+        {
+            return true;
+        }
+
+        return await utentiStrutture.HaGestioneUtentiClienteAsync(currentUser.UtenteId, clienteId, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<UtenteStruttura>> ListaAssegnazioniStrutturaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
-        var strutturaClienteId = await strutture.GetClienteIdAsync(strutturaId, cancellationToken)
-            ?? throw new NotFoundException("Struttura non trovata.");
-
-        if (!currentUser.IsSuperAdmin && currentUser.ClienteId != strutturaClienteId)
-        {
-            throw new ForbiddenException("Non puoi consultare gli utenti di questa struttura.");
-        }
+        // Stesso controllo (Cliente/Attivo/licenza) di ogni altro modulo operativo — prima d'ora
+        // questo endpoint bypassava TenantAccessGuard, restando utilizzabile anche su una Struttura a
+        // licenza scaduta, incoerente col resto dell'app (Camere/Prenotazioni/... la bloccano già).
+        await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
 
         if (!await HaGestioneUtentiAsync(currentUser, strutturaId, cancellationToken))
         {
@@ -78,11 +97,18 @@ public class UtenteManagementService(
     /// "Gestione utenti" (permesso SettingUser) è qui usato anche come porta d'accesso alla pagina
     /// Log: solo chi può gestire gli utenti di una struttura deve poter vedere cosa succede su quella
     /// struttura, i lavoratori normali no (richiesta esplicita — "l'utente non amministratore nemmeno
-    /// la pagina log deve vedere"). Il Super Admin ha sempre accesso, non ha una riga UtenteStruttura.
+    /// la pagina log deve vedere"). Il Super Admin ha sempre accesso, non ha una riga UtenteStruttura;
+    /// il titolare del Cliente (Utente.IsClienteAccount) allo stesso modo, per lo stesso motivo.
     /// </summary>
     public async Task<bool> HaGestioneUtentiAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         if (currentUser.IsSuperAdmin)
+        {
+            return true;
+        }
+
+        var utenteCorrente = await utenti.GetByIdAsync(currentUser.UtenteId, cancellationToken);
+        if (utenteCorrente is { IsClienteAccount: true })
         {
             return true;
         }
@@ -112,7 +138,7 @@ public class UtenteManagementService(
             // Un Cliente crea utenti solo per sé stesso, a prescindere da cosa passa in request.
             clienteId = currentUser.ClienteId;
 
-            if (!await utentiStrutture.HaGestioneUtentiClienteAsync(currentUser.UtenteId, clienteId!.Value, cancellationToken))
+            if (!await HaGestioneUtentiClienteAsync(currentUser, clienteId!.Value, cancellationToken))
             {
                 throw new ForbiddenException("Solo chi gestisce gli utenti può creare nuovi utenti.");
             }
@@ -124,6 +150,9 @@ public class UtenteManagementService(
             throw new ConflictException("Esiste già un utente con questa email.");
         }
 
+        // IsClienteAccount (titolare, accesso libero a tutte le Strutture del Cliente) è una leva
+        // sensibile quanto IsSuperAdmin: onorata solo se richiesta da un Super Admin, altrimenti
+        // ignorata silenziosamente (mai un privilege escalation che un Cliente può concedersi da solo).
         var utente = new Utente
         {
             Email = email,
@@ -131,6 +160,7 @@ public class UtenteManagementService(
             Cognome = request.Cognome,
             IsSuperAdmin = request.IsSuperAdmin,
             ClienteId = clienteId,
+            IsClienteAccount = currentUser.IsSuperAdmin && request.IsClienteAccount,
         };
         utente.PasswordHash = passwordHasher.HashPassword(utente, request.Password);
 
@@ -148,12 +178,19 @@ public class UtenteManagementService(
     {
         var utenteTarget = await utenti.GetByIdAsync(utenteId, cancellationToken)
             ?? throw new NotFoundException("Utente non trovato.");
-        var strutturaClienteId = await strutture.GetClienteIdAsync(strutturaId, cancellationToken)
-            ?? throw new NotFoundException("Struttura non trovata.");
 
-        if (!currentUser.IsSuperAdmin)
+        if (currentUser.IsSuperAdmin)
         {
-            if (currentUser.ClienteId != strutturaClienteId || utenteTarget.ClienteId != currentUser.ClienteId)
+            _ = await strutture.GetClienteIdAsync(strutturaId, cancellationToken)
+                ?? throw new NotFoundException("Struttura non trovata.");
+        }
+        else
+        {
+            // Stesso controllo (Cliente/Attivo/licenza) di ogni altro modulo operativo — prima d'ora
+            // si poteva assegnare/modificare un ruolo anche su una Struttura a licenza scaduta.
+            await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
+
+            if (utenteTarget.ClienteId != currentUser.ClienteId)
             {
                 throw new ForbiddenException("Non puoi assegnare ruoli su questa struttura/utente.");
             }
@@ -195,6 +232,48 @@ public class UtenteManagementService(
         return assegnazione;
     }
 
+    /// <summary>
+    /// Rimuove l'accesso di un Utente a questa Struttura — non elimina l'account Utente in sé, che
+    /// resta (con le eventuali altre assegnazioni su altre Strutture dello stesso Cliente): "eliminare
+    /// l'utente" dalla pagina Utenti di una Struttura significa qui togliergli l'accesso a QUELLA
+    /// struttura, non cancellare la sua identità dal sistema.
+    /// </summary>
+    public async Task RimuoviAssegnazioneAsync(ICurrentUser currentUser, Guid utenteId, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var utenteTarget = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        if (currentUser.IsSuperAdmin)
+        {
+            _ = await strutture.GetClienteIdAsync(strutturaId, cancellationToken)
+                ?? throw new NotFoundException("Struttura non trovata.");
+        }
+        else
+        {
+            // Stesso controllo (Cliente/Attivo/licenza) di ogni altro modulo operativo — prima d'ora
+            // si poteva rimuovere un accesso anche su una Struttura a licenza scaduta.
+            await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
+
+            if (utenteTarget.ClienteId != currentUser.ClienteId)
+            {
+                throw new ForbiddenException("Non puoi rimuovere l'accesso su questa struttura/utente.");
+            }
+
+            if (!await HaGestioneUtentiAsync(currentUser, strutturaId, cancellationToken))
+            {
+                throw new ForbiddenException("Solo chi gestisce gli utenti di questa struttura può rimuovere un accesso.");
+            }
+        }
+
+        if (utenteId == currentUser.UtenteId)
+        {
+            throw new ConflictException("Non puoi rimuovere il tuo stesso accesso a questa struttura.");
+        }
+
+        await utentiStrutture.RemoveAsync(utenteId, strutturaId, cancellationToken);
+        await LogUtenteAsync(currentUser, utenteTarget.ClienteId, strutturaId, $"Accesso rimosso per {utenteTarget.Email}.", cancellationToken);
+    }
+
     public async Task<Utente> AggiornaAsync(ICurrentUser currentUser, Guid utenteId, AggiornaUtenteRequest request, CancellationToken cancellationToken)
     {
         var utenteTarget = await utenti.GetByIdAsync(utenteId, cancellationToken)
@@ -205,7 +284,7 @@ public class UtenteManagementService(
             throw new ForbiddenException("Non puoi modificare questo utente.");
         }
 
-        if (!currentUser.IsSuperAdmin && !await utentiStrutture.HaGestioneUtentiClienteAsync(currentUser.UtenteId, utenteTarget.ClienteId!.Value, cancellationToken))
+        if (!await HaGestioneUtentiClienteAsync(currentUser, utenteTarget.ClienteId!.Value, cancellationToken))
         {
             throw new ForbiddenException("Solo chi gestisce gli utenti può modificare questo utente.");
         }
@@ -239,7 +318,7 @@ public class UtenteManagementService(
             throw new ForbiddenException("Non puoi modificare questo utente.");
         }
 
-        if (!currentUser.IsSuperAdmin && !await utentiStrutture.HaGestioneUtentiClienteAsync(currentUser.UtenteId, utenteTarget.ClienteId!.Value, cancellationToken))
+        if (!await HaGestioneUtentiClienteAsync(currentUser, utenteTarget.ClienteId!.Value, cancellationToken))
         {
             throw new ForbiddenException("Solo chi gestisce gli utenti può modificare questo utente.");
         }

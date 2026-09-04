@@ -51,4 +51,15 @@ public class Struttura
 
     /// <summary>PayTourist in particolare dipende dal Comune: non tutti i comuni l'hanno adottato.</summary>
     public bool PayTouristAbilitato { get; set; }
+
+    /// <summary>
+    /// Scadenza della licenza software GestiSoft assegnata dal Super Admin a questa Struttura — è la
+    /// licenza che GestiSoft concede al Cliente per usare il gestionale, indipendente da quali
+    /// integrazioni esterne (Wubook/Alloggiati Web/Osservatorio/PayTourist) siano concesse: NON è la
+    /// licenza Wubook (quella è solo il Codice struttura/lcode, vedi WubookIntegrazione). Oltre questa
+    /// data, TenantAccessGuard blocca l'uso della Struttura per ogni suo utente e AuthService blocca
+    /// il login di chi non ha nessun'altra Struttura ancora valida — mai per una scadenza mai
+    /// impostata (null), solo per una data reale già superata.
+    /// </summary>
+    public DateTime? ScadenzaLicenza { get; set; }
 }

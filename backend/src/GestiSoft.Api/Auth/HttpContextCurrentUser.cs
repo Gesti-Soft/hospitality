@@ -16,4 +16,6 @@ public class HttpContextCurrentUser(IHttpContextAccessor httpContextAccessor) : 
     public bool IsSuperAdmin => Principal?.FindFirst(AppClaimTypes.IsSuperAdmin)?.Value == "true";
 
     public Guid? ClienteId => Guid.TryParse(Principal?.FindFirst(AppClaimTypes.ClienteId)?.Value, out var id) ? id : null;
+
+    public bool IsClienteAccount => Principal?.FindFirst(AppClaimTypes.IsClienteAccount)?.Value == "true";
 }

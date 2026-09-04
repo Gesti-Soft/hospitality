@@ -20,6 +20,7 @@ public class JwtTokenGenerator(IOptions<JwtOptions> options) : IJwtTokenGenerato
             new(JwtRegisteredClaimNames.Sub, utente.Id.ToString()),
             new(JwtRegisteredClaimNames.Email, utente.Email),
             new(AppClaimTypes.IsSuperAdmin, utente.IsSuperAdmin ? "true" : "false"),
+            new(AppClaimTypes.IsClienteAccount, utente.IsClienteAccount ? "true" : "false"),
         };
 
         if (utente.ClienteId is { } clienteId)

@@ -71,6 +71,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const clienteImpersonato = isSuperAdmin ? clienti.find((c) => c.id === clienteId) : undefined
   const inImpersonazione = isSuperAdmin && !!strutturaCorrente
 
+  // Il Super Admin bypassa sempre (deve poter entrare proprio nella struttura da rinnovare). Per un
+  // Cliente/Operatore, con la licenza scaduta (licenza software GestiSoft della Struttura, NON la
+  // licenza Wubook) il backend rifiuta comunque ogni chiamata reale (TenantAccessGuard) — questo
+  // blocco a livello di UI evita però che l'utente veda un Cruscotto apparentemente normale con dati
+  // parziali/vuoti dovuti a errori sparsi pagina per pagina: sostituisce subito tutto il contenuto
+  // con un avviso esplicito, lasciando visibile solo il selettore Struttura per poter eventualmente
+  // scegliere un'altra struttura ancora valida dello stesso Cliente.
+  const bloccataPerLicenza = !isSuperAdmin && !!strutturaCorrente?.licenzaScaduta
+
   // Sotto i 900px la sidebar fissa e le tab in barra non ci stanno: diventano un menu a comparsa
   // aperto dall'icona hamburger, che raccoglie anche Cliente/tab (in barra solo su desktop).
   const mobile = useMediaQuery('(max-width:899.95px)')
@@ -122,12 +131,26 @@ export function AppShell({ children }: { children: ReactNode }) {
       {mobile && tabSezioni}
 
       {/* Il SuperAdmin senza ancora un Cliente scelto non ha alcuna struttura sensata da mostrare
-          qui: la select resta nascosta finché non ne sceglie uno (vedi selettoreCliente sopra). */}
-      {(!isSuperAdmin || clienteId) && (
+          qui: la select resta nascosta finché non ne sceglie uno (vedi selettoreCliente sopra). Un
+          titolare (accesso libero a tutte le Strutture del Cliente) la vede sempre, anche con una
+          sola Struttura; un utente normale assegnato a una sola Struttura non ha invece nulla tra
+          cui scegliere, la select resta nascosta finché non viene assegnato anche a una seconda. */}
+      {(!isSuperAdmin || clienteId) && (isSuperAdmin || sessione?.isClienteAccount || strutture.length > 1) && (
         <SelettoreCercabile
           etichetta="Struttura"
           valore={strutturaId}
-          opzioni={strutture.map((s) => ({ id: s.id, nome: s.nome }))}
+          opzioni={strutture.map((s) => ({
+            id: s.id,
+            nome: s.nome,
+            // Una Struttura con licenza scaduta non compare MAI in questo elenco per un utente
+            // normale, nemmeno tra quelle a cui è assegnato (StrutturaService.ListAsync la esclude a
+            // monte: non è un problema suo, è tra GestiSoft e il Cliente) — solo il titolare del
+            // Cliente (proprietario delle Strutture) e il Super Admin la vedono, disabilitata con
+            // "Da rinnovare"/"Disattivata" qui sotto, per poter sollecitare il rinnovo o (solo il
+            // Super Admin) entrarci comunque per rinnovarla/riattivarla.
+            disabilitata: !isSuperAdmin && s.licenzaScaduta,
+            nota: !s.attivo ? 'Disattivata' : s.licenzaScaduta ? 'Da rinnovare' : undefined,
+          }))}
           caricamento={loading && strutture.length === 0}
           onChange={selezionaStruttura}
           onAggiungi={isSuperAdmin ? () => setNuovaStrutturaAperta(true) : undefined}
@@ -274,7 +297,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Box>
           </Box>
 
-          <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, md: 4.5 } }}>{children}</Box>
+          <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, md: 4.5 } }}>{bloccataPerLicenza ? <BloccoLicenzaScaduta /> : children}</Box>
         </Box>
       </Box>
 
@@ -283,6 +306,24 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
       {strutturaInModifica && <ModificaStrutturaDialog struttura={strutturaInModifica} onClose={() => setStrutturaInModifica(null)} />}
       {strutturaDaEliminare && <EliminaStrutturaDialog struttura={strutturaDaEliminare} onClose={() => setStrutturaDaEliminare(null)} />}
+    </Box>
+  )
+}
+
+/** Sostituisce l'intero contenuto operativo quando la licenza della Struttura selezionata è scaduta — vedi `bloccataPerLicenza` in AppShell. */
+function BloccoLicenzaScaduta() {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+      <Box sx={{ width: '100%', maxWidth: 480, textAlign: 'center' }}>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 800, fontSize: 20 }}>Struttura sospesa</Typography>
+        <Typography sx={{ fontSize: 14, color: tokens.textSecondary, mt: 1.5 }}>
+          La licenza di questa struttura è scaduta. Contatta l'assistenza GestiSoft per rinnovarla — nel frattempo la struttura non è
+          utilizzabile.
+        </Typography>
+        <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary, mt: 2 }}>
+          Se il tuo account ha altre strutture ancora attive, puoi selezionarne una diversa dal menu a sinistra.
+        </Typography>
+      </Box>
     </Box>
   )
 }
@@ -499,6 +540,9 @@ function TabSezione({
 interface Opzione {
   id: string
   nome: string
+  /** Es. licenza scaduta: l'opzione resta visibile ma non selezionabile, con `nota` mostrata accanto al nome. */
+  disabilitata?: boolean
+  nota?: string
 }
 
 interface SelettoreCercabileProps {
@@ -548,6 +592,7 @@ function SelettoreCercabile({
       // se a runtime è l'unico modo corretto di rappresentare "nessuna selezione ancora" qui.
       value={opzioni.find((o) => o.id === valore) ?? (null as unknown as Opzione)}
       onChange={(_, v) => v && onChange(v.id)}
+      getOptionDisabled={(o) => !!o.disabilitata}
       disabled={opzioni.length === 0}
       disableClearable
       noOptionsText="Nessun risultato"
@@ -589,6 +634,11 @@ function SelettoreCercabile({
         return (
           <Box component="li" key={key} {...rest} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{option.nome}</Box>
+            {option.nota && (
+              <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.error600, textTransform: 'uppercase', letterSpacing: '.03em', whiteSpace: 'nowrap' }}>
+                {option.nota}
+              </Typography>
+            )}
             {onModificaOpzione && (
               <IconButton
                 size="small"

@@ -12,6 +12,7 @@ export interface LoginResponse {
   email: string
   isSuperAdmin: boolean
   clienteId: string | null
+  isClienteAccount: boolean
 }
 
 export const login = (request: LoginRequest) => apiPost<LoginResponse>('/auth/login', request)

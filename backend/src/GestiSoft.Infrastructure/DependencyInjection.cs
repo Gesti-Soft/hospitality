@@ -66,6 +66,8 @@ public static class DependencyInjection
         services.AddScoped<IDatiFatturaRepository, DatiFatturaRepository>();
         services.AddScoped<IFatturaDocumentGenerator, FatturaDocumentGenerator>();
         services.AddScoped<IWubookIntegrazioneRepository, WubookIntegrazioneRepository>();
+        services.AddScoped<IWubookEventoRicevutoRepository, WubookEventoRicevutoRepository>();
+        services.AddScoped<IRinnovoLicenzaRepository, RinnovoLicenzaRepository>();
         services.AddScoped<IChiusuraCameraRepository, ChiusuraCameraRepository>();
         services.AddScoped<IRestrizioneSoggiornoCameraRepository, RestrizioneSoggiornoCameraRepository>();
         services.AddScoped<IAlloggiatiWebIntegrazioneRepository, AlloggiatiWebIntegrazioneRepository>();
@@ -78,6 +80,7 @@ public static class DependencyInjection
         services.AddScoped<ISuperAdminRepository, SuperAdminRepository>();
         services.AddScoped<IStatisticheRepository, StatisticheRepository>();
         services.AddScoped<IStatisticheSuperAdminRepository, StatisticheSuperAdminRepository>();
+        services.AddScoped<IImpostazioniGlobaliRepository, ImpostazioniGlobaliRepository>();
         services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
 
         // Backend esterno "gestisoft" (licenze/abbonamenti, già in produzione): il legacy leggeva

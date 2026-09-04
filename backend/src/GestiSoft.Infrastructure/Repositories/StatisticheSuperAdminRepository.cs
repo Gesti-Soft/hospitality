@@ -1,4 +1,3 @@
-using GestiSoft.Application.Statistiche;
 using GestiSoft.Application.SuperAdmin;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -16,13 +15,14 @@ namespace GestiSoft.Infrastructure.Repositories;
 /// </summary>
 public class StatisticheSuperAdminRepository(GestiSoftDbContext db) : IStatisticheSuperAdminRepository
 {
-    private const int MassimoVociClassifica = 10;
+    private const int GiorniPreavvisoScadenza = 30;
 
     public async Task<StatisticheSuperAdminResult> GetStatisticheAsync(int anno, CancellationToken cancellationToken)
     {
         var clienti = await db.Clienti.AsNoTracking().ToListAsync(cancellationToken);
         var strutture = await db.Strutture.AsNoTracking().ToListAsync(cancellationToken);
         var wubook = await db.WubookIntegrazioni.AsNoTracking().ToListAsync(cancellationToken);
+        var tokenWubookGlobale = (await db.ImpostazioniGlobali.AsNoTracking().FirstOrDefaultAsync(cancellationToken))?.TokenWubook;
         var alloggiatiWeb = await db.AlloggiatiWebIntegrazioni.AsNoTracking().ToListAsync(cancellationToken);
         var osservatorio = await db.OsservatorioAppartamenti.AsNoTracking().ToListAsync(cancellationToken);
         var payTouristIntegrazioni = await db.PayTouristIntegrazioni.AsNoTracking().ToListAsync(cancellationToken);
@@ -35,12 +35,7 @@ public class StatisticheSuperAdminRepository(GestiSoftDbContext db) : IStatistic
         var payTouristIntegrazioneByStruttura = payTouristIntegrazioni.ToDictionary(p => p.StrutturaId);
         var payTouristStruttureByStruttura = payTouristStrutture.ToLookup(p => p.StrutturaId);
 
-        var importoPagatoPerStruttura = await ImportoPagatoPerStrutturaAsync(anno, cancellationToken);
-        var sommaPermanenzaPerStruttura = await SommaPermanenzaPerStrutturaAsync(anno, cancellationToken);
-        var numeroCamerePerStruttura = await db.Camere.AsNoTracking()
-            .GroupBy(c => c.StrutturaId)
-            .Select(g => new { StrutturaId = g.Key, Conteggio = g.Count() })
-            .ToDictionaryAsync(g => g.StrutturaId, g => g.Conteggio, cancellationToken);
+        var incassiRinnoviPerMese = await IncassiRinnoviPerMeseAsync(anno, cancellationToken);
 
         var panoramica = new PanoramicaBusinessResult(
             clienti.Count(c => c.Attivo),
@@ -50,42 +45,32 @@ public class StatisticheSuperAdminRepository(GestiSoftDbContext db) : IStatistic
 
         var nuoviClientiPerMese = NuoviClientiPerMese(clienti, anno);
 
-        var incassiPerCliente = strutture
-            .GroupBy(s => s.ClienteId)
-            .Select(g => new
-            {
-                ClienteId = g.Key,
-                Importo = g.Sum(s => importoPagatoPerStruttura.GetValueOrDefault(s.Id)),
-                NumeroStrutture = g.Count(),
-            })
-            .Where(x => clientiById.ContainsKey(x.ClienteId))
-            .OrderByDescending(x => x.Importo)
-            .Select(x => new IncassoPerClienteResult(x.ClienteId, clientiById[x.ClienteId].RagioneSociale, x.Importo, x.NumeroStrutture))
+        // Una Struttura disattivata (o il cui Cliente è disattivato) non deve comparire in nessuna
+        // vista della Dashboard Super Admin: non è più operativa, non ha senso sollecitarla o
+        // segnalarne lo stato di salute.
+        var struttureVisibili = strutture
+            .Where(s => s.Attivo && clientiById.GetValueOrDefault(s.ClienteId)?.Attivo == true)
             .ToList();
 
-        var classificaFatturato = strutture
-            .Where(s => clientiById.ContainsKey(s.ClienteId))
-            .Select(s => new ClassificaStrutturaResult(s.Id, s.Nome, clientiById[s.ClienteId].RagioneSociale, importoPagatoPerStruttura.GetValueOrDefault(s.Id)))
-            .OrderByDescending(c => c.Valore)
-            .Take(MassimoVociClassifica)
+        var oggi = DateTime.UtcNow;
+
+        var licenzeScadute = struttureVisibili
+            .Where(s => s.ScadenzaLicenza is null || s.ScadenzaLicenza < oggi)
+            .Select(s => new LicenzaScadutaResult(s.Id, s.Nome, clientiById[s.ClienteId].RagioneSociale, s.ScadenzaLicenza))
             .ToList();
 
-        var classificaOccupazione = strutture
-            .Where(s => clientiById.ContainsKey(s.ClienteId))
-            .Select(s => new ClassificaStrutturaResult(
+        var licenzeInScadenza = struttureVisibili
+            .Where(s => s.ScadenzaLicenza is { } scadenza && scadenza >= oggi && scadenza <= oggi.AddDays(GiorniPreavvisoScadenza))
+            .Select(s => new LicenzaInScadenzaResult(
                 s.Id,
                 s.Nome,
                 clientiById[s.ClienteId].RagioneSociale,
-                (decimal)CalcoloOccupazione.TassoOccupazionePercentuale(
-                    sommaPermanenzaPerStruttura.GetValueOrDefault(s.Id),
-                    numeroCamerePerStruttura.GetValueOrDefault(s.Id),
-                    anno)))
-            .OrderByDescending(c => c.Valore)
-            .Take(MassimoVociClassifica)
+                s.ScadenzaLicenza!.Value,
+                (int)Math.Ceiling((s.ScadenzaLicenza!.Value - oggi).TotalDays)))
+            .OrderBy(l => l.GiorniRimanenti)
             .ToList();
 
-        var saluteIntegrazioni = strutture
-            .Where(s => clientiById.ContainsKey(s.ClienteId))
+        var saluteIntegrazioni = struttureVisibili
             .Select(s => new SaluteIntegrazioneStrutturaResult(
                 s.Id,
                 s.Nome,
@@ -93,10 +78,10 @@ public class StatisticheSuperAdminRepository(GestiSoftDbContext db) : IStatistic
                 EsitoAlloggiatiWeb(s, alloggiatiWebByStruttura),
                 EsitoOsservatorio(s, osservatorioByStruttura[s.Id].ToList()),
                 EsitoPayTourist(s, payTouristIntegrazioneByStruttura, payTouristStruttureByStruttura[s.Id].ToList()),
-                EsitoWubook(s, wubookByStruttura)))
+                EsitoWubook(s, wubookByStruttura, tokenWubookGlobale)))
             .ToList();
 
-        return new StatisticheSuperAdminResult(panoramica, nuoviClientiPerMese, incassiPerCliente, classificaFatturato, classificaOccupazione, saluteIntegrazioni);
+        return new StatisticheSuperAdminResult(panoramica, nuoviClientiPerMese, incassiRinnoviPerMese, licenzeScadute, licenzeInScadenza, saluteIntegrazioni);
     }
 
     public async Task<IReadOnlyList<int>> ListaAnniConDatiAsync(CancellationToken cancellationToken) =>
@@ -106,19 +91,16 @@ public class StatisticheSuperAdminRepository(GestiSoftDbContext db) : IStatistic
             .OrderByDescending(a => a)
             .ToListAsync(cancellationToken);
 
-    private async Task<Dictionary<Guid, decimal>> ImportoPagatoPerStrutturaAsync(int anno, CancellationToken cancellationToken) =>
-        await db.Prenotazioni.AsNoTracking()
-            .Where(p => p.Anno == anno)
-            .GroupBy(p => p.StrutturaId)
-            .Select(g => new { StrutturaId = g.Key, Totale = g.Sum(p => p.ImportoPagato ?? 0) })
-            .ToDictionaryAsync(g => g.StrutturaId, g => g.Totale, cancellationToken);
+    private async Task<IReadOnlyList<IncassoRinnovoMensileResult>> IncassiRinnoviPerMeseAsync(int anno, CancellationToken cancellationToken)
+    {
+        var perMese = await db.RinnoviLicenza.AsNoTracking()
+            .Where(r => r.CreatedAtUtc.Year == anno)
+            .GroupBy(r => r.CreatedAtUtc.Month)
+            .Select(g => new { Mese = g.Key, Importo = g.Sum(r => r.Importo ?? 0) })
+            .ToDictionaryAsync(g => g.Mese, g => g.Importo, cancellationToken);
 
-    private async Task<Dictionary<Guid, int>> SommaPermanenzaPerStrutturaAsync(int anno, CancellationToken cancellationToken) =>
-        await db.Ospiti.AsNoTracking()
-            .Where(o => o.Prenotazione != null && o.Prenotazione.Anno == anno && o.Permanenza > 0)
-            .GroupBy(o => o.StrutturaId)
-            .Select(g => new { StrutturaId = g.Key, Somma = g.Sum(o => o.Permanenza!.Value) })
-            .ToDictionaryAsync(g => g.StrutturaId, g => g.Somma, cancellationToken);
+        return Enumerable.Range(1, 12).Select(mese => new IncassoRinnovoMensileResult(mese, perMese.GetValueOrDefault(mese))).ToList();
+    }
 
     private static IReadOnlyList<TrendMensileResult> NuoviClientiPerMese(IReadOnlyList<Cliente> clienti, int anno)
     {
@@ -137,16 +119,21 @@ public class StatisticheSuperAdminRepository(GestiSoftDbContext db) : IStatistic
     /// caso NonConcesso (qui necessario: la dashboard per-struttura filtra a monte i servizi non
     /// concessi, questa vista cross-struttura no).
     /// </summary>
-    private static EsitoIntegrazioneResult EsitoWubook(Struttura struttura, IReadOnlyDictionary<Guid, WubookIntegrazione> wubookByStruttura)
+    private static EsitoIntegrazioneResult EsitoWubook(Struttura struttura, IReadOnlyDictionary<Guid, WubookIntegrazione> wubookByStruttura, string? tokenWubookGlobale)
     {
         if (!struttura.WubookAbilitato)
         {
             return new EsitoIntegrazioneResult(EsitoIntegrazione.NonConcesso, null, null);
         }
 
-        if (!wubookByStruttura.TryGetValue(struttura.Id, out var w) || string.IsNullOrWhiteSpace(w.GestisoftUsername) || string.IsNullOrWhiteSpace(w.GestisoftToken))
+        if (!wubookByStruttura.TryGetValue(struttura.Id, out var w) || string.IsNullOrWhiteSpace(tokenWubookGlobale) || string.IsNullOrWhiteSpace(w.CodiceStruttura))
         {
             return new EsitoIntegrazioneResult(EsitoIntegrazione.NonConfigurato, null, null);
+        }
+
+        if (struttura.ScadenzaLicenza is { } scadenza && scadenza < DateTime.UtcNow)
+        {
+            return new EsitoIntegrazioneResult(EsitoIntegrazione.Errore, null, $"Licenza scaduta il {scadenza:dd/MM/yyyy}.");
         }
 
         if (!string.IsNullOrWhiteSpace(w.UltimoErrore))
@@ -154,7 +141,9 @@ public class StatisticheSuperAdminRepository(GestiSoftDbContext db) : IStatistic
             return new EsitoIntegrazioneResult(EsitoIntegrazione.Errore, null, w.UltimoErrore);
         }
 
-        return new EsitoIntegrazioneResult(w.CacheAggiornataAtUtc != null ? EsitoIntegrazione.Attivo : EsitoIntegrazione.Attesa, w.CacheAggiornataAtUtc, null);
+        // Le credenziali inserite dal Super Admin sono utilizzabili subito (nessun rinnovo/cache
+        // asincrono da attendere come nel comportamento precedente) — mai più "in attesa".
+        return new EsitoIntegrazioneResult(EsitoIntegrazione.Attivo, null, null);
     }
 
     private static EsitoIntegrazioneResult EsitoAlloggiatiWeb(Struttura struttura, IReadOnlyDictionary<Guid, AlloggiatiWebIntegrazione> byStruttura)

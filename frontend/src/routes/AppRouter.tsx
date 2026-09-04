@@ -19,8 +19,9 @@ import { UtentiPage } from '../pages/UtentiPage'
 import { ImpostazioniPage } from '../pages/ImpostazioniPage'
 import { LogPage } from '../pages/LogPage'
 import { StatistichePage } from '../pages/StatistichePage'
-import { StatisticheSuperAdminPage } from '../pages/StatisticheSuperAdminPage'
 import { SuperAdminDashboardPage } from '../pages/SuperAdminDashboardPage'
+import { SuperAdminClientiPage } from '../pages/SuperAdminClientiPage'
+import { SuperAdminImpostazioniPage } from '../pages/SuperAdminImpostazioniPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
 /**
@@ -58,7 +59,8 @@ const router = createBrowserRouter([
       { path: '/impostazioni', element: <ImpostazioniPage /> },
       { path: '/log', element: <LogPage /> },
       { path: '/super-admin', element: <SuperAdminDashboardPage /> },
-      { path: '/super-admin/statistiche', element: <StatisticheSuperAdminPage /> },
+      { path: '/super-admin/clienti', element: <SuperAdminClientiPage /> },
+      { path: '/super-admin/impostazioni', element: <SuperAdminImpostazioniPage /> },
     ],
   },
 ])

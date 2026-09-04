@@ -55,6 +55,12 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
 
     public DbSet<WubookIntegrazione> WubookIntegrazioni => Set<WubookIntegrazione>();
 
+    public DbSet<WubookEventoRicevuto> WubookEventiRicevuti => Set<WubookEventoRicevuto>();
+
+    public DbSet<RinnovoLicenza> RinnoviLicenza => Set<RinnovoLicenza>();
+
+    public DbSet<ImpostazioniGlobali> ImpostazioniGlobali => Set<ImpostazioniGlobali>();
+
     public DbSet<AlloggiatiWebIntegrazione> AlloggiatiWebIntegrazioni => Set<AlloggiatiWebIntegrazione>();
 
     public DbSet<OsservatorioAppartamento> OsservatorioAppartamenti => Set<OsservatorioAppartamento>();

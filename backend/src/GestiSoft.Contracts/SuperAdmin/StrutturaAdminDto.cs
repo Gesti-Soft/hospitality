@@ -10,7 +10,7 @@ public record StrutturaAdminDto(
     DateTime? DisattivataAtUtc,
     bool WubookAttivo,
     string? WubookUltimoErrore,
-    DateTime? WubookCacheAggiornataAtUtc,
+    DateTime? ScadenzaLicenza,
     bool PoliziaStatoAttiva,
     bool OsservatorioAttivo,
     bool PayTouristAttivo,

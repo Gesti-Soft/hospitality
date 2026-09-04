@@ -84,13 +84,11 @@ export function DashboardPage() {
   ]
 
   const wubookStato: EsitoIntegrazione | undefined = wubook.data
-    ? !wubook.data.licenzaConfigurata
-      ? 'non-configurato'
-      : wubook.data.ultimoErrore
-        ? 'errore'
-        : wubook.data.cacheAggiornataAtUtc
-          ? 'ok'
-          : 'attesa'
+    ? wubook.data.ultimoErrore
+      ? 'errore'
+      : wubook.data.credenzialiPronte
+        ? 'ok'
+        : 'non-configurato'
     : undefined
 
   const alloggiatiWebStato: EsitoIntegrazione | undefined = alloggiatiWeb.data

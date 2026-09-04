@@ -15,6 +15,11 @@ public class UtenteStrutturaRepository(GestiSoftDbContext db) : IUtenteStruttura
             .Where(us => us.StrutturaId == strutturaId)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<UtenteStruttura>> ListByUtenteIdAsync(Guid utenteId, CancellationToken cancellationToken) =>
+        await db.UtentiStrutture.AsNoTracking()
+            .Where(us => us.UtenteId == utenteId)
+            .ToListAsync(cancellationToken);
+
     public Task<bool> HaGestioneUtentiClienteAsync(Guid utenteId, Guid clienteId, CancellationToken cancellationToken) =>
         db.UtentiStrutture.AsNoTracking()
             .Where(us => us.UtenteId == utenteId && us.SettingUser)
@@ -32,6 +37,18 @@ public class UtenteStrutturaRepository(GestiSoftDbContext db) : IUtenteStruttura
             db.UtentiStrutture.Add(assegnazione);
         }
 
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RemoveAsync(Guid utenteId, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var assegnazione = await db.UtentiStrutture.FirstOrDefaultAsync(us => us.UtenteId == utenteId && us.StrutturaId == strutturaId, cancellationToken);
+        if (assegnazione is null)
+        {
+            return;
+        }
+
+        db.UtentiStrutture.Remove(assegnazione);
         await db.SaveChangesAsync(cancellationToken);
     }
 }

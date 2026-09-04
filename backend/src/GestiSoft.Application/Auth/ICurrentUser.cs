@@ -16,4 +16,7 @@ public interface ICurrentUser
 
     /// <summary>Null per i Super Admin.</summary>
     Guid? ClienteId { get; }
+
+    /// <summary>True solo per il titolare/account Cliente: libero accesso a tutte le Strutture del proprio Cliente.</summary>
+    bool IsClienteAccount { get; }
 }

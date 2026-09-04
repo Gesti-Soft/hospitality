@@ -4,10 +4,7 @@ import { apiDelete, apiGet, apiPost, apiPut, apiScaricaFile } from './client'
 export interface WubookIntegrazioneDto {
   strutturaId: string
   attivo: boolean
-  gestisoftUsername: string | null
-  licenzaConfigurata: boolean
   credenzialiPronte: boolean
-  cacheAggiornataAtUtc: string | null
   ultimoErrore: string | null
 }
 
@@ -404,17 +401,31 @@ export interface WubookConfigRequest {
   attivo: boolean
 }
 
-export interface WubookLicenzaRequest {
-  gestisoftUsername: string | null
-  gestisoftToken: string | null
-}
-
 export interface RisultatoSincronizzazioneWubookDto {
   importate: number
   aggiornate: number
   annullate: number
   /** Conteggio, non un elenco. */
   errori: number
+}
+
+/** Una prenotazione Wubook intercettata (Lcode/Rcode), a prescindere dall'esito dell'importazione — per recuperarla a mano in caso di problemi. */
+export interface WubookEventoRicevutoDto {
+  id: string
+  lcode: string
+  rcode: number
+  importazioneRiuscita: boolean
+  messaggioErrore: string | null
+  createdAtUtc: string
+  updatedAtUtc: string | null
+}
+
+export function useWubookEventiRicevuti(strutturaId: string | null, abilitato: boolean) {
+  return useQuery({
+    queryKey: ['wubook-eventi-ricevuti', strutturaId],
+    queryFn: () => apiGet<WubookEventoRicevutoDto[]>(`/strutture/${strutturaId}/wubook/eventi-ricevuti`),
+    enabled: !!strutturaId && abilitato,
+  })
 }
 
 function useInvalidaWubook(strutturaId: string | null) {
@@ -426,23 +437,6 @@ export function useAggiornaWubookConfig(strutturaId: string | null) {
   const invalida = useInvalidaWubook(strutturaId)
   return useMutation({
     mutationFn: (request: WubookConfigRequest) => apiPut<WubookIntegrazioneDto>(`/strutture/${strutturaId}/wubook/config`, request),
-    onSuccess: invalida,
-  })
-}
-
-// Separato da useAggiornaWubookConfig apposta: due submit indipendenti (toggle Attivo vs licenza gestisoft.it).
-export function useAggiornaWubookLicenza(strutturaId: string | null) {
-  const invalida = useInvalidaWubook(strutturaId)
-  return useMutation({
-    mutationFn: (request: WubookLicenzaRequest) => apiPut<WubookIntegrazioneDto>(`/strutture/${strutturaId}/wubook/licenza`, request),
-    onSuccess: invalida,
-  })
-}
-
-export function useRinnovaWubookCredenziali(strutturaId: string | null) {
-  const invalida = useInvalidaWubook(strutturaId)
-  return useMutation({
-    mutationFn: () => apiPost<WubookIntegrazioneDto>(`/strutture/${strutturaId}/wubook/config/rinnova`),
     onSuccess: invalida,
   })
 }

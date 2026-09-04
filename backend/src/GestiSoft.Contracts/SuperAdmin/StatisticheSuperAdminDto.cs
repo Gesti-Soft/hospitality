@@ -5,18 +5,20 @@ namespace GestiSoft.Contracts.SuperAdmin;
 public record StatisticheSuperAdminDto(
     PanoramicaBusinessDto Panoramica,
     IReadOnlyList<TrendMensileDto> NuoviClientiPerMese,
-    IReadOnlyList<IncassoPerClienteDto> IncassiPerCliente,
-    IReadOnlyList<ClassificaStrutturaDto> ClassificaStruttureFatturato,
-    IReadOnlyList<ClassificaStrutturaDto> ClassificaStruttureOccupazione,
+    IReadOnlyList<IncassoRinnovoMensileDto> IncassiRinnoviPerMese,
+    IReadOnlyList<LicenzaScadutaDto> LicenzeScadute,
+    IReadOnlyList<LicenzaInScadenzaDto> LicenzeInScadenza,
     IReadOnlyList<SaluteIntegrazioneStrutturaDto> SaluteIntegrazioni);
 
 public record PanoramicaBusinessDto(int ClientiAttivi, int ClientiTotali, int StruttureAttive, int StruttureTotali);
 
 public record TrendMensileDto(int Mese, int Conteggio);
 
-public record IncassoPerClienteDto(Guid ClienteId, string RagioneSociale, decimal ImportoPagatoAnno, int NumeroStrutture);
+public record IncassoRinnovoMensileDto(int Mese, decimal Importo);
 
-public record ClassificaStrutturaDto(Guid StrutturaId, string NomeStruttura, string RagioneSocialeCliente, decimal Valore);
+public record LicenzaScadutaDto(Guid StrutturaId, string NomeStruttura, string RagioneSocialeCliente, DateTime? Scadenza);
+
+public record LicenzaInScadenzaDto(Guid StrutturaId, string NomeStruttura, string RagioneSocialeCliente, DateTime Scadenza, int GiorniRimanenti);
 
 public record EsitoIntegrazioneDto(EsitoIntegrazione Stato, DateTime? UltimoInvioAtUtc, string? UltimoErrore);
 

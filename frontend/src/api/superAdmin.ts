@@ -10,7 +10,8 @@ export interface StrutturaAdminDto {
   disattivataAtUtc: string | null
   wubookAttivo: boolean
   wubookUltimoErrore: string | null
-  wubookCacheAggiornataAtUtc: string | null
+  /** Licenza software GestiSoft di questa Struttura (NON la licenza Wubook) — scaduta = struttura inaccessibile ai suoi utenti. */
+  scadenzaLicenza: string | null
   poliziaStatoAttiva: boolean
   osservatorioAttivo: boolean
   payTouristAttivo: boolean
@@ -27,8 +28,8 @@ export interface ClienteAdminDto {
   partitaIva: string | null
   attivo: boolean
   createdAtUtc: string
-  /** Quota mensile pattuita con il Cliente — solo un promemoria, non genera fatture. */
-  quotaMensile: number | null
+  /** Quota annua pattuita con il Cliente — solo un promemoria, non genera fatture. */
+  quotaAnnua: number | null
   /** Appunti liberi del Super Admin — mai visibile al Cliente stesso. */
   note: string | null
   numeroUtenti: number
@@ -46,6 +47,8 @@ export interface UtenteAdminDto {
   clienteId: string | null
   clienteRagioneSociale: string | null
   createdAtUtc: string
+  /** Titolare del Cliente: accesso libero a tutte le sue Strutture, senza bisogno di assegnazioni UtenteStruttura. */
+  isClienteAccount: boolean
 }
 
 export interface DashboardSuperAdminDto {
@@ -109,6 +112,7 @@ export interface AggiornaUtenteRequest {
   email: string
   nome: string | null
   cognome: string | null
+  isClienteAccount: boolean
 }
 
 export function useAggiornaUtente() {

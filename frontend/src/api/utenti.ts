@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPut } from './client'
+import { apiDelete, apiGet, apiPost, apiPut } from './client'
 
 // Come gli altri enum: l'Api li serializza come numeri (vedi commento in api/camere.ts).
 export const RuoloUtente = {
@@ -25,6 +25,7 @@ export interface UtenteDto {
   isSuperAdmin: boolean
   clienteId: string | null
   attivo: boolean
+  isClienteAccount: boolean
 }
 
 export interface PermessiStruttura {
@@ -63,6 +64,8 @@ export interface CreaUtenteRequest {
   cognome: string | null
   isSuperAdmin: boolean
   clienteId: string | null
+  /** Onorato solo se chi chiama è Super Admin (verificato lato server) — titolare, accesso libero a tutte le Strutture del Cliente. */
+  isClienteAccount?: boolean
 }
 
 export interface AssegnaRuoloRequest extends PermessiStruttura {
@@ -136,6 +139,18 @@ export function useAggiornaUtente() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['utenti-cliente'] })
       queryClient.invalidateQueries({ queryKey: ['assegnazioni-struttura'] })
+    },
+  })
+}
+
+/** "Elimina" un utente da una Struttura: rimuove solo l'assegnazione (l'account Utente resta, con le eventuali altre assegnazioni). */
+export function useRimuoviAssegnazione(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (utenteId: string) => apiDelete(`/utenti/${utenteId}/strutture/${strutturaId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assegnazioni-struttura', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['utenti-cliente'] })
     },
   })
 }

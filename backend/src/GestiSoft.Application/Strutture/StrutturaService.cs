@@ -1,6 +1,7 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Utenti;
+using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -10,13 +11,45 @@ public record CreaStrutturaRequest(Guid ClienteId, string Nome);
 
 public record AggiornaStrutturaRequest(string Nome);
 
-public class StrutturaService(IStrutturaRepository repository, IUtenteStrutturaRepository utentiStrutture, IUtenteRepository utenti)
+/// <param name="RinnovoPagato">
+/// True solo se il Super Admin ha confermato esplicitamente che questa modifica alla scadenza
+/// corrisponde a un pagamento reale del Cliente (chiesto in UI solo quando la scadenza cambia
+/// davvero — un rinnovo può anche essere gratuito, es. una correzione). Se true, registra una riga
+/// in RinnovoLicenza per alimentare gli incassi della pagina Statistiche Super Admin.
+/// </param>
+public record AggiornaLicenzaStrutturaRequest(DateTime? ScadenzaLicenza, bool RinnovoPagato = false, decimal? ImportoRinnovo = null);
+
+public class StrutturaService(
+    IStrutturaRepository repository,
+    IUtenteRepository utenti,
+    IRinnovoLicenzaRepository rinnoviLicenza)
 {
-    /// <summary>SuperAdmin vede tutte le Strutture (o filtrate per un Cliente a scelta); un Cliente vede solo le proprie.</summary>
+    /// <summary>
+    /// Il Super Admin vede tutte le Strutture (anche disattivate o a licenza scaduta, o filtrate per
+    /// un Cliente a scelta), sempre e comunque — deve poterci entrare per rinnovarle. Il titolare del
+    /// Cliente (Utente.IsClienteAccount) è il "proprietario" delle Strutture: vede anche lui tutte
+    /// quelle attive del proprio Cliente, comprese quelle con la licenza scaduta (mostrate disabilitate
+    /// con "Da rinnovare" in UI, così sa cosa sollecitare a GestiSoft) — è l'unico, oltre al Super
+    /// Admin, autorizzato a saperlo. Un utente normale (anche con ruolo Administrator su quella
+    /// specifica Struttura) non deve invece vedere per niente una Struttura a licenza scaduta, nemmeno
+    /// tra quelle a cui è assegnato: non è un problema suo, è tra GestiSoft e il Cliente — se è
+    /// assegnato a più Strutture e una è scaduta, continua a vedere solo le altre.
+    /// </summary>
     public async Task<IReadOnlyList<Struttura>> ListAsync(ICurrentUser currentUser, Guid? filtroClienteId, CancellationToken cancellationToken)
     {
-        var clienteId = currentUser.IsSuperAdmin ? filtroClienteId : currentUser.ClienteId;
-        return await repository.ListByClienteAsync(clienteId, cancellationToken);
+        if (currentUser.IsSuperAdmin)
+        {
+            return await repository.ListByClienteAsync(filtroClienteId, includiInattive: true, cancellationToken);
+        }
+
+        var utente = await utenti.GetByIdAsync(currentUser.UtenteId, cancellationToken);
+        if (utente is { IsClienteAccount: true })
+        {
+            return await repository.ListByClienteAsync(currentUser.ClienteId, includiInattive: false, cancellationToken);
+        }
+
+        var assegnate = await repository.ListAssegnateAsync(currentUser.UtenteId, cancellationToken);
+        return assegnate.Where(s => !IsLicenzaScaduta(s)).ToList();
     }
 
     public async Task<Struttura> GetByIdAsync(ICurrentUser currentUser, Guid id, CancellationToken cancellationToken)
@@ -55,42 +88,11 @@ public class StrutturaService(IStrutturaRepository repository, IUtenteStrutturaR
         // non lo concede esplicitamente, anche se il Cliente ne ha già altre abilitate.
         await repository.AddAsync(struttura, cancellationToken);
 
-        // Il Super Admin non è un utente del Cliente: senza questo, la Struttura appena creata
-        // resterebbe inaccessibile a chiunque dal lato Cliente (PermessoStrutturaGuard/
-        // GestioneUtentiGuard richiedono sempre una UtenteStruttura, mai solo l'appartenenza al
-        // Cliente proprietario) — un problema reale soprattutto per la primissima Struttura di un
-        // Cliente nuovo, dove nessuno avrebbe altrimenti un modo di assegnarsela dalla schermata
-        // Utenti. Assegnato automaticamente come Administrator a tutti gli utenti già esistenti di
-        // quel Cliente, non solo al primo/admin.
-        var utentiCliente = await utenti.ListByClienteIdAsync(request.ClienteId, cancellationToken);
-        foreach (var utente in utentiCliente)
-        {
-            await utentiStrutture.UpsertAsync(
-                new UtenteStruttura
-                {
-                    UtenteId = utente.Id,
-                    StrutturaId = struttura.Id,
-                    Ruolo = RuoloUtente.Administrator,
-                    BookingRead = true,
-                    BookingWrite = true,
-                    ReservationRead = true,
-                    ReservationWrite = true,
-                    StatePoliceRead = true,
-                    StatePoliceWrite = true,
-                    StatePoliceSettings = true,
-                    SettingAgency = true,
-                    SettingUser = true,
-                    SettingRoomRead = true,
-                    SettingRoomWrite = true,
-                    RoomStatusUpdate = true,
-                    FinanceRead = true,
-                    FinanceWrite = true,
-                    RestaurantRead = true,
-                    RestaurantWrite = true,
-                },
-                cancellationToken);
-        }
-
+        // Nessuna assegnazione UtenteStruttura automatica qui, su richiesta esplicita: un utente può
+        // lavorare in una Struttura e non in un'altra, anche dello stesso Cliente — chi deve avere
+        // accesso a questa Struttura va assegnato esplicitamente dalla schermata Utenti (o è il
+        // titolare del Cliente, Utente.IsClienteAccount, che ha libero accesso a tutte le Strutture
+        // del proprio Cliente senza bisogno di alcuna assegnazione, vedi TenantAccessGuard).
         return struttura;
     }
 
@@ -128,7 +130,7 @@ public class StrutturaService(IStrutturaRepository repository, IUtenteStrutturaR
 
         if (!attivo)
         {
-            var altreAttive = await repository.ListByClienteAsync(struttura.ClienteId, cancellationToken);
+            var altreAttive = await repository.ListByClienteAsync(struttura.ClienteId, includiInattive: false, cancellationToken);
             if (altreAttive.All(s => s.Id == struttura.Id))
             {
                 throw new ConflictException("Non puoi eliminare l'unica struttura rimasta: il gestionale richiede almeno una struttura attiva.");
@@ -139,5 +141,55 @@ public class StrutturaService(IStrutturaRepository repository, IUtenteStrutturaR
         struttura.DisattivataAtUtc = attivo ? null : DateTime.UtcNow;
         await repository.UpdateAsync(struttura, cancellationToken);
         return struttura;
+    }
+
+    /// <summary>
+    /// Vero solo se la licenza software GestiSoft di questa Struttura ha una scadenza già impostata e
+    /// superata — mai per una licenza mai configurata (una Struttura appena creata dal Super Admin
+    /// non deve risultare "da rinnovare" prima ancora di essere stata configurata). Indipendente da
+    /// quali integrazioni esterne siano concesse: NON è la licenza Wubook. Usato per marcare la
+    /// Struttura come "Da rinnovare" nel selettore (TenantAccessGuard applica poi il blocco vero e
+    /// proprio sull'uso reale della Struttura).
+    /// </summary>
+    public static bool IsLicenzaScaduta(Struttura struttura) =>
+        struttura.ScadenzaLicenza is { } scadenza && scadenza < DateTime.UtcNow;
+
+    /// <summary>Lettura completa (Super Admin) della licenza software GestiSoft di una Struttura.</summary>
+    public async Task<Struttura> GetLicenzaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+        return await repository.GetByIdAsync(strutturaId, cancellationToken)
+            ?? throw new NotFoundException("Struttura non trovata.");
+    }
+
+    /// <summary>
+    /// Assegna/rinnova la licenza software GestiSoft di una Struttura — solo il Super Admin, mai il
+    /// Cliente. Se il Super Admin conferma che è un rinnovo pagato, registra anche l'incasso in
+    /// RinnovoLicenza (vedi Statistiche Super Admin).
+    /// </summary>
+    public async Task<Struttura> AggiornaLicenzaAsync(ICurrentUser currentUser, Guid strutturaId, AggiornaLicenzaStrutturaRequest request, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        var struttura = await repository.GetByIdAsync(strutturaId, cancellationToken)
+            ?? throw new NotFoundException("Struttura non trovata.");
+
+        struttura.ScadenzaLicenza = request.ScadenzaLicenza;
+        await repository.UpdateAsync(struttura, cancellationToken);
+
+        if (request.RinnovoPagato && request.ScadenzaLicenza is { } scadenza)
+        {
+            await rinnoviLicenza.AddAsync(new RinnovoLicenza { StrutturaId = strutturaId, ScadenzaImpostata = scadenza, Importo = request.ImportoRinnovo }, cancellationToken);
+        }
+
+        return struttura;
+    }
+
+    private static void RichiediSuperAdmin(ICurrentUser currentUser)
+    {
+        if (!currentUser.IsSuperAdmin)
+        {
+            throw new ForbiddenException("Solo il Super Admin può gestire la licenza di una struttura.");
+        }
     }
 }

@@ -87,7 +87,7 @@ public class PayTouristInvioService(
         int idSoftware;
         try
         {
-            idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(strutturaId, cancellationToken);
+            idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(cancellationToken);
         }
         catch (ConflictException ex)
         {
@@ -145,7 +145,7 @@ public class PayTouristInvioService(
         {
             try
             {
-                idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(strutturaId, cancellationToken);
+                idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(cancellationToken);
                 var (riduzioniOk, riduzioniRisultato, _) = await client.GetRiduzioniAsync(integrazione.Token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
                 riduzioni = riduzioniOk ? riduzioniRisultato : [];
 
@@ -205,7 +205,7 @@ public class PayTouristInvioService(
                 throw new ConflictException("Token PayTourist non configurato.");
             }
 
-            var idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(strutturaId, cancellationToken);
+            var idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(cancellationToken);
 
             var tipologieIds = payTouristStruttura.Tipologie.Select(t => t.TipologiaId).ToHashSet();
             var daInviare = await ospiti.ListDaInviarePayTouristAsync(strutturaId, tipologieIds, cancellationToken);

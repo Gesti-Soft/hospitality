@@ -27,14 +27,12 @@ import {
   useAggiornaAlloggiatiWebConfig,
   useAggiornaPayTouristConfig,
   useAggiornaWubookConfig,
-  useAggiornaWubookLicenza,
   useAlloggiatiWebConfig,
   useEliminaOsservatorioAppartamento,
   useEliminaPayTouristStruttura,
   useOsservatorioAppartamenti,
   usePayTouristConfig,
   usePayTouristStrutture,
-  useRinnovaWubookCredenziali,
   useSuggerimentoEtaTassaPayTourist,
   useWubookConfig,
   type AlloggiatiWebIntegrazioneDto,
@@ -49,9 +47,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { OsservatorioAppartamentoDialog } from '../components/OsservatorioAppartamentoDialog'
 import { PayTouristStrutturaDialog } from '../components/PayTouristStrutturaDialog'
 
-const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-
-type TabImpostazioni = 'generali' | 'licenza' | 'polizia' | 'osservatorio' | 'paytourist'
+type TabImpostazioni = 'generali' | 'polizia' | 'osservatorio' | 'paytourist'
 
 /** Pallino colorato (verde = inserito, grigio = mancante) — usato come indicatore compatto accanto a un campo o un titolo, al posto di un Chip testuale. */
 function Pallino({ inserito }: { inserito: boolean }) {
@@ -79,17 +75,13 @@ export function ImpostazioniPage() {
 
   // Ogni tab di credenziali/configurazione ha senso solo se il Super Admin ha concesso il relativo
   // servizio a questa struttura — stesso principio già applicato alle voci di menu "Invii automatici"
-  // (vedi navItems.ts) e alla sezione "Invii automatici" di questa stessa pagina. "Licenza gestisoft.it"
-  // è condivisa da Wubook e PayTourist (restituisce credenziali Wubook + Id Software PayTourist),
-  // quindi resta visibile se almeno uno dei due è concesso.
-  const mostraLicenza = (strutturaCorrente?.wubookAbilitato ?? false) || (strutturaCorrente?.payTouristAbilitato ?? false)
+  // (vedi navItems.ts) e alla sezione "Invii automatici" di questa stessa pagina.
   const mostraPolizia = strutturaCorrente?.alloggiatiWebAbilitato ?? false
   const mostraOsservatorio = strutturaCorrente?.osservatorioAbilitato ?? false
   const mostraPayTourist = strutturaCorrente?.payTouristAbilitato ?? false
 
   const tabVisibile: Record<TabImpostazioni, boolean> = {
     generali: true,
-    licenza: mostraLicenza,
     polizia: mostraPolizia,
     osservatorio: mostraOsservatorio,
     paytourist: mostraPayTourist,
@@ -100,14 +92,12 @@ export function ImpostazioniPage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Tabs value={tabEffettivo} onChange={(_, v) => setTab(v)} sx={{ minHeight: 0 }}>
         <Tab label="Generali" value="generali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
-        {mostraLicenza && <Tab label="Licenza gestisoft.it" value="licenza" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
         {mostraPolizia && <Tab label="Alloggiati Web" value="polizia" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
         {mostraOsservatorio && <Tab label="Osservatorio Turistico" value="osservatorio" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
         {mostraPayTourist && <Tab label="PayTourist" value="paytourist" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
       </Tabs>
 
       {tabEffettivo === 'generali' && <TabGenerali strutturaId={strutturaId} />}
-      {tabEffettivo === 'licenza' && <TabLicenzaGestisoft strutturaId={strutturaId} />}
       {tabEffettivo === 'polizia' && <TabAlloggiatiWeb strutturaId={strutturaId} />}
       {tabEffettivo === 'osservatorio' && <TabOsservatorio strutturaId={strutturaId} />}
       {tabEffettivo === 'paytourist' && <TabPayTourist strutturaId={strutturaId} />}
@@ -159,7 +149,7 @@ function WubookAttivoToggle({ strutturaId, dati }: { strutturaId: string; dati: 
         label="Sincronizzazione Wubook attiva per questa struttura"
       />
       <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
-        Richiede la licenza gestisoft.it configurata (tab "Licenza gestisoft.it").
+        Richiede il codice struttura Wubook configurato dal Super Admin e una licenza in corso di validità.
       </Typography>
     </Box>
   )
@@ -425,98 +415,6 @@ export function ImpostazioniGeneraliForm({
       <Box>
         <Button variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
           Salva impostazioni
-        </Button>
-      </Box>
-    </Box>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Licenza gestisoft.it (autenticazione condivisa: rinnovo credenziali Wubook + Id Software
-// PayTourist — non è una configurazione di Wubook, vedi WubookLicenzaService.RinnovaCredenzialiAsync)
-// ---------------------------------------------------------------------------
-
-function TabLicenzaGestisoft({ strutturaId }: { strutturaId: string | null }) {
-  const config = useWubookConfig(strutturaId)
-
-  return (
-    <Box sx={{ maxWidth: 640 }}>
-      {config.isLoading && <Skeleton variant="rounded" height={280} />}
-      {!config.isLoading && config.data && <LicenzaGestisoftForm strutturaId={strutturaId!} dati={config.data} />}
-    </Box>
-  )
-}
-
-function LicenzaGestisoftForm({ strutturaId, dati }: { strutturaId: string; dati: WubookIntegrazioneDto }) {
-  const [gestisoftUsername, setGestisoftUsername] = useState(dati.gestisoftUsername ?? '')
-  const [gestisoftToken, setGestisoftToken] = useState('')
-  const toast = useToast()
-
-  const aggiornaLicenza = useAggiornaWubookLicenza(strutturaId)
-  const rinnova = useRinnovaWubookCredenziali(strutturaId)
-
-  function segnalaErrore(err: unknown) {
-    toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
-  }
-
-  function salvaLicenza() {
-    aggiornaLicenza.mutate(
-      { gestisoftUsername: gestisoftUsername.trim() === '' ? null : gestisoftUsername.trim(), gestisoftToken: gestisoftToken.trim() === '' ? null : gestisoftToken.trim() },
-      {
-        onSuccess: () => {
-          toast.successo('Licenza salvata.')
-          setGestisoftToken('')
-        },
-        onError: segnalaErrore,
-      },
-    )
-  }
-
-  function rinnovaOra() {
-    rinnova.mutate(undefined, { onError: segnalaErrore })
-  }
-
-  return (
-    <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Licenza gestisoft.it</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip size="small" label={dati.licenzaConfigurata ? 'Licenza configurata' : 'Licenza non configurata'} sx={{ bgcolor: dati.licenzaConfigurata ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
-          <Chip size="small" label={dati.credenzialiPronte ? 'Credenziali Wubook pronte' : 'In attesa di rinnovo'} sx={{ bgcolor: dati.credenzialiPronte ? tokens.blue600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
-        </Box>
-      </Box>
-
-      <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
-        Questa NON è una credenziale di Wubook: è l'autenticazione verso gestisoft.it (Utente/Token della licenza), che restituisce sia le
-        credenziali Wubook sia l'Id Software PayTourist. Senza questa licenza né la sincronizzazione Wubook né PayTourist possono
-        funzionare. Ogni Struttura ha la propria coppia Utente/Token.
-      </Typography>
-
-      {dati.ultimoErrore && <Alert severity="warning">{dati.ultimoErrore}</Alert>}
-
-      <Box sx={{ display: 'flex', gap: 2 }}>
-        <TextField label="Utente gestisoft.it" value={gestisoftUsername} onChange={(e) => setGestisoftUsername(e.target.value)} fullWidth disabled={aggiornaLicenza.isPending} />
-        <TextField
-          label={<EtichettaConPallino testo="Token gestisoft.it" inserito={dati.licenzaConfigurata} />}
-          type="password"
-          value={gestisoftToken}
-          onChange={(e) => setGestisoftToken(e.target.value)}
-          fullWidth
-          disabled={aggiornaLicenza.isPending}
-          helperText={dati.licenzaConfigurata ? "Già salvato: lasciarlo vuoto e salvare lo AZZERA" : ' '}
-        />
-      </Box>
-
-      <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
-        Cache aggiornata: {dati.cacheAggiornataAtUtc ? formattatoreDataOra.format(new Date(dati.cacheAggiornataAtUtc)) : 'mai'}
-      </Typography>
-
-      <Box sx={{ display: 'flex', gap: 1.5 }}>
-        <Button variant="contained" color="primary" onClick={salvaLicenza} disabled={aggiornaLicenza.isPending}>
-          Salva licenza
-        </Button>
-        <Button variant="outlined" onClick={rinnovaOra} disabled={rinnova.isPending || !dati.licenzaConfigurata}>
-          Rinnova credenziali ora
         </Button>
       </Box>
     </Box>

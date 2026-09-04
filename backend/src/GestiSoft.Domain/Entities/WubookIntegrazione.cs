@@ -4,43 +4,27 @@ namespace GestiSoft.Domain.Entities;
 
 /// <summary>
 /// Configurazione e stato dell'integrazione Wubook per una Struttura (una riga per Struttura).
-/// Separata da <see cref="ImpostazioniStruttura"/> perché mescola due cose scritte da chi/quando
-/// diversi: <see cref="GestisoftUsername"/>/<see cref="GestisoftToken"/> sono la licenza
-/// gestisoft.it inserita dall'operatore via UI, mentre <see cref="ApiKeyCache"/>/
-/// <see cref="LcodeCache"/>/<see cref="CacheAggiornataAtUtc"/> sono scritti dal job periodico di
-/// rinnovo (vedi WubookLicenzaService) — tenerli sullo stesso record di ImpostazioniStruttura
-/// avrebbe rischiato scritture concorrenti che si sovrascrivono a vicenda.
-/// Porta la logica di GestiCache/set-running del sistema legacy: nel legacy la licenza
-/// (username+token) era una sola per installazione (single-tenant); qui è per Struttura, decisione
-/// presa esplicitamente con l'utente. tokenWb/idWoBook non vengono MAI presi da configurazione
-/// locale: arrivano sempre, ad ogni rinnovo, dalla risposta di gestisoft.it/users/set-running.
-/// <see cref="IdPaytouristCache"/> (Fase 8) segue la stessa regola: è il "software_id" richiesto
-/// dall'API PayTourist, letto dalla stessa risposta (campo idPaytourist) invece di essere
-/// configurato a mano su una nuova entità PayTourist dedicata — su istruzione esplicita
-/// dell'utente, coerente col fatto che anche nel legacy questo valore arrivava, a monte, dallo
-/// stesso meccanismo di licenza (vedi Controller.Logic.StartUpLogic).
+/// <see cref="Attivo"/> è un toggle self-service del Cliente/operatore (richiede SettingRoomWrite);
+/// <see cref="CodiceStruttura"/> è invece gestito solo dal Super Admin, perché è GestiSoft (l'azienda,
+/// non il singolo cliente) il vero titolare dell'account partner Wubook. <see cref="GestisoftUsername"/>/
+/// <see cref="GestisoftToken"/> restano invece solo per identificarsi verso gestisoft.it nel polling
+/// minute-by-minute delle prenotazioni (Wubook notifica le nuove prenotazioni a gestisoft.it, non
+/// qui). NOTA: la scadenza della licenza NON è qui — è <see cref="Struttura.ScadenzaLicenza"/>, la
+/// licenza software GestiSoft concessa al Cliente, indipendente da Wubook.
 /// </summary>
 public class WubookIntegrazione : TenantEntity
 {
     public bool Attivo { get; set; }
 
-    /// <summary>Username della licenza gestisoft.it di questa Struttura.</summary>
+    /// <summary>Username verso gestisoft.it, usato solo per il polling eventi (vedi WubookEventiService) — gestito dal Super Admin.</summary>
     public string? GestisoftUsername { get; set; }
 
-    /// <summary>Token della licenza gestisoft.it di questa Struttura (segreto, non va mai esposto in risposta API).</summary>
+    /// <summary>Token verso gestisoft.it, usato solo per il polling eventi (segreto, non va mai esposto in risposta API) — gestito dal Super Admin.</summary>
     public string? GestisoftToken { get; set; }
 
-    /// <summary>Apikey Wubook (tokenWb) — cache dell'ultimo valore ricevuto da gestisoft.it, mai inserita a mano.</summary>
-    public string? ApiKeyCache { get; set; }
+    /// <summary>Codice struttura Wubook (lcode) — inserito a mano dal Super Admin, non più recuperato da gestisoft.it.</summary>
+    public string? CodiceStruttura { get; set; }
 
-    /// <summary>Lcode Wubook (idWoBook) — cache dell'ultimo valore ricevuto da gestisoft.it, mai inserito a mano.</summary>
-    public string? LcodeCache { get; set; }
-
-    /// <summary>Id Software PayTourist (idPaytourist) — cache dell'ultimo valore ricevuto da gestisoft.it, mai inserito a mano (Fase 8).</summary>
-    public string? IdPaytouristCache { get; set; }
-
-    public DateTime? CacheAggiornataAtUtc { get; set; }
-
-    /// <summary>Ultimo errore di rinnovo licenza/credenziali, per mostrarlo in UI (es. "Token scaduto", "Abbonamento scaduto").</summary>
+    /// <summary>Ultimo motivo per cui le credenziali non sono utilizzabili (mancanti o la licenza della Struttura è scaduta), per mostrarlo in UI.</summary>
     public string? UltimoErrore { get; set; }
 }

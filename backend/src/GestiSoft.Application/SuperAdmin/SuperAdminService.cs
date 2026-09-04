@@ -12,7 +12,7 @@ public record ServiziStrutturaRequest(bool WubookAbilitato, bool AlloggiatiWebAb
 
 public record ResettaPasswordRequest(string NuovaPassword);
 
-public record AggiornaUtenteRequest(string Email, string? Nome, string? Cognome);
+public record AggiornaUtenteRequest(string Email, string? Nome, string? Cognome, bool IsClienteAccount);
 
 /// <summary>
 /// Vista d'insieme cross-Cliente per il Super Admin (staff GestiSoft): Clienti/Strutture/Utenti,
@@ -151,6 +151,7 @@ public class SuperAdminService(
 
         utente.Nome = request.Nome;
         utente.Cognome = request.Cognome;
+        utente.IsClienteAccount = request.IsClienteAccount;
 
         await utenti.UpdateAsync(utente, cancellationToken);
         await LogUtenteAsync(currentUser, utente, $"Profilo utente aggiornato ({utente.Email}) da Super Admin.", cancellationToken);

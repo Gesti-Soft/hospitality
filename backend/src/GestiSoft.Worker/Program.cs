@@ -32,16 +32,10 @@ try
             .WithIdentity("heartbeat-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
 
-        // Fase 5 — Integrazione Wubook: stessa cadenza del legacy (GetWobook all'avvio + ogni 2h,
-        // hour timer per il pull prenotazioni, minute timer per gli eventi via gestisoft.it).
-        var wubookLicenzaJobKey = new JobKey("wubook-licenza-refresh");
-        quartz.AddJob<WubookLicenzaRefreshJob>(options => options.WithIdentity(wubookLicenzaJobKey));
-        quartz.AddTrigger(trigger => trigger
-            .ForJob(wubookLicenzaJobKey)
-            .WithIdentity("wubook-licenza-refresh-trigger")
-            .StartNow()
-            .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(2).RepeatForever()));
-
+        // Fase 5 — Integrazione Wubook: hour timer per il pull prenotazioni, minute timer per gli
+        // eventi via gestisoft.it. Il rinnovo periodico della licenza (ogni 2h) non esiste più: le
+        // credenziali Wubook sono inserite a mano dal Super Admin, non più recuperate da
+        // gestisoft.it (vedi WubookLicenzaService).
         var wubookPullJobKey = new JobKey("wubook-pull-prenotazioni");
         quartz.AddJob<WubookPullPrenotazioniJob>(options => options.WithIdentity(wubookPullJobKey));
         quartz.AddTrigger(trigger => trigger

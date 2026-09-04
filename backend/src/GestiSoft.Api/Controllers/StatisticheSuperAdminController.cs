@@ -32,15 +32,12 @@ public class StatisticheSuperAdminController(ApplicationSuperAdmin.StatisticheSu
     private static StatisticheSuperAdminDto ToDto(ApplicationSuperAdmin.StatisticheSuperAdminResult r) => new(
         new PanoramicaBusinessDto(r.Panoramica.ClientiAttivi, r.Panoramica.ClientiTotali, r.Panoramica.StruttureAttive, r.Panoramica.StruttureTotali),
         r.NuoviClientiPerMese.Select(v => new TrendMensileDto(v.Mese, v.Conteggio)).ToList(),
-        r.IncassiPerCliente.Select(v => new IncassoPerClienteDto(v.ClienteId, v.RagioneSociale, v.ImportoPagatoAnno, v.NumeroStrutture)).ToList(),
-        r.ClassificaStruttureFatturato.Select(ToDto).ToList(),
-        r.ClassificaStruttureOccupazione.Select(ToDto).ToList(),
+        r.IncassiRinnoviPerMese.Select(v => new IncassoRinnovoMensileDto(v.Mese, v.Importo)).ToList(),
+        r.LicenzeScadute.Select(l => new LicenzaScadutaDto(l.StrutturaId, l.NomeStruttura, l.RagioneSocialeCliente, l.Scadenza)).ToList(),
+        r.LicenzeInScadenza.Select(l => new LicenzaInScadenzaDto(l.StrutturaId, l.NomeStruttura, l.RagioneSocialeCliente, l.Scadenza, l.GiorniRimanenti)).ToList(),
         r.SaluteIntegrazioni.Select(s => new SaluteIntegrazioneStrutturaDto(
             s.StrutturaId, s.NomeStruttura, s.RagioneSocialeCliente,
             ToDto(s.AlloggiatiWeb), ToDto(s.Osservatorio), ToDto(s.PayTourist), ToDto(s.Wubook))).ToList());
-
-    private static ClassificaStrutturaDto ToDto(ApplicationSuperAdmin.ClassificaStrutturaResult c) =>
-        new(c.StrutturaId, c.NomeStruttura, c.RagioneSocialeCliente, c.Valore);
 
     private static EsitoIntegrazioneDto ToDto(ApplicationSuperAdmin.EsitoIntegrazioneResult e) =>
         new(e.Stato, e.UltimoInvioAtUtc, e.UltimoErrore);

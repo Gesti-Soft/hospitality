@@ -190,7 +190,7 @@ public class PayTouristConfigService(
         int idSoftware;
         try
         {
-            idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(strutturaId, cancellationToken);
+            idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(cancellationToken);
         }
         catch (ConflictException ex)
         {
@@ -233,7 +233,7 @@ public class PayTouristConfigService(
             throw new ConflictException("Nessuna struttura PayTourist con Id impostato per questa struttura.");
         }
 
-        var idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(strutturaId, cancellationToken);
+        var idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(cancellationToken);
         var comuneAttivita = (await impostazioniStruttura.GetByStrutturaIdAsync(strutturaId, cancellationToken))?.ComuneAttivita;
 
         var (ok, riduzioni, errore) = await client.GetRiduzioniAsync(integrazione.Token, comuneAttivita, idStruttura.Value, idSoftware, cancellationToken);

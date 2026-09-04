@@ -47,6 +47,21 @@ public class StrutturaController(StrutturaService service, ICurrentUser currentU
         return Ok(new { struttura.Id, struttura.Attivo });
     }
 
+    /// <summary>Licenza software GestiSoft della Struttura — solo Super Admin. NON la licenza Wubook (vedi WubookConfigController per quella).</summary>
+    [HttpGet("{id:guid}/licenza")]
+    public async Task<IActionResult> GetLicenza(Guid id, CancellationToken cancellationToken)
+    {
+        var struttura = await service.GetLicenzaAsync(currentUser, id, cancellationToken);
+        return Ok(new LicenzaStrutturaDto(struttura.Id, struttura.ScadenzaLicenza));
+    }
+
+    [HttpPut("{id:guid}/licenza")]
+    public async Task<IActionResult> AggiornaLicenza(Guid id, [FromBody] AggiornaLicenzaStrutturaRequest request, CancellationToken cancellationToken)
+    {
+        var struttura = await service.AggiornaLicenzaAsync(currentUser, id, request, cancellationToken);
+        return Ok(new LicenzaStrutturaDto(struttura.Id, struttura.ScadenzaLicenza));
+    }
+
     private static StrutturaDto ToDto(Domain.Entities.Struttura struttura) => new(
         struttura.Id,
         struttura.ClienteId,
@@ -55,5 +70,7 @@ public class StrutturaController(StrutturaService service, ICurrentUser currentU
         struttura.WubookAbilitato,
         struttura.AlloggiatiWebAbilitato,
         struttura.OsservatorioAbilitato,
-        struttura.PayTouristAbilitato);
+        struttura.PayTouristAbilitato,
+        StrutturaService.IsLicenzaScaduta(struttura),
+        struttura.Attivo);
 }

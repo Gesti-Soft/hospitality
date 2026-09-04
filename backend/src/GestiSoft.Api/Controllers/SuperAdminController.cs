@@ -63,10 +63,10 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
         var utente = await service.AggiornaUtenteAsync(
             currentUser,
             utenteId,
-            new ApplicationSuperAdmin.AggiornaUtenteRequest(request.Email, request.Nome, request.Cognome),
+            new ApplicationSuperAdmin.AggiornaUtenteRequest(request.Email, request.Nome, request.Cognome, request.IsClienteAccount),
             cancellationToken);
 
-        return Ok(new { utente.Id, utente.Email, utente.Nome, utente.Cognome });
+        return Ok(new { utente.Id, utente.Email, utente.Nome, utente.Cognome, utente.IsClienteAccount });
     }
 
     [HttpPut("utenti/{utenteId:guid}/attivo")]
@@ -91,12 +91,12 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
     private static DashboardSuperAdminDto ToDto(ApplicationSuperAdmin.DashboardSuperAdminInfo d) => new(
         d.Clienti.Select(c => new ClienteAdminDto(
             c.Id, c.RagioneSociale, c.PartitaIva, c.Attivo, c.CreatedAtUtc,
-            c.QuotaMensile, c.Note,
+            c.QuotaAnnua, c.Note,
             c.NumeroUtenti, c.NumeroUtentiAttivi,
             c.Strutture.Select(s => new StrutturaAdminDto(
-                s.Id, s.Nome, s.Attivo, s.DisattivataAtUtc, s.WubookAttivo, s.WubookUltimoErrore, s.WubookCacheAggiornataAtUtc,
+                s.Id, s.Nome, s.Attivo, s.DisattivataAtUtc, s.WubookAttivo, s.WubookUltimoErrore, s.ScadenzaLicenza,
                 s.PoliziaStatoAttiva, s.OsservatorioAttivo, s.PayTouristAttivo,
                 s.WubookAbilitato, s.AlloggiatiWebAbilitato, s.OsservatorioAbilitato, s.PayTouristAbilitato)).ToList()))
             .ToList(),
-        d.Utenti.Select(u => new UtenteAdminDto(u.Id, u.Email, u.Nome, u.Cognome, u.IsSuperAdmin, u.Attivo, u.ClienteId, u.ClienteRagioneSociale, u.CreatedAtUtc)).ToList());
+        d.Utenti.Select(u => new UtenteAdminDto(u.Id, u.Email, u.Nome, u.Cognome, u.IsSuperAdmin, u.Attivo, u.ClienteId, u.ClienteRagioneSociale, u.CreatedAtUtc, u.IsClienteAccount)).ToList());
 }

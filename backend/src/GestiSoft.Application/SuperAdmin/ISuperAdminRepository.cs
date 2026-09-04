@@ -7,7 +7,7 @@ public record StrutturaAdminInfo(
     DateTime? DisattivataAtUtc,
     bool WubookAttivo,
     string? WubookUltimoErrore,
-    DateTime? WubookCacheAggiornataAtUtc,
+    DateTime? ScadenzaLicenza,
     bool PoliziaStatoAttiva,
     bool OsservatorioAttivo,
     bool PayTouristAttivo,
@@ -22,7 +22,7 @@ public record ClienteAdminInfo(
     string? PartitaIva,
     bool Attivo,
     DateTime CreatedAtUtc,
-    decimal? QuotaMensile,
+    decimal? QuotaAnnua,
     string? Note,
     int NumeroUtenti,
     int NumeroUtentiAttivi,
@@ -37,7 +37,8 @@ public record UtenteAdminInfo(
     bool Attivo,
     Guid? ClienteId,
     string? ClienteRagioneSociale,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    bool IsClienteAccount);
 
 public record DashboardSuperAdminInfo(IReadOnlyList<ClienteAdminInfo> Clienti, IReadOnlyList<UtenteAdminInfo> Utenti);
 

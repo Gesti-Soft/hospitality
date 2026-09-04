@@ -18,18 +18,24 @@ export interface TrendMensileDto {
   conteggio: number
 }
 
-export interface IncassoPerClienteDto {
-  clienteId: string
-  ragioneSociale: string
-  importoPagatoAnno: number
-  numeroStrutture: number
+export interface IncassoRinnovoMensileDto {
+  mese: number
+  importo: number
 }
 
-export interface ClassificaStrutturaDto {
+export interface LicenzaScadutaDto {
   strutturaId: string
   nomeStruttura: string
   ragioneSocialeCliente: string
-  valore: number
+  scadenza: string | null
+}
+
+export interface LicenzaInScadenzaDto {
+  strutturaId: string
+  nomeStruttura: string
+  ragioneSocialeCliente: string
+  scadenza: string
+  giorniRimanenti: number
 }
 
 export interface EsitoIntegrazioneDto {
@@ -51,9 +57,9 @@ export interface SaluteIntegrazioneStrutturaDto {
 export interface StatisticheSuperAdminDto {
   panoramica: PanoramicaBusinessDto
   nuoviClientiPerMese: TrendMensileDto[]
-  incassiPerCliente: IncassoPerClienteDto[]
-  classificaStruttureFatturato: ClassificaStrutturaDto[]
-  classificaStruttureOccupazione: ClassificaStrutturaDto[]
+  incassiRinnoviPerMese: IncassoRinnovoMensileDto[]
+  licenzeScadute: LicenzaScadutaDto[]
+  licenzeInScadenza: LicenzaInScadenzaDto[]
   saluteIntegrazioni: SaluteIntegrazioneStrutturaDto[]
 }
 

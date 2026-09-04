@@ -15,7 +15,7 @@ public class UtenteController(UtenteManagementService service, ICurrentUser curr
     public async Task<IActionResult> Crea([FromBody] CreaUtenteRequest request, CancellationToken cancellationToken)
     {
         var utente = await service.CreaAsync(currentUser, request, cancellationToken);
-        var dto = new UtenteDto(utente.Id, utente.Email, utente.Nome, utente.Cognome, utente.IsSuperAdmin, utente.ClienteId, utente.Attivo);
+        var dto = new UtenteDto(utente.Id, utente.Email, utente.Nome, utente.Cognome, utente.IsSuperAdmin, utente.ClienteId, utente.Attivo, utente.IsClienteAccount);
         return Ok(dto);
     }
 
@@ -36,6 +36,13 @@ public class UtenteController(UtenteManagementService service, ICurrentUser curr
         return Ok(dto);
     }
 
+    [HttpDelete("{utenteId:guid}/strutture/{strutturaId:guid}")]
+    public async Task<IActionResult> RimuoviAssegnazione(Guid utenteId, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await service.RimuoviAssegnazioneAsync(currentUser, utenteId, strutturaId, cancellationToken);
+        return NoContent();
+    }
+
     [HttpPost("me/cambia-password")]
     public async Task<IActionResult> CambiaPassword([FromBody] CambiaPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -47,7 +54,7 @@ public class UtenteController(UtenteManagementService service, ICurrentUser curr
     public async Task<IActionResult> Aggiorna(Guid utenteId, [FromBody] AggiornaUtenteRequest request, CancellationToken cancellationToken)
     {
         var utente = await service.AggiornaAsync(currentUser, utenteId, request, cancellationToken);
-        var dto = new UtenteDto(utente.Id, utente.Email, utente.Nome, utente.Cognome, utente.IsSuperAdmin, utente.ClienteId, utente.Attivo);
+        var dto = new UtenteDto(utente.Id, utente.Email, utente.Nome, utente.Cognome, utente.IsSuperAdmin, utente.ClienteId, utente.Attivo, utente.IsClienteAccount);
         return Ok(dto);
     }
 

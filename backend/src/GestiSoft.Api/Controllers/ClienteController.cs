@@ -17,7 +17,7 @@ public class ClienteController(ClienteService service, UtenteManagementService u
     public async Task<IActionResult> ListaUtenti(Guid clienteId, CancellationToken cancellationToken)
     {
         var utenti = await utentiService.ListaUtentiClienteAsync(currentUser, clienteId, cancellationToken);
-        return Ok(utenti.Select(u => new UtenteDto(u.Id, u.Email, u.Nome, u.Cognome, u.IsSuperAdmin, u.ClienteId, u.Attivo)));
+        return Ok(utenti.Select(u => new UtenteDto(u.Id, u.Email, u.Nome, u.Cognome, u.IsSuperAdmin, u.ClienteId, u.Attivo, u.IsClienteAccount)));
     }
 
     [HttpGet]
@@ -50,5 +50,5 @@ public class ClienteController(ClienteService service, UtenteManagementService u
     }
 
     private static ClienteDto ToDto(Domain.Entities.Cliente cliente) =>
-        new(cliente.Id, cliente.RagioneSociale, cliente.PartitaIva, cliente.Attivo, cliente.CreatedAtUtc, cliente.QuotaMensile, cliente.Note);
+        new(cliente.Id, cliente.RagioneSociale, cliente.PartitaIva, cliente.Attivo, cliente.CreatedAtUtc, cliente.QuotaAnnua, cliente.Note);
 }

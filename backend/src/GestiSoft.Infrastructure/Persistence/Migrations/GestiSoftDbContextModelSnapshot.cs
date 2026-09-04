@@ -158,7 +158,7 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<decimal?>("QuotaMensile")
+                    b.Property<decimal?>("QuotaAnnua")
                         .HasColumnType("numeric(10,2)");
 
                     b.Property<string>("RagioneSociale")
@@ -466,6 +466,24 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.HasIndex("TipologiaId", "DataInizio", "DataFine");
 
                     b.ToTable("prezzi_camera", (string)null);
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.ImpostazioniGlobali", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("IdSoftwarePaytourist")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TokenWubook")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("impostazioni_globali", (string)null);
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.ImpostazioniStruttura", b =>
@@ -1183,6 +1201,34 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("tipi_alloggiato", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.RinnovoLicenza", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("Importo")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<DateTime>("ScadenzaImpostata")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.ToTable("rinnovi_licenza", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.SettingAgenzia", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1416,6 +1462,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<DateTime?>("ScadenzaLicenza")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("WubookAbilitato")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1450,6 +1499,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)");
+
+                    b.Property<bool>("IsClienteAccount")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsSuperAdmin")
                         .HasColumnType("boolean");
@@ -1544,20 +1596,57 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("utenti_strutture", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.WubookEventoRicevuto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ImportazioneRiuscita")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Lcode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("MessaggioErrore")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Rcode")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.HasIndex("StrutturaId", "Rcode")
+                        .IsUnique();
+
+                    b.ToTable("wubook_eventi_ricevuti", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.WubookIntegrazione", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("ApiKeyCache")
-                        .HasColumnType("text");
-
                     b.Property<bool>("Attivo")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime?>("CacheAggiornataAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<string>("CodiceStruttura")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1566,12 +1655,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("GestisoftUsername")
-                        .HasColumnType("text");
-
-                    b.Property<string>("IdPaytouristCache")
-                        .HasColumnType("text");
-
-                    b.Property<string>("LcodeCache")
                         .HasColumnType("text");
 
                     b.Property<Guid>("StrutturaId")
@@ -1854,6 +1937,15 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Navigation("Camera");
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.RinnovoLicenza", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.SettingAgenzia", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
@@ -1935,6 +2027,15 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Navigation("Struttura");
 
                     b.Navigation("Utente");
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.WubookEventoRicevuto", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.WubookIntegrazione", b =>

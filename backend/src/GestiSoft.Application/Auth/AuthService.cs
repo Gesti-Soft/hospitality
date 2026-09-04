@@ -1,17 +1,20 @@
 using GestiSoft.Application.Clienti;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Utenti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 
 namespace GestiSoft.Application.Auth;
 
-public record LoginResult(string Token, DateTime ScadeAtUtc, Guid UtenteId, string Email, bool IsSuperAdmin, Guid? ClienteId);
+public record LoginResult(string Token, DateTime ScadeAtUtc, Guid UtenteId, string Email, bool IsSuperAdmin, Guid? ClienteId, bool IsClienteAccount);
 
 public class AuthService(
     IUtenteRepository utenti,
     IClienteRepository clienti,
+    IUtenteStrutturaRepository utentiStrutture,
+    IStrutturaRepository strutture,
     IPasswordHasher<Utente> passwordHasher,
     IJwtTokenGenerator tokenGenerator,
     ILogEventoService logEventi)
@@ -36,6 +39,17 @@ public class AuthService(
             throw new UnauthorizedAppException("Email non trovata.");
         }
 
+        // Email e password vanno verificate per prime, prima di qualunque controllo di
+        // abilitazione: un account disabilitato con la password sbagliata deve vedere "Password
+        // errata", non "Utente disabilitato" — altrimenti chi indovina l'email di un account
+        // disabilitato lo scopre senza mai azzeccare la password.
+        var esito = passwordHasher.VerifyHashedPassword(utente, utente.PasswordHash, password);
+        if (esito == PasswordVerificationResult.Failed)
+        {
+            await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
+            throw new UnauthorizedAppException("Password errata.");
+        }
+
         if (!utente.Attivo)
         {
             await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
@@ -52,11 +66,17 @@ public class AuthService(
             }
         }
 
-        var esito = passwordHasher.VerifyHashedPassword(utente, utente.PasswordHash, password);
-        if (esito == PasswordVerificationResult.Failed)
+        // Un utente normale vede solo le Strutture a cui è stato assegnato, un titolare (IsClienteAccount)
+        // tutte quelle del proprio Cliente: se TUTTE quelle raggiungibili hanno la licenza GestiSoft
+        // scaduta, non c'è nulla che possa davvero fare una volta entrato — meglio bloccarlo qui con un
+        // messaggio chiaro piuttosto che lasciarlo entrare in un gestionale dove ogni singola pagina
+        // finirebbe comunque rifiutata da TenantAccessGuard. Se invece ha anche una sola Struttura
+        // ancora valida, il login riesce: la Struttura scaduta resta comunque bloccata (vedi
+        // TenantAccessGuard), le altre no.
+        if (!utente.IsSuperAdmin && await TutteLeStruttureBloccateAsync(utente, cancellationToken))
         {
             await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
-            throw new UnauthorizedAppException("Password errata.");
+            throw new UnauthorizedAppException("La licenza della tua struttura è scaduta. Contatta l'assistenza GestiSoft per rinnovarla.");
         }
 
         var token = tokenGenerator.Generate(utente);
@@ -70,7 +90,7 @@ public class AuthService(
             operatore: utente.Email,
             cancellationToken: cancellationToken);
 
-        return new LoginResult(token.Value, token.ScadeAtUtc, utente.Id, utente.Email, utente.IsSuperAdmin, utente.ClienteId);
+        return new LoginResult(token.Value, token.ScadeAtUtc, utente.Id, utente.Email, utente.IsSuperAdmin, utente.ClienteId, utente.IsClienteAccount);
     }
 
     /// <summary>
@@ -97,8 +117,52 @@ public class AuthService(
             }
         }
 
+        if (!utente.IsSuperAdmin && await TutteLeStruttureBloccateAsync(utente, cancellationToken))
+        {
+            throw new UnauthorizedAppException(CredenzialiNonValideMessage);
+        }
+
         var token = tokenGenerator.Generate(utente);
-        return new LoginResult(token.Value, token.ScadeAtUtc, utente.Id, utente.Email, utente.IsSuperAdmin, utente.ClienteId);
+        return new LoginResult(token.Value, token.ScadeAtUtc, utente.Id, utente.Email, utente.IsSuperAdmin, utente.ClienteId, utente.IsClienteAccount);
+    }
+
+    /// <summary>
+    /// True solo se l'utente ha almeno una Struttura attiva raggiungibile e TUTTE quelle attive hanno
+    /// la licenza GestiSoft scaduta — un'unica Struttura ancora valida basta a far riuscire comunque il
+    /// login. Per un titolare (IsClienteAccount) le Strutture raggiungibili sono tutte quelle attive
+    /// del proprio Cliente (libero accesso, mai limitato alle sole assegnazioni); per un utente normale
+    /// sono solo quelle a cui è stato esplicitamente assegnato in UtenteStruttura. Una Struttura
+    /// soft-eliminata non conta né a favore né contro; una licenza mai impostata (null) non conta come
+    /// scaduta.
+    /// </summary>
+    private async Task<bool> TutteLeStruttureBloccateAsync(Utente utente, CancellationToken cancellationToken)
+    {
+        var struttureRaggiungibili = utente.IsClienteAccount
+            ? await strutture.ListByClienteAsync(utente.ClienteId, includiInattive: false, cancellationToken)
+            : await StruttureAssegnateAttiveAsync(utente.Id, cancellationToken);
+
+        if (struttureRaggiungibili.Count == 0)
+        {
+            return false;
+        }
+
+        return struttureRaggiungibili.All(s => s.ScadenzaLicenza is { } scadenza && scadenza < DateTime.UtcNow);
+    }
+
+    private async Task<IReadOnlyList<Struttura>> StruttureAssegnateAttiveAsync(Guid utenteId, CancellationToken cancellationToken)
+    {
+        var assegnazioni = await utentiStrutture.ListByUtenteIdAsync(utenteId, cancellationToken);
+        var risultato = new List<Struttura>();
+        foreach (var assegnazione in assegnazioni)
+        {
+            var struttura = await strutture.GetByIdAsync(assegnazione.StrutturaId, cancellationToken);
+            if (struttura is { Attivo: true })
+            {
+                risultato.Add(struttura);
+            }
+        }
+
+        return risultato;
     }
 
     private Task LogFallitoAsync(string emailTentata, Guid? clienteId, CancellationToken cancellationToken) =>

@@ -57,8 +57,9 @@ export const navSections: NavSection[] = [
     icon: IconSuperAdmin,
     soloSuperAdmin: true,
     items: [
-      { label: 'Dashboard Super Admin', path: '/super-admin', icon: IconSuperAdmin },
-      { label: 'Statistiche', path: '/super-admin/statistiche', icon: IconStatistiche },
+      { label: 'Dashboard', path: '/super-admin', icon: IconSuperAdmin },
+      { label: 'Clienti', path: '/super-admin/clienti', icon: IconUtenti },
+      { label: 'Impostazioni', path: '/super-admin/impostazioni', icon: IconImpostazioni },
     ],
   },
   {

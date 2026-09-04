@@ -6,7 +6,7 @@ public record ClienteAdminDto(
     string? PartitaIva,
     bool Attivo,
     DateTime CreatedAtUtc,
-    decimal? QuotaMensile,
+    decimal? QuotaAnnua,
     string? Note,
     int NumeroUtenti,
     int NumeroUtentiAttivi,

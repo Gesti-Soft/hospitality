@@ -12,12 +12,22 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import { useStruttura } from '../struttura/StrutturaContext'
+import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
-import { RuoloUtente, useAssegnazioniStruttura, useCambiaPasswordPropria, useUtentiCliente, type AssegnazioneStrutturaDto } from '../api/utenti'
+import {
+  RuoloUtente,
+  useAssegnazioniStruttura,
+  useCambiaPasswordPropria,
+  useRimuoviAssegnazione,
+  useUtentiCliente,
+  type AssegnazioneStrutturaDto,
+} from '../api/utenti'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { AssegnaRuoloDialog, type StatoAssegnazioneIniziale } from '../components/AssegnaRuoloDialog'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 const ETICHETTA_RUOLO: Record<RuoloUtente, string> = {
   [RuoloUtente.Administrator]: 'Amministratore',
@@ -43,16 +53,38 @@ function contaPermessi(a: AssegnazioneStrutturaDto): number {
 
 export function UtentiPage() {
   const { strutturaId, strutturaCorrente } = useStruttura()
+  const { sessione } = useAuth()
   const clienteId = strutturaCorrente?.clienteId ?? null
 
   const assegnazioni = useAssegnazioniStruttura(strutturaId)
   const utentiCliente = useUtentiCliente(clienteId)
+  const rimuoviAssegnazione = useRimuoviAssegnazione(strutturaId)
+  const toast = useToast()
 
   const [dialogo, setDialogo] = useState<StatoAssegnazioneIniziale | null>(null)
+  const [daEliminare, setDaEliminare] = useState<AssegnazioneStrutturaDto | null>(null)
 
+  // Il titolare (accesso libero a tutte le Strutture del Cliente, mai bisogno di un'assegnazione)
+  // non va offerto tra gli utenti "da assegnare" a questa struttura.
   const utentiNonAssegnati = (utentiCliente.data ?? []).filter(
-    (u) => !(assegnazioni.data ?? []).some((a) => a.utenteId === u.id),
+    (u) => !u.isClienteAccount && !(assegnazioni.data ?? []).some((a) => a.utenteId === u.id),
   )
+
+  // "Assegna utente esistente" mescola utenti di Strutture diverse dello stesso Cliente — solo il
+  // titolare e il Super Admin devono poterlo fare, non un lavoratore con solo il permesso SettingUser
+  // sulla struttura corrente.
+  const puoAssegnareUtenteEsistente = sessione?.isSuperAdmin || sessione?.isClienteAccount
+
+  function eliminaConfermato() {
+    if (!daEliminare) return
+    rimuoviAssegnazione.mutate(daEliminare.utenteId, {
+      onSuccess: () => {
+        toast.successo(`Accesso rimosso per ${daEliminare.email}.`)
+        setDaEliminare(null)
+      },
+      onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+    })
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -61,9 +93,11 @@ export function UtentiPage() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Utenti con accesso a questa struttura</Typography>
         <Box sx={{ display: 'flex', gap: 1.5 }}>
-          <Button variant="outlined" size="small" onClick={() => setDialogo({ modo: 'assegna' })} disabled={!strutturaId}>
-            + Assegna utente esistente
-          </Button>
+          {puoAssegnareUtenteEsistente && (
+            <Button variant="outlined" size="small" onClick={() => setDialogo({ modo: 'assegna' })} disabled={!strutturaId}>
+              + Assegna utente esistente
+            </Button>
+          )}
           <Button variant="contained" color="primary" size="small" onClick={() => setDialogo({ modo: 'nuovo' })} disabled={!strutturaId}>
             + Nuovo utente
           </Button>
@@ -111,6 +145,11 @@ export function UtentiPage() {
                     <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', assegnazione: a })}>
                       <EditIcon fontSize="small" />
                     </IconButton>
+                    {a.utenteId !== sessione?.utenteId && (
+                      <IconButton size="small" color="error" onClick={() => setDaEliminare(a)}>
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -121,6 +160,17 @@ export function UtentiPage() {
 
       {dialogo && strutturaId && (
         <AssegnaRuoloDialog strutturaId={strutturaId} clienteId={clienteId} stato={dialogo} utentiDisponibili={utentiNonAssegnati} onClose={() => setDialogo(null)} />
+      )}
+
+      {daEliminare && (
+        <ConfirmDialog
+          titolo="Elimina accesso"
+          messaggio={`${daEliminare.email} non avrà più accesso a questa struttura. Se ha accesso anche ad altre strutture, quelle non vengono toccate.`}
+          testoConferma="Elimina"
+          inCorso={rimuoviAssegnazione.isPending}
+          onConferma={eliminaConfermato}
+          onAnnulla={() => setDaEliminare(null)}
+        />
       )}
     </Box>
   )
