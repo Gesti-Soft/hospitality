@@ -6,6 +6,8 @@ public record ClienteAdminDto(
     string? PartitaIva,
     bool Attivo,
     DateTime CreatedAtUtc,
+    decimal? QuotaMensile,
+    string? Note,
     int NumeroUtenti,
     int NumeroUtentiAttivi,
     IReadOnlyList<StrutturaAdminDto> Strutture);

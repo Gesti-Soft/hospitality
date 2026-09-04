@@ -130,7 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           opzioni={strutture.map((s) => ({ id: s.id, nome: s.nome }))}
           caricamento={loading && strutture.length === 0}
           onChange={selezionaStruttura}
-          onAggiungi={() => setNuovaStrutturaAperta(true)}
+          onAggiungi={isSuperAdmin ? () => setNuovaStrutturaAperta(true) : undefined}
           onModificaOpzione={setStrutturaInModifica}
           onEliminaOpzione={setStrutturaDaEliminare}
         />
@@ -278,12 +278,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Box>
       </Box>
 
-      {nuovaStrutturaAperta && (
-        <NuovaStrutturaDialog
-          clienteId={isSuperAdmin ? clienteId : null}
-          onClose={() => setNuovaStrutturaAperta(false)}
-          onCreata={selezionaStruttura}
-        />
+      {nuovaStrutturaAperta && isSuperAdmin && clienteId && (
+        <NuovaStrutturaDialog clienteId={clienteId} onClose={() => setNuovaStrutturaAperta(false)} onCreata={selezionaStruttura} />
       )}
       {strutturaInModifica && <ModificaStrutturaDialog struttura={strutturaInModifica} onClose={() => setStrutturaInModifica(null)} />}
       {strutturaDaEliminare && <EliminaStrutturaDialog struttura={strutturaDaEliminare} onClose={() => setStrutturaDaEliminare(null)} />}
@@ -296,7 +292,7 @@ function NuovaStrutturaDialog({
   onClose,
   onCreata,
 }: {
-  clienteId: string | null
+  clienteId: string
   onClose: () => void
   onCreata: (id: string) => void
 }) {

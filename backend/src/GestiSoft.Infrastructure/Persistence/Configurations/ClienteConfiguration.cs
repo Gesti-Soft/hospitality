@@ -12,6 +12,8 @@ public class ClienteConfiguration : IEntityTypeConfiguration<Cliente>
         builder.HasKey(c => c.Id);
         builder.Property(c => c.RagioneSociale).IsRequired().HasMaxLength(200);
         builder.Property(c => c.PartitaIva).HasMaxLength(20);
+        builder.Property(c => c.QuotaMensile).HasColumnType("numeric(10,2)");
+        builder.Property(c => c.Note).HasColumnType("text");
 
         builder.HasMany(c => c.Strutture)
             .WithOne(s => s.Cliente)

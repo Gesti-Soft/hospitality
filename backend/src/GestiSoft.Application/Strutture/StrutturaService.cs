@@ -6,11 +6,11 @@ using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.Strutture;
 
-public record CreaStrutturaRequest(Guid? ClienteId, string Nome);
+public record CreaStrutturaRequest(Guid ClienteId, string Nome);
 
 public record AggiornaStrutturaRequest(string Nome);
 
-public class StrutturaService(IStrutturaRepository repository, IUtenteStrutturaRepository utentiStrutture)
+public class StrutturaService(IStrutturaRepository repository, IUtenteStrutturaRepository utentiStrutture, IUtenteRepository utenti)
 {
     /// <summary>SuperAdmin vede tutte le Strutture (o filtrate per un Cliente a scelta); un Cliente vede solo le proprie.</summary>
     public async Task<IReadOnlyList<Struttura>> ListAsync(ICurrentUser currentUser, Guid? filtroClienteId, CancellationToken cancellationToken)
@@ -32,17 +32,21 @@ public class StrutturaService(IStrutturaRepository repository, IUtenteStrutturaR
         return struttura;
     }
 
+    /// <summary>
+    /// Solo il Super Admin crea Strutture, mai il Cliente per sé stesso (stessa regola di
+    /// ClienteService per i Clienti): sono l'unità su cui GestiSoft attiva/fattura il servizio, non
+    /// qualcosa da attivare in autonomia.
+    /// </summary>
     public async Task<Struttura> CreaAsync(ICurrentUser currentUser, CreaStrutturaRequest request, CancellationToken cancellationToken)
     {
-        // Un Cliente crea Strutture solo per sé stesso; solo il Super Admin può specificare
-        // un ClienteId diverso (es. per creare la prima struttura di un nuovo cliente).
-        var clienteId = currentUser.IsSuperAdmin
-            ? request.ClienteId ?? throw new ConflictException("Specificare il Cliente proprietario della struttura.")
-            : currentUser.ClienteId ?? throw new ForbiddenException("Utente non associato a nessun Cliente.");
+        if (!currentUser.IsSuperAdmin)
+        {
+            throw new ForbiddenException("Solo il Super Admin può creare una nuova struttura. Contatta l'assistenza GestiSoft.");
+        }
 
         var struttura = new Struttura
         {
-            ClienteId = clienteId,
+            ClienteId = request.ClienteId,
             Nome = request.Nome,
         };
 
@@ -51,17 +55,20 @@ public class StrutturaService(IStrutturaRepository repository, IUtenteStrutturaR
         // non lo concede esplicitamente, anche se il Cliente ne ha già altre abilitate.
         await repository.AddAsync(struttura, cancellationToken);
 
-        // Chi crea la Struttura per sé stesso deve poterla usare subito: senza questa assegnazione
-        // resterebbe senza alcun permesso su una Struttura che ha appena creato (PermessoStrutturaGuard
-        // richiede sempre una UtenteStruttura, appartenere al Cliente proprietario non basta). Un
-        // Super Admin che crea una Struttura per conto di un Cliente non riceve un'assegnazione: non
-        // è un utente di quel Cliente, sarà il Cliente ad assegnare i ruoli dalla schermata Utenti.
-        if (!currentUser.IsSuperAdmin)
+        // Il Super Admin non è un utente del Cliente: senza questo, la Struttura appena creata
+        // resterebbe inaccessibile a chiunque dal lato Cliente (PermessoStrutturaGuard/
+        // GestioneUtentiGuard richiedono sempre una UtenteStruttura, mai solo l'appartenenza al
+        // Cliente proprietario) — un problema reale soprattutto per la primissima Struttura di un
+        // Cliente nuovo, dove nessuno avrebbe altrimenti un modo di assegnarsela dalla schermata
+        // Utenti. Assegnato automaticamente come Administrator a tutti gli utenti già esistenti di
+        // quel Cliente, non solo al primo/admin.
+        var utentiCliente = await utenti.ListByClienteIdAsync(request.ClienteId, cancellationToken);
+        foreach (var utente in utentiCliente)
         {
             await utentiStrutture.UpsertAsync(
                 new UtenteStruttura
                 {
-                    UtenteId = currentUser.UtenteId,
+                    UtenteId = utente.Id,
                     StrutturaId = struttura.Id,
                     Ruolo = RuoloUtente.Administrator,
                     BookingRead = true,

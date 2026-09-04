@@ -21,14 +21,10 @@ export function useStrutture(clienteId: string | null, abilitato = true) {
   })
 }
 
-/**
- * Un Cliente crea la struttura per sé stesso (il backend deduce il ClienteId dall'utente
- * autenticato, clienteId va omesso/null); un Super Admin deve specificare per quale Cliente.
- */
+/** Solo il Super Admin crea una Struttura, sempre specificando per quale Cliente (mai un'autocreazione da parte del Cliente stesso). */
 export function useCreaStruttura() {
   return useMutation({
-    mutationFn: ({ nome, clienteId }: { nome: string; clienteId?: string | null }) =>
-      apiPost<StrutturaDto>('/strutture', { clienteId: clienteId ?? null, nome }),
+    mutationFn: ({ nome, clienteId }: { nome: string; clienteId: string }) => apiPost<StrutturaDto>('/strutture', { clienteId, nome }),
   })
 }
 

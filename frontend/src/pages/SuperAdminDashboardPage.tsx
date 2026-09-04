@@ -48,6 +48,7 @@ import { useToast } from '../toast/ToastContext'
 import { KpiCard } from '../components/KpiCard'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 interface EsitoServizio {
@@ -428,9 +429,21 @@ function ClienteCard({
         </Typography>
       </Box>
 
-      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.textSecondary }}>
-        {cliente.strutture.length === 0 ? 'Nessuna struttura' : `${cliente.strutture.length} ${cliente.strutture.length === 1 ? 'struttura' : 'strutture'}`}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.textSecondary }}>
+          {cliente.strutture.length === 0 ? 'Nessuna struttura' : `${cliente.strutture.length} ${cliente.strutture.length === 1 ? 'struttura' : 'strutture'}`}
+        </Typography>
+        {cliente.quotaMensile != null && (
+          <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.ok600 }}>{formattatoreValuta.format(cliente.quotaMensile)}/mese</Typography>
+        )}
+        {cliente.note && (
+          <Tooltip title={cliente.note}>
+            <Typography noWrap sx={{ fontSize: 12, color: tokens.textTertiary, fontStyle: 'italic', maxWidth: 160 }}>
+              "{cliente.note}"
+            </Typography>
+          </Tooltip>
+        )}
+      </Box>
     </Box>
   )
 }
@@ -508,6 +521,8 @@ function ModificaClienteDialog({
 }) {
   const [ragioneSociale, setRagioneSociale] = useState(cliente.ragioneSociale)
   const [partitaIva, setPartitaIva] = useState(cliente.partitaIva ?? '')
+  const [quotaMensile, setQuotaMensile] = useState(cliente.quotaMensile != null ? String(cliente.quotaMensile) : '')
+  const [note, setNote] = useState(cliente.note ?? '')
   const [email, setEmail] = useState(adminUtente?.email ?? '')
   const [nome, setNome] = useState(adminUtente?.nome ?? '')
   const [cognome, setCognome] = useState(adminUtente?.cognome ?? '')
@@ -534,7 +549,15 @@ function ModificaClienteDialog({
     }
     setErrore(null)
     try {
-      await aggiorna.mutateAsync({ clienteId: cliente.id, request: { ragioneSociale: ragioneSociale.trim(), partitaIva: partitaIva.trim() || null } })
+      await aggiorna.mutateAsync({
+        clienteId: cliente.id,
+        request: {
+          ragioneSociale: ragioneSociale.trim(),
+          partitaIva: partitaIva.trim() || null,
+          quotaMensile: quotaMensile.trim() === '' ? null : Number(quotaMensile.replace(',', '.')),
+          note: note.trim() || null,
+        },
+      })
       if (adminUtente) {
         await aggiornaUtente.mutateAsync({
           utenteId: adminUtente.id,
@@ -580,6 +603,29 @@ function ModificaClienteDialog({
           autoFocus
         />
         <TextField label="P.IVA" value={partitaIva} onChange={(e) => setPartitaIva(e.target.value)} fullWidth disabled={inCorso} />
+
+        <Divider />
+        <Typography sx={{ fontSize: 11, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+          Solo per il Super Admin
+        </Typography>
+        <TextField
+          label="Quota mensile (€)"
+          value={quotaMensile}
+          onChange={(e) => setQuotaMensile(e.target.value)}
+          fullWidth
+          disabled={inCorso}
+          helperText="Solo un promemoria, non genera fatture"
+        />
+        <TextField
+          label="Note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          fullWidth
+          multiline
+          minRows={2}
+          disabled={inCorso}
+          helperText="Appunti privati, mai visibili al Cliente"
+        />
 
         {adminUtente ? (
           <>

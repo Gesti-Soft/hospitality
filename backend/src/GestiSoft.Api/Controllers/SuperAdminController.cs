@@ -91,6 +91,7 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
     private static DashboardSuperAdminDto ToDto(ApplicationSuperAdmin.DashboardSuperAdminInfo d) => new(
         d.Clienti.Select(c => new ClienteAdminDto(
             c.Id, c.RagioneSociale, c.PartitaIva, c.Attivo, c.CreatedAtUtc,
+            c.QuotaMensile, c.Note,
             c.NumeroUtenti, c.NumeroUtentiAttivi,
             c.Strutture.Select(s => new StrutturaAdminDto(
                 s.Id, s.Nome, s.Attivo, s.DisattivataAtUtc, s.WubookAttivo, s.WubookUltimoErrore, s.WubookCacheAggiornataAtUtc,

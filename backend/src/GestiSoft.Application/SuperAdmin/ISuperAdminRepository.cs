@@ -22,6 +22,8 @@ public record ClienteAdminInfo(
     string? PartitaIva,
     bool Attivo,
     DateTime CreatedAtUtc,
+    decimal? QuotaMensile,
+    string? Note,
     int NumeroUtenti,
     int NumeroUtentiAttivi,
     IReadOnlyList<StrutturaAdminInfo> Strutture);

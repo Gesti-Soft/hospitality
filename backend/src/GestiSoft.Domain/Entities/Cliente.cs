@@ -20,6 +20,12 @@ public class Cliente
     /// </summary>
     public bool Attivo { get; set; } = true;
 
+    /// <summary>Quota mensile pattuita con il Cliente — solo un promemoria per il Super Admin, non genera fatture né blocca l'accesso da sola.</summary>
+    public decimal? QuotaMensile { get; set; }
+
+    /// <summary>Appunti liberi del Super Admin su questo Cliente (es. accordi commerciali, contatti) — mai visibile al Cliente stesso.</summary>
+    public string? Note { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public ICollection<Struttura> Strutture { get; set; } = new List<Struttura>();

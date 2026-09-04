@@ -27,6 +27,10 @@ export interface ClienteAdminDto {
   partitaIva: string | null
   attivo: boolean
   createdAtUtc: string
+  /** Quota mensile pattuita con il Cliente — solo un promemoria, non genera fatture. */
+  quotaMensile: number | null
+  /** Appunti liberi del Super Admin — mai visibile al Cliente stesso. */
+  note: string | null
   numeroUtenti: number
   numeroUtentiAttivi: number
   strutture: StrutturaAdminDto[]

@@ -7,6 +7,8 @@ export interface ClienteDto {
   partitaIva: string | null
   attivo: boolean
   createdAtUtc: string
+  quotaMensile: number | null
+  note: string | null
 }
 
 export interface CreaClienteRequest {
@@ -31,6 +33,8 @@ export function useCreaCliente() {
 export interface AggiornaClienteRequest {
   ragioneSociale: string
   partitaIva: string | null
+  quotaMensile: number | null
+  note: string | null
 }
 
 export function useAggiornaCliente() {

@@ -61,6 +61,8 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
                 c.PartitaIva,
                 c.Attivo,
                 c.CreatedAtUtc,
+                c.QuotaMensile,
+                c.Note,
                 utentiCliente.Count(),
                 utentiCliente.Count(u => u.Attivo),
                 infoStrutture);

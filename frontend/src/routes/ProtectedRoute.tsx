@@ -18,7 +18,7 @@ export function ProtectedRoute() {
   )
 }
 
-/** Un Cliente senza nessuna Struttura non vede il gestionale: prima deve crearne una. */
+/** Un Cliente senza nessuna Struttura non vede il gestionale: solo il Super Admin può crearne una. */
 function AppGate() {
   const { isSuperAdmin, strutture, loading } = useStruttura()
 

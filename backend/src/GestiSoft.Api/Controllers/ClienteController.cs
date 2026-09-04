@@ -50,5 +50,5 @@ public class ClienteController(ClienteService service, UtenteManagementService u
     }
 
     private static ClienteDto ToDto(Domain.Entities.Cliente cliente) =>
-        new(cliente.Id, cliente.RagioneSociale, cliente.PartitaIva, cliente.Attivo, cliente.CreatedAtUtc);
+        new(cliente.Id, cliente.RagioneSociale, cliente.PartitaIva, cliente.Attivo, cliente.CreatedAtUtc, cliente.QuotaMensile, cliente.Note);
 }
