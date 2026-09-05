@@ -1,6 +1,7 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.Fatturazione;
 
@@ -11,6 +12,9 @@ public record CreaDatiClienteRequest(
     string? Denominazione,
     string? Nome,
     string? Cognome,
+    DateTime? DataNascita,
+    Sesso? Sesso,
+    string? LuogoNascita,
     string? Indirizzo,
     string? NCivico,
     string? Cap,
@@ -18,7 +22,13 @@ public record CreaDatiClienteRequest(
     string? Provincia,
     string? Cittadinanza,
     string? CodiceDestinatario,
-    string? Pec);
+    string? Pec,
+    /// <summary>
+    /// Valorizzata SOLO quando questa richiesta persiste per la prima volta un Cliente bare-bones
+    /// proposto da FatturazioneService.RisolviClientePerPrenotazioneAsync (mai scelta dall'operatore
+    /// in UI) — mantiene la deduplica per ospite anche ora che quel metodo non scrive più nulla.
+    /// </summary>
+    string? CustomerKey = null);
 
 /// <summary>CRUD manuale dell'anagrafica clienti fatturabili — porta DatiCliente/SearchClientCommand del legacy.</summary>
 public class DatiClienteService(IDatiClienteRepository clienti, PermessoStrutturaGuard permessoGuard)
@@ -65,6 +75,9 @@ public class DatiClienteService(IDatiClienteRepository clienti, PermessoStruttur
         entity.Denominazione = request.Denominazione;
         entity.Nome = request.Nome;
         entity.Cognome = request.Cognome;
+        entity.DataNascita = request.DataNascita;
+        entity.Sesso = request.Sesso;
+        entity.LuogoNascita = request.LuogoNascita;
         entity.Indirizzo = request.Indirizzo;
         entity.NCivico = request.NCivico;
         entity.Cap = request.Cap;
@@ -73,5 +86,9 @@ public class DatiClienteService(IDatiClienteRepository clienti, PermessoStruttur
         entity.Cittadinanza = request.Cittadinanza;
         entity.CodiceDestinatario = request.CodiceDestinatario;
         entity.Pec = request.Pec;
+        if (request.CustomerKey is not null)
+        {
+            entity.CustomerKey = request.CustomerKey;
+        }
     }
 }

@@ -84,7 +84,7 @@ public class FatturazioneService(
         var capofila = await ospiti.GetByPrenotazioneAsync(prenotazione.Id, cancellationToken)
             ?? throw new ConflictException("La prenotazione non ha ancora una scheda ospiti: compilala prima di fatturare.");
 
-        var (cliente, _) = await RisolviOTrovaClienteAsync(strutturaId, capofila, cancellationToken);
+        var (cliente, _) = await RisolviOCreaClienteAsync(strutturaId, capofila, cancellationToken);
 
         var prezzoUnitario = request.PrezzoUnitario ?? prenotazione.ImportoTotale ?? 0;
         var prezzoTotale = request.Quantita * prezzoUnitario;
@@ -185,17 +185,35 @@ public class FatturazioneService(
         return (fattura, cliente, azienda);
     }
 
+    private static string CostruisciCustomerKey(Ospite capofila) =>
+        $"{capofila.NumeroDocumento}-{capofila.Nome}-{capofila.Cognome}-{capofila.DataNascita:yyyyMMdd}";
+
+    private static DatiCliente CostruisciClienteBareBones(Guid strutturaId, Ospite capofila, string customerKey) => new()
+    {
+        StrutturaId = strutturaId,
+        Nome = capofila.Nome,
+        Cognome = capofila.Cognome,
+        LuogoResidenza = capofila.LuogoResidenza,
+        Cittadinanza = capofila.Cittadinanza,
+        // Solo per suggerire in automatico il Codice Fiscale nel form "Dati cliente" — la scheda
+        // ospiti li ha già raccolti, evita di richiederli una seconda volta all'operatore.
+        DataNascita = capofila.DataNascita,
+        Sesso = capofila.Sesso,
+        LuogoNascita = capofila.LuogoNascita,
+        CustomerKey = customerKey,
+    };
+
     /// <summary>
-    /// Trova o crea il Cliente fatturabile per l'ospite capofila di una Prenotazione — usata sia alla
-    /// creazione reale di una fattura, sia per una risoluzione "anticipata" (<see cref="RisolviClientePerPrenotazioneAsync"/>)
-    /// che permette all'operatore di completarlo (P.IVA/CF/indirizzo/PEC) PRIMA di generare la fattura,
-    /// invece di scoprire solo alla fine che ne è stato creato uno bare-bones. CustomerKey =
+    /// Trova o crea per davvero il Cliente fatturabile per l'ospite capofila — usata SOLO al momento
+    /// di generare effettivamente la fattura (<see cref="CreaDaPrenotazioneAsync"/>), quando un Cliente
+    /// con Id reale è indispensabile per il vincolo FK di DatiFattura. Mai per una semplice anteprima:
+    /// vedi <see cref="RisolviClientePerPrenotazioneAsync"/>, che non scrive nulla. CustomerKey =
     /// NumeroDocumento-Nome-Cognome-DataNascita, stessa formula del legacy per deduplicare i clienti —
     /// mai risolto due volte in un Cliente diverso per lo stesso ospite.
     /// </summary>
-    private async Task<(DatiCliente Cliente, bool AppenaCreato)> RisolviOTrovaClienteAsync(Guid strutturaId, Ospite capofila, CancellationToken cancellationToken)
+    private async Task<(DatiCliente Cliente, bool AppenaCreato)> RisolviOCreaClienteAsync(Guid strutturaId, Ospite capofila, CancellationToken cancellationToken)
     {
-        var customerKey = $"{capofila.NumeroDocumento}-{capofila.Nome}-{capofila.Cognome}-{capofila.DataNascita:yyyyMMdd}";
+        var customerKey = CostruisciCustomerKey(capofila);
 
         var esistente = await clienti.GetByCustomerKeyAsync(strutturaId, customerKey, cancellationToken);
         if (esistente is not null)
@@ -203,27 +221,21 @@ public class FatturazioneService(
             return (esistente, false);
         }
 
-        var nuovo = new DatiCliente
-        {
-            StrutturaId = strutturaId,
-            Nome = capofila.Nome,
-            Cognome = capofila.Cognome,
-            LuogoResidenza = capofila.LuogoResidenza,
-            Cittadinanza = capofila.Cittadinanza,
-            CustomerKey = customerKey,
-        };
-
+        var nuovo = CostruisciClienteBareBones(strutturaId, capofila, customerKey);
         await clienti.AddAsync(nuovo, cancellationToken);
         return (nuovo, true);
     }
 
     /// <summary>
-    /// Risolve (senza ancora fatturare nulla) il Cliente fatturabile per la prenotazione scelta nel
-    /// dialog "Nuova fattura" — se non esisteva ancora, ne crea subito uno bare-bones (nome/cognome/
-    /// residenza/cittadinanza dalla scheda ospiti) e lo segnala come "appena creato", così il frontend
-    /// può aprire immediatamente il form per completarlo (P.IVA/CF/indirizzo/PEC) prima che l'operatore
-    /// prosegua con "Crea fattura" — mai un secondo Cliente duplicato più tardi, è lo stesso identico
-    /// record (stessa CustomerKey) che CreaDaPrenotazioneAsync userebbe comunque.
+    /// Anteprima, SENZA SCRIVERE NULLA, del Cliente fatturabile per la prenotazione scelta nel dialog
+    /// "Nuova fattura"/"Genera fattura": se esiste già (stessa CustomerKey) lo restituisce così com'è;
+    /// altrimenti propone un Cliente bare-bones (nome/cognome/residenza/cittadinanza/data e comune di
+    /// nascita dalla scheda ospiti) NON persistito — Id vuoto — da completare nel form. Viene creato
+    /// per davvero solo quando l'operatore preme "Crea cliente" lì (<see cref="DatiClienteService.CreaAsync"/>,
+    /// che riceve la stessa CustomerKey) oppure, se l'operatore salta quel passaggio, quando preme
+    /// "Crea fattura" (<see cref="CreaDaPrenotazioneAsync"/>) — mai qui: altrimenti resterebbe un
+    /// Cliente bare-bones orfano nel database ogni volta che si apre "Genera fattura" e poi si annulla
+    /// senza completare né fatturare nulla.
     /// </summary>
     public async Task<(DatiCliente Cliente, bool AppenaCreato)> RisolviClientePerPrenotazioneAsync(
         ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
@@ -240,7 +252,14 @@ public class FatturazioneService(
         var capofila = await ospiti.GetByPrenotazioneAsync(prenotazione.Id, cancellationToken)
             ?? throw new ConflictException("La prenotazione non ha ancora una scheda ospiti: compilala prima di fatturare.");
 
-        return await RisolviOTrovaClienteAsync(strutturaId, capofila, cancellationToken);
+        var customerKey = CostruisciCustomerKey(capofila);
+        var esistente = await clienti.GetByCustomerKeyAsync(strutturaId, customerKey, cancellationToken);
+        if (esistente is not null)
+        {
+            return (esistente, false);
+        }
+
+        return (CostruisciClienteBareBones(strutturaId, capofila, customerKey), true);
     }
 
     private async Task<DatiFattura> GetOwnedAsync(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)

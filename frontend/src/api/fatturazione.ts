@@ -81,6 +81,10 @@ export interface DatiClienteDto {
   denominazione: string | null
   nome: string | null
   cognome: string | null
+  /** Formato "YYYY-MM-DDTHH:mm:ss" — solo per suggerire in automatico il Codice Fiscale, non compare in fattura. */
+  dataNascita: string | null
+  sesso: number | null
+  luogoNascita: string | null
   indirizzo: string | null
   nCivico: string | null
   cap: string | null
@@ -92,7 +96,12 @@ export interface DatiClienteDto {
   customerKey: string | null
 }
 
-export type DatiClienteRequest = Omit<DatiClienteDto, 'id' | 'strutturaId' | 'customerKey'>
+/**
+ * `customerKey` resta nel payload (mai un campo editabile in UI) solo per il caso in cui questa
+ * richiesta persista per la prima volta un Cliente bare-bones proposto da "Genera fattura" — vedi
+ * DatiClienteDialog.
+ */
+export type DatiClienteRequest = Omit<DatiClienteDto, 'id' | 'strutturaId'>
 
 export function useDatiClienti(strutturaId: string | null) {
   return useQuery({

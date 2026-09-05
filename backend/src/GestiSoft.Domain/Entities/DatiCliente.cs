@@ -1,4 +1,5 @@
 using GestiSoft.Domain.Common;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Domain.Entities;
 
@@ -19,6 +20,13 @@ public class DatiCliente : TenantEntity
     public string? Nome { get; set; }
 
     public string? Cognome { get; set; }
+
+    /// <summary>Data e comune di nascita — usati solo per suggerire in automatico il Codice Fiscale (persona fisica), non riportati in fattura.</summary>
+    public DateTime? DataNascita { get; set; }
+
+    public Sesso? Sesso { get; set; }
+
+    public string? LuogoNascita { get; set; }
 
     public string? Indirizzo { get; set; }
 

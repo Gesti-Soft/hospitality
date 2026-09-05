@@ -91,9 +91,11 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   const inCorso = crea.isPending || aggiorna.isPending
 
   // Ogni volta che si sceglie una prenotazione (mai in modifica, dove il Cliente è già assegnato),
-  // risolve subito il Cliente fatturabile collegato al suo ospite — lo stesso che userebbe comunque
-  // "Crea fattura" — invece di lasciarlo scoprire solo alla fine. Se non esisteva ancora, viene creato
-  // ora (bare-bones) e va completato subito, aprendo "Nuovo cliente" già precompilato.
+  // chiede subito un'ANTEPRIMA (nessuna scrittura) del Cliente fatturabile collegato al suo ospite —
+  // lo stesso che userebbe comunque "Crea fattura" — invece di lasciarlo scoprire solo alla fine. Se
+  // non esiste ancora, il form "Nuovo cliente" si apre già precompilato ma NON crea nulla finché
+  // l'operatore non preme "Crea cliente" lì dentro (clienteNonPersistito) — così annullare senza
+  // salvare non lascia un Cliente bare-bones orfano nel database.
   useEffect(() => {
     if (modifica || prenotazioneId === '') return
     risolviCliente.mutate(prenotazioneId, {
@@ -284,7 +286,12 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
     </Dialog>
 
     {clienteDaCompletare && (
-      <DatiClienteDialog strutturaId={strutturaId} cliente={clienteDaCompletare} onClose={() => setClienteDaCompletare(null)} />
+      <DatiClienteDialog
+        strutturaId={strutturaId}
+        cliente={clienteDaCompletare}
+        clienteNonPersistito
+        onClose={() => setClienteDaCompletare(null)}
+      />
     )}
     </>
   )

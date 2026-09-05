@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
@@ -29,9 +29,10 @@ import {
   type OspiteDto,
   type SalvaSchedaOspitiRequest,
 } from '../api/ospiti'
-import { type ComuneDto, useComuni, useDocumenti, useStati, useTipiAlloggiato } from '../api/riferimenti'
+import { useDocumenti, useStati, useTipiAlloggiato } from '../api/riferimenti'
 import { differenzaGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { CampoData } from './CampoData'
+import { SelectComune } from './SelectComune'
 import { fontDisplay, tokens } from '../theme'
 
 interface Props {
@@ -75,16 +76,6 @@ export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenota
 
 const permanenzaDefault = (p: PrenotazioneDto) => (p.checkIn && p.checkOut ? Math.max(differenzaGiorni(new Date(p.checkOut), new Date(p.checkIn)), 1) : 1)
 
-/** Ritarda l'aggiornamento di un valore, per non interrogare il server ad ogni tasto premuto. */
-function useValoreConRitardo<T>(valore: T, ritardoMs: number): T {
-  const [valoreRitardato, setValoreRitardato] = useState(valore)
-  useEffect(() => {
-    const timer = setTimeout(() => setValoreRitardato(valore), ritardoMs)
-    return () => clearTimeout(timer)
-  }, [valore, ritardoMs])
-  return valoreRitardato
-}
-
 /** Select con autocompletamento sopra un elenco statico già caricato (Stati, Documenti, Tipo ospite). */
 function SelectRiferimento({
   label,
@@ -127,79 +118,6 @@ function SelectRiferimento({
               endAdornment: (
                 <>
                   {loading && <CircularProgress color="inherit" size={16} />}
-                  {params.slotProps.input.endAdornment}
-                </>
-              ),
-            },
-          }}
-        />
-      )}
-    />
-  )
-}
-
-/** Select con ricerca lato server sui comuni italiani (~11.283 righe, non caricati tutti insieme). */
-function SelectComune({
-  label,
-  value,
-  onChange,
-  disabled,
-  size,
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  disabled?: boolean
-  size?: 'small' | 'medium'
-}) {
-  const [testo, setTesto] = useState(value)
-  // Provincia del comune scelto l'ultima volta (per disambiguare in etichetta gli omonimi, es.
-  // "CASTELLAMMARE DEL GOLFO (TP)") — tenuta a parte invece di essere ri-derivata cercandola negli
-  // ultimi risultati di ricerca: dopo una selezione il testo digitato include già "(TP)", quindi
-  // ricercarlo per intero non troverebbe più nulla (il campo Descrizione non contiene la provincia)
-  // e si perderebbe/ritroverebbe la provincia ad ogni giro di ricerca, con un fastidioso lampeggio.
-  const [provinciaSelezionata, setProvinciaSelezionata] = useState<string | null>(null)
-  const ricerca = useValoreConRitardo(testo, 300)
-  const comuni = useComuni(ricerca)
-  const opzioni = comuni.data ?? []
-
-  const opzioneSelezionata: ComuneDto | null =
-    value ? { id: '', codice: 0, descrizione: value, provincia: provinciaSelezionata, codiceBelfiore: null, cap: null } : null
-
-  return (
-    <Autocomplete
-      fullWidth
-      size={size}
-      disabled={disabled}
-      loading={comuni.isFetching}
-      options={opzioni}
-      filterOptions={(x) => x}
-      value={opzioneSelezionata}
-      inputValue={testo}
-      onInputChange={(_, v, reason) => {
-        setTesto(v)
-        if (reason === 'input') {
-          setProvinciaSelezionata(null)
-        }
-      }}
-      isOptionEqualToValue={(o, v) => o.descrizione === v.descrizione}
-      getOptionLabel={(o) => (o.provincia ? `${o.descrizione} (${o.provincia})` : o.descrizione)}
-      onChange={(_, v) => {
-        onChange(v?.descrizione ?? '')
-        setProvinciaSelezionata(v?.provincia ?? null)
-      }}
-      noOptionsText={ricerca.trim().length < 2 ? 'Digita per cercare...' : 'Nessun comune trovato'}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          label={label}
-          slotProps={{
-            ...params.slotProps,
-            input: {
-              ...params.slotProps.input,
-              endAdornment: (
-                <>
-                  {comuni.isFetching && <CircularProgress color="inherit" size={16} />}
                   {params.slotProps.input.endAdornment}
                 </>
               ),

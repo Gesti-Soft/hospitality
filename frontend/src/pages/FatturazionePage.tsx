@@ -336,7 +336,7 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
       <Box sx={{ display: 'flex', gap: 2 }}>
         <TextField label="Comune" value={comune} onChange={(e) => setComune(e.target.value)} fullWidth disabled={aggiorna.isPending} />
         <TextField label="Provincia" value={provincia} onChange={(e) => setProvincia(e.target.value)} sx={{ width: 110 }} disabled={aggiorna.isPending} />
-        <TextField label="Nazione (ISO2)" value={iso2} onChange={(e) => setIso2(e.target.value)} sx={{ width: 110 }} disabled={aggiorna.isPending} />
+        <TextField label="Nazione (ISO2)" value={iso2} onChange={(e) => setIso2(e.target.value)} sx={{ width: 170 }} disabled={aggiorna.isPending} />
       </Box>
 
       <Box sx={{ display: 'flex', gap: 2 }}>

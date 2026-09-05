@@ -35,6 +35,7 @@ public class DatiClienteController(DatiClienteService service, ICurrentUser curr
 
     private static DatiClienteDto ToDto(DatiCliente c) => new(
         c.Id, c.StrutturaId, c.Iso2, c.PIva, c.CodiceFiscale, c.Denominazione, c.Nome, c.Cognome,
+        c.DataNascita, c.Sesso, c.LuogoNascita,
         c.Indirizzo, c.NCivico, c.Cap, c.LuogoResidenza, c.Provincia, c.Cittadinanza,
         c.CodiceDestinatario, c.Pec, c.CustomerKey);
 }

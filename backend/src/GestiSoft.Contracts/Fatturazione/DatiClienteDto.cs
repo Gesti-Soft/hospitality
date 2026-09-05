@@ -1,3 +1,5 @@
+using GestiSoft.Domain.Enums;
+
 namespace GestiSoft.Contracts.Fatturazione;
 
 public record DatiClienteDto(
@@ -9,6 +11,9 @@ public record DatiClienteDto(
     string? Denominazione,
     string? Nome,
     string? Cognome,
+    DateTime? DataNascita,
+    Sesso? Sesso,
+    string? LuogoNascita,
     string? Indirizzo,
     string? NCivico,
     string? Cap,
