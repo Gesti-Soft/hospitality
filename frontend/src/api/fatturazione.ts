@@ -190,6 +190,15 @@ export function useFatture(strutturaId: string | null, anno: number) {
   })
 }
 
+/** Anni con almeno una fattura emessa — per il selettore Anno. */
+export function useAnniDisponibiliFatture(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['fatture', strutturaId, 'anni'],
+    queryFn: () => apiGet<number[]>(`/strutture/${strutturaId}/fatture/anni`),
+    enabled: !!strutturaId,
+  })
+}
+
 function useInvalidaFatture(strutturaId: string | null) {
   const queryClient = useQueryClient()
   return () => {

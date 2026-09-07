@@ -19,6 +19,13 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
         return Ok(fatture.Select(ToDto));
     }
 
+    [HttpGet("anni")]
+    public async Task<IActionResult> AnniDisponibili(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var anni = await service.GetAnniDisponibiliAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(anni);
+    }
+
     [HttpGet("{fatturaId:guid}")]
     public async Task<IActionResult> Get(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
     {

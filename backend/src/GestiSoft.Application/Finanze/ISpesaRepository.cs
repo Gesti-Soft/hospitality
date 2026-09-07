@@ -8,6 +8,9 @@ public interface ISpesaRepository
 
     Task<IReadOnlyList<Spesa>> ListAsync(Guid strutturaId, int? anno, CancellationToken cancellationToken);
 
+    /// <summary>Anni con almeno una spesa registrata — per il selettore Anno.</summary>
+    Task<IReadOnlyList<int>> ListaAnniConDatiAsync(Guid strutturaId, CancellationToken cancellationToken);
+
     Task AddAsync(Spesa entity, CancellationToken cancellationToken);
 
     Task UpdateAsync(Spesa entity, CancellationToken cancellationToken);

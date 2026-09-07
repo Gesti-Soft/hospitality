@@ -23,4 +23,11 @@ public class CauzioneRepository(GestiSoftDbContext db) : ICauzioneRepository
 
         return await query.OrderByDescending(c => c.DataInserimento).ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<int>> ListaAnniConDatiAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        await db.Cauzioni.AsNoTracking()
+            .Where(c => c.StrutturaId == strutturaId && c.DataInserimento != null)
+            .Select(c => c.DataInserimento!.Value.Year)
+            .Distinct()
+            .ToListAsync(cancellationToken);
 }

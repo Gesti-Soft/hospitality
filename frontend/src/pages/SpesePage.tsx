@@ -11,14 +11,16 @@ import TableRow from '@mui/material/TableRow'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import { useStruttura } from '../struttura/StrutturaContext'
+import { useAnniDisponibiliFinanze } from '../api/finanze'
 import { useSpese, useEliminaSpesa, type SpesaDto } from '../api/spese'
 import { ApiError } from '../api/client'
 import { fontMono, tokens } from '../theme'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
 import { SpesaDialog } from '../components/SpesaDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
-  ANNO_CORRENTE,
   AzioneNuovo,
+  BarraTotale,
   Cornice,
   FiltriRicercaData,
   formattatoreData,
@@ -40,6 +42,8 @@ export function SpesePage() {
   const [dataDa, setDataDa] = useState('')
   const [dataA, setDataA] = useState('')
 
+  const anniDisponibili = useAnniDisponibiliFinanze(strutturaId)
+  const anni = anniConAnnoCorrente(anniDisponibili.data)
   const spese = useSpese(strutturaId, anno)
   const elimina = useEliminaSpesa(strutturaId)
 
@@ -66,6 +70,7 @@ export function SpesePage() {
       <IntestazioneFinanze
         titolo="Spese"
         anno={anno}
+        anni={anni}
         onAnnoChange={setAnno}
         azioni={<AzioneNuovo etichetta="+ Nuova spesa" onClick={() => setDialogo('nuova')} disabilitato={!strutturaId} />}
       />
@@ -130,19 +135,12 @@ export function SpesePage() {
                 </TableRow>
               ))}
               {altreDaCaricare && <RigaCaricamentoAltri colSpan={6} ref={sentinellaRef} />}
-              {dati.length > 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} />
-                  <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700 }}>
-                    {formattatoreValuta.format(totale)}
-                  </TableCell>
-                  <TableCell />
-                </TableRow>
-              )}
             </TableBody>
           </Table>
         </Cornice>
       )}
+
+      {!spese.isLoading && dati.length > 0 && <BarraTotale etichetta="Totale spese" valore={totale} colore={tokens.error600} />}
 
       {dialogo !== 'chiuso' && strutturaId && <SpesaDialog strutturaId={strutturaId} spesa={dialogo === 'nuova' ? null : dialogo} onClose={() => setDialogo('chiuso')} />}
 

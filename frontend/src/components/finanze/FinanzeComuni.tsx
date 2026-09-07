@@ -8,25 +8,40 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import SearchIcon from '@mui/icons-material/Search'
-import { fontDisplay, tokens } from '../../theme'
+import { fontDisplay, fontMono, tokens } from '../../theme'
 import { CampoData } from '../CampoData'
 import { inizioGiornoLocale, parsaInputData } from '../../lib/date'
+
+export { ANNO_CORRENTE } from '../../lib/anni'
 
 export const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 export const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-export const ANNO_CORRENTE = new Date().getFullYear()
-export const ANNI_DISPONIBILI = [ANNO_CORRENTE - 2, ANNO_CORRENTE - 1, ANNO_CORRENTE, ANNO_CORRENTE + 1]
-
-/** Intestazione comune alle 4 pagine di Finanze: titolo a sinistra, selettore Anno (ed eventuali azioni) a destra. */
-export function IntestazioneFinanze({ titolo, anno, onAnnoChange, azioni }: { titolo: string; anno: number; onAnnoChange: (anno: number) => void; azioni?: React.ReactNode }) {
+/**
+ * Intestazione comune alle 4 pagine di Finanze: titolo a sinistra, selettore Anno (ed eventuali
+ * azioni) a destra. `anni` è a carico di chi chiama (vedi `anniConAnnoCorrente`) — su richiesta
+ * esplicita propone solo anni con dati reali più l'anno corrente, mai un range fisso arbitrario.
+ */
+export function IntestazioneFinanze({
+  titolo,
+  anno,
+  anni,
+  onAnnoChange,
+  azioni,
+}: {
+  titolo: string
+  anno: number
+  anni: number[]
+  onAnnoChange: (anno: number) => void
+  azioni?: React.ReactNode
+}) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 18 }}>{titolo}</Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         {azioni}
         <TextField select size="small" label="Anno" value={anno} onChange={(e) => onAnnoChange(Number(e.target.value))} sx={{ minWidth: 110 }}>
-          {ANNI_DISPONIBILI.map((a) => (
+          {anni.map((a) => (
             <MenuItem key={a} value={a}>
               {a}
             </MenuItem>
@@ -122,6 +137,39 @@ export function RigaVuota({ colSpan, messaggio }: { colSpan: number; messaggio: 
         {messaggio}
       </TableCell>
     </TableRow>
+  )
+}
+
+/**
+ * Barra del totale sotto la tabella, fuori dalla `Cornice` e con `position: sticky` sul fondo
+ * dell'area di contenuto scrollabile (vedi `overflow: 'auto'` in AppShell): con la paginazione a
+ * scroll infinito la tabella può crescere molto in altezza, e un totale dentro l'ultima riga della
+ * tabella sarebbe visibile solo scrollando fino in fondo a tutto l'elenco — qui invece resta sempre
+ * a vista, indipendentemente da quante righe sono già state caricate.
+ */
+export function BarraTotale({ etichetta, valore, colore }: { etichetta: string; valore: number; colore?: string }) {
+  return (
+    <Box
+      sx={{
+        position: 'sticky',
+        bottom: 0,
+        zIndex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        px: 2,
+        py: 1.25,
+        bgcolor: tokens.surface,
+        border: `1px solid ${tokens.surfaceBorder}`,
+        borderRadius: 2,
+        boxShadow: '0 -4px 10px rgba(0,0,0,0.06)',
+      }}
+    >
+      <Typography sx={{ fontSize: 13, fontWeight: 700, color: tokens.textSecondary }}>{etichetta}</Typography>
+      <Typography sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 15, color: colore ?? tokens.textPrimary }}>
+        {formattatoreValuta.format(valore)}
+      </Typography>
+    </Box>
   )
 }
 

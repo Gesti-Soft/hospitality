@@ -74,6 +74,18 @@ public class PrenotazioneRepository(GestiSoftDbContext db) : IPrenotazioneReposi
             .Where(p => p.StrutturaId == strutturaId && p.Anno == anno && p.StatoPrenotazione != StatoPrenotazione.Annullata)
             .SumAsync(p => p.ImportoPagato ?? 0, cancellationToken);
 
+    public Task<decimal> SommaImportoPagatoTotaleAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        db.Prenotazioni
+            .Where(p => p.StrutturaId == strutturaId && p.StatoPrenotazione != StatoPrenotazione.Annullata)
+            .SumAsync(p => p.ImportoPagato ?? 0, cancellationToken);
+
+    public async Task<IReadOnlyList<int>> ListaAnniConIncassoAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        await db.Prenotazioni.AsNoTracking()
+            .Where(p => p.StrutturaId == strutturaId && p.StatoPrenotazione != StatoPrenotazione.Annullata && p.ImportoPagato > 0)
+            .Select(p => p.Anno)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<Prenotazione>> ListPeriodoAsync(Guid strutturaId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken)
     {
         dataInizio = DateTime.SpecifyKind(dataInizio, DateTimeKind.Utc);

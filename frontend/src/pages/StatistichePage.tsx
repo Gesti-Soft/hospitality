@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import MenuItem from '@mui/material/MenuItem'
@@ -14,11 +14,10 @@ import { KpiCard } from '../components/KpiCard'
 import { MatriceTipologieMese, NOMI_MESI } from '../components/statistiche/MatriceTipologieMese'
 import { coloriPerEtichette, PALETTE_CATEGORICA } from '../lib/chartColors'
 import { formattatoreAsseCompatto } from '../lib/numberFormat'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
 import { fontDisplay, tokens } from '../theme'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
-
-const ANNO_CORRENTE = new Date().getFullYear()
 
 // Sopra questa soglia un grafico a barre con una serie per tipologia diventa illeggibile — la
 // matrice completa (tutte le tipologie, non solo le prime) resta comunque disponibile in tabella.
@@ -28,18 +27,9 @@ export function StatistichePage() {
   const { strutturaId } = useStruttura()
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const anniDisponibili = useAnniDisponibiliStatistiche(strutturaId)
-  // Nessun anno con dati (struttura appena creata): l'anno corrente resta comunque selezionabile,
-  // così la pagina mostra lo stato vuoto ("Nessuna prenotazione...") invece di un selettore vuoto.
-  const anniSelezionabili = anniDisponibili.data && anniDisponibili.data.length > 0 ? anniDisponibili.data : [ANNO_CORRENTE]
-
-  // Su richiesta esplicita, il selettore propone solo anni con dati reali (mai 2027 o un anno
-  // passato sicuramente vuoto) — appena la lista arriva, se l'anno corrente non ne fa parte si
-  // passa al più recente con dati.
-  useEffect(() => {
-    if (anniDisponibili.data && anniDisponibili.data.length > 0 && !anniDisponibili.data.includes(anno)) {
-      setAnno(anniDisponibili.data[0])
-    }
-  }, [anniDisponibili.data]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Su richiesta esplicita, il selettore propone gli anni con dati reali più l'anno corrente,
+  // sempre — anche una struttura appena creata deve poterlo selezionare.
+  const anniSelezionabili = anniConAnnoCorrente(anniDisponibili.data)
 
   const statistiche = useStatisticheStruttura(strutturaId, anno)
   const dati = statistiche.data

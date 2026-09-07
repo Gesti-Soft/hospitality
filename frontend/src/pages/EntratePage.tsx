@@ -11,14 +11,16 @@ import TableRow from '@mui/material/TableRow'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import { useStruttura } from '../struttura/StrutturaContext'
+import { useAnniDisponibiliFinanze } from '../api/finanze'
 import { useEntrate, useEliminaEntrata, type EntrataDto } from '../api/entrate'
 import { ApiError } from '../api/client'
 import { fontMono, tokens } from '../theme'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
 import { EntrataDialog } from '../components/EntrataDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
-  ANNO_CORRENTE,
   AzioneNuovo,
+  BarraTotale,
   Cornice,
   FiltriRicercaData,
   formattatoreData,
@@ -40,6 +42,8 @@ export function EntratePage() {
   const [dataDa, setDataDa] = useState('')
   const [dataA, setDataA] = useState('')
 
+  const anniDisponibili = useAnniDisponibiliFinanze(strutturaId)
+  const anni = anniConAnnoCorrente(anniDisponibili.data)
   const entrate = useEntrate(strutturaId, anno)
   const elimina = useEliminaEntrata(strutturaId)
 
@@ -64,6 +68,7 @@ export function EntratePage() {
       <IntestazioneFinanze
         titolo="Entrate"
         anno={anno}
+        anni={anni}
         onAnnoChange={setAnno}
         azioni={<AzioneNuovo etichetta="+ Nuova entrata" onClick={() => setDialogo('nuova')} disabilitato={!strutturaId} />}
       />
@@ -126,19 +131,12 @@ export function EntratePage() {
                 </TableRow>
               ))}
               {altreDaCaricare && <RigaCaricamentoAltri colSpan={5} ref={sentinellaRef} />}
-              {dati.length > 0 && (
-                <TableRow>
-                  <TableCell colSpan={3} />
-                  <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700 }}>
-                    {formattatoreValuta.format(totale)}
-                  </TableCell>
-                  <TableCell />
-                </TableRow>
-              )}
             </TableBody>
           </Table>
         </Cornice>
       )}
+
+      {!entrate.isLoading && dati.length > 0 && <BarraTotale etichetta="Totale entrate" valore={totale} colore={tokens.ok600} />}
 
       {dialogo !== 'chiuso' && strutturaId && <EntrataDialog strutturaId={strutturaId} entrata={dialogo === 'nuova' ? null : dialogo} onClose={() => setDialogo('chiuso')} />}
 

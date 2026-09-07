@@ -28,6 +28,13 @@ public class DatiFatturaRepository(GestiSoftDbContext db) : IDatiFatturaReposito
         return await query.OrderByDescending(f => f.Progressivo).ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<int>> ListaAnniConDatiAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        await db.DatiFattura.AsNoTracking()
+            .Where(f => f.StrutturaId == strutturaId)
+            .Select(f => f.Anno)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public async Task<int> GetMaxProgressivoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         var max = await db.DatiFattura

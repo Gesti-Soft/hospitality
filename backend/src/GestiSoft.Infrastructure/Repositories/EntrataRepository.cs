@@ -21,6 +21,13 @@ public class EntrataRepository(GestiSoftDbContext db) : IEntrataRepository
         return await query.OrderByDescending(e => e.Data).ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<int>> ListaAnniConDatiAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        await db.Entrate.AsNoTracking()
+            .Where(e => e.StrutturaId == strutturaId && e.Anno != null)
+            .Select(e => e.Anno!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
     public async Task AddAsync(Entrata entity, CancellationToken cancellationToken)
     {
         db.Entrate.Add(entity);

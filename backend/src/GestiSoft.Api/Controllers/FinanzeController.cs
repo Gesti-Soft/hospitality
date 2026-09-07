@@ -19,11 +19,18 @@ public class FinanzeController(FinanzeService service, ICurrentUser currentUser)
         return Ok(cauzioni.Select(ToDto));
     }
 
+    [HttpGet("anni")]
+    public async Task<IActionResult> AnniDisponibili(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var anni = await service.GetAnniDisponibiliAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(anni);
+    }
+
     [HttpGet("riepilogo-cassa")]
     public async Task<IActionResult> RiepilogoCassa(Guid strutturaId, [FromQuery] int? anno, CancellationToken cancellationToken)
     {
         var riepilogo = await service.RiepilogoCassaAsync(currentUser, strutturaId, anno ?? DateTime.UtcNow.Year, cancellationToken);
-        return Ok(new RiepilogoCassaDto(riepilogo.Anno, riepilogo.ImportoPagatoPrenotazioni, riepilogo.Cauzioni, riepilogo.Entrate, riepilogo.Spese, riepilogo.Saldo));
+        return Ok(new RiepilogoCassaDto(riepilogo.Anno, riepilogo.ImportoPagatoPrenotazioni, riepilogo.Cauzioni, riepilogo.Entrate, riepilogo.Spese, riepilogo.Saldo, riepilogo.CassaAttuale));
     }
 
     private static CauzioneDto ToDto(Cauzione c) => new(c.Id, c.StrutturaId, c.PrenotazioneId, c.ImportoCauzione, c.DataInserimento);

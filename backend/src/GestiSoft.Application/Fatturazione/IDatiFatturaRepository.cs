@@ -11,6 +11,9 @@ public interface IDatiFatturaRepository
 
     Task<IReadOnlyList<DatiFattura>> ListAsync(Guid strutturaId, int? anno, CancellationToken cancellationToken);
 
+    /// <summary>Anni con almeno una fattura emessa — per il selettore Anno.</summary>
+    Task<IReadOnlyList<int>> ListaAnniConDatiAsync(Guid strutturaId, CancellationToken cancellationToken);
+
     Task<int> GetMaxProgressivoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
 
     /// <summary>

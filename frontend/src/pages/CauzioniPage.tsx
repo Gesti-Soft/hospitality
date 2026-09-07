@@ -8,19 +8,23 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
 import { useStruttura } from '../struttura/StrutturaContext'
-import { useCauzioni } from '../api/finanze'
+import { useAnniDisponibiliFinanze, useCauzioni } from '../api/finanze'
 import { fontMono, tokens } from '../theme'
-import { ANNO_CORRENTE, Cornice, formattatoreData, formattatoreValuta, IntestazioneFinanze, RigaVuota } from '../components/finanze/FinanzeComuni'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
+import { BarraTotale, Cornice, formattatoreData, formattatoreValuta, IntestazioneFinanze, RigaVuota } from '../components/finanze/FinanzeComuni'
 
 export function CauzioniPage() {
   const { strutturaId } = useStruttura()
   const [anno, setAnno] = useState(ANNO_CORRENTE)
+  const anniDisponibili = useAnniDisponibiliFinanze(strutturaId)
+  const anni = anniConAnnoCorrente(anniDisponibili.data)
   const cauzioni = useCauzioni(strutturaId, anno)
   const dati = cauzioni.data ?? []
+  const totale = dati.reduce((acc, c) => acc + (c.importoCauzione ?? 0), 0)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <IntestazioneFinanze titolo="Cauzioni" anno={anno} onAnnoChange={setAnno} />
+      <IntestazioneFinanze titolo="Cauzioni" anno={anno} anni={anni} onAnnoChange={setAnno} />
 
       <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
         Registrate automaticamente al check-out quando la cauzione non viene restituita per intero — nessuna registrazione manuale.
@@ -51,6 +55,8 @@ export function CauzioniPage() {
           </Table>
         </Cornice>
       )}
+
+      {!cauzioni.isLoading && dati.length > 0 && <BarraTotale etichetta="Totale cauzioni trattenute" valore={totale} colore={tokens.error600} />}
     </Box>
   )
 }

@@ -56,6 +56,13 @@ public class FatturazioneService(
         return await fatture.ListAsync(strutturaId, anno, cancellationToken);
     }
 
+    /// <summary>Anni con almeno una fattura emessa — per il selettore Anno.</summary>
+    public async Task<IReadOnlyList<int>> GetAnniDisponibiliAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+        return await fatture.ListaAnniConDatiAsync(strutturaId, cancellationToken);
+    }
+
     public async Task<DatiFattura> GetAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);

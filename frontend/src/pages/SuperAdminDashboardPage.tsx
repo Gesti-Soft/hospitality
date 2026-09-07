@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import MenuItem from '@mui/material/MenuItem'
@@ -21,13 +21,12 @@ import {
   type LicenzaScadutaDto,
 } from '../api/statisticheSuperAdmin'
 import { KpiCard } from '../components/KpiCard'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
 import { fontDisplay, fontMono, tokens } from '../theme'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
-
-const ANNO_CORRENTE = new Date().getFullYear()
 
 const TESTO_ESITO: Record<EsitoIntegrazione, string> = {
   [EsitoIntegrazione.NonConcesso]: 'non concesso',
@@ -49,14 +48,8 @@ export function SuperAdminDashboardPage() {
   const { isSuperAdmin } = useStruttura()
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const anniDisponibili = useAnniDisponibiliStatisticheSuperAdmin(isSuperAdmin)
-  const anniSelezionabili = anniDisponibili.data && anniDisponibili.data.length > 0 ? anniDisponibili.data : [ANNO_CORRENTE]
-
-  // Su richiesta esplicita, il selettore propone solo anni con dati reali.
-  useEffect(() => {
-    if (anniDisponibili.data && anniDisponibili.data.length > 0 && !anniDisponibili.data.includes(anno)) {
-      setAnno(anniDisponibili.data[0])
-    }
-  }, [anniDisponibili.data]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Su richiesta esplicita, il selettore propone gli anni con dati reali più l'anno corrente, sempre.
+  const anniSelezionabili = anniConAnnoCorrente(anniDisponibili.data)
 
   const statistiche = useStatisticheSuperAdmin(isSuperAdmin, anno)
 
@@ -186,7 +179,7 @@ export function SuperAdminDashboardPage() {
                 <TableCell>Alloggiati Web</TableCell>
                 <TableCell>Osservatorio</TableCell>
                 <TableCell>PayTourist</TableCell>
-                <TableCell>Wubook</TableCell>
+                <TableCell>OTA</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>

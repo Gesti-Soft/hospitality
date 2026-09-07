@@ -25,6 +25,7 @@ import {
   scaricaFatturaPdf,
   scaricaFatturaXml,
   useAggiornaDatiAziendali,
+  useAnniDisponibiliFatture,
   useDatiAziendali,
   useDatiClienti,
   useFatture,
@@ -34,6 +35,7 @@ import {
   type DatiFatturaDto,
 } from '../api/fatturazione'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
 import { useToast } from '../toast/ToastContext'
 import { DatiClienteDialog } from '../components/DatiClienteDialog'
 import { FatturaDialog, type StatoFatturaIniziale } from '../components/FatturaDialog'
@@ -43,9 +45,6 @@ import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-const ANNO_CORRENTE = new Date().getFullYear()
-const ANNI_DISPONIBILI = [ANNO_CORRENTE - 2, ANNO_CORRENTE - 1, ANNO_CORRENTE, ANNO_CORRENTE + 1]
-
 type Tab_ = 'fatture' | 'dati-aziendali' | 'clienti'
 
 export function FatturazionePage() {
@@ -54,6 +53,8 @@ export function FatturazionePage() {
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const toast = useToast()
 
+  const anniDisponibili = useAnniDisponibiliFatture(strutturaId)
+  const anni = anniConAnnoCorrente(anniDisponibili.data)
   const fatture = useFatture(strutturaId, anno)
   const clienti = useDatiClienti(strutturaId)
   const storico = useStoricoPrenotazioni(strutturaId, anno)
@@ -73,7 +74,7 @@ export function FatturazionePage() {
 
         {tab === 'fatture' && (
           <TextField select size="small" label="Anno" value={anno} onChange={(e) => setAnno(Number(e.target.value))} sx={{ minWidth: 110 }}>
-            {ANNI_DISPONIBILI.map((a) => (
+            {anni.map((a) => (
               <MenuItem key={a} value={a}>
                 {a}
               </MenuItem>

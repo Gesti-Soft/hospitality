@@ -53,8 +53,8 @@ export function LoginPage() {
         </Box>
 
         <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1.75 }}>
-          <GestiSoftMark size={42} />
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 19, color: '#fff' }}>GestiSoft</Typography>
+          <GestiSoftMark size={56} />
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 26, color: '#fff' }}>GestiSoft</Typography>
         </Box>
 
         <Box sx={{ position: 'relative', maxWidth: 440, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -62,8 +62,7 @@ export function LoginPage() {
             Il gestionale che tiene ordine nella tua struttura.
           </Typography>
           <Typography sx={{ fontSize: 15.5, lineHeight: 1.6, color: '#B8C2CE' }}>
-            Calendario prenotazioni, camere, ospiti, fatturazione e invii a Polizia di Stato, Osservatorio Turistico e
-            PayTourist — in un solo posto, sempre aggiornato.
+            Niente più schedine da inviare a mano: calendario, camere, ospiti e fatturazione elettronica in un solo posto, sincronizzati con i portali OTA e con invii automatici a Polizia di Stato e Osservatorio Turistico.
           </Typography>
         </Box>
 
@@ -119,8 +118,8 @@ export function LoginPage() {
 
           <Typography sx={{ fontSize: 12, color: tokens.textTertiary, textAlign: 'center' }}>
             Problemi di accesso? Scrivi a{' '}
-            <Link href="mailto:assistenza@gestisoft.it" underline="hover">
-              assistenza@gestisoft.it
+            <Link href="mailto:info@gestisoft.it" underline="hover">
+              info@gestisoft.it
             </Link>
           </Typography>
         </Box>

@@ -9,7 +9,7 @@ public record CreaSpesaRequest(string? TipoSpesa, string? Nome, decimal ImportoS
 
 public record CreaEntrataRequest(string? TipoEntrata, string? Nome, decimal ImportoEntrata, string? Descrizione, DateTime? Data);
 
-public record RiepilogoCassaResult(int Anno, decimal ImportoPagatoPrenotazioni, decimal Cauzioni, decimal Entrate, decimal Spese, decimal Saldo);
+public record RiepilogoCassaResult(int Anno, decimal ImportoPagatoPrenotazioni, decimal Cauzioni, decimal Entrate, decimal Spese, decimal Saldo, decimal CassaAttuale);
 
 /// <summary>
 /// Spese ed entrate di cassa — porta FinanzeLogic del legacy (CRUD puro, nessuna regola di
@@ -132,7 +132,29 @@ public class FinanzeService(
         return await cauzioni.ListByStrutturaAsync(strutturaId, anno, cancellationToken);
     }
 
-    /// <summary>Cassa = incassi prenotazioni non annullate + cauzioni trattenute + entrate − spese, per un dato anno.</summary>
+    /// <summary>Anni con almeno un dato di cassa (spesa, entrata, cauzione o incasso prenotazione) — per il selettore Anno condiviso da Riepilogo/Spese/Entrate/Cauzioni.</summary>
+    public async Task<IReadOnlyList<int>> GetAnniDisponibiliAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+
+        var anniSpese = await spese.ListaAnniConDatiAsync(strutturaId, cancellationToken);
+        var anniEntrate = await entrate.ListaAnniConDatiAsync(strutturaId, cancellationToken);
+        var anniCauzioni = await cauzioni.ListaAnniConDatiAsync(strutturaId, cancellationToken);
+        var anniIncassi = await prenotazioni.ListaAnniConIncassoAsync(strutturaId, cancellationToken);
+
+        return anniSpese.Concat(anniEntrate).Concat(anniCauzioni).Concat(anniIncassi)
+            .Distinct()
+            .OrderByDescending(a => a)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Cassa = incassi prenotazioni non annullate + cauzioni trattenute + entrate − spese. `Saldo` è
+    /// il netto del solo anno richiesto (utile per confrontare un anno con l'altro); `CassaAttuale` è
+    /// invece cumulativo su tutta la storia della Struttura, senza filtro anno — quanto dovrebbe
+    /// esserci realmente in cassa ad oggi, da quando la struttura ha iniziato a operare (porta
+    /// FinanzeLogic.GetCassa del legacy, che sommava sempre l'intera tabella senza filtro anno).
+    /// </summary>
     public async Task<RiepilogoCassaResult> RiepilogoCassaAsync(ICurrentUser currentUser, Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
@@ -142,9 +164,15 @@ public class FinanzeService(
         var totaleCauzioni = cauzioniAnno.Sum(c => c.ImportoCauzione ?? 0);
         var totaleEntrate = (await entrate.ListAsync(strutturaId, anno, cancellationToken)).Sum(e => e.ImportoEntrata);
         var totaleSpese = (await spese.ListAsync(strutturaId, anno, cancellationToken)).Sum(s => s.ImportoSpesa);
-
         var saldo = incassoPrenotazioni + totaleCauzioni + totaleEntrate - totaleSpese;
-        return new RiepilogoCassaResult(anno, incassoPrenotazioni, totaleCauzioni, totaleEntrate, totaleSpese, saldo);
+
+        var incassoTotale = await prenotazioni.SommaImportoPagatoTotaleAsync(strutturaId, cancellationToken);
+        var cauzioniTotale = (await cauzioni.ListByStrutturaAsync(strutturaId, null, cancellationToken)).Sum(c => c.ImportoCauzione ?? 0);
+        var entrateTotale = (await entrate.ListAsync(strutturaId, null, cancellationToken)).Sum(e => e.ImportoEntrata);
+        var speseTotale = (await spese.ListAsync(strutturaId, null, cancellationToken)).Sum(s => s.ImportoSpesa);
+        var cassaAttuale = incassoTotale + cauzioniTotale + entrateTotale - speseTotale;
+
+        return new RiepilogoCassaResult(anno, incassoPrenotazioni, totaleCauzioni, totaleEntrate, totaleSpese, saldo, cassaAttuale);
     }
 
     private async Task<Spesa> GetSpesaOwnedAsync(Guid strutturaId, Guid spesaId, CancellationToken cancellationToken)
