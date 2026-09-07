@@ -18,12 +18,26 @@ public class RiferimentiRepository(GestiSoftDbContext db) : IRiferimentiReposito
 
         if (!string.IsNullOrWhiteSpace(ricerca))
         {
-            var pattern = $"%{ricerca.Trim()}%";
-            query = query.Where(c => EF.Functions.ILike(c.Descrizione, pattern));
+            var termine = ricerca.Trim();
+            var pattern = $"%{termine}%";
+            var termineLower = termine.ToLowerInvariant();
+            query = query
+                .Where(c => EF.Functions.ILike(c.Descrizione, pattern))
+                // Il più vicino al termine cercato prima: posizione del match ascendente (chi inizia
+                // con "ROMA" o lo contiene subito batte chi lo contiene in fondo al nome), poi il nome
+                // più corto (tra due che iniziano allo stesso modo, "ROMA" batte "ROMAGNANO SESIA"),
+                // infine alfabetico come tie-break finale — non più il semplice ordine alfabetico di
+                // prima, che seppelliva "ROMA" sotto decine di comuni che la contengono solo di striscio.
+                .OrderBy(c => c.Descrizione.ToLower().IndexOf(termineLower))
+                .ThenBy(c => c.Descrizione.Length)
+                .ThenBy(c => c.Descrizione);
+        }
+        else
+        {
+            query = query.OrderBy(c => c.Descrizione);
         }
 
         return await query
-            .OrderBy(c => c.Descrizione)
             .Take(limite)
             .ToListAsync(cancellationToken);
     }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
@@ -8,13 +8,31 @@ import Typography from '@mui/material/Typography'
 import CalendarIcon from '@mui/icons-material/CalendarTodayOutlined'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
-import { aggiungiGiorni, differenzaGiorni, formatoInputData, parsaDataItaliana, parsaInputData } from '../lib/date'
+import { aggiungiGiorni, differenzaGiorni, formatoInputData, parsaInputData } from '../lib/date'
 import { tokens } from '../theme'
+
+type Segmento = 'g' | 'm' | 'a'
+
+const LUNGHEZZA: Record<Segmento, number> = { g: 2, m: 2, a: 4 }
+const FILLER: Record<Segmento, string> = { g: 'g', m: 'm', a: 'a' }
+const MASSIMO: Record<Segmento, number> = { g: 31, m: 12, a: 9999 }
+const SUCCESSIVO: Record<Segmento, Segmento | null> = { g: 'm', m: 'a', a: null }
+const ORDINE: Segmento[] = ['g', 'm', 'a']
+
+/** Indici [inizio, fine) del segmento nel testo "gg/mm/aaaa" (i "/" sono in posizione 2 e 5). */
+function rangeSegmento(s: Segmento): [number, number] {
+  if (s === 'g') return [0, 2]
+  if (s === 'm') return [3, 5]
+  return [6, 10]
+}
+
+function conFiller(valore: string, s: Segmento): string {
+  return (valore + FILLER[s].repeat(LUNGHEZZA[s])).slice(0, LUNGHEZZA[s])
+}
 
 const GIORNI_SETTIMANA = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom']
 const DIMENSIONE_BLOCCO_ANNI = 12
 const formattatoreMese = new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' })
-const formattatoreVisualizzato = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 interface Props {
   label: string
@@ -68,24 +86,49 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
   const [meseVisibile, setMeseVisibile] = useState<Date>(() => inizioMese(new Date()))
   const [vistaAnni, setVistaAnni] = useState(false)
   const [bloccoAnni, setBloccoAnni] = useState(() => inizioBloccoAnni(new Date().getFullYear()))
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const valoreData = value ? parsaInputData(value) : null
   const minData = min ? parsaInputData(min) : null
   const maxData = max ? parsaInputData(max) : null
-  const testoFormattato = valoreData ? formattatoreVisualizzato.format(valoreData) : ''
 
-  // Il testo digitato è un buffer locale: segue `value` finché l'operatore non inizia a scrivere,
-  // così un cambiamento esterno (es. il check-out ricalcolato quando cambia il check-in altrove nel
-  // form) si riflette subito, ma senza sovrascrivere ciò che si sta digitando in quel momento.
-  const [testo, setTesto] = useState(testoFormattato)
+  // Buffer dei 3 segmenti digitabili separatamente (giorno/mese/anno): seguono `value` finché
+  // l'operatore non inizia a scrivere, così un cambiamento esterno (es. il check-out ricalcolato
+  // quando cambia il check-in altrove nel form) si riflette subito, senza sovrascrivere ciò che si
+  // sta digitando in quel momento.
+  const [giorno, setGiorno] = useState('')
+  const [mese, setMese] = useState('')
+  const [anno, setAnno] = useState('')
+  // Segmento con il focus e se il prossimo tasto digitato deve sovrascriverlo da zero (appena
+  // selezionato, con clic o dopo l'avanzamento automatico) invece di accodarsi a quanto già scritto.
+  const [segmento, setSegmento] = useState<Segmento>('g')
+  const [fresh, setFresh] = useState(true)
   const [inModifica, setInModifica] = useState(false)
 
   useEffect(() => {
-    if (!inModifica) {
-      setTesto(testoFormattato)
+    if (inModifica) return
+    if (value) {
+      const [a, m, g] = value.split('-')
+      setAnno(a)
+      setMese(m)
+      setGiorno(g)
+    } else {
+      setAnno('')
+      setMese('')
+      setGiorno('')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testoFormattato])
+  }, [value, inModifica])
+
+  // Tiene evidenziato (selezionato) il segmento attivo nell'input reale, così l'operatore vede
+  // sempre quale porzione della data sta per sovrascrivere digitando.
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el || document.activeElement !== el) return
+    const [inizio, fine] = rangeSegmento(segmento)
+    el.setSelectionRange(inizio, fine)
+  }, [segmento, giorno, mese, anno])
+
+  const testo = `${conFiller(giorno, 'g')}/${conFiller(mese, 'm')}/${conFiller(anno, 'a')}`
 
   function fuoriLimiti(d: Date): boolean {
     return !!((minData && d < minData) || (maxData && d > maxData))
@@ -104,34 +147,152 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
     setVistaAnni(false)
   }
 
-  function seleziona(giorno: Date) {
-    onChange(formatoInputData(giorno))
-    setTesto(formattatoreVisualizzato.format(giorno))
+  function seleziona(giornoScelto: Date) {
+    onChange(formatoInputData(giornoScelto))
+    setInModifica(false)
     chiudi()
   }
 
-  function inizioModifica() {
+  /** Clic (o focus) sul campo: seleziona sempre il giorno, pronto per essere riscritto da capo. */
+  function selezionaGiorno() {
     setInModifica(true)
+    setSegmento('g')
+    setFresh(true)
+    inputRef.current?.setSelectionRange(...rangeSegmento('g'))
   }
 
-  function commettiTesto() {
+  function valoreSegmento(s: Segmento): string {
+    return s === 'g' ? giorno : s === 'm' ? mese : anno
+  }
+
+  function impostaSegmento(s: Segmento, v: string) {
+    if (s === 'g') setGiorno(v)
+    else if (s === 'm') setMese(v)
+    else setAnno(v)
+  }
+
+  function avanzaSegmento() {
+    const successivo = SUCCESSIVO[segmento]
+    if (successivo) {
+      setSegmento(successivo)
+      setFresh(true)
+    }
+  }
+
+  function spostaSegmento(direzione: 1 | -1) {
+    const idx = ORDINE.indexOf(segmento)
+    const prossimo = ORDINE[Math.min(ORDINE.length - 1, Math.max(0, idx + direzione))]
+    setSegmento(prossimo)
+    setFresh(true)
+  }
+
+  function scriviCifra(cifra: string) {
+    const lunghezza = LUNGHEZZA[segmento]
+    const massimo = MASSIMO[segmento]
+
+    let nuovo = fresh ? cifra : valoreSegmento(segmento) + cifra
+    // Overflow di lunghezza (una terza cifra su un segmento già pieno) o di valore (es. giorno "39",
+    // mese "13"): scarta quanto scritto finora e riparte da questa sola cifra, invece di restare
+    // bloccati su un segmento ormai invalido.
+    if (nuovo.length > lunghezza || Number(nuovo) > massimo) nuovo = cifra
+
+    // Una singola cifra che da sola eccede già il massimo possibile a due cifre (es. giorno "4":
+    // 40-49 > 31, mese "3": 30-39 > 12) determina subito il valore finale del segmento senza
+    // aspettare una seconda cifra — stesso comportamento dei picker nativi (basta scrivere "4" per
+    // il giorno 4, non serve "04").
+    const completo = nuovo.length === lunghezza
+    const decisoAlPrimoDigito = nuovo.length === 1 && Number(nuovo) * 10 > massimo
+    if (decisoAlPrimoDigito) nuovo = nuovo.padStart(lunghezza, '0')
+
+    impostaSegmento(segmento, nuovo)
+    setFresh(false)
+    setInModifica(true)
+
+    if (completo || decisoAlPrimoDigito) avanzaSegmento()
+  }
+
+  function cancellaCifra() {
+    setInModifica(true)
+    const corrente = valoreSegmento(segmento)
+    if (corrente.length > 0) {
+      impostaSegmento(segmento, corrente.slice(0, -1))
+      setFresh(false)
+      return
+    }
+    const precedente = segmento === 'a' ? 'm' : segmento === 'm' ? 'g' : null
+    if (!precedente) return
+    setSegmento(precedente)
+    impostaSegmento(precedente, valoreSegmento(precedente).slice(0, -1))
+    setFresh(false)
+  }
+
+  function onKeyDownCampo(e: KeyboardEvent<HTMLElement>) {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.key === 'Tab') return
+    if (e.key === 'Enter') {
+      e.currentTarget.blur()
+      return
+    }
+    if (e.key === 'Backspace') {
+      e.preventDefault()
+      cancellaCifra()
+      return
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      spostaSegmento(-1)
+      return
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      spostaSegmento(1)
+      return
+    }
+    if (/^[0-9]$/.test(e.key)) {
+      e.preventDefault()
+      scriviCifra(e.key)
+      return
+    }
+    e.preventDefault()
+  }
+
+  function commetti() {
     setInModifica(false)
 
-    if (testo.trim() === '') {
+    if (!giorno && !mese && !anno) {
       if (value !== '') onChange('')
       return
     }
 
-    const parsata = parsaDataItaliana(testo)
-    if (!parsata || fuoriLimiti(parsata)) {
-      // Testo non valido o fuori dai limiti consentiti: torna all'ultimo valore valido invece di
-      // lasciare a video una data che non verrebbe mai salvata.
-      setTesto(testoFormattato)
+    const ripristina = () => {
+      if (value) {
+        const [a, m, g] = value.split('-')
+        setAnno(a)
+        setMese(m)
+        setGiorno(g)
+      } else {
+        setAnno('')
+        setMese('')
+        setGiorno('')
+      }
+    }
+
+    if (giorno.length < 2 || mese.length < 2 || anno.length < 4) {
+      // Data incompleta: torna all'ultimo valore valido invece di lasciare a video un segmento vuoto.
+      ripristina()
       return
     }
 
-    onChange(formatoInputData(parsata))
-    setTesto(formattatoreVisualizzato.format(parsata))
+    const g = Number(giorno)
+    const m = Number(mese)
+    const a = Number(anno)
+    const data = new Date(a, m - 1, g)
+    const valida = data.getFullYear() === a && data.getMonth() === m - 1 && data.getDate() === g
+    if (!valida || fuoriLimiti(data)) {
+      ripristina()
+      return
+    }
+
+    onChange(formatoInputData(data))
   }
 
   const griglia = costruisciGriglia(meseVisibile)
@@ -142,18 +303,14 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
       <TextField
         label={label}
         value={testo}
-        onFocus={inizioModifica}
-        onChange={(e) => {
-          inizioModifica()
-          setTesto(e.target.value)
+        onFocus={selezionaGiorno}
+        onClick={selezionaGiorno}
+        onChange={() => {
+          /* Input pienamente controllato via onKeyDown/onPaste: nessuna modifica diretta da qui. */
         }}
-        onBlur={commettiTesto}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.currentTarget.blur()
-          }
-        }}
-        placeholder="gg/mm/aaaa"
+        onPaste={(e) => e.preventDefault()}
+        onBlur={commetti}
+        onKeyDown={onKeyDownCampo}
         fullWidth={fullWidth}
         required={required}
         disabled={disabled}
@@ -162,6 +319,7 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
         size={size}
         slotProps={{
           input: {
+            inputRef,
             endAdornment: (
               <InputAdornment position="end">
                 <IconButton size="small" onClick={apriCalendario} disabled={disabled} edge="end">
@@ -266,13 +424,13 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
                 </IconButton>
               </Box>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
-                {anniBlocco.map((anno) => {
-                  const selezionato = anno === meseVisibile.getFullYear()
+                {anniBlocco.map((annoOpzione) => {
+                  const selezionato = annoOpzione === meseVisibile.getFullYear()
                   return (
                     <Box
-                      key={anno}
+                      key={annoOpzione}
                       onClick={() => {
-                        setMeseVisibile((m) => new Date(anno, m.getMonth(), 1))
+                        setMeseVisibile((m) => new Date(annoOpzione, m.getMonth(), 1))
                         setVistaAnni(false)
                       }}
                       sx={{
@@ -289,7 +447,7 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
                         '&:hover': { bgcolor: selezionato ? tokens.blue600 : tokens.paper },
                       }}
                     >
-                      {anno}
+                      {annoOpzione}
                     </Box>
                   )
                 })}
