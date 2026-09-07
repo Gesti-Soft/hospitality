@@ -4,7 +4,7 @@ using GestiSoft.Application.Osservatorio;
 using GestiSoft.Domain.Enums;
 using Quartz;
 
-namespace GestiSoft.Worker.Jobs;
+namespace GestiSoft.WorkerSchedine.Jobs;
 
 /// <summary>
 /// Invio giornaliero Osservatorio Turistico — stesso orario configurato di Alloggiati Web

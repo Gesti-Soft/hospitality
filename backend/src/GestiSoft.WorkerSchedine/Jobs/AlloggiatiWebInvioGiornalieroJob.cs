@@ -4,7 +4,7 @@ using GestiSoft.Application.Notifiche;
 using GestiSoft.Domain.Enums;
 using Quartz;
 
-namespace GestiSoft.Worker.Jobs;
+namespace GestiSoft.WorkerSchedine.Jobs;
 
 /// <summary>
 /// Invio giornaliero schedine Alloggiati Web — porta lo StartDailyTaskTimer/CheckTimeAndExecuteTask

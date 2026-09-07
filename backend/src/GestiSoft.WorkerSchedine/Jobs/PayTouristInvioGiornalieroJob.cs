@@ -4,7 +4,7 @@ using GestiSoft.Application.PayTourist;
 using GestiSoft.Domain.Enums;
 using Quartz;
 
-namespace GestiSoft.Worker.Jobs;
+namespace GestiSoft.WorkerSchedine.Jobs;
 
 /// <summary>
 /// Invio giornaliero PayTourist — stessa cadenza/orario condiviso di Alloggiati Web/Osservatorio

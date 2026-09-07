@@ -69,6 +69,24 @@ services:
       Osservatorio__BaseUrl: ${OSSERVATORIO_BASE_URL:-}
       PayTourist__BaseUrl: ${PAYTOURIST_BASE_URL:-}
 
+  worker-schedine:
+    build:
+      context: .
+      dockerfile: backend/src/GestiSoft.WorkerSchedine/Dockerfile
+    container_name: gestisoft-gestionale-worker-schedine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      TZ: ${TZ:-Europe/Rome}
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      Gestisoft__BaseUrl: ${GESTISOFT_BASE_URL:-}
+      AlloggiatiWeb__Endpoint: ${ALLOGGIATIWEB_ENDPOINT:-}
+      Osservatorio__BaseUrl: ${OSSERVATORIO_BASE_URL:-}
+      PayTourist__BaseUrl: ${PAYTOURIST_BASE_URL:-}
+
   frontend:
     build:
       context: ./frontend

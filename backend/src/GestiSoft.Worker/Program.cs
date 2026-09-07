@@ -50,32 +50,11 @@ try
             .WithIdentity("wubook-eventi-polling-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
 
-        // Fase 6 — Integrazione Alloggiati Web: porta lo StartDailyTaskTimer del legacy (controllo
-        // ogni minuto se è stata raggiunta l'ora di invio configurata per struttura).
-        var alloggiatiWebJobKey = new JobKey("alloggiati-web-invio-giornaliero");
-        quartz.AddJob<AlloggiatiWebInvioGiornalieroJob>(options => options.WithIdentity(alloggiatiWebJobKey));
-        quartz.AddTrigger(trigger => trigger
-            .ForJob(alloggiatiWebJobKey)
-            .WithIdentity("alloggiati-web-invio-giornaliero-trigger")
-            .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
-
-        // Fase 7 — Integrazione Osservatorio Turistico: stesso orario configurato di Alloggiati Web,
-        // stesso controllo ogni minuto.
-        var osservatorioJobKey = new JobKey("osservatorio-invio-giornaliero");
-        quartz.AddJob<OsservatorioInvioGiornalieroJob>(options => options.WithIdentity(osservatorioJobKey));
-        quartz.AddTrigger(trigger => trigger
-            .ForJob(osservatorioJobKey)
-            .WithIdentity("osservatorio-invio-giornaliero-trigger")
-            .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
-
-        // Fase 8 — Integrazione PayTourist: stesso orario condiviso di Alloggiati Web/Osservatorio,
-        // stesso controllo ogni minuto.
-        var payTouristJobKey = new JobKey("paytourist-invio-giornaliero");
-        quartz.AddJob<PayTouristInvioGiornalieroJob>(options => options.WithIdentity(payTouristJobKey));
-        quartz.AddTrigger(trigger => trigger
-            .ForJob(payTouristJobKey)
-            .WithIdentity("paytourist-invio-giornaliero-trigger")
-            .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
+        // Fase 6/7/8 — Alloggiati Web/Osservatorio/PayTourist ("schedine"): spostati in un processo
+        // separato (GestiSoft.WorkerSchedine), condividono lo stesso Postgres ma girano in un
+        // eseguibile a parte — un rallentamento/blocco su uno di questi sistemi esterni (Questura/
+        // PMS, non controllati da noi) non deve rallentare il polling Wubook qui sopra, che oggi
+        // condividerebbe altrimenti lo stesso processo/thread pool.
 
         // Notifiche in-app: scadenza licenza GestiSoft (non urgente, controllo orario è sufficiente)
         // e check-out dimenticato (idem — un ritardo di qualche minuto nel segnalarlo non cambia nulla).
