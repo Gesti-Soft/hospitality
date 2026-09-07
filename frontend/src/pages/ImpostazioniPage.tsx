@@ -243,6 +243,15 @@ export function ImpostazioniGeneraliForm({
   }
 
   function salva() {
+    // PayTourist è in manutenzione ogni giorno dalle 14:00 alle 18:00 — l'orario è condiviso dalle 3
+    // integrazioni, quindi se PayTourist è concesso a questa Struttura dal Super Admin (non il
+    // checkbox self-service sopra, che si può riaccendere in qualunque momento) non può cadere in
+    // quella fascia. Stessa regola verificata anche lato server (fonte di verità).
+    if (servizi.payTouristAbilitato && oraInvioGiornaliero >= '14:00' && oraInvioGiornaliero < '18:00') {
+      toast.errore("L'orario di invio non può essere tra le 14:00 e le 18:00: PayTourist è in manutenzione in quella fascia oraria.")
+      return
+    }
+
     const request: ImpostazioniStrutturaRequest = {
       poliziaStatoAttiva,
       osservatorioAttivo,
@@ -407,9 +416,10 @@ export function ImpostazioniGeneraliForm({
               type="time"
               value={oraInvioGiornaliero}
               onChange={(e) => setOraInvioGiornaliero(e.target.value)}
-              sx={{ width: 200 }}
+              sx={{ width: 260 }}
               slotProps={{ inputLabel: { shrink: true } }}
               disabled={aggiorna.isPending}
+              helperText={servizi.payTouristAbilitato ? 'Non può essere tra le 14:00 e le 18:00: PayTourist è in manutenzione' : ' '}
             />
           </Box>
         )}

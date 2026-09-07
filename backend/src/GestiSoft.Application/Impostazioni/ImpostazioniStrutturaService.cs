@@ -1,4 +1,5 @@
 using GestiSoft.Application.Auth;
+using GestiSoft.Application.Exceptions;
 using GestiSoft.Domain.Entities;
 
 namespace GestiSoft.Application.Impostazioni;
@@ -19,10 +20,21 @@ public record AggiornaImpostazioniRequest(
 
 public class ImpostazioniStrutturaService(
     IImpostazioniStrutturaRepository repository,
+    IStrutturaRepository strutture,
     TenantAccessGuard accessGuard,
     ConcessioneServiziGuard concessioneGuard,
     GestioneUtentiGuard gestioneUtentiGuard)
 {
+    /// <summary>
+    /// PayTourist è offline per manutenzione ogni giorno dalle 14:00 alle 18:00 (comunicato
+    /// dall'utente) — <c>OraInvioGiornaliero</c> è condiviso dalle 3 integrazioni "schedine" (Alloggiati
+    /// Web/Osservatorio/PayTourist), quindi se PayTourist è concesso a questa Struttura dal Super
+    /// Admin (<see cref="Struttura.PayTouristAbilitato"/> — non il toggle self-service
+    /// <see cref="ImpostazioniStruttura.PayTouristAttivo"/>, che l'operatore potrebbe riaccendere in
+    /// qualunque momento) l'orario configurato non può cadere in quella fascia.
+    /// </summary>
+    private static readonly TimeOnly InizioManutenzionePayTourist = new(14, 0);
+    private static readonly TimeOnly FineManutenzionePayTourist = new(18, 0);
     public async Task<ImpostazioniStruttura> GetOrDefaultAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
@@ -54,6 +66,16 @@ public class ImpostazioniStrutturaService(
         if (request.PayTouristAttivo)
         {
             await concessioneGuard.EnsurePayTouristAsync(strutturaId, cancellationToken);
+        }
+
+        if (request.OraInvioGiornaliero is { } orario && orario >= InizioManutenzionePayTourist && orario < FineManutenzionePayTourist)
+        {
+            var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken);
+            if (struttura is { PayTouristAbilitato: true })
+            {
+                throw new ConflictException(
+                    $"L'orario di invio non può essere tra le {InizioManutenzionePayTourist:HH:mm} e le {FineManutenzionePayTourist:HH:mm}: PayTourist è in manutenzione in quella fascia oraria.");
+            }
         }
 
         var impostazioni = await repository.GetByStrutturaIdAsync(strutturaId, cancellationToken)
