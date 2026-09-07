@@ -47,6 +47,9 @@ public interface IPrenotazioneRepository
 
     Task<Prenotazione?> GetByIdPrenotazioneWubookAsync(Guid strutturaId, int idPrenotazioneWubook, CancellationToken cancellationToken);
 
+    /// <summary>Prenotazioni In corso (check-in già fatto) il cui check-out previsto è nel passato, su tutte le Strutture — usata dal job di notifica "check-out dimenticato".</summary>
+    Task<IReadOnlyList<Prenotazione>> ListCheckOutDimenticatoAsync(CancellationToken cancellationToken);
+
     Task AddAsync(Prenotazione entity, CancellationToken cancellationToken);
 
     Task UpdateAsync(Prenotazione entity, CancellationToken cancellationToken);

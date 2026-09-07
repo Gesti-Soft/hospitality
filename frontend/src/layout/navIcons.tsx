@@ -15,6 +15,16 @@ export function IconCruscotto(props: IconProps) {
   )
 }
 
+export function IconNotifiche(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4.5 13V8.3C4.5 5.6 6.5 3.4 9 3.4C11.5 3.4 13.5 5.6 13.5 8.3V13" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M3.5 13H14.5" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M7.2 15.2C7.6 15.7 8.3 16 9 16C9.7 16 10.4 15.7 10.8 15.2" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function IconSuperAdmin(props: IconProps) {
   return (
     <svg {...base} {...props}>

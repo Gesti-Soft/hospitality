@@ -1,5 +1,7 @@
 using GestiSoft.Application.Impostazioni;
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Osservatorio;
+using GestiSoft.Domain.Enums;
 using Quartz;
 
 namespace GestiSoft.Worker.Jobs;
@@ -16,6 +18,7 @@ namespace GestiSoft.Worker.Jobs;
 public class OsservatorioInvioGiornalieroJob(
     IImpostazioniStrutturaRepository impostazioni,
     OsservatorioInvioService invioService,
+    NotificaService notificaService,
     ILogger<OsservatorioInvioGiornalieroJob> logger) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
@@ -39,6 +42,23 @@ public class OsservatorioInvioGiornalieroJob(
                         "Invio Osservatorio Turistico struttura {strutturaId}: {arrivi} arrivi, {checkout} checkout, {giorni} giorni chiusi{messaggio}",
                         struttura.StrutturaId, risultato.ArriviInviati, risultato.CheckoutInviati, risultato.GiorniChiusi,
                         risultato.Messaggio is null ? string.Empty : $" - {risultato.Messaggio}");
+                }
+
+                // Una sola notifica riepilogativa al giorno per struttura (somma su tutti gli
+                // appartamenti configurati) — a differenza di Alloggiati Web/PayTourist, questo job
+                // non si auto-limita a un'esecuzione al giorno (ritenta ogni minuto finché il cursore
+                // non avanza), quindi qui la deduplica per data è l'unica cosa che evita una notifica
+                // ad ogni giro riuscito.
+                var arriviTotali = risultati.Sum(r => r.ArriviInviati);
+                var checkoutTotali = risultati.Sum(r => r.CheckoutInviati);
+                if (arriviTotali > 0 || checkoutTotali > 0)
+                {
+                    await notificaService.CreaSeNonEsisteAsync(
+                        struttura.StrutturaId, TipoNotifica.SchedineInviate,
+                        $"schedine:osservatorio:{struttura.StrutturaId}:{DateTime.UtcNow:yyyyMMdd}",
+                        "Osservatorio Turistico: schedine inviate",
+                        $"Osservatorio Turistico: {arriviTotali} arrivi e {checkoutTotali} check-out inviati oggi.",
+                        context.CancellationToken);
                 }
             }
             catch (Exception ex)

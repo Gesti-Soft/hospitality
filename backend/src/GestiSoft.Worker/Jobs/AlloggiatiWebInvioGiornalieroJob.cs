@@ -1,5 +1,7 @@
 using GestiSoft.Application.AlloggiatiWeb;
 using GestiSoft.Application.Impostazioni;
+using GestiSoft.Application.Notifiche;
+using GestiSoft.Domain.Enums;
 using Quartz;
 
 namespace GestiSoft.Worker.Jobs;
@@ -18,6 +20,7 @@ public class AlloggiatiWebInvioGiornalieroJob(
     IImpostazioniStrutturaRepository impostazioni,
     IAlloggiatiWebIntegrazioneRepository integrazioni,
     AlloggiatiWebInvioService invioService,
+    NotificaService notificaService,
     ILogger<AlloggiatiWebInvioGiornalieroJob> logger) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
@@ -46,6 +49,16 @@ public class AlloggiatiWebInvioGiornalieroJob(
                     "Invio Alloggiati Web struttura {strutturaId}: {inviate}/{totale} inviate ({errori} errori){messaggio}",
                     struttura.StrutturaId, risultato.Inviate, risultato.TotaleSchedine, risultato.Errori,
                     risultato.Messaggio is null ? string.Empty : $" - {risultato.Messaggio}");
+
+                if (risultato.TotaleSchedine > 0)
+                {
+                    await notificaService.CreaSeNonEsisteAsync(
+                        struttura.StrutturaId, TipoNotifica.SchedineInviate,
+                        $"schedine:alloggiati-web:{struttura.StrutturaId}:{oggi:yyyyMMdd}",
+                        "Alloggiati Web: schedine inviate",
+                        $"Alloggiati Web: {risultato.Inviate}/{risultato.TotaleSchedine} schedine inviate oggi" + (risultato.Errori > 0 ? $" ({risultato.Errori} errori)." : "."),
+                        context.CancellationToken);
+                }
             }
             catch (Exception ex)
             {

@@ -79,6 +79,8 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
 
     public DbSet<RestrizioneSoggiornoCamera> RestrizioniSoggiornoCamera => Set<RestrizioneSoggiornoCamera>();
 
+    public DbSet<Notifica> Notifiche => Set<Notifica>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GestiSoftDbContext).Assembly);

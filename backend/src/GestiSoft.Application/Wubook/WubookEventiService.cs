@@ -1,3 +1,4 @@
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Domain.Entities;
 
 namespace GestiSoft.Application.Wubook;
@@ -20,7 +21,8 @@ public class WubookEventiService(
     IWubookClient wubookClient,
     IWubookEventoRicevutoRepository eventiRicevuti,
     WubookLicenzaService licenzaService,
-    WubookPrenotazioniService prenotazioniService)
+    WubookPrenotazioniService prenotazioniService,
+    NotificaService notificaService)
 {
     public async Task ElaboraEventiAsync(Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -29,6 +31,12 @@ public class WubookEventiService(
         {
             return;
         }
+
+        // Eseguito ad ogni giro (non solo quando ci sono eventi nuovi da gestisoft.it, vedi ritorno
+        // anticipato sotto): promuove a "cancellata" visibile le cancellazioni la cui finestra di
+        // grazia (vedi NotificaService.RegistraCancellazioneWubookAsync) è scaduta senza che sia
+        // arrivata una prenotazione corrispondente.
+        await notificaService.ConfermaCancellazioniScaduteAsync(strutturaId, cancellationToken);
 
         var eventi = await licenzaClient.GetEventiNonLettiAsync(integrazione.GestisoftToken, cancellationToken);
         if (eventi.Status != "ok" || eventi.RCodes.Count == 0)

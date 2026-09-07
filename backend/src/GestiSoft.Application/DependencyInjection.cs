@@ -6,6 +6,7 @@ using GestiSoft.Application.Fatturazione;
 using GestiSoft.Application.Finanze;
 using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Osservatorio;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.PayTourist;
@@ -69,6 +70,7 @@ public static class DependencyInjection
         services.AddScoped<StatisticheService>();
         services.AddScoped<StatisticheSuperAdminService>();
         services.AddScoped<ImpostazioniGlobaliService>();
+        services.AddScoped<NotificaService>();
 
         return services;
     }

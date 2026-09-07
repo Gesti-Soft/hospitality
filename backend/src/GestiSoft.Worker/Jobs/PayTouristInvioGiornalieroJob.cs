@@ -1,5 +1,7 @@
 using GestiSoft.Application.Impostazioni;
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.PayTourist;
+using GestiSoft.Domain.Enums;
 using Quartz;
 
 namespace GestiSoft.Worker.Jobs;
@@ -18,6 +20,7 @@ public class PayTouristInvioGiornalieroJob(
     IImpostazioniStrutturaRepository impostazioni,
     IPayTouristStrutturaRepository payTouristStrutture,
     PayTouristInvioService invioService,
+    NotificaService notificaService,
     ILogger<PayTouristInvioGiornalieroJob> logger) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
@@ -46,6 +49,16 @@ public class PayTouristInvioGiornalieroJob(
                     "Invio PayTourist struttura {strutturaId}: {inviate}/{totale} inviate ({errori} errori){messaggio}",
                     struttura.StrutturaId, risultato.Inviate, risultato.TotalePrenotazioni, risultato.Errori,
                     risultato.Messaggio is null ? string.Empty : $" - {risultato.Messaggio}");
+
+                if (risultato.TotalePrenotazioni > 0)
+                {
+                    await notificaService.CreaSeNonEsisteAsync(
+                        struttura.StrutturaId, TipoNotifica.SchedineInviate,
+                        $"schedine:paytourist:{struttura.StrutturaId}:{oggi:yyyyMMdd}",
+                        "PayTourist: schedine inviate",
+                        $"PayTourist: {risultato.Inviate}/{risultato.TotalePrenotazioni} schedine inviate oggi" + (risultato.Errori > 0 ? $" ({risultato.Errori} errori)." : "."),
+                        context.CancellationToken);
+                }
             }
             catch (Exception ex)
             {

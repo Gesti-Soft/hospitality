@@ -2,6 +2,7 @@ using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -55,7 +56,8 @@ public class PrenotazioniService(
     IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard,
     ILogEventoService logEventi,
-    OspitiService ospitiService)
+    OspitiService ospitiService,
+    NotificaService notificaService)
 {
     /// <summary>
     /// Se il numero non è stato scritto a mano e l'agenzia è "Diretta", genera il progressivo
@@ -424,6 +426,10 @@ public class PrenotazioniService(
 
         await camere.UpdateAsync(camera, cancellationToken);
         await prenotazioni.UpdateAsync(prenotazione, cancellationToken);
+        // Il check-out è appena stato effettuato: se un job aveva già segnalato "check-out
+        // dimenticato" per questa prenotazione (vedi CheckOutDimenticatoNotificaJob), il problema è
+        // risolto — la notifica va segnata letta invece di restare visibile a torto.
+        await notificaService.RisolviPerPrenotazioneAsync(strutturaId, TipoNotifica.CheckOutDimenticato, prenotazione.Id, cancellationToken);
         return prenotazione;
     }
 

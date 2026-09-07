@@ -76,6 +76,22 @@ try
             .ForJob(payTouristJobKey)
             .WithIdentity("paytourist-invio-giornaliero-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
+
+        // Notifiche in-app: scadenza licenza GestiSoft (non urgente, controllo orario è sufficiente)
+        // e check-out dimenticato (idem — un ritardo di qualche minuto nel segnalarlo non cambia nulla).
+        var licenzaScadenzaJobKey = new JobKey("licenza-scadenza-notifica");
+        quartz.AddJob<LicenzaScadenzaNotificaJob>(options => options.WithIdentity(licenzaScadenzaJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(licenzaScadenzaJobKey)
+            .WithIdentity("licenza-scadenza-notifica-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(1).RepeatForever()));
+
+        var checkOutDimenticatoJobKey = new JobKey("checkout-dimenticato-notifica");
+        quartz.AddJob<CheckOutDimenticatoNotificaJob>(options => options.WithIdentity(checkOutDimenticatoJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(checkOutDimenticatoJobKey)
+            .WithIdentity("checkout-dimenticato-notifica-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(1).RepeatForever()));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 

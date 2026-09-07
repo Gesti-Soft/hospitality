@@ -6,6 +6,7 @@ using GestiSoft.Application.Fatturazione;
 using GestiSoft.Application.Finanze;
 using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Osservatorio;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.PayTourist;
@@ -81,6 +82,7 @@ public static class DependencyInjection
         services.AddScoped<IStatisticheRepository, StatisticheRepository>();
         services.AddScoped<IStatisticheSuperAdminRepository, StatisticheSuperAdminRepository>();
         services.AddScoped<IImpostazioniGlobaliRepository, ImpostazioniGlobaliRepository>();
+        services.AddScoped<INotificaRepository, NotificaRepository>();
         services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
 
         // Backend esterno "gestisoft" (licenze/abbonamenti, già in produzione): il legacy leggeva

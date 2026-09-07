@@ -121,6 +121,14 @@ public class PrenotazioneRepository(GestiSoftDbContext db) : IPrenotazioneReposi
     public Task<Prenotazione?> GetByIdPrenotazioneWubookAsync(Guid strutturaId, int idPrenotazioneWubook, CancellationToken cancellationToken) =>
         db.Prenotazioni.FirstOrDefaultAsync(p => p.StrutturaId == strutturaId && p.IdPrenotazioneWubook == idPrenotazioneWubook, cancellationToken);
 
+    public async Task<IReadOnlyList<Prenotazione>> ListCheckOutDimenticatoAsync(CancellationToken cancellationToken)
+    {
+        var oggi = DateTime.UtcNow.Date;
+        return await db.Prenotazioni.AsNoTracking()
+            .Where(p => p.StatoPrenotazione == StatoPrenotazione.InCorso && p.CheckOut != null && p.CheckOut.Value.Date < oggi)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(Prenotazione entity, CancellationToken cancellationToken)
     {
         db.Prenotazioni.Add(entity);

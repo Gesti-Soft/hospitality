@@ -1,6 +1,7 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Domain.Entities;
@@ -28,7 +29,8 @@ public class WubookPrenotazioniService(
     WubookLicenzaService licenzaService,
     IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard,
-    ILogEventoService logEventi)
+    ILogEventoService logEventi,
+    NotificaService notificaService)
 {
     private enum EsitoBooking { Creata, Aggiornata, Annullata, Ignorata }
 
@@ -106,14 +108,20 @@ public class WubookPrenotazioniService(
             // per una verifica manuale, invece di annullare/azzerare silenziosamente.
             if (esistente.StatoPrenotazione == StatoPrenotazione.InCorso)
             {
+                var numeroVisualizzatoInCorso = esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8];
                 await logEventi.RegistraAsync(
                     LivelloLog.Warning,
-                    $"Wubook segnala come cancellata la prenotazione #{esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8]} (rcode={booking.RCode}), ma risulta già In corso (check-in effettuato): nessuna modifica automatica, verificare manualmente.",
+                    $"Wubook segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso} (rcode={booking.RCode}), ma risulta già In corso (check-in effettuato): nessuna modifica automatica, verificare manualmente.",
                     origine: "Wubook",
                     clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                     strutturaId: strutturaId,
                     categoria: "Wubook",
                     cancellationToken: cancellationToken);
+                await notificaService.CreaPerPrenotazioneSeNonEsisteAsync(
+                    strutturaId, TipoNotifica.PrenotazioneAnnullata, esistente.Id,
+                    "Cancellazione da verificare",
+                    $"Wubook segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso}, ma l'ospite ha già fatto check-in: verificare manualmente.",
+                    cancellationToken);
                 return EsitoBooking.Ignorata;
             }
 
@@ -121,6 +129,9 @@ public class WubookPrenotazioniService(
             // check-in non è mai avvenuto e la camera non è mai stata toccata da questa prenotazione
             // — non c'è nulla da liberare. Se la camera risulta occupata/non pronta, è per un motivo
             // indipendente (altro soggiorno in corso, blocco manuale) e non va alterato qui.
+            var numeroVisualizzato = esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8];
+            var canaleCancellata = esistente.Agenzia ?? nomeCanale;
+
             esistente.StatoPrenotazione = StatoPrenotazione.Annullata;
             esistente.ImportoPrenotazione = 0;
             esistente.ImportoPagato = 0;
@@ -130,12 +141,23 @@ public class WubookPrenotazioniService(
 
             await logEventi.RegistraAsync(
                 LivelloLog.Info,
-                $"Prenotazione #{esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8]} annullata da Wubook (rcode={booking.RCode}).",
+                $"Prenotazione #{numeroVisualizzato} annullata da Wubook (rcode={booking.RCode}).",
                 origine: "Wubook",
                 clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                 strutturaId: strutturaId,
                 categoria: "Wubook",
                 cancellationToken: cancellationToken);
+
+            // Non ancora una notifica visibile: Wubook, quando un operatore modifica una prenotazione
+            // da un canale OTA, manda la cancellazione del vecchio rcode e subito dopo una nuova
+            // prenotazione con i dati aggiornati — resta InAttesa per una breve finestra di grazia, in
+            // modo da poterla fondere con quella nuova (vedi RegistraNuovaOModificaWubookAsync) invece
+            // di notificare due volte la stessa modifica.
+            await notificaService.RegistraCancellazioneWubookAsync(
+                strutturaId, esistente.Id, canaleCancellata,
+                "Prenotazione cancellata",
+                $"Prenotazione #{numeroVisualizzato} ({canaleCancellata}) cancellata da Wubook.",
+                cancellationToken);
 
             return EsitoBooking.Annullata;
         }
@@ -172,6 +194,15 @@ public class WubookPrenotazioniService(
             entity.PMS = struttura is null || !struttura.OsservatorioAbilitato;
             entity.PayTourist = struttura is null || !struttura.PayTouristAbilitato;
             await prenotazioni.AddAsync(entity, cancellationToken);
+
+            await notificaService.RegistraNuovaOModificaWubookAsync(
+                strutturaId, entity.Id, nomeCanale,
+                booking.CustomerEmail, booking.CustomerName, booking.CustomerSurname,
+                titoloNuova: "Nuova prenotazione",
+                messaggioNuova: $"Nuova prenotazione da {nomeCanale}: {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}.",
+                titoloModifica: "Prenotazione modificata",
+                messaggioModifica: $"Prenotazione da {nomeCanale} modificata: ora {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}.",
+                cancellationToken);
         }
         else
         {
