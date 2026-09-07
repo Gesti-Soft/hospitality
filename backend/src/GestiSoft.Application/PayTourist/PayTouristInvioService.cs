@@ -300,6 +300,13 @@ public class PayTouristInvioService(
             o.Prenotazione?.PayTourist ?? false)).ToList();
     }
 
+    /// <summary>Anni con almeno una prenotazione per il selettore Anno della schermata operativa — su richiesta esplicita, non deve proporre anni sicuramente vuoti.</summary>
+    public async Task<IReadOnlyList<int>> ListaAnniAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+        return await prenotazioni.ListaAnniConPrenotazioniAsync(strutturaId, cancellationToken);
+    }
+
     private async Task<(int Inviate, int Trovate, int Errori, IReadOnlyList<string> Messaggi)> ProcessaStrutturaAsync(
         Guid strutturaId,
         PayTouristStruttura payTouristStruttura,

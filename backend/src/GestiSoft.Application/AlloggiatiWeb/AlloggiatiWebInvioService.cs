@@ -113,6 +113,13 @@ public class AlloggiatiWebInvioService(
             o.Prenotazione?.StatePolice ?? false)).ToList();
     }
 
+    /// <summary>Anni con almeno una prenotazione per il selettore Anno della schermata operativa — su richiesta esplicita, non deve proporre anni sicuramente vuoti.</summary>
+    public async Task<IReadOnlyList<int>> ListaAnniAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+        return await prenotazioni.ListaAnniConPrenotazioniAsync(strutturaId, cancellationToken);
+    }
+
     /// <summary>
     /// Esportazione su richiesta (download) delle schedine ancora da inviare — fallback quando il
     /// servizio SOAP non è ancora configurato o non è raggiungibile, senza inviarle né marcarle

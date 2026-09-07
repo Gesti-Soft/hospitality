@@ -21,6 +21,14 @@ public class AlloggiatiWebSincronizzazioneController(AlloggiatiWebInvioService i
         return Ok(schedine.Select(s => new SchedinaAlloggiatiWebDto(s.OspiteId, s.PrenotazioneId, s.NomeOspite, s.Camera, s.CheckIn, s.CheckOut, s.Inviata)));
     }
 
+    /// <summary>Anni con almeno una prenotazione — per non proporre nel selettore Anno anni sicuramente vuoti.</summary>
+    [HttpGet("schedine/anni")]
+    public async Task<IActionResult> Anni(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var anni = await invioService.ListaAnniAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(anni);
+    }
+
     [HttpPost("schedine/invia")]
     public async Task<IActionResult> InviaOra(Guid strutturaId, CancellationToken cancellationToken)
     {

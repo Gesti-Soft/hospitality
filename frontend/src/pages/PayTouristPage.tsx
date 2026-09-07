@@ -14,10 +14,17 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { ApiError } from '../api/client'
-import { esportaPayTourist, useInviaPayTouristOra, useInviaPayTouristSingola, usePayTouristStrutture, usePrenotazioniPayTourist } from '../api/integrazioni'
+import {
+  esportaPayTourist,
+  useAnniPayTourist,
+  useInviaPayTouristOra,
+  useInviaPayTouristSingola,
+  usePayTouristStrutture,
+  usePrenotazioniPayTourist,
+} from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
-import { ANNO_CORRENTE, ultimiAnni } from '../lib/anni'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -28,6 +35,8 @@ export function PayTouristPage() {
   const strutture = usePayTouristStrutture(strutturaId)
   const [payTouristStrutturaId, setPayTouristStrutturaId] = useState<string | null>(null)
   const [anno, setAnno] = useState(ANNO_CORRENTE)
+  const anniDisponibili = useAnniPayTourist(strutturaId)
+  const anniSelezionabili = anniConAnnoCorrente(anniDisponibili.data)
   const [errore, setErrore] = useState<string | null>(null)
   const [risultatoInvio, setRisultatoInvio] = useState<string | null>(null)
 
@@ -144,7 +153,7 @@ export function PayTouristPage() {
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
             <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Prenotazioni</Typography>
             <TextField select size="small" label="Anno" value={anno} onChange={(e) => setAnno(Number(e.target.value))} sx={{ minWidth: 110 }}>
-              {ultimiAnni().map((a) => (
+              {anniSelezionabili.map((a) => (
                 <MenuItem key={a} value={a}>
                   {a}
                 </MenuItem>

@@ -18,13 +18,14 @@ import {
   esportaSchedinaAlloggiatiWebSingola,
   esportaSchedineAlloggiatiWeb,
   useAlloggiatiWebConfig,
+  useAnniAlloggiatiWeb,
   useInviaAlloggiatiWebOra,
   useSchedineAlloggiatiWeb,
 } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
-import { ANNO_CORRENTE, ultimiAnni } from '../lib/anni'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -33,6 +34,8 @@ export function PoliziaPage() {
   const { strutturaId } = useStruttura()
   const puoInviare = usePuoScrivere('statePoliceWrite')
   const [anno, setAnno] = useState(ANNO_CORRENTE)
+  const anniDisponibili = useAnniAlloggiatiWeb(strutturaId)
+  const anniSelezionabili = anniConAnnoCorrente(anniDisponibili.data)
   const config = useAlloggiatiWebConfig(strutturaId)
   const schedine = useSchedineAlloggiatiWeb(strutturaId, anno)
   const [risultatoInvio, setRisultatoInvio] = useState<{ inviate: number; totale: number; errori: number; messaggio: string | null } | null>(null)
@@ -117,7 +120,7 @@ export function PoliziaPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
           <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Schedine</Typography>
           <TextField select size="small" label="Anno" value={anno} onChange={(e) => setAnno(Number(e.target.value))} sx={{ minWidth: 110 }}>
-            {ultimiAnni().map((a) => (
+            {anniSelezionabili.map((a) => (
               <MenuItem key={a} value={a}>
                 {a}
               </MenuItem>

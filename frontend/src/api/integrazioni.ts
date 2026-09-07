@@ -225,6 +225,15 @@ export function useSchedineAlloggiatiWeb(strutturaId: string | null, anno: numbe
   })
 }
 
+/** Anni con almeno una prenotazione — per non proporre nel selettore Anno anni sicuramente vuoti. */
+export function useAnniAlloggiatiWeb(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['alloggiati-web-anni', strutturaId],
+    queryFn: () => apiGet<number[]>(`/strutture/${strutturaId}/alloggiati-web/schedine/anni`),
+    enabled: !!strutturaId,
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Osservatorio Turistico
 // ---------------------------------------------------------------------------
@@ -294,6 +303,15 @@ export function useSchedineOsservatorio(strutturaId: string | null, appartamento
     queryKey: ['osservatorio-schedine', strutturaId, appartamentoId, anno],
     queryFn: () => apiGet<SchedinaOsservatorioDto[]>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}/schedine?anno=${anno}`),
     enabled: !!strutturaId && !!appartamentoId,
+  })
+}
+
+/** Anni con almeno una prenotazione — per non proporre nel selettore Anno anni sicuramente vuoti. A livello di Struttura, non di singolo appartamento. */
+export function useAnniOsservatorio(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['osservatorio-anni', strutturaId],
+    queryFn: () => apiGet<number[]>(`/strutture/${strutturaId}/osservatorio/anni`),
+    enabled: !!strutturaId,
   })
 }
 
@@ -393,6 +411,15 @@ export function usePrenotazioniPayTourist(strutturaId: string | null, payTourist
     queryKey: ['paytourist-prenotazioni', strutturaId, payTouristStrutturaId, anno],
     queryFn: () => apiGet<PrenotazionePayTouristDto[]>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/prenotazioni?anno=${anno}`),
     enabled: !!strutturaId && !!payTouristStrutturaId,
+  })
+}
+
+/** Anni con almeno una prenotazione — per non proporre nel selettore Anno anni sicuramente vuoti. */
+export function useAnniPayTourist(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['paytourist-anni', strutturaId],
+    queryFn: () => apiGet<number[]>(`/strutture/${strutturaId}/paytourist/anni`),
+    enabled: !!strutturaId,
   })
 }
 

@@ -42,6 +42,13 @@ public interface IPrenotazioneRepository
     /// <summary>Anni con almeno un incasso (prenotazione non annullata con ImportoPagato &gt; 0) — per il selettore Anno del riepilogo cassa.</summary>
     Task<IReadOnlyList<int>> ListaAnniConIncassoAsync(Guid strutturaId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Anni con almeno una prenotazione non annullata — per il selettore Anno delle schermate
+    /// operative Alloggiati Web/Osservatorio/PayTourist (su richiesta esplicita, non deve proporre
+    /// anni sicuramente vuoti, stesso principio già applicato a Statistiche/Finanze).
+    /// </summary>
+    Task<IReadOnlyList<int>> ListaAnniConPrenotazioniAsync(Guid strutturaId, CancellationToken cancellationToken);
+
     /// <summary>Prenotazioni non annullate di una camera che si sovrappongono al periodo — usata dalla sincronizzazione disponibilità Wubook di Fase 5.</summary>
     Task<IReadOnlyList<Prenotazione>> ListOccupazioneAsync(Guid strutturaId, Guid cameraId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken);
 

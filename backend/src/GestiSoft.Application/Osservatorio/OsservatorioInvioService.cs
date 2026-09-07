@@ -120,6 +120,13 @@ public class OsservatorioInvioService(
             o.Prenotazione?.CheckOut is { } checkOut ? appartamento.CursoreDataAtUtc?.Date > checkOut.Date : null)).ToList();
     }
 
+    /// <summary>Anni con almeno una prenotazione per il selettore Anno della schermata operativa — su richiesta esplicita, non deve proporre anni sicuramente vuoti.</summary>
+    public async Task<IReadOnlyList<int>> ListaAnniAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+        return await prenotazioni.ListaAnniConPrenotazioniAsync(strutturaId, cancellationToken);
+    }
+
     private async Task<RisultatoInvioOsservatorio> ProcessaAppartamentoAsync(Guid strutturaId, OsservatorioAppartamento appartamento, bool automatico, CancellationToken cancellationToken)
     {
         await concessioneGuard.EnsureOsservatorioAsync(strutturaId, cancellationToken);

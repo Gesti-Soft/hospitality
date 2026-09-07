@@ -13,6 +13,14 @@ namespace GestiSoft.Api.Controllers;
 [Authorize]
 public class PayTouristSincronizzazioneController(PayTouristInvioService invioService, ICurrentUser currentUser) : ControllerBase
 {
+    /// <summary>Anni con almeno una prenotazione — per non proporre nel selettore Anno anni sicuramente vuoti.</summary>
+    [HttpGet("anni")]
+    public async Task<IActionResult> Anni(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var anni = await invioService.ListaAnniAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(anni);
+    }
+
     [HttpPost("invia")]
     public async Task<IActionResult> InviaOra(Guid strutturaId, CancellationToken cancellationToken)
     {
