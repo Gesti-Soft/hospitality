@@ -44,6 +44,15 @@ export function IconCamere(props: IconProps) {
   )
 }
 
+export function IconPulizie(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M7 15.5L11.5 4L13 8L16 9.5L12.5 11L11 15L9.5 11L6.5 9.5Z" stroke="currentColor" strokeWidth={1.3} strokeLinejoin="round" />
+      <path d="M2.5 6.5L3.4 4L4.3 6.5L6.5 7.5L4.3 8.5L3.4 11L2.5 8.5L0.5 7.5Z" stroke="currentColor" strokeWidth={1.1} strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function IconTipologie(props: IconProps) {
   return (
     <svg {...base} {...props}>

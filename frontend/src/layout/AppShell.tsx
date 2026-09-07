@@ -24,12 +24,12 @@ import { useAuth } from '../auth/AuthContext'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useAggiornaStruttura, useCreaStruttura, useImpostaAttivoStruttura, type StrutturaDto } from '../api/strutture'
 import { GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA } from '../api/superAdmin'
-import { useMioPermessoStruttura } from '../api/utenti'
 import { ApiError } from '../api/client'
 import { fontDisplay, tokens } from '../theme'
 import { GestiSoftMark } from '../components/GestiSoftMark'
-import { navItemsFlat, navSections, type NavSection } from './navItems'
+import { navItemsFlat, type NavSection } from './navItems'
 import { IconEsci, IconSuperAdmin } from './navIcons'
+import { useSezioniVisibili } from './useSezioniVisibili'
 
 const NAV_RAIL_WIDTH = 232
 const TOPBAR_HEIGHT = 56
@@ -40,23 +40,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { sessione, esci } = useAuth()
   const { isSuperAdmin, clienti, clienteId, strutture, strutturaId, strutturaCorrente, loading, selezionaCliente, selezionaStruttura } =
     useStruttura()
-  // Solo per decidere se mostrare le voci "richiedeGestioneUtenti" (es. Log) — il Super Admin non
-  // ha bisogno di questo dato, ce l'ha sempre libero.
-  const mioPermesso = useMioPermessoStruttura(!isSuperAdmin ? strutturaId : null)
-
-  const sezioniVisibili = navSections
-    .filter((section) => !section.soloSuperAdmin || isSuperAdmin)
-    // Per il SuperAdmin, le sezioni operative restano nascoste finché non seleziona
-    // esplicitamente una Struttura (nessuna struttura precaricata all'accesso).
-    .filter((section) => section.soloSuperAdmin || !isSuperAdmin || !!strutturaId)
-    .filter((section) => !section.richiedeGestioneUtenti || isSuperAdmin || mioPermesso.data?.settingUser === true)
-    .map((section) => ({
-      section,
-      // Una sezione i cui servizi sono tutti disabilitati (es. "Invii automatici" senza alcun
-      // servizio esterno concesso) non deve comparire nemmeno come tab.
-      voci: section.items.filter((item) => !item.richiedeServizio || strutturaCorrente?.[item.richiedeServizio] !== false),
-    }))
-    .filter(({ voci }) => voci.length > 0)
+  const { sezioni: sezioniVisibili } = useSezioniVisibili()
 
   const sezioneAttiva = sezioniVisibili.find(({ voci }) => voci.some((item) => item.path === location.pathname)) ?? sezioniVisibili[0]
 

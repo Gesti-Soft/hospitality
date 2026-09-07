@@ -24,13 +24,33 @@ public class StrutturaUtentiController(UtenteManagementService service, ICurrent
             a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite)));
     }
 
-    /// <summary>Solo i propri permessi su questa struttura (non l'intero elenco) — usato dal frontend per decidere se mostrare pagine riservate a chi gestisce gli utenti (es. Log), senza dover scaricare il roster completo.</summary>
+    /// <summary>Tutti i propri permessi su questa struttura (non l'intero elenco) — usato dal frontend per decidere quali pagine/voci di menu mostrare, senza dover scaricare il roster completo.</summary>
     [HttpGet("me")]
     public async Task<IActionResult> Mio(Guid strutturaId, CancellationToken cancellationToken)
     {
-        var haGestioneUtenti = await service.HaGestioneUtentiAsync(currentUser, strutturaId, cancellationToken);
-        return Ok(new MioPermessoStrutturaDto(haGestioneUtenti));
+        var p = await service.GetMioPermessoAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(new MioPermessoStrutturaDto(
+            p.BookingRead, p.BookingWrite, p.ReservationRead, p.ReservationWrite,
+            p.StatePoliceRead, p.StatePoliceWrite, p.StatePoliceSettings,
+            p.SettingAgency, p.SettingUser, p.SettingRoomRead, p.SettingRoomWrite, p.RoomStatusUpdate,
+            p.FinanceRead, p.FinanceWrite, p.RestaurantRead, p.RestaurantWrite));
     }
 }
 
-public record MioPermessoStrutturaDto(bool SettingUser);
+public record MioPermessoStrutturaDto(
+    bool BookingRead,
+    bool BookingWrite,
+    bool ReservationRead,
+    bool ReservationWrite,
+    bool StatePoliceRead,
+    bool StatePoliceWrite,
+    bool StatePoliceSettings,
+    bool SettingAgency,
+    bool SettingUser,
+    bool SettingRoomRead,
+    bool SettingRoomWrite,
+    bool RoomStatusUpdate,
+    bool FinanceRead,
+    bool FinanceWrite,
+    bool RestaurantRead,
+    bool RestaurantWrite);

@@ -40,6 +40,14 @@ public class CamereController(CamereService service, ICurrentUser currentUser) :
         return NoContent();
     }
 
+    /// <summary>Segna una camera come pulita (torna "Pronta") — pagina Pulizie, permesso RoomStatusUpdate.</summary>
+    [HttpPut("{cameraId:guid}/pulita")]
+    public async Task<IActionResult> SegnaPulita(Guid strutturaId, Guid cameraId, CancellationToken cancellationToken)
+    {
+        var camera = await service.SegnaPulitaAsync(currentUser, strutturaId, cameraId, cancellationToken);
+        return Ok(ToDto(camera));
+    }
+
     /// <summary>Duplica tipologie/camere/prezzi/canali vendita da un'altra Struttura attiva dello stesso Cliente.</summary>
     [HttpPost("duplica-da/{strutturaOrigineId:guid}")]
     public async Task<IActionResult> DuplicaDa(Guid strutturaId, Guid strutturaOrigineId, CancellationToken cancellationToken)

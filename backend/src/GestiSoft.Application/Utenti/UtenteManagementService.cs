@@ -34,6 +34,35 @@ public record AggiornaUtenteRequest(string? Nome, string? Cognome, string Email)
 
 public record ResetPasswordRequest(string PasswordNuova);
 
+/// <summary>Tutti i permessi granulari dell'utente corrente su una Struttura — usato dal frontend per decidere quali voci di menu mostrare.</summary>
+public record MioPermessoRisultato(
+    bool BookingRead,
+    bool BookingWrite,
+    bool ReservationRead,
+    bool ReservationWrite,
+    bool StatePoliceRead,
+    bool StatePoliceWrite,
+    bool StatePoliceSettings,
+    bool SettingAgency,
+    bool SettingUser,
+    bool SettingRoomRead,
+    bool SettingRoomWrite,
+    bool RoomStatusUpdate,
+    bool FinanceRead,
+    bool FinanceWrite,
+    bool RestaurantRead,
+    bool RestaurantWrite)
+{
+    public static readonly MioPermessoRisultato Tutti = new(true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true);
+    public static readonly MioPermessoRisultato Nessuno = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+
+    public static MioPermessoRisultato Da(UtenteStruttura a) => new(
+        a.BookingRead, a.BookingWrite, a.ReservationRead, a.ReservationWrite,
+        a.StatePoliceRead, a.StatePoliceWrite, a.StatePoliceSettings,
+        a.SettingAgency, a.SettingUser, a.SettingRoomRead, a.SettingRoomWrite, a.RoomStatusUpdate,
+        a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite);
+}
+
 public class UtenteManagementService(
     IUtenteRepository utenti,
     IUtenteStrutturaRepository utentiStrutture,
@@ -115,6 +144,30 @@ public class UtenteManagementService(
 
         var assegnazione = await utentiStrutture.GetAsync(currentUser.UtenteId, strutturaId, cancellationToken);
         return assegnazione?.SettingUser ?? false;
+    }
+
+    /// <summary>
+    /// Tutti i permessi granulari dell'utente corrente su questa Struttura — usato dal frontend per
+    /// decidere quali voci di menu mostrare (su richiesta esplicita: un addetto pulizie non deve
+    /// vedere Calendario/Finanze/Invii automatici/ecc., solo le pagine per cui ha davvero un
+    /// permesso). Stesso bypass di <see cref="HaGestioneUtentiAsync"/>: Super Admin e titolare del
+    /// Cliente vedono/possono tutto.
+    /// </summary>
+    public async Task<MioPermessoRisultato> GetMioPermessoAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        if (currentUser.IsSuperAdmin)
+        {
+            return MioPermessoRisultato.Tutti;
+        }
+
+        var utenteCorrente = await utenti.GetByIdAsync(currentUser.UtenteId, cancellationToken);
+        if (utenteCorrente is { IsClienteAccount: true })
+        {
+            return MioPermessoRisultato.Tutti;
+        }
+
+        var assegnazione = await utentiStrutture.GetAsync(currentUser.UtenteId, strutturaId, cancellationToken);
+        return assegnazione is null ? MioPermessoRisultato.Nessuno : MioPermessoRisultato.Da(assegnazione);
     }
 
     public async Task<Utente> CreaAsync(ICurrentUser currentUser, CreaUtenteRequest request, CancellationToken cancellationToken)

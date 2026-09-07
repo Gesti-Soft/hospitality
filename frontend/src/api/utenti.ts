@@ -78,11 +78,9 @@ export interface AggiornaUtenteRequest {
   email: string
 }
 
-export interface MioPermessoStrutturaDto {
-  settingUser: boolean
-}
+export type MioPermessoStrutturaDto = PermessiStruttura
 
-/** Solo i propri permessi sulla struttura corrente — usato per decidere se mostrare pagine riservate a chi gestisce gli utenti (es. Log), senza scaricare il roster completo. */
+/** Tutti i propri permessi sulla struttura corrente — usato per decidere quali pagine/voci di menu mostrare (es. Log, ma anche Calendario/Finanze/Invii automatici per un ruolo con permessi limitati), senza scaricare il roster completo. */
 export function useMioPermessoStruttura(strutturaId: string | null) {
   return useQuery({
     queryKey: ['mio-permesso-struttura', strutturaId],

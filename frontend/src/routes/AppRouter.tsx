@@ -4,6 +4,7 @@ import { DashboardPage } from '../pages/DashboardPage'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { CalendarioPage } from '../pages/CalendarioPage'
 import { CamerePage } from '../pages/CamerePage'
+import { PuliziePage } from '../pages/PuliziePage'
 import { TipologiePage } from '../pages/TipologiePage'
 import { OspitiPage } from '../pages/OspitiPage'
 import { RiepilogoCassaPage } from '../pages/RiepilogoCassaPage'
@@ -23,15 +24,37 @@ import { SuperAdminDashboardPage } from '../pages/SuperAdminDashboardPage'
 import { SuperAdminClientiPage } from '../pages/SuperAdminClientiPage'
 import { SuperAdminImpostazioniPage } from '../pages/SuperAdminImpostazioniPage'
 import { ProtectedRoute } from './ProtectedRoute'
+import { useSezioniVisibili } from '../layout/useSezioniVisibili'
 
 /**
  * Il Super Admin senza ancora una Struttura scelta non ha nessun Cruscotto operativo da mostrare:
  * va alla sua dashboard. Una volta scelta una Struttura (tab "Operativo" in alto, il cui primo
  * elemento è proprio "/") deve invece vedere il Cruscotto di quella struttura come chiunque altro.
+ *
+ * Un utente senza alcun permesso per vedere il Cruscotto (es. addetto pulizie, che vede solo
+ * "Pulizie" in menu) non deve nemmeno atterrarci per un istante dopo il login — reindirizzato subito
+ * alla prima voce di menu che può effettivamente vedere. Aspetta che i permessi siano arrivati
+ * (`caricamento`) prima di decidere, altrimenti un redirect prematuro basato su dati incompleti
+ * rimbalzerebbe subito indietro appena i permessi reali risultano più ampi.
  */
 function RootRoute() {
   const { isSuperAdmin, strutturaId } = useStruttura()
-  return isSuperAdmin && !strutturaId ? <Navigate to="/super-admin" replace /> : <DashboardPage />
+  const { sezioni, caricamento } = useSezioniVisibili()
+
+  if (isSuperAdmin && !strutturaId) {
+    return <Navigate to="/super-admin" replace />
+  }
+
+  if (caricamento) {
+    return null
+  }
+
+  const primaVoceDisponibile = sezioni[0]?.voci[0]
+  if (primaVoceDisponibile && primaVoceDisponibile.path !== '/') {
+    return <Navigate to={primaVoceDisponibile.path} replace />
+  }
+
+  return <DashboardPage />
 }
 
 const router = createBrowserRouter([
@@ -42,6 +65,7 @@ const router = createBrowserRouter([
       { path: '/', element: <RootRoute /> },
       { path: '/calendario', element: <CalendarioPage /> },
       { path: '/camere', element: <CamerePage /> },
+      { path: '/pulizie', element: <PuliziePage /> },
       { path: '/tipologie', element: <TipologiePage /> },
       { path: '/ospiti', element: <OspitiPage /> },
       { path: '/finanze', element: <Navigate to="/finanze/riepilogo" replace /> },

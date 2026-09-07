@@ -72,6 +72,15 @@ export function useEliminaCamera(strutturaId: string | null) {
   })
 }
 
+/** Segna una camera come pulita (torna "Pronta") — pagina Pulizie. */
+export function useSegnaCameraPulita(strutturaId: string | null) {
+  const invalida = useInvalidaCamere(strutturaId)
+  return useMutation({
+    mutationFn: (cameraId: string) => apiPut<CameraDto>(`/strutture/${strutturaId}/camere/${cameraId}/pulita`),
+    onSuccess: invalida,
+  })
+}
+
 export interface RisultatoDuplicazioneCamereDto {
   tipologie: number
   camere: number

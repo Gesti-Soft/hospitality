@@ -183,6 +183,23 @@ public class CamereService(
         return entity;
     }
 
+    /// <summary>
+    /// Segna una camera come pulita (torna "Pronta") — usata dalla pagina Pulizie. Permesso
+    /// `RoomStatusUpdate` invece di `SettingRoomWrite`: un addetto pulizie deve poter aggiornare lo
+    /// stato della camera senza avere accesso a crearne/modificarne l'anagrafica.
+    /// </summary>
+    public async Task<SettingRoom> SegnaPulitaAsync(ICurrentUser currentUser, Guid strutturaId, Guid cameraId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.RoomStatusUpdate, cancellationToken);
+
+        var entity = await GetCameraOwnedAsync(strutturaId, cameraId, cancellationToken);
+        entity.StateRoom = StatoCamera.Pronta;
+        entity.UpdatedAtUtc = DateTime.UtcNow;
+
+        await camere.UpdateAsync(entity, cancellationToken);
+        return entity;
+    }
+
     private static string? NormalizzaCodiceWubook(string? codice)
     {
         if (string.IsNullOrWhiteSpace(codice))

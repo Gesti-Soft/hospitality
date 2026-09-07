@@ -3,9 +3,13 @@ import { Navigate } from 'react-router-dom'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment'
 import Link from '@mui/material/Link'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import VisibilityIcon from '@mui/icons-material/VisibilityOutlined'
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOffOutlined'
 import { useAuth } from '../auth/AuthContext'
 import { fontDisplay, tokens } from '../theme'
 import { GestiSoftMark } from '../components/GestiSoftMark'
@@ -14,6 +18,7 @@ export function LoginPage() {
   const { sessione, accedi, loading, errore } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordVisibile, setPasswordVisibile] = useState(false)
 
   if (sessione) {
     return <Navigate to="/" replace />
@@ -97,12 +102,29 @@ export function LoginPage() {
             <Box>
               <TextField
                 label="Password"
-                type="password"
+                type={passwordVisibile ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 required
                 fullWidth
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => setPasswordVisibile((v) => !v)}
+                          edge="end"
+                          size="small"
+                          tabIndex={-1}
+                          aria-label={passwordVisibile ? 'Nascondi password' : 'Mostra password'}
+                        >
+                          {passwordVisibile ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
               />
               <Box sx={{ textAlign: 'right', mt: 0.75 }}>
                 <Link href="#" underline="hover" sx={{ fontSize: 12.5, fontWeight: 600 }}>
