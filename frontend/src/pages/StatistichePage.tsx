@@ -130,6 +130,24 @@ export function StatistichePage() {
                 />
               </CardGrafico>
 
+              <CardGrafico titolo="Tassa di soggiorno mensile">
+                <BarChart
+                  height={260}
+                  hideLegend
+                  borderRadius={4}
+                  xAxis={[{ data: NOMI_MESI, scaleType: 'band' }]}
+                  yAxis={[{ valueFormatter: formattatoreAsseCompatto((v) => formattatoreValuta.format(v)) }]}
+                  series={[
+                    {
+                      data: dati.tassaSoggiorno.andamentoMensile.map((v) => v.valore),
+                      label: 'Tassa di soggiorno',
+                      color: PALETTE_CATEGORICA[1],
+                      valueFormatter: (v) => formattatoreValuta.format(v ?? 0),
+                    },
+                  ]}
+                />
+              </CardGrafico>
+
               <CardGrafico titolo="Ricavo per tipologia camera">
                 <BarChart
                   layout="horizontal"
