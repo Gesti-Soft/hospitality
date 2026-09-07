@@ -15,9 +15,16 @@ public class StatisticheRepository(GestiSoftDbContext db) : IStatisticheReposito
             .OrderByDescending(a => a)
             .ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// Su segnalazione esplicita dell'utente: una prenotazione Annullata non è mai stato un soggiorno
+    /// reale, non deve contare come "prenotazione" nel KPI né nelle sue percentuali derivate (vedi
+    /// StatisticheService.GetStatisticheAsync, che usa questo conteggio anche come denominatore per
+    /// ContaPerNazionalitaAsync) — stessa esclusione già applicata a SommaTassaSoggiornoAnnoAsync,
+    /// estesa qui e alle altre query "conteggio prenotazioni" di questo repository per coerenza.
+    /// </summary>
     public Task<int> ContaPrenotazioniAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken) =>
         db.Prenotazioni.AsNoTracking()
-            .CountAsync(p => p.StrutturaId == strutturaId && p.Anno == anno, cancellationToken);
+            .CountAsync(p => p.StrutturaId == strutturaId && p.Anno == anno && p.StatoPrenotazione != StatoPrenotazione.Annullata, cancellationToken);
 
     public async Task<(decimal Stimato, decimal Effettivo)> SommaImportiAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
@@ -49,7 +56,7 @@ public class StatisticheRepository(GestiSoftDbContext db) : IStatisticheReposito
     public async Task<IReadOnlyList<(string? Etichetta, int Conteggio)>> ContaPerAgenziaAsync(Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         var righe = await db.Prenotazioni.AsNoTracking()
-            .Where(p => p.StrutturaId == strutturaId && p.Anno == anno)
+            .Where(p => p.StrutturaId == strutturaId && p.Anno == anno && p.StatoPrenotazione != StatoPrenotazione.Annullata)
             .GroupBy(p => p.Agenzia)
             .Select(g => new { Etichetta = g.Key, Conteggio = g.Count() })
             .ToListAsync(cancellationToken);
@@ -60,7 +67,8 @@ public class StatisticheRepository(GestiSoftDbContext db) : IStatisticheReposito
     public async Task<IReadOnlyList<(string? Etichetta, int Conteggio)>> ContaPerNazionalitaAsync(Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         var righe = await db.Ospiti.AsNoTracking()
-            .Where(o => o.StrutturaId == strutturaId && o.Prenotazione != null && o.Prenotazione.Anno == anno)
+            .Where(o => o.StrutturaId == strutturaId && o.Prenotazione != null && o.Prenotazione.Anno == anno
+                && o.Prenotazione.StatoPrenotazione != StatoPrenotazione.Annullata)
             .GroupBy(o => o.Cittadinanza)
             .Select(g => new { Etichetta = g.Key, Conteggio = g.Count() })
             .ToListAsync(cancellationToken);
@@ -93,7 +101,8 @@ public class StatisticheRepository(GestiSoftDbContext db) : IStatisticheReposito
     public async Task<IReadOnlyList<(string Tipologia, int Mese, int Conteggio)>> PrenotazioniPerTipologiaMeseAsync(Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         var righe = await db.Prenotazioni.AsNoTracking()
-            .Where(p => p.StrutturaId == strutturaId && p.CheckIn != null && p.CheckIn.Value.Year == anno && p.Camera != null && p.Camera.Tipologia != null)
+            .Where(p => p.StrutturaId == strutturaId && p.CheckIn != null && p.CheckIn.Value.Year == anno && p.Camera != null && p.Camera.Tipologia != null
+                && p.StatoPrenotazione != StatoPrenotazione.Annullata)
             .GroupBy(p => new { Tipologia = p.Camera!.Tipologia!.TipologiaCamera, Mese = p.CheckIn!.Value.Month })
             .Select(g => new { g.Key.Tipologia, g.Key.Mese, Conteggio = g.Count() })
             .ToListAsync(cancellationToken);
