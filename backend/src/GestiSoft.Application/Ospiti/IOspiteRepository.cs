@@ -16,11 +16,12 @@ public interface IOspiteRepository
     Task<IReadOnlyList<Ospite>> ListDaInviareAlloggiatiWebAsync(Guid strutturaId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Ospiti con soggiorno non annullato e check-in nella finestra indicata (indipendentemente dal
-    /// flag StatePolice) — per la schermata operativa Alloggiati Web (Impostazioni), che deve
-    /// mostrare sia le schedine da inviare sia quelle già inviate, non solo quelle in coda.
+    /// Ospiti con soggiorno non annullato, check-in nell'anno indicato (indipendentemente dal flag
+    /// StatePolice) — per la schermata operativa Alloggiati Web (Impostazioni), che deve mostrare sia
+    /// le schedine da inviare sia quelle già inviate, non solo quelle in coda. Su richiesta esplicita
+    /// dell'utente, filtrato per anno selezionato (non più una finestra mobile di 30 giorni).
     /// </summary>
-    Task<IReadOnlyList<Ospite>> ListRecentiAlloggiatiWebAsync(Guid strutturaId, DateTime da, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Ospite>> ListRecentiAlloggiatiWebAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
 
     /// <summary>
     /// Ospiti con arrivo (check-in) in una data, soggiorno in corso, non ancora inviati
@@ -39,11 +40,13 @@ public interface IOspiteRepository
     Task<IReadOnlyList<Ospite>> ListCheckoutOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime data, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Ospiti non annullati con check-in o check-out nella finestra indicata, sulle tipologie
-    /// dell'appartamento — per la schermata operativa Osservatorio, che deve mostrare sia gli
-    /// arrivi/partenze da inviare sia quelli già inviati (non solo il giorno corrente).
+    /// Ospiti con soggiorno già arrivato al check-in (InCorso o Completata — mai Incompleta: un
+    /// check-in futuro non ancora avvenuto non deve comparire come "da inviare") nell'anno indicato,
+    /// sulle tipologie dell'appartamento — per la schermata operativa Osservatorio, che deve mostrare
+    /// sia gli arrivi/partenze da inviare sia quelli già inviati. Su richiesta esplicita dell'utente,
+    /// filtrato per anno selezionato (non più una finestra mobile di 30 giorni).
     /// </summary>
-    Task<IReadOnlyList<Ospite>> ListRecentiOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime da, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Ospite>> ListRecentiOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, int anno, CancellationToken cancellationToken);
 
     /// <summary>
     /// Ospiti di prenotazioni già completate (check-out effettuato, <c>StatoPrenotazione.Completata</c>)
@@ -56,12 +59,13 @@ public interface IOspiteRepository
     Task<IReadOnlyList<Ospite>> ListDaInviarePayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Ospiti di prenotazioni completate con check-out nella finestra indicata (indipendentemente dal
+    /// Ospiti di prenotazioni completate con check-out nell'anno indicato (indipendentemente dal
     /// flag PayTourist), sulle tipologie della struttura PayTourist — per la schermata operativa
     /// PayTourist (Impostazioni), che deve mostrare sia le prenotazioni da inviare sia quelle già
-    /// inviate, non solo quelle ancora in coda.
+    /// inviate, non solo quelle ancora in coda. Su richiesta esplicita dell'utente, filtrato per anno
+    /// selezionato (non più una finestra mobile di 30 giorni).
     /// </summary>
-    Task<IReadOnlyList<Ospite>> ListRecentiPayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime da, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Ospite>> ListRecentiPayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, int anno, CancellationToken cancellationToken);
 
     void Add(Ospite entity);
 

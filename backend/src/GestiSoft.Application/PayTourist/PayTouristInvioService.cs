@@ -279,8 +279,8 @@ public class PayTouristInvioService(
             operatore: operatore,
             cancellationToken: cancellationToken);
 
-    /// <summary>Elenco prenotazioni recenti (30 giorni sul check-out) di una struttura PayTourist per la schermata operativa — da inviare e già inviate.</summary>
-    public async Task<IReadOnlyList<PrenotazionePayTourist>> ListPrenotazioniAsync(ICurrentUser currentUser, Guid strutturaId, Guid payTouristStrutturaId, CancellationToken cancellationToken)
+    /// <summary>Elenco prenotazioni dell'anno indicato (sul check-out) di una struttura PayTourist per la schermata operativa — da inviare e già inviate.</summary>
+    public async Task<IReadOnlyList<PrenotazionePayTourist>> ListPrenotazioniAsync(ICurrentUser currentUser, Guid strutturaId, Guid payTouristStrutturaId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
 
@@ -288,7 +288,7 @@ public class PayTouristInvioService(
             ?? throw new NotFoundException("Struttura PayTourist non trovata.");
 
         var tipologieIds = payTouristStruttura.Tipologie.Select(t => t.TipologiaId).ToHashSet();
-        var recenti = await ospiti.ListRecentiPayTouristAsync(strutturaId, tipologieIds, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+        var recenti = await ospiti.ListRecentiPayTouristAsync(strutturaId, tipologieIds, anno, cancellationToken);
 
         return recenti.Select(o => new PrenotazionePayTourist(
             o.Id,

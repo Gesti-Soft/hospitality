@@ -12,11 +12,11 @@ namespace GestiSoft.Api.Controllers;
 [Authorize]
 public class OsservatorioSincronizzazioneController(OsservatorioInvioService invioService, ICurrentUser currentUser) : ControllerBase
 {
-    /// <summary>Elenco arrivi/partenze recenti (30 giorni) da inviare/già inviati — per la schermata operativa.</summary>
+    /// <summary>Elenco arrivi/partenze dell'anno indicato (default anno corrente) da inviare/già inviati — per la schermata operativa.</summary>
     [HttpGet("schedine")]
-    public async Task<IActionResult> Lista(Guid strutturaId, Guid appartamentoId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Lista(Guid strutturaId, Guid appartamentoId, [FromQuery] int? anno, CancellationToken cancellationToken)
     {
-        var schedine = await invioService.ListSchedineAsync(currentUser, strutturaId, appartamentoId, cancellationToken);
+        var schedine = await invioService.ListSchedineAsync(currentUser, strutturaId, appartamentoId, anno ?? DateTime.UtcNow.Year, cancellationToken);
         return Ok(schedine.Select(s => new SchedinaOsservatorioDto(s.OspiteId, s.PrenotazioneId, s.NomeOspite, s.Camera, s.CheckIn, s.CheckOut, s.ArrivoInviato, s.PartenzaInviata)));
     }
 

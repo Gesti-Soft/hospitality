@@ -94,12 +94,12 @@ public class OsservatorioInvioService(
     }
 
     /// <summary>
-    /// Elenco arrivi/partenze recenti (30 giorni) di un appartamento per la schermata operativa —
+    /// Elenco arrivi/partenze dell'anno indicato di un appartamento per la schermata operativa —
     /// da inviare e già inviati. La partenza si considera inviata se il cursore di chiusura
     /// giornata dell'appartamento ha già superato la data di check-out (nessun flag dedicato per
     /// singola prenotazione: il checkout viene chiuso per giorno, non per ospite).
     /// </summary>
-    public async Task<IReadOnlyList<SchedinaOsservatorio>> ListSchedineAsync(ICurrentUser currentUser, Guid strutturaId, Guid appartamentoId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SchedinaOsservatorio>> ListSchedineAsync(ICurrentUser currentUser, Guid strutturaId, Guid appartamentoId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
 
@@ -107,7 +107,7 @@ public class OsservatorioInvioService(
             ?? throw new NotFoundException("Appartamento Osservatorio Turistico non trovato.");
 
         var tipologieIds = appartamento.Tipologie.Select(t => t.TipologiaId).ToHashSet();
-        var recenti = await ospiti.ListRecentiOsservatorioAsync(strutturaId, tipologieIds, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+        var recenti = await ospiti.ListRecentiOsservatorioAsync(strutturaId, tipologieIds, anno, cancellationToken);
 
         return recenti.Select(o => new SchedinaOsservatorio(
             o.Id,

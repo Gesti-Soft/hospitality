@@ -28,11 +28,11 @@ public class PayTouristSincronizzazioneController(PayTouristInvioService invioSe
         return NoContent();
     }
 
-    /// <summary>Elenco prenotazioni recenti (30 giorni) da inviare/già inviate per una struttura PayTourist — per la schermata operativa.</summary>
+    /// <summary>Elenco prenotazioni dell'anno indicato (default anno corrente) da inviare/già inviate per una struttura PayTourist — per la schermata operativa.</summary>
     [HttpGet("strutture/{payTouristStrutturaId:guid}/prenotazioni")]
-    public async Task<IActionResult> Lista(Guid strutturaId, Guid payTouristStrutturaId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Lista(Guid strutturaId, Guid payTouristStrutturaId, [FromQuery] int? anno, CancellationToken cancellationToken)
     {
-        var prenotazioni = await invioService.ListPrenotazioniAsync(currentUser, strutturaId, payTouristStrutturaId, cancellationToken);
+        var prenotazioni = await invioService.ListPrenotazioniAsync(currentUser, strutturaId, payTouristStrutturaId, anno ?? DateTime.UtcNow.Year, cancellationToken);
         return Ok(prenotazioni.Select(p => new PrenotazionePayTouristDto(p.OspiteId, p.PrenotazioneId, p.NomeOspite, p.Camera, p.CheckIn, p.CheckOut, p.Inviata)));
     }
 

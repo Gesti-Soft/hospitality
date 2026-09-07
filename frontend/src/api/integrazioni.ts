@@ -208,18 +208,19 @@ export function useInviaAlloggiatiWebOra(strutturaId: string | null) {
   })
 }
 
-export function esportaSchedineAlloggiatiWeb(strutturaId: string) {
-  return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/schedine/export`, `schedine-alloggiati-web.txt`)
+export function esportaSchedineAlloggiatiWeb(strutturaId: string, anno: number) {
+  return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/schedine/export?anno=${anno}`, `schedine-alloggiati-web-${anno}.txt`)
 }
 
-export function esportaSchedinaAlloggiatiWebSingola(strutturaId: string, ospiteId: string) {
-  return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/schedine/${ospiteId}/export`, `schedina-alloggiati-web.txt`)
+export function esportaSchedinaAlloggiatiWebSingola(strutturaId: string, ospiteId: string, anno: number) {
+  return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/schedine/${ospiteId}/export?anno=${anno}`, `schedina-alloggiati-web.txt`)
 }
 
-export function useSchedineAlloggiatiWeb(strutturaId: string | null) {
+/** Su richiesta esplicita, filtrato per anno selezionato (non più una finestra mobile di 30 giorni). */
+export function useSchedineAlloggiatiWeb(strutturaId: string | null, anno: number) {
   return useQuery({
-    queryKey: ['alloggiati-web-schedine', strutturaId],
-    queryFn: () => apiGet<SchedinaAlloggiatiWebDto[]>(`/strutture/${strutturaId}/alloggiati-web/schedine`),
+    queryKey: ['alloggiati-web-schedine', strutturaId, anno],
+    queryFn: () => apiGet<SchedinaAlloggiatiWebDto[]>(`/strutture/${strutturaId}/alloggiati-web/schedine?anno=${anno}`),
     enabled: !!strutturaId,
   })
 }
@@ -287,10 +288,11 @@ export function useInviaOsservatorioOra(strutturaId: string | null) {
   })
 }
 
-export function useSchedineOsservatorio(strutturaId: string | null, appartamentoId: string | null) {
+/** Su richiesta esplicita, filtrato per anno selezionato (non più una finestra mobile di 30 giorni). */
+export function useSchedineOsservatorio(strutturaId: string | null, appartamentoId: string | null, anno: number) {
   return useQuery({
-    queryKey: ['osservatorio-schedine', strutturaId, appartamentoId],
-    queryFn: () => apiGet<SchedinaOsservatorioDto[]>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}/schedine`),
+    queryKey: ['osservatorio-schedine', strutturaId, appartamentoId, anno],
+    queryFn: () => apiGet<SchedinaOsservatorioDto[]>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}/schedine?anno=${anno}`),
     enabled: !!strutturaId && !!appartamentoId,
   })
 }
@@ -385,10 +387,11 @@ export function esportaPayTourist(strutturaId: string, payTouristStrutturaId: st
   return apiScaricaFile(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/export`, `paytourist-export.json`)
 }
 
-export function usePrenotazioniPayTourist(strutturaId: string | null, payTouristStrutturaId: string | null) {
+/** Su richiesta esplicita, filtrato per anno selezionato (non più una finestra mobile di 30 giorni). */
+export function usePrenotazioniPayTourist(strutturaId: string | null, payTouristStrutturaId: string | null, anno: number) {
   return useQuery({
-    queryKey: ['paytourist-prenotazioni', strutturaId, payTouristStrutturaId],
-    queryFn: () => apiGet<PrenotazionePayTouristDto[]>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/prenotazioni`),
+    queryKey: ['paytourist-prenotazioni', strutturaId, payTouristStrutturaId, anno],
+    queryFn: () => apiGet<PrenotazionePayTouristDto[]>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/prenotazioni?anno=${anno}`),
     enabled: !!strutturaId && !!payTouristStrutturaId,
   })
 }

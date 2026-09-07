@@ -17,6 +17,7 @@ import { ApiError } from '../api/client'
 import { useInviaOsservatorioOra, useOsservatorioAppartamenti, useSchedineOsservatorio } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
+import { ANNO_CORRENTE, ultimiAnni } from '../lib/anni'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
@@ -25,6 +26,7 @@ export function OsservatorioPage() {
   const puoInviare = usePuoScrivere('statePoliceWrite')
   const appartamenti = useOsservatorioAppartamenti(strutturaId)
   const [appartamentoId, setAppartamentoId] = useState<string | null>(null)
+  const [anno, setAnno] = useState(ANNO_CORRENTE)
   const [errore, setErrore] = useState<string | null>(null)
   const [risultato, setRisultato] = useState<string | null>(null)
 
@@ -38,7 +40,7 @@ export function OsservatorioPage() {
     }
   }, [appartamenti.data, appartamentoId])
 
-  const schedine = useSchedineOsservatorio(strutturaId, appartamentoId)
+  const schedine = useSchedineOsservatorio(strutturaId, appartamentoId, anno)
   const invia = useInviaOsservatorioOra(strutturaId)
 
   function inviaOra() {
@@ -110,7 +112,16 @@ export function OsservatorioPage() {
 
       {appartamentoId && (
         <Box>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, mb: 1.5 }}>Arrivi/partenze (ultimi 30 giorni)</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Arrivi/partenze</Typography>
+            <TextField select size="small" label="Anno" value={anno} onChange={(e) => setAnno(Number(e.target.value))} sx={{ minWidth: 110 }}>
+              {ultimiAnni().map((a) => (
+                <MenuItem key={a} value={a}>
+                  {a}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
           {schedine.isLoading && <Skeleton variant="rounded" height={220} />}
           {!schedine.isLoading && (
             <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
@@ -129,7 +140,7 @@ export function OsservatorioPage() {
                   {(schedine.data ?? []).length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                        Nessun arrivo/partenza negli ultimi 30 giorni.
+                        Nessun arrivo/partenza per l'anno selezionato.
                       </TableCell>
                     </TableRow>
                   )}

@@ -3,12 +3,14 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
+import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { ApiError } from '../api/client'
@@ -22,6 +24,7 @@ import {
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
+import { ANNO_CORRENTE, ultimiAnni } from '../lib/anni'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -29,8 +32,9 @@ const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', m
 export function PoliziaPage() {
   const { strutturaId } = useStruttura()
   const puoInviare = usePuoScrivere('statePoliceWrite')
+  const [anno, setAnno] = useState(ANNO_CORRENTE)
   const config = useAlloggiatiWebConfig(strutturaId)
-  const schedine = useSchedineAlloggiatiWeb(strutturaId)
+  const schedine = useSchedineAlloggiatiWeb(strutturaId, anno)
   const [risultatoInvio, setRisultatoInvio] = useState<{ inviate: number; totale: number; errori: number; messaggio: string | null } | null>(null)
   const toast = useToast()
 
@@ -47,7 +51,7 @@ export function PoliziaPage() {
   async function esporta() {
     if (!strutturaId) return
     try {
-      await esportaSchedineAlloggiatiWeb(strutturaId)
+      await esportaSchedineAlloggiatiWeb(strutturaId, anno)
     } catch (err) {
       toast.errore(err instanceof ApiError ? err.message : 'Download non riuscito.')
     }
@@ -56,7 +60,7 @@ export function PoliziaPage() {
   async function esportaSingola(ospiteId: string) {
     if (!strutturaId) return
     try {
-      await esportaSchedinaAlloggiatiWebSingola(strutturaId, ospiteId)
+      await esportaSchedinaAlloggiatiWebSingola(strutturaId, ospiteId, anno)
     } catch (err) {
       toast.errore(err instanceof ApiError ? err.message : 'Download non riuscito.')
     }
@@ -110,7 +114,16 @@ export function PoliziaPage() {
       </Box>
 
       <Box>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, mb: 1.5 }}>Schedine (ultimi 30 giorni)</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Schedine</Typography>
+          <TextField select size="small" label="Anno" value={anno} onChange={(e) => setAnno(Number(e.target.value))} sx={{ minWidth: 110 }}>
+            {ultimiAnni().map((a) => (
+              <MenuItem key={a} value={a}>
+                {a}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
         {schedine.isLoading && <Skeleton variant="rounded" height={220} />}
         {!schedine.isLoading && (
           <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
@@ -129,7 +142,7 @@ export function PoliziaPage() {
                 {(schedine.data ?? []).length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                      Nessuna schedina negli ultimi 30 giorni.
+                      Nessuna schedina per l'anno selezionato.
                     </TableCell>
                   </TableRow>
                 )}

@@ -13,11 +13,11 @@ namespace GestiSoft.Api.Controllers;
 [Authorize]
 public class AlloggiatiWebSincronizzazioneController(AlloggiatiWebInvioService invioService, ICurrentUser currentUser) : ControllerBase
 {
-    /// <summary>Elenco schedine recenti (30 giorni) da inviare/già inviate — per la schermata operativa.</summary>
+    /// <summary>Elenco schedine dell'anno indicato (default anno corrente) da inviare/già inviate — per la schermata operativa.</summary>
     [HttpGet("schedine")]
-    public async Task<IActionResult> Lista(Guid strutturaId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Lista(Guid strutturaId, [FromQuery] int? anno, CancellationToken cancellationToken)
     {
-        var schedine = await invioService.ListSchedineAsync(currentUser, strutturaId, cancellationToken);
+        var schedine = await invioService.ListSchedineAsync(currentUser, strutturaId, anno ?? DateTime.UtcNow.Year, cancellationToken);
         return Ok(schedine.Select(s => new SchedinaAlloggiatiWebDto(s.OspiteId, s.PrenotazioneId, s.NomeOspite, s.Camera, s.CheckIn, s.CheckOut, s.Inviata)));
     }
 
@@ -28,19 +28,19 @@ public class AlloggiatiWebSincronizzazioneController(AlloggiatiWebInvioService i
         return Ok(new RisultatoInvioAlloggiatiWebDto(risultato.Inviate, risultato.TotaleSchedine, risultato.Errori, risultato.Messaggio));
     }
 
-    /// <summary>Fallback: esporta come file di testo le schedine ancora da inviare (30 giorni, stessa fonte della lista mostrata a schermo) senza inviarle né marcarle come inviate (stesso pattern "on-demand, mai persistito" di PDF/XML fattura in Fase 4).</summary>
+    /// <summary>Fallback: esporta come file di testo le schedine ancora da inviare nell'anno indicato (stessa fonte della lista mostrata a schermo) senza inviarle né marcarle come inviate (stesso pattern "on-demand, mai persistito" di PDF/XML fattura in Fase 4).</summary>
     [HttpGet("schedine/export")]
-    public async Task<IActionResult> Esporta(Guid strutturaId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Esporta(Guid strutturaId, [FromQuery] int? anno, CancellationToken cancellationToken)
     {
-        var testo = await invioService.EsportaAsync(currentUser, strutturaId, cancellationToken);
+        var testo = await invioService.EsportaAsync(currentUser, strutturaId, anno ?? DateTime.UtcNow.Year, cancellationToken);
         return File(Encoding.UTF8.GetBytes(testo), "text/plain", $"schedine-alloggiati-web-{DateTime.UtcNow:yyyyMMdd}.txt");
     }
 
     /// <summary>Esporta come file di testo UNA sola schedina, oltre al bulk.</summary>
     [HttpGet("schedine/{ospiteId:guid}/export")]
-    public async Task<IActionResult> EsportaSingola(Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken)
+    public async Task<IActionResult> EsportaSingola(Guid strutturaId, Guid ospiteId, [FromQuery] int? anno, CancellationToken cancellationToken)
     {
-        var testo = await invioService.EsportaSingolaAsync(currentUser, strutturaId, ospiteId, cancellationToken);
+        var testo = await invioService.EsportaSingolaAsync(currentUser, strutturaId, ospiteId, anno ?? DateTime.UtcNow.Year, cancellationToken);
         return File(Encoding.UTF8.GetBytes(testo), "text/plain", $"schedina-alloggiati-web-{DateTime.UtcNow:yyyyMMdd}.txt");
     }
 }

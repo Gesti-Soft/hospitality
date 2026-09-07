@@ -17,6 +17,7 @@ import { ApiError } from '../api/client'
 import { esportaPayTourist, useInviaPayTouristOra, useInviaPayTouristSingola, usePayTouristStrutture, usePrenotazioniPayTourist } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
+import { ANNO_CORRENTE, ultimiAnni } from '../lib/anni'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -26,6 +27,7 @@ export function PayTouristPage() {
   const puoInviare = usePuoScrivere('statePoliceWrite')
   const strutture = usePayTouristStrutture(strutturaId)
   const [payTouristStrutturaId, setPayTouristStrutturaId] = useState<string | null>(null)
+  const [anno, setAnno] = useState(ANNO_CORRENTE)
   const [errore, setErrore] = useState<string | null>(null)
   const [risultatoInvio, setRisultatoInvio] = useState<string | null>(null)
 
@@ -39,7 +41,7 @@ export function PayTouristPage() {
     }
   }, [strutture.data, payTouristStrutturaId])
 
-  const prenotazioni = usePrenotazioniPayTourist(strutturaId, payTouristStrutturaId)
+  const prenotazioni = usePrenotazioniPayTourist(strutturaId, payTouristStrutturaId, anno)
   const invia = useInviaPayTouristOra(strutturaId)
   const inviaSingola = useInviaPayTouristSingola(strutturaId)
   const [invioSingoloInCorso, setInvioSingoloInCorso] = useState<string | null>(null)
@@ -139,7 +141,16 @@ export function PayTouristPage() {
 
       {payTouristStrutturaId && (
         <Box>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, mb: 1.5 }}>Prenotazioni (ultimi 30 giorni)</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Prenotazioni</Typography>
+            <TextField select size="small" label="Anno" value={anno} onChange={(e) => setAnno(Number(e.target.value))} sx={{ minWidth: 110 }}>
+              {ultimiAnni().map((a) => (
+                <MenuItem key={a} value={a}>
+                  {a}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
           {prenotazioni.isLoading && <Skeleton variant="rounded" height={220} />}
           {!prenotazioni.isLoading && (
             <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
@@ -158,7 +169,7 @@ export function PayTouristPage() {
                   {(prenotazioni.data ?? []).length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                        Nessuna prenotazione negli ultimi 30 giorni.
+                        Nessuna prenotazione per l'anno selezionato.
                       </TableCell>
                     </TableRow>
                   )}

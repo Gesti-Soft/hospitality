@@ -96,12 +96,12 @@ public class AlloggiatiWebInvioService(
         return await SalvaEsitoAsync(integrazione, inviate, daInviare.Count, messaggio, cancellationToken);
     }
 
-    /// <summary>Elenco schedine recenti (30 giorni) per la schermata operativa — da inviare e già inviate, non solo quelle in coda.</summary>
-    public async Task<IReadOnlyList<SchedinaAlloggiatiWeb>> ListSchedineAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    /// <summary>Elenco schedine dell'anno indicato per la schermata operativa — da inviare e già inviate, non solo quelle in coda.</summary>
+    public async Task<IReadOnlyList<SchedinaAlloggiatiWeb>> ListSchedineAsync(ICurrentUser currentUser, Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
 
-        var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+        var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, anno, cancellationToken);
 
         return recenti.Select(o => new SchedinaAlloggiatiWeb(
             o.Id,
@@ -117,37 +117,35 @@ public class AlloggiatiWebInvioService(
     /// Esportazione su richiesta (download) delle schedine ancora da inviare — fallback quando il
     /// servizio SOAP non è ancora configurato o non è raggiungibile, senza inviarle né marcarle
     /// come inviate (stesso pattern "on-demand, mai persistito" di PDF/XML fattura in Fase 4).
-    /// Usa la stessa fonte dati della lista mostrata a schermo (30 giorni, non solo check-in
-    /// oggi/ieri): l'export deve coincidere con quello che l'operatore vede in pagina come "da
-    /// inviare" — prima usava la finestra stretta pensata per il job automatico giornaliero,
-    /// risultando vuoto ogni volta che non c'erano arrivi esattamente in quei 2 giorni.
+    /// Usa la stessa fonte dati della lista mostrata a schermo (stesso anno selezionato): l'export
+    /// deve coincidere con quello che l'operatore vede in pagina come "da inviare".
     /// </summary>
-    public async Task<string> EsportaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    public async Task<string> EsportaAsync(ICurrentUser currentUser, Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
 
-        var daInviare = await ListDaInviareRecentiAsync(strutturaId, cancellationToken);
+        var daInviare = await ListDaInviareRecentiAsync(strutturaId, anno, cancellationToken);
         var builder = await CreaBuilderAsync(cancellationToken);
 
         return string.Join("\r\n", daInviare.SelectMany(builder.Costruisci));
     }
 
     /// <summary>Esportazione di una singola schedina (per Ospite), oltre al bulk.</summary>
-    public async Task<string> EsportaSingolaAsync(ICurrentUser currentUser, Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken)
+    public async Task<string> EsportaSingolaAsync(ICurrentUser currentUser, Guid strutturaId, Guid ospiteId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
 
-        var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+        var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, anno, cancellationToken);
         var ospite = recenti.FirstOrDefault(o => o.Id == ospiteId)
-            ?? throw new NotFoundException("Ospite non trovato tra le schedine recenti.");
+            ?? throw new NotFoundException("Ospite non trovato tra le schedine dell'anno selezionato.");
 
         var builder = await CreaBuilderAsync(cancellationToken);
         return string.Join("\r\n", builder.Costruisci(ospite));
     }
 
-    private async Task<IReadOnlyList<Ospite>> ListDaInviareRecentiAsync(Guid strutturaId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<Ospite>> ListDaInviareRecentiAsync(Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
-        var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, DateTime.UtcNow.Date.AddDays(-30), cancellationToken);
+        var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, anno, cancellationToken);
         return recenti.Where(o => o.Prenotazione?.StatePolice != true).ToList();
     }
 
