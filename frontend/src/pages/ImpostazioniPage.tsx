@@ -419,7 +419,7 @@ export function ImpostazioniGeneraliForm({
               sx={{ width: 260 }}
               slotProps={{ inputLabel: { shrink: true } }}
               disabled={aggiorna.isPending}
-              helperText={servizi.payTouristAbilitato ? 'Non può essere tra le 14:00 e le 18:00: PayTourist è in manutenzione' : ' '}
+              helperText={servizi.payTouristAbilitato ? 'L orario di invio non può essere tra le 14:00 e le 18:00: PayTourist è in manutenzione in quella fascia oraria.' : ' '}
             />
           </Box>
         )}
