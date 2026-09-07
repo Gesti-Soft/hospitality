@@ -69,10 +69,6 @@ export function WubookPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, maxWidth: 1000 }}>
-      <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-        Sincronizzazione con Wubook (OTA/channel manager): camere/prezzi/disponibilità/prenotazioni. Licenza gestisoft.it e attivazione si
-        configurano in Impostazioni.
-      </Typography>
 
       {config.isLoading && <Skeleton variant="rounded" height={80} />}
       {!config.isLoading && config.data && <StatoWubook dati={config.data} />}
@@ -105,7 +101,7 @@ function StatoWubook({ dati }: { dati: WubookIntegrazioneDto }) {
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Stato sincronizzazione</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Chip size="small" label={dati.attivo ? 'Attiva' : 'Non attiva'} sx={{ bgcolor: dati.attivo ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
-          <Chip size="small" label={dati.credenzialiPronte ? 'Credenziali Wubook pronte' : 'In attesa di rinnovo'} sx={{ bgcolor: dati.credenzialiPronte ? tokens.blue600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+          <Chip size="small" label={dati.credenzialiPronte ? 'Credenziali pronte' : 'In attesa di rinnovo'} sx={{ bgcolor: dati.credenzialiPronte ? tokens.blue600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
         </Box>
       </Box>
       {dati.ultimoErrore && <Alert severity="warning">{dati.ultimoErrore}</Alert>}

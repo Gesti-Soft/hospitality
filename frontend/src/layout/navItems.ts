@@ -92,7 +92,7 @@ export const navSections: NavSection[] = [
       { label: 'Polizia di Stato', path: '/polizia-di-stato', icon: IconPolizia, richiedeServizio: 'alloggiatiWebAbilitato' },
       { label: 'Osservatorio', path: '/osservatorio', icon: IconOsservatorio, richiedeServizio: 'osservatorioAbilitato' },
       { label: 'PayTourist', path: '/paytourist', icon: IconPayTourist, richiedeServizio: 'payTouristAbilitato' },
-      { label: 'OTA · Wubook', path: '/wubook', icon: IconWubook, richiedeServizio: 'wubookAbilitato' },
+      { label: 'Servizi · OTA', path: '/wubook', icon: IconWubook, richiedeServizio: 'wubookAbilitato' },
     ],
   },
   {

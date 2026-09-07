@@ -199,7 +199,7 @@ export function DashboardPage() {
           <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: 3 }}>
             <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5, mb: 1.75 }}>Stato invii automatici</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-              {wubookConcesso && <RigaIntegrazione nome="Wubook" stato={wubookStato} />}
+              {wubookConcesso && <RigaIntegrazione nome="OTA" stato={wubookStato} />}
               {alloggiatiWebConcesso && <RigaIntegrazione nome="Alloggiati Web" stato={alloggiatiWebStato} />}
               {osservatorioConcesso && <RigaIntegrazione nome="Osservatorio Turistico" stato={osservatorioStato} />}
               {payTouristConcesso && <RigaIntegrazione nome="PayTourist" stato={payTouristStato} />}

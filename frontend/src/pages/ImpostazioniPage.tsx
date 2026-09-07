@@ -143,14 +143,11 @@ function WubookAttivoToggle({ strutturaId, dati }: { strutturaId: string; dati: 
 
   return (
     <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Wubook</Typography>
+      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Servizi · OTA</Typography>
       <FormControlLabel
         control={<Checkbox checked={attivo} onChange={(e) => salvaAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
-        label="Sincronizzazione Wubook attiva per questa struttura"
+        label="Sincronizzazione OTA attiva per questa struttura"
       />
-      <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
-        Richiede il codice struttura Wubook configurato dal Super Admin e una licenza in corso di validità.
-      </Typography>
     </Box>
   )
 }
@@ -355,7 +352,7 @@ export function ImpostazioniGeneraliForm({
                 onChange={(e) => setComuneAttivita(e.target.value)}
                 disabled={aggiorna.isPending}
                 fullWidth
-                helperText="Comune dove opera fisicamente la struttura — usato per la riduzione residenza e le riduzioni PayTourist"
+                helperText="Comune dove opera fisicamente la struttura"
               />
               <TextField
                 label="Riduzione residenti (%)"
