@@ -205,7 +205,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               width: 28,
               height: 28,
               borderRadius: '8px',
-              bgcolor: tokens.orange600,
+              bgcolor: tokens.blue600,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
