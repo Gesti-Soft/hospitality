@@ -41,6 +41,7 @@ import { DatiClienteDialog } from '../components/DatiClienteDialog'
 import { FatturaDialog, type StatoFatturaIniziale } from '../components/FatturaDialog'
 import { FiltriRicercaData, nelRangeData, RigaCaricamentoAltri } from '../components/finanze/FinanzeComuni'
 import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -141,6 +142,7 @@ function TabFatture({
   prenotazioniDisponibili: ReturnType<typeof useStoricoPrenotazioni>['data']
   onErrore: (err: unknown) => void
 }) {
+  const puoScrivere = usePuoScrivere('financeWrite')
   const [dialogo, setDialogo] = useState<StatoFatturaIniziale | null>(null)
   const [ricerca, setRicerca] = useState('')
   const [dataDa, setDataDa] = useState('')
@@ -169,7 +171,10 @@ function TabFatture({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <IntestazioneTab titolo="Fatture" azione={{ etichetta: '+ Nuova fattura', onClick: () => setDialogo({ modo: 'crea' }), disabilitato: !strutturaId }} />
+      <IntestazioneTab
+        titolo="Fatture"
+        azione={puoScrivere ? { etichetta: '+ Nuova fattura', onClick: () => setDialogo({ modo: 'crea' }), disabilitato: !strutturaId } : undefined}
+      />
 
       <FiltriRicercaData
         ricerca={ricerca}
@@ -215,11 +220,13 @@ function TabFatture({
                     {formattatoreValuta.format(f.importoTotale)}
                   </TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Modifica">
-                      <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', fattura: f })}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    {puoScrivere && (
+                      <Tooltip title="Modifica">
+                        <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', fattura: f })}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                     <Tooltip title="Scarica PDF">
                       <IconButton size="small" onClick={() => scarica(scaricaFatturaPdf, f)}>
                         <PictureAsPdfIcon fontSize="small" />
@@ -262,6 +269,7 @@ function TabDatiAziendali({ strutturaId }: { strutturaId: string | null }) {
 }
 
 export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; dati: DatiAziendaliDto }) {
+  const puoScrivere = usePuoScrivere('financeWrite')
   const [iso2, setIso2] = useState(dati.iso2 ?? 'IT')
   const [pIva, setPIva] = useState(dati.pIva ?? '')
   const [codiceFiscale, setCodiceFiscale] = useState(dati.codiceFiscale ?? '')
@@ -344,16 +352,19 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
         <TextField label="Nazione (denominazione)" value={nazione} onChange={(e) => setNazione(e.target.value)} fullWidth disabled={aggiorna.isPending} />
       </Box>
 
-      <Box>
-        <Button variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
-          Salva
-        </Button>
-      </Box>
+      {puoScrivere && (
+        <Box>
+          <Button variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
+            Salva
+          </Button>
+        </Box>
+      )}
     </Box>
   )
 }
 
 function TabClienti({ strutturaId, clienti, caricamento }: { strutturaId: string | null; clienti: DatiClienteDto[] | undefined; caricamento: boolean }) {
+  const puoScrivere = usePuoScrivere('financeWrite')
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | DatiClienteDto>('chiuso')
   const [ricerca, setRicerca] = useState('')
 
@@ -368,7 +379,10 @@ function TabClienti({ strutturaId, clienti, caricamento }: { strutturaId: string
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <IntestazioneTab titolo="Clienti fatturabili" azione={{ etichetta: '+ Nuovo cliente', onClick: () => setDialogo('nuovo'), disabilitato: !strutturaId }} />
+      <IntestazioneTab
+        titolo="Clienti fatturabili"
+        azione={puoScrivere ? { etichetta: '+ Nuovo cliente', onClick: () => setDialogo('nuovo'), disabilitato: !strutturaId } : undefined}
+      />
       <Typography sx={{ fontSize: 12, color: tokens.textTertiary, mt: -1.5 }}>
         Creati automaticamente alla prima fattura per un ospite (deduplicati); qui puoi anche aggiungerne o correggerne uno a mano.
       </Typography>
@@ -401,9 +415,11 @@ function TabClienti({ strutturaId, clienti, caricamento }: { strutturaId: string
                   <TableCell>{c.luogoResidenza ?? '—'}</TableCell>
                   <TableCell>{c.pec ?? '—'}</TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => setDialogo(c)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
+                    {puoScrivere && (
+                      <IconButton size="small" onClick={() => setDialogo(c)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

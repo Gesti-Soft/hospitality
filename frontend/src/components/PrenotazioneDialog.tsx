@@ -37,6 +37,7 @@ import { CampoData } from './CampoData'
 import { tokens } from '../theme'
 import { OspiteDialog } from './OspiteDialog'
 import { ConfirmDialog } from './ConfirmDialog'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 export type StatoIniziale =
   | { modo: 'crea'; cameraId: string | null; checkIn: Date; checkOut: Date }
@@ -74,6 +75,8 @@ interface Props {
 }
 
 export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipologie, onClose }: Props) {
+  const puoScrivere = usePuoScrivere('reservationWrite')
+  const puoCambiareStatoCamera = usePuoScrivere('roomStatusUpdate')
   const modifica = stato.modo === 'modifica' ? stato.prenotazione : null
   const creaIniziale = stato.modo === 'crea' ? stato : null
 
@@ -503,7 +506,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2.5, flexWrap: 'wrap', gap: 1 }}>
-        {modifica && modifica.statoPrenotazione !== StatoPrenotazione.Annullata && modifica.statoPrenotazione !== StatoPrenotazione.Completata && (
+        {puoScrivere && modifica && modifica.statoPrenotazione !== StatoPrenotazione.Annullata && modifica.statoPrenotazione !== StatoPrenotazione.Completata && (
           <Button color="error" onClick={eseguiAnnulla} disabled={inCorso} sx={{ mr: 'auto' }}>
             Annulla prenotazione
           </Button>
@@ -516,19 +519,21 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
-        {modifica && modifica.statoPrenotazione === StatoPrenotazione.Incompleta && (
+        {puoCambiareStatoCamera && modifica && modifica.statoPrenotazione === StatoPrenotazione.Incompleta && (
           <Button variant="contained" onClick={eseguiCheckIn} disabled={inCorso}>
             Check-in
           </Button>
         )}
-        {modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && (
+        {puoCambiareStatoCamera && modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && (
           <Button variant="contained" onClick={eseguiCheckOut} disabled={inCorso}>
             Check-out
           </Button>
         )}
-        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
-          {modifica ? 'Salva modifiche' : 'Crea prenotazione'}
-        </Button>
+        {puoScrivere && (
+          <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
+            {modifica ? 'Salva modifiche' : 'Crea prenotazione'}
+          </Button>
+        )}
       </DialogActions>
 
       {schedaOspitiAperta && modifica && (

@@ -57,6 +57,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ImpostazioniWubookCameraDialog } from '../components/ImpostazioniWubookCameraDialog'
 import { PianoPrezzoDialog } from '../components/PianoPrezzoDialog'
 import { PianoRestrizioneDialog } from '../components/PianoRestrizioneDialog'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 type TabWubook = 'camere' | 'piani-prezzo' | 'piani-restrizione'
 
@@ -110,6 +111,8 @@ function StatoWubook({ dati }: { dati: WubookIntegrazioneDto }) {
 }
 
 function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
+  const puoScrivereCamere = usePuoScrivere('settingRoomWrite')
+  const puoScrivereRenotazioni = usePuoScrivere('reservationWrite')
   const oggi = new Date()
   const [dataInizio, setDataInizio] = useState(formatoInputData(oggi))
   const [dataFine, setDataFine] = useState(formatoInputData(aggiungiGiorni(oggi, 30)))
@@ -160,15 +163,21 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
       </Box>
 
       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-        <Button variant="outlined" onClick={() => esegui('prezzi')} disabled={inCorso}>
-          Sincronizza prezzi
-        </Button>
-        <Button variant="outlined" onClick={() => esegui('disponibilita')} disabled={inCorso}>
-          Sincronizza disponibilità
-        </Button>
-        <Button variant="outlined" onClick={() => esegui('prenotazioni')} disabled={inCorso}>
-          Sincronizza prenotazioni (pull)
-        </Button>
+        {puoScrivereCamere && (
+          <>
+            <Button variant="outlined" onClick={() => esegui('prezzi')} disabled={inCorso}>
+              Sincronizza prezzi
+            </Button>
+            <Button variant="outlined" onClick={() => esegui('disponibilita')} disabled={inCorso}>
+              Sincronizza disponibilità
+            </Button>
+          </>
+        )}
+        {puoScrivereRenotazioni && (
+          <Button variant="outlined" onClick={() => esegui('prenotazioni')} disabled={inCorso}>
+            Sincronizza prenotazioni (pull)
+          </Button>
+        )}
       </Box>
     </Box>
   )
@@ -183,6 +192,7 @@ function TabellaCamere({
   camere: CameraWubookInfoDto[]
   tipologie: { id: string; tipologiaCamera: string }[]
 }) {
+  const puoScrivere = usePuoScrivere('settingRoomWrite')
   const [tipologiaFiltro, setTipologiaFiltro] = useState('')
   const [dialogoChiusure, setDialogoChiusure] = useState<{ cameraId: string; cameraNome: string } | null>(null)
   const [dialogoAssocia, setDialogoAssocia] = useState<CameraWubookInfoDto | null>(null)
@@ -261,7 +271,7 @@ function TabellaCamere({
                   )}
                 </TableCell>
                 <TableCell align="right">
-                  {!c.wubookAttiva && (
+                  {!c.wubookAttiva && puoScrivere && (
                     <>
                       <Tooltip title="Associa a una camera già esistente su Wubook">
                         <IconButton size="small" onClick={() => setDialogoAssocia(c)}>
@@ -282,16 +292,20 @@ function TabellaCamere({
                           <EditCalendarIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Modifica su Wubook (codice camera, prezzo, WooDoo)">
-                        <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
-                          <SettingsIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Elimina da Wubook">
-                        <IconButton size="small" onClick={() => setDaEliminare(c)} disabled={rimuovi.isPending}>
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      {puoScrivere && (
+                        <>
+                          <Tooltip title="Modifica su Wubook (codice camera, prezzo, WooDoo)">
+                            <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
+                              <SettingsIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Elimina da Wubook">
+                            <IconButton size="small" onClick={() => setDaEliminare(c)} disabled={rimuovi.isPending}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      )}
                     </>
                   )}
                 </TableCell>
@@ -398,6 +412,7 @@ function AssociaCameraWubookDialog({ strutturaId, camera, onClose }: { struttura
 }
 
 function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
+  const puoScrivere = usePuoScrivere('settingRoomWrite')
   const piani = usePianiPrezzo(strutturaId)
   const elimina = useEliminaPianoPrezzo(strutturaId)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | PianoPrezzoDto>('chiuso')
@@ -414,11 +429,13 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
         percentuale. La mappatura piano→canale si fa nel pannello Wubook.
       </Typography>
 
-      <Box>
-        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>
-          + Nuovo piano
-        </Button>
-      </Box>
+      {puoScrivere && (
+        <Box>
+          <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>
+            + Nuovo piano
+          </Button>
+        </Box>
+      )}
 
       {piani.isLoading && <Skeleton variant="rounded" height={180} />}
 
@@ -449,7 +466,7 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
                   <TableCell>{p.isVirtual ? `Virtuale (da ${p.parentId})` : 'Base'}</TableCell>
                   <TableCell>{p.variazione != null ? `${p.variazione} (${p.tipoVariazione === 2 ? '%' : '€'})` : '—'}</TableCell>
                   <TableCell align="right">
-                    {p.isVirtual && (
+                    {p.isVirtual && puoScrivere && (
                       <>
                         <Tooltip title="Modifica">
                           <IconButton size="small" onClick={() => setDialogo(p)}>
@@ -479,6 +496,7 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
 }
 
 function TabPianiRestrizione({ strutturaId }: { strutturaId: string }) {
+  const puoScrivere = usePuoScrivere('settingRoomWrite')
   const piani = usePianiRestrizione(strutturaId)
   const elimina = useEliminaPianoRestrizione(strutturaId)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | PianoRestrizioneDto>('chiuso')
@@ -495,11 +513,13 @@ function TabPianiRestrizione({ strutturaId }: { strutturaId: string }) {
         soggiorno minimo/massimo per camera e periodo (tab Camere).
       </Typography>
 
-      <Box>
-        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>
-          + Nuovo piano
-        </Button>
-      </Box>
+      {puoScrivere && (
+        <Box>
+          <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>
+            + Nuovo piano
+          </Button>
+        </Box>
+      )}
 
       {piani.isLoading && <Skeleton variant="rounded" height={180} />}
 
@@ -530,16 +550,20 @@ function TabPianiRestrizione({ strutturaId }: { strutturaId: string }) {
                   <TableCell>{p.regole ? `${p.regole.minStay ?? '—'} / ${p.regole.maxStay ?? '—'}` : '—'}</TableCell>
                   <TableCell>{p.regole?.chiuso ? 'Sì' : 'No'}</TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Modifica">
-                      <IconButton size="small" onClick={() => setDialogo(p)}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Elimina">
-                      <IconButton size="small" onClick={() => elimina.mutate(p.id, { onError: gestisciErrore })} disabled={elimina.isPending}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    {puoScrivere && (
+                      <>
+                        <Tooltip title="Modifica">
+                          <IconButton size="small" onClick={() => setDialogo(p)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Elimina">
+                          <IconButton size="small" onClick={() => elimina.mutate(p.id, { onError: gestisciErrore })} disabled={elimina.isPending}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

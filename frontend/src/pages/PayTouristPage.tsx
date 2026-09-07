@@ -16,12 +16,14 @@ import { useStruttura } from '../struttura/StrutturaContext'
 import { ApiError } from '../api/client'
 import { esportaPayTourist, useInviaPayTouristOra, useInviaPayTouristSingola, usePayTouristStrutture, usePrenotazioniPayTourist } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export function PayTouristPage() {
   const { strutturaId } = useStruttura()
+  const puoInviare = usePuoScrivere('statePoliceWrite')
   const strutture = usePayTouristStrutture(strutturaId)
   const [payTouristStrutturaId, setPayTouristStrutturaId] = useState<string | null>(null)
   const [errore, setErrore] = useState<string | null>(null)
@@ -110,9 +112,11 @@ export function PayTouristPage() {
             ))}
           </TextField>
 
-          <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending}>
-            Invia ora tutte
-          </Button>
+          {puoInviare && (
+            <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending}>
+              Invia ora tutte
+            </Button>
+          )}
           <Button variant="outlined" size="small" onClick={esporta} disabled={!payTouristStrutturaId || (prenotazioni.data ?? []).length === 0}>
             Esporta JSON
           </Button>
@@ -168,7 +172,7 @@ export function PayTouristPage() {
                         <Chip size="small" label={p.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: p.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
                       </TableCell>
                       <TableCell align="right">
-                        {!p.inviata && (
+                        {!p.inviata && puoInviare && (
                           <Button
                             size="small"
                             variant="outlined"

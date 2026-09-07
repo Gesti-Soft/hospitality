@@ -44,6 +44,7 @@ import { useToast } from '../toast/ToastContext'
 import { CameraDialog } from '../components/CameraDialog'
 import { PrezzoDialog } from '../components/PrezzoDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 const ETICHETTA_STATO_CAMERA: Record<StatoCamera, string> = {
   [StatoCamera.Pronta]: 'Pronta',
@@ -66,6 +67,8 @@ type Tab_ = 'camere' | 'prezzi' | 'canali'
 
 export function CamerePage() {
   const { strutturaId, strutture } = useStruttura()
+  const puoScrivereCamere = usePuoScrivere('settingRoomWrite')
+  const puoVedereCanali = usePuoScrivere('settingAgency')
   const [tab, setTab] = useState<Tab_>('camere')
   const [tipologiaSelezionataId, setTipologiaSelezionataId] = useState('')
   const [duplicaAperto, setDuplicaAperto] = useState(false)
@@ -74,7 +77,10 @@ export function CamerePage() {
   const camere = useCamere(strutturaId)
   const tipologie = useTipologie(strutturaId)
   const prezzi = usePrezzi(strutturaId)
-  const canali = useCanaliVendita(strutturaId)
+  // Canali vendita: un solo permesso (SettingAgency) governa sia la consultazione che la
+  // scrittura — a differenza di Camere/Prezzi non serve un permesso separato di sola lettura,
+  // quindi senza SettingAgency la query non parte nemmeno (fallirebbe comunque con 403).
+  const canali = useCanaliVendita(puoVedereCanali ? strutturaId : null)
 
   // La select Tipologia governa Camere/Prezzi (Canali vendita non dipende dalla tipologia, ma
   // resta comunque dietro la stessa selezione): di default è sempre popolata con la prima
@@ -114,9 +120,9 @@ export function CamerePage() {
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 0 }}>
           <Tab label="Camere" value="camere" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
           <Tab label="Prezzi" value="prezzi" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
-          <Tab label="Canali vendita" value="canali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+          {puoVedereCanali && <Tab label="Canali vendita" value="canali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
         </Tabs>
-        {altreStrutture.length > 0 && (
+        {altreStrutture.length > 0 && puoScrivereCamere && (
           <Button variant="outlined" size="small" onClick={() => setDuplicaAperto(true)}>
             Duplica da un'altra struttura
           </Button>
@@ -136,6 +142,7 @@ export function CamerePage() {
               caricamento={camere.isLoading}
               tipologie={tipologie.data ?? []}
               tipologiaId={tipologiaId}
+              puoScrivere={puoScrivereCamere}
               onErrore={segnalaErrore}
             />
           )}
@@ -147,10 +154,11 @@ export function CamerePage() {
               camere={camere.data ?? []}
               tipologie={tipologie.data ?? []}
               tipologiaId={tipologiaId}
+              puoScrivere={puoScrivereCamere}
               onErrore={segnalaErrore}
             />
           )}
-          {tab === 'canali' && <TabCanali strutturaId={strutturaId} canali={canali.data} caricamento={canali.isLoading} onErrore={segnalaErrore} />}
+          {tab === 'canali' && puoVedereCanali && <TabCanali strutturaId={strutturaId} canali={canali.data} caricamento={canali.isLoading} onErrore={segnalaErrore} />}
         </>
       )}
 
@@ -233,13 +241,15 @@ function Cornice({ children }: { children: React.ReactNode }) {
   )
 }
 
-function IntestazioneTab({ titolo, azione }: { titolo: string; azione: { etichetta: string; onClick: () => void; disabilitato?: boolean } }) {
+function IntestazioneTab({ titolo, azione }: { titolo: string; azione?: { etichetta: string; onClick: () => void; disabilitato?: boolean } }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>{titolo}</Typography>
-      <Button variant="contained" color="primary" size="small" onClick={azione.onClick} disabled={azione.disabilitato}>
-        {azione.etichetta}
-      </Button>
+      {azione && (
+        <Button variant="contained" color="primary" size="small" onClick={azione.onClick} disabled={azione.disabilitato}>
+          {azione.etichetta}
+        </Button>
+      )}
     </Box>
   )
 }
@@ -264,6 +274,7 @@ function TabCamere({
   caricamento,
   tipologie,
   tipologiaId,
+  puoScrivere,
   onErrore,
 }: {
   strutturaId: string | null
@@ -271,6 +282,7 @@ function TabCamere({
   caricamento: boolean
   tipologie: TipologiaCameraDto[]
   tipologiaId: string
+  puoScrivere: boolean
   onErrore: (err: unknown) => void
 }) {
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | CameraDto>('chiuso')
@@ -286,7 +298,10 @@ function TabCamere({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <IntestazioneTab titolo="Camere" azione={{ etichetta: '+ Nuova camera', onClick: () => setDialogo('nuova'), disabilitato: !strutturaId }} />
+      <IntestazioneTab
+        titolo="Camere"
+        azione={puoScrivere ? { etichetta: '+ Nuova camera', onClick: () => setDialogo('nuova'), disabilitato: !strutturaId } : undefined}
+      />
 
       {caricamento && <Skeleton variant="rounded" height={220} />}
 
@@ -317,12 +332,16 @@ function TabCamere({
                     {c.soggiornoMinimo ?? '—'}
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => setDialogo(c)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => setDaEliminare(c)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    {puoScrivere && (
+                      <>
+                        <IconButton size="small" onClick={() => setDialogo(c)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" onClick={() => setDaEliminare(c)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -365,6 +384,7 @@ function TabPrezzi({
   camere,
   tipologie,
   tipologiaId,
+  puoScrivere,
   onErrore,
 }: {
   strutturaId: string | null
@@ -373,6 +393,7 @@ function TabPrezzi({
   camere: CameraDto[]
   tipologie: TipologiaCameraDto[]
   tipologiaId: string
+  puoScrivere: boolean
   onErrore: (err: unknown) => void
 }) {
   const [dialogoAperto, setDialogoAperto] = useState(false)
@@ -406,15 +427,17 @@ function TabPrezzi({
             <ToggleButton value="lista">Lista</ToggleButton>
             <ToggleButton value="calendario">Calendario</ToggleButton>
           </ToggleButtonGroup>
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={() => setDialogoAperto(true)}
-            disabled={!strutturaId || tipologie.length === 0}
-          >
-            + Nuovo periodo
-          </Button>
+          {puoScrivere && (
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              onClick={() => setDialogoAperto(true)}
+              disabled={!strutturaId || tipologie.length === 0}
+            >
+              + Nuovo periodo
+            </Button>
+          )}
         </Box>
       </Box>
 
@@ -448,9 +471,11 @@ function TabPrezzi({
                       {p.prezzoPerNotte != null ? formattatoreValuta.format(p.prezzoPerNotte) : '—'}
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton size="small" onClick={() => eliminaPrezzo(p)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                      {puoScrivere && (
+                        <IconButton size="small" onClick={() => eliminaPrezzo(p)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -464,7 +489,7 @@ function TabPrezzi({
           prezzi={prezziTipologia}
           camere={camereTipologia}
           tipologie={tipologie.filter((t) => t.id === tipologiaId)}
-          onEliminaPrezzo={eliminaPrezzo}
+          onEliminaPrezzo={puoScrivere ? eliminaPrezzo : undefined}
         />
       )}
 
@@ -498,7 +523,7 @@ function VistaPrezziCalendario({
   prezzi: PrezzoCameraDto[]
   camere: CameraDto[]
   tipologie: TipologiaCameraDto[]
-  onEliminaPrezzo: (p: PrezzoCameraDto) => void
+  onEliminaPrezzo?: (p: PrezzoCameraDto) => void
 }) {
   const [inizioFinestra, setInizioFinestra] = useState(() => inizioGiornoLocale(new Date()))
   const giorni = Array.from({ length: GIORNI_VISIBILI_PREZZI }, (_, i) => aggiungiGiorni(inizioFinestra, i))
@@ -589,8 +614,8 @@ function VistaPrezziCalendario({
                     return (
                       <Box
                         key={g.getTime()}
-                        onClick={() => p && onEliminaPrezzo(p)}
-                        title={p ? 'Clicca per eliminare questo periodo' : undefined}
+                        onClick={() => p && onEliminaPrezzo?.(p)}
+                        title={p && onEliminaPrezzo ? 'Clicca per eliminare questo periodo' : undefined}
                         sx={{
                           height: 40,
                           display: 'flex',
@@ -598,7 +623,7 @@ function VistaPrezziCalendario({
                           justifyContent: 'center',
                           borderLeft: `1px solid ${tokens.surfaceBorder}`,
                           bgcolor: p ? tokens.ok100 : 'transparent',
-                          cursor: p ? 'pointer' : 'default',
+                          cursor: p && onEliminaPrezzo ? 'pointer' : 'default',
                         }}
                       >
                         {p?.prezzoPerNotte != null && (

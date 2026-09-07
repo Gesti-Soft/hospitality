@@ -51,3 +51,22 @@ export function useSezioniVisibili(): SezioniVisibiliRisultato {
 
   return { sezioni, caricamento: !isSuperAdmin && !!strutturaId && mioPermesso.isLoading }
 }
+
+export interface VoceProtettaRisultato {
+  /** True se l'utente corrente può vedere la voce a questo path (stessa logica del menu). */
+  visibile: boolean
+  caricamento: boolean
+  /** Prima voce di menu disponibile per l'utente, per reindirizzarlo se `visibile` è false. */
+  primaVoceDisponibile?: NavItem
+}
+
+/**
+ * Guardia di rotta: un utente che digita direttamente l'URL di una pagina per cui non ha il
+ * permesso (es. `/camere` da addetto pulizie) non deve poterci restare solo perché il menu la
+ * nasconde — riusa la stessa lista `useSezioniVisibili` così le due logiche non possono divergere.
+ */
+export function useVoceProtetta(path: string): VoceProtettaRisultato {
+  const { sezioni, caricamento } = useSezioniVisibili()
+  const visibile = sezioni.some((s) => s.voci.some((v) => v.path === path))
+  return { visibile, caricamento, primaVoceDisponibile: sezioni[0]?.voci[0] }
+}

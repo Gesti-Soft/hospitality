@@ -27,6 +27,7 @@ import {
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { CampoData } from './CampoData'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 interface Props {
   strutturaId: string
@@ -57,6 +58,7 @@ export function ChiusureRestrizioniDialog({ strutturaId, cameraId, cameraNome, o
 }
 
 function SezioneChiusure({ strutturaId, cameraId }: { strutturaId: string; cameraId: string }) {
+  const puoScrivere = usePuoScrivere('settingRoomWrite')
   const chiusure = useChiusureCamera(strutturaId, cameraId)
   const crea = useCreaChiusuraCamera(strutturaId, cameraId)
   const elimina = useEliminaChiusuraCamera(strutturaId, cameraId)
@@ -133,7 +135,7 @@ function SezioneChiusure({ strutturaId, cameraId }: { strutturaId: string; camer
                 <TableCell>{c.quantita ?? '—'}</TableCell>
                 <TableCell>{c.motivo ?? '—'}</TableCell>
                 <TableCell align="right">
-                  {c.id != null && (
+                  {c.id != null && puoScrivere && (
                     <IconButton size="small" onClick={() => elimina.mutate(c.id!)} disabled={elimina.isPending}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -145,20 +147,23 @@ function SezioneChiusure({ strutturaId, cameraId }: { strutturaId: string; camer
         </Table>
       </Box>
 
-      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-        <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} size="small" disabled={crea.isPending} />
-        <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} size="small" disabled={crea.isPending} />
-        <TextField label="Quantità" type="number" value={quantita} onChange={(e) => setQuantita(e.target.value)} size="small" sx={{ width: 110 }} disabled={crea.isPending} />
-        <TextField label="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} size="small" disabled={crea.isPending} />
-        <Button variant="outlined" size="small" onClick={aggiungi} disabled={crea.isPending} sx={{ whiteSpace: 'nowrap' }}>
-          + Chiudi periodo
-        </Button>
-      </Box>
+      {puoScrivere && (
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+          <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} size="small" disabled={crea.isPending} />
+          <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} size="small" disabled={crea.isPending} />
+          <TextField label="Quantità" type="number" value={quantita} onChange={(e) => setQuantita(e.target.value)} size="small" sx={{ width: 110 }} disabled={crea.isPending} />
+          <TextField label="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} size="small" disabled={crea.isPending} />
+          <Button variant="outlined" size="small" onClick={aggiungi} disabled={crea.isPending} sx={{ whiteSpace: 'nowrap' }}>
+            + Chiudi periodo
+          </Button>
+        </Box>
+      )}
     </Box>
   )
 }
 
 function SezioneRestrizioni({ strutturaId, cameraId }: { strutturaId: string; cameraId: string }) {
+  const puoScrivere = usePuoScrivere('settingRoomWrite')
   const restrizioni = useRestrizioniPeriodoCamera(strutturaId, cameraId)
   const crea = useCreaRestrizionePeriodoCamera(strutturaId, cameraId)
   const elimina = useEliminaRestrizionePeriodoCamera(strutturaId, cameraId)
@@ -243,9 +248,11 @@ function SezioneRestrizioni({ strutturaId, cameraId }: { strutturaId: string; ca
                 <TableCell>{r.maxStay ?? '—'}</TableCell>
                 <TableCell>{r.motivo ?? '—'}</TableCell>
                 <TableCell align="right">
-                  <IconButton size="small" onClick={() => elimina.mutate(r.id)} disabled={elimina.isPending}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                  {puoScrivere && (
+                    <IconButton size="small" onClick={() => elimina.mutate(r.id)} disabled={elimina.isPending}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -253,16 +260,18 @@ function SezioneRestrizioni({ strutturaId, cameraId }: { strutturaId: string; ca
         </Table>
       </Box>
 
-      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-        <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} size="small" disabled={crea.isPending} />
-        <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} size="small" disabled={crea.isPending} />
-        <TextField label="Min notti" type="number" value={minStay} onChange={(e) => setMinStay(e.target.value)} size="small" sx={{ width: 110 }} disabled={crea.isPending} />
-        <TextField label="Max notti" type="number" value={maxStay} onChange={(e) => setMaxStay(e.target.value)} size="small" sx={{ width: 110 }} disabled={crea.isPending} />
-        <TextField label="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} size="small" disabled={crea.isPending} />
-        <Button variant="outlined" size="small" onClick={aggiungi} disabled={crea.isPending} sx={{ whiteSpace: 'nowrap' }}>
-          + Aggiungi regola
-        </Button>
-      </Box>
+      {puoScrivere && (
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+          <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} size="small" disabled={crea.isPending} />
+          <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} size="small" disabled={crea.isPending} />
+          <TextField label="Min notti" type="number" value={minStay} onChange={(e) => setMinStay(e.target.value)} size="small" sx={{ width: 110 }} disabled={crea.isPending} />
+          <TextField label="Max notti" type="number" value={maxStay} onChange={(e) => setMaxStay(e.target.value)} size="small" sx={{ width: 110 }} disabled={crea.isPending} />
+          <TextField label="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} size="small" disabled={crea.isPending} />
+          <Button variant="outlined" size="small" onClick={aggiungi} disabled={crea.isPending} sx={{ whiteSpace: 'nowrap' }}>
+            + Aggiungi regola
+          </Button>
+        </Box>
+      )}
     </Box>
   )
 }

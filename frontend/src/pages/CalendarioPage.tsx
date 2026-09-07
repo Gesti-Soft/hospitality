@@ -19,6 +19,7 @@ import { useTipologie } from '../api/tipologie'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { aggiungiGiorni, differenzaGiorni, inizioGiornoLocale } from '../lib/date'
 import { PrenotazioneDialog, type StatoIniziale } from '../components/PrenotazioneDialog'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 const GIORNI_VISIBILI_DEFAULT = 14
 const GIORNI_VISIBILI_MIN = 7
@@ -62,6 +63,7 @@ const COLORE_STATO_CAMERA: Record<StatoCamera, string> = {
 
 export function CalendarioPage() {
   const { strutturaId } = useStruttura()
+  const puoScrivere = usePuoScrivere('reservationWrite')
   const [inizioFinestra, setInizioFinestra] = useState(() => inizioGiornoLocale(new Date()))
   const [dialogo, setDialogo] = useState<StatoIniziale | null>(null)
   const [filtroTipologiaId, setFiltroTipologiaId] = useState('')
@@ -152,22 +154,24 @@ export function CalendarioPage() {
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Legenda agenzieDistinct={agenzieDistinct} />
-          <Button
-            variant="contained"
-            color="primary"
-            size="medium"
-            disabled={!strutturaId || !camere.data || camere.data.length === 0}
-            onClick={() =>
-              setDialogo({
-                modo: 'crea',
-                cameraId: null,
-                checkIn: inizioGiornoLocale(new Date()),
-                checkOut: aggiungiGiorni(new Date(), 1),
-              })
-            }
-          >
-            + Nuova prenotazione
-          </Button>
+          {puoScrivere && (
+            <Button
+              variant="contained"
+              color="primary"
+              size="medium"
+              disabled={!strutturaId || !camere.data || camere.data.length === 0}
+              onClick={() =>
+                setDialogo({
+                  modo: 'crea',
+                  cameraId: null,
+                  checkIn: inizioGiornoLocale(new Date()),
+                  checkOut: aggiungiGiorni(new Date(), 1),
+                })
+              }
+            >
+              + Nuova prenotazione
+            </Button>
+          )}
         </Box>
       </Box>
 
@@ -292,8 +296,10 @@ export function CalendarioPage() {
                   inizioFinestra={inizioFinestra}
                   fineFinestra={fineFinestra}
                   prenotazioni={prenotazioniPerCamera.get(camera.id) ?? []}
-                  onCellaVuota={(giorno) =>
-                    setDialogo({ modo: 'crea', cameraId: camera.id, checkIn: giorno, checkOut: aggiungiGiorni(giorno, 1) })
+                  onCellaVuota={
+                    puoScrivere
+                      ? (giorno) => setDialogo({ modo: 'crea', cameraId: camera.id, checkIn: giorno, checkOut: aggiungiGiorni(giorno, 1) })
+                      : undefined
                   }
                   onPrenotazione={(p) => setDialogo({ modo: 'modifica', prenotazione: p })}
                   agenzieDistinct={agenzieDistinct}
@@ -339,7 +345,7 @@ interface RigaCameraProps {
   inizioFinestra: Date
   fineFinestra: Date
   prenotazioni: PrenotazioneDto[]
-  onCellaVuota: (giorno: Date) => void
+  onCellaVuota?: (giorno: Date) => void
   onPrenotazione: (p: PrenotazioneDto) => void
   agenzieDistinct: string[]
 }
@@ -391,14 +397,14 @@ function RigaCamera({ camera, giorni, giorniVisibili, inizioFinestra, fineFinest
           return (
             <Box
               key={g.getTime()}
-              onClick={() => onCellaVuota(g)}
+              onClick={() => onCellaVuota?.(g)}
               sx={{
                 gridColumn: `${idx + 1} / span 1`,
                 gridRow: 1,
                 bgcolor: weekend ? tokens.paper : 'transparent',
                 borderLeft: `1px solid ${tokens.surfaceBorder}`,
-                cursor: 'pointer',
-                '&:hover': { bgcolor: '#F4F1EA' },
+                cursor: onCellaVuota ? 'pointer' : 'default',
+                '&:hover': onCellaVuota ? { bgcolor: '#F4F1EA' } : undefined,
               }}
             />
           )

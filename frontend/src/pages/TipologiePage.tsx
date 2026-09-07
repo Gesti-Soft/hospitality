@@ -18,11 +18,13 @@ import { ApiError } from '../api/client'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { TipologiaDialog } from '../components/TipologiaDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 
 export function TipologiePage() {
   const { strutturaId } = useStruttura()
+  const puoScrivere = usePuoScrivere('settingRoomWrite')
   const [errore, setErrore] = useState<string | null>(null)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | TipologiaCameraDto>('chiuso')
   const [daEliminare, setDaEliminare] = useState<TipologiaCameraDto | null>(null)
@@ -42,9 +44,11 @@ export function TipologiePage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tipologie camera</Typography>
-        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuova')} disabled={!strutturaId}>
-          + Nuova tipologia
-        </Button>
+        {puoScrivere && (
+          <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuova')} disabled={!strutturaId}>
+            + Nuova tipologia
+          </Button>
+        )}
       </Box>
 
       {errore && (
@@ -92,12 +96,16 @@ export function TipologiePage() {
                     {t.cauzione != null ? formattatoreValuta.format(t.cauzione) : '—'}
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => setDialogo(t)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => setDaEliminare(t)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    {puoScrivere && (
+                      <>
+                        <IconButton size="small" onClick={() => setDialogo(t)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" onClick={() => setDaEliminare(t)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

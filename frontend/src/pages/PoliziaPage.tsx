@@ -21,12 +21,14 @@ import {
 } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export function PoliziaPage() {
   const { strutturaId } = useStruttura()
+  const puoInviare = usePuoScrivere('statePoliceWrite')
   const config = useAlloggiatiWebConfig(strutturaId)
   const schedine = useSchedineAlloggiatiWeb(strutturaId)
   const [risultatoInvio, setRisultatoInvio] = useState<{ inviate: number; totale: number; errori: number; messaggio: string | null } | null>(null)
@@ -96,9 +98,11 @@ export function PoliziaPage() {
         )}
 
         <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5 }}>
-          <Button variant="contained" color="primary" onClick={inviaOra} disabled={invia.isPending}>
-            Invia ora
-          </Button>
+          {puoInviare && (
+            <Button variant="contained" color="primary" onClick={inviaOra} disabled={invia.isPending}>
+              Invia ora
+            </Button>
+          )}
           <Button variant="outlined" onClick={esporta} disabled={(schedine.data ?? []).length === 0}>
             Esporta schedine del giorno
           </Button>

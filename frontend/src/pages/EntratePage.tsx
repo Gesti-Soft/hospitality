@@ -31,9 +31,11 @@ import {
   RigaVuota,
 } from '../components/finanze/FinanzeComuni'
 import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 export function EntratePage() {
   const { strutturaId } = useStruttura()
+  const puoScrivere = usePuoScrivere('financeWrite')
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const [errore, setErrore] = useState<string | null>(null)
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | EntrataDto>('chiuso')
@@ -70,7 +72,7 @@ export function EntratePage() {
         anno={anno}
         anni={anni}
         onAnnoChange={setAnno}
-        azioni={<AzioneNuovo etichetta="+ Nuova entrata" onClick={() => setDialogo('nuova')} disabilitato={!strutturaId} />}
+        azioni={puoScrivere ? <AzioneNuovo etichetta="+ Nuova entrata" onClick={() => setDialogo('nuova')} disabilitato={!strutturaId} /> : undefined}
       />
 
       <FiltriRicercaData
@@ -121,12 +123,16 @@ export function EntratePage() {
                     {formattatoreValuta.format(e.importoEntrata)}
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => setDialogo(e)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => setDaEliminare(e)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    {puoScrivere && (
+                      <>
+                        <IconButton size="small" onClick={() => setDialogo(e)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" onClick={() => setDaEliminare(e)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

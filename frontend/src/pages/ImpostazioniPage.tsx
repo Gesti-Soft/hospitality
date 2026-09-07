@@ -46,6 +46,7 @@ import { useToast } from '../toast/ToastContext'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { OsservatorioAppartamentoDialog } from '../components/OsservatorioAppartamentoDialog'
 import { PayTouristStrutturaDialog } from '../components/PayTouristStrutturaDialog'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 type TabImpostazioni = 'generali' | 'polizia' | 'osservatorio' | 'paytourist'
 
@@ -72,13 +73,17 @@ function EtichettaConPallino({ testo, inserito }: { testo: string; inserito: boo
 export function ImpostazioniPage() {
   const { strutturaId, strutturaCorrente } = useStruttura()
   const [tab, setTab] = useState<TabImpostazioni>('generali')
+  // Lettura e scrittura delle credenziali Polizia/Osservatorio/PayTourist condividono lo stesso
+  // permesso (StatePoliceSettings) — un utente senza questo permesso non deve vedere nemmeno la
+  // tab (fallirebbe comunque con 403 al primo caricamento), non solo il pulsante Salva.
+  const puoConfigurareCredenziali = usePuoScrivere('statePoliceSettings')
 
   // Ogni tab di credenziali/configurazione ha senso solo se il Super Admin ha concesso il relativo
   // servizio a questa struttura — stesso principio già applicato alle voci di menu "Invii automatici"
   // (vedi navItems.ts) e alla sezione "Invii automatici" di questa stessa pagina.
-  const mostraPolizia = strutturaCorrente?.alloggiatiWebAbilitato ?? false
-  const mostraOsservatorio = strutturaCorrente?.osservatorioAbilitato ?? false
-  const mostraPayTourist = strutturaCorrente?.payTouristAbilitato ?? false
+  const mostraPolizia = (strutturaCorrente?.alloggiatiWebAbilitato ?? false) && puoConfigurareCredenziali
+  const mostraOsservatorio = (strutturaCorrente?.osservatorioAbilitato ?? false) && puoConfigurareCredenziali
+  const mostraPayTourist = (strutturaCorrente?.payTouristAbilitato ?? false) && puoConfigurareCredenziali
 
   const tabVisibile: Record<TabImpostazioni, boolean> = {
     generali: true,
@@ -132,6 +137,7 @@ function TabGenerali({ strutturaId }: { strutturaId: string | null }) {
 }
 
 function WubookAttivoToggle({ strutturaId, dati }: { strutturaId: string; dati: WubookIntegrazioneDto }) {
+  const puoScrivere = usePuoScrivere('settingRoomWrite')
   const [attivo, setAttivo] = useState(dati.attivo)
   const toast = useToast()
   const aggiorna = useAggiornaWubookConfig(strutturaId)
@@ -145,7 +151,7 @@ function WubookAttivoToggle({ strutturaId, dati }: { strutturaId: string; dati: 
     <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Servizi · OTA</Typography>
       <FormControlLabel
-        control={<Checkbox checked={attivo} onChange={(e) => salvaAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
+        control={<Checkbox checked={attivo} onChange={(e) => salvaAttivo(e.target.checked)} disabled={aggiorna.isPending || !puoScrivere} />}
         label="Sincronizzazione OTA attiva per questa struttura"
       />
     </Box>

@@ -24,6 +24,7 @@ import { SuperAdminDashboardPage } from '../pages/SuperAdminDashboardPage'
 import { SuperAdminClientiPage } from '../pages/SuperAdminClientiPage'
 import { SuperAdminImpostazioniPage } from '../pages/SuperAdminImpostazioniPage'
 import { ProtectedRoute } from './ProtectedRoute'
+import { RouteGuard } from './RouteGuard'
 import { useSezioniVisibili } from '../layout/useSezioniVisibili'
 
 /**
@@ -63,28 +64,28 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       { path: '/', element: <RootRoute /> },
-      { path: '/calendario', element: <CalendarioPage /> },
-      { path: '/camere', element: <CamerePage /> },
-      { path: '/pulizie', element: <PuliziePage /> },
-      { path: '/tipologie', element: <TipologiePage /> },
-      { path: '/ospiti', element: <OspitiPage /> },
+      { path: '/calendario', element: <RouteGuard path="/calendario"><CalendarioPage /></RouteGuard> },
+      { path: '/camere', element: <RouteGuard path="/camere"><CamerePage /></RouteGuard> },
+      { path: '/pulizie', element: <RouteGuard path="/pulizie"><PuliziePage /></RouteGuard> },
+      { path: '/tipologie', element: <RouteGuard path="/tipologie"><TipologiePage /></RouteGuard> },
+      { path: '/ospiti', element: <RouteGuard path="/ospiti"><OspitiPage /></RouteGuard> },
       { path: '/finanze', element: <Navigate to="/finanze/riepilogo" replace /> },
-      { path: '/finanze/riepilogo', element: <RiepilogoCassaPage /> },
-      { path: '/finanze/spese', element: <SpesePage /> },
-      { path: '/finanze/entrate', element: <EntratePage /> },
-      { path: '/finanze/cauzioni', element: <CauzioniPage /> },
-      { path: '/fatturazione', element: <FatturazionePage /> },
-      { path: '/statistiche', element: <StatistichePage /> },
-      { path: '/polizia-di-stato', element: <PoliziaPage /> },
-      { path: '/osservatorio', element: <OsservatorioPage /> },
-      { path: '/paytourist', element: <PayTouristPage /> },
-      { path: '/wubook', element: <WubookPage /> },
-      { path: '/utenti', element: <UtentiPage /> },
-      { path: '/impostazioni', element: <ImpostazioniPage /> },
-      { path: '/log', element: <LogPage /> },
-      { path: '/super-admin', element: <SuperAdminDashboardPage /> },
-      { path: '/super-admin/clienti', element: <SuperAdminClientiPage /> },
-      { path: '/super-admin/impostazioni', element: <SuperAdminImpostazioniPage /> },
+      { path: '/finanze/riepilogo', element: <RouteGuard path="/finanze/riepilogo"><RiepilogoCassaPage /></RouteGuard> },
+      { path: '/finanze/spese', element: <RouteGuard path="/finanze/spese"><SpesePage /></RouteGuard> },
+      { path: '/finanze/entrate', element: <RouteGuard path="/finanze/entrate"><EntratePage /></RouteGuard> },
+      { path: '/finanze/cauzioni', element: <RouteGuard path="/finanze/cauzioni"><CauzioniPage /></RouteGuard> },
+      { path: '/fatturazione', element: <RouteGuard path="/fatturazione"><FatturazionePage /></RouteGuard> },
+      { path: '/statistiche', element: <RouteGuard path="/statistiche"><StatistichePage /></RouteGuard> },
+      { path: '/polizia-di-stato', element: <RouteGuard path="/polizia-di-stato"><PoliziaPage /></RouteGuard> },
+      { path: '/osservatorio', element: <RouteGuard path="/osservatorio"><OsservatorioPage /></RouteGuard> },
+      { path: '/paytourist', element: <RouteGuard path="/paytourist"><PayTouristPage /></RouteGuard> },
+      { path: '/wubook', element: <RouteGuard path="/wubook"><WubookPage /></RouteGuard> },
+      { path: '/utenti', element: <RouteGuard path="/utenti"><UtentiPage /></RouteGuard> },
+      { path: '/impostazioni', element: <RouteGuard path="/impostazioni"><ImpostazioniPage /></RouteGuard> },
+      { path: '/log', element: <RouteGuard path="/log"><LogPage /></RouteGuard> },
+      { path: '/super-admin', element: <RouteGuard path="/super-admin"><SuperAdminDashboardPage /></RouteGuard> },
+      { path: '/super-admin/clienti', element: <RouteGuard path="/super-admin/clienti"><SuperAdminClientiPage /></RouteGuard> },
+      { path: '/super-admin/impostazioni', element: <RouteGuard path="/super-admin/impostazioni"><SuperAdminImpostazioniPage /></RouteGuard> },
     ],
   },
 ])

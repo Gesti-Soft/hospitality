@@ -16,11 +16,13 @@ import { useStruttura } from '../struttura/StrutturaContext'
 import { ApiError } from '../api/client'
 import { useInviaOsservatorioOra, useOsservatorioAppartamenti, useSchedineOsservatorio } from '../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 export function OsservatorioPage() {
   const { strutturaId } = useStruttura()
+  const puoInviare = usePuoScrivere('statePoliceWrite')
   const appartamenti = useOsservatorioAppartamenti(strutturaId)
   const [appartamentoId, setAppartamentoId] = useState<string | null>(null)
   const [errore, setErrore] = useState<string | null>(null)
@@ -91,9 +93,11 @@ export function OsservatorioPage() {
             />
           )}
 
-          <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending || !appartamentoId}>
-            Invia ora
-          </Button>
+          {puoInviare && (
+            <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending || !appartamentoId}>
+              Invia ora
+            </Button>
+          )}
         </Box>
       )}
 

@@ -20,6 +20,7 @@ import { fontDisplay, fontMono, tokens } from '../theme'
 import { aggiungiGiorni, inizioGiornoLocale } from '../lib/date'
 import { PrenotazioneDialog, type StatoIniziale } from '../components/PrenotazioneDialog'
 import { KpiCard, KpiCardDoppia } from '../components/KpiCard'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 /**
  * Le date arrivano dal backend come timestamp "locali alla struttura" ma serializzati con
@@ -48,13 +49,21 @@ type EsitoIntegrazione = 'ok' | 'attesa' | 'errore' | 'non-configurato'
 export function DashboardPage() {
   const { strutturaId, strutturaCorrente } = useStruttura()
   const [dialogo, setDialogo] = useState<StatoIniziale | null>(null)
+  const puoScrivere = usePuoScrivere('reservationWrite')
+  // Come in CamerePage: un solo permesso (SettingAgency/StatePoliceSettings) governa sia la
+  // consultazione che la scrittura di questi dati — senza il permesso la query non parte nemmeno
+  // (fallirebbe comunque con 403).
+  const puoVedereCanali = usePuoScrivere('settingAgency')
+  const puoVedereCredenzialiInvii = usePuoScrivere('statePoliceSettings')
+  const puoVedereCamere = usePuoScrivere('settingRoomRead')
+  const puoVedereFinanze = usePuoScrivere('financeRead')
 
   const arriviInCorso = useArriviInCorso(strutturaId)
   const arriviProssimi = useArriviProssimi(strutturaId)
-  const camere = useCamere(strutturaId)
-  const canali = useCanaliVendita(strutturaId)
-  const tipologie = useTipologie(strutturaId)
-  const cassa = useRiepilogoCassa(strutturaId, new Date().getFullYear())
+  const camere = useCamere(puoVedereCamere ? strutturaId : null)
+  const canali = useCanaliVendita(puoVedereCanali ? strutturaId : null)
+  const tipologie = useTipologie(puoVedereCamere ? strutturaId : null)
+  const cassa = useRiepilogoCassa(puoVedereFinanze ? strutturaId : null, new Date().getFullYear())
 
   // Come nelle voci di menu "Invii automatici" e in Impostazioni: un servizio non concesso dal
   // Super Admin a questa struttura non deve comparire affatto, non solo mostrare un pallino "non
@@ -65,11 +74,11 @@ export function DashboardPage() {
   const payTouristConcesso = strutturaCorrente?.payTouristAbilitato ?? false
   const nessunServizioConcesso = !wubookConcesso && !alloggiatiWebConcesso && !osservatorioConcesso && !payTouristConcesso
 
-  const wubook = useWubookConfig(wubookConcesso ? strutturaId : null)
-  const alloggiatiWeb = useAlloggiatiWebConfig(alloggiatiWebConcesso ? strutturaId : null)
-  const osservatorio = useOsservatorioAppartamenti(osservatorioConcesso ? strutturaId : null)
-  const payTouristConfig = usePayTouristConfig(payTouristConcesso ? strutturaId : null)
-  const payTouristStrutture = usePayTouristStrutture(payTouristConcesso ? strutturaId : null)
+  const wubook = useWubookConfig(wubookConcesso && puoVedereCamere ? strutturaId : null)
+  const alloggiatiWeb = useAlloggiatiWebConfig(alloggiatiWebConcesso && puoVedereCredenzialiInvii ? strutturaId : null)
+  const osservatorio = useOsservatorioAppartamenti(osservatorioConcesso && puoVedereCredenzialiInvii ? strutturaId : null)
+  const payTouristConfig = usePayTouristConfig(payTouristConcesso && puoVedereCredenzialiInvii ? strutturaId : null)
+  const payTouristStrutture = usePayTouristStrutture(payTouristConcesso && puoVedereCredenzialiInvii ? strutturaId : null)
 
   const arriviOggi = (arriviProssimi.data ?? []).filter((p) => isOggi(p.checkIn))
   // "Oggi o prima", non solo "oggi": una partenza dimenticata resta InCorso e deve restare
@@ -128,22 +137,24 @@ export function DashboardPage() {
         <Typography sx={{ fontSize: 13, color: tokens.textSecondary, textTransform: 'capitalize' }}>
           {formattatoreData.format(new Date())}
         </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          size="medium"
-          disabled={!strutturaId || !camere.data || camere.data.length === 0}
-          onClick={() =>
-            setDialogo({
-              modo: 'crea',
-              cameraId: null,
-              checkIn: inizioGiornoLocale(new Date()),
-              checkOut: aggiungiGiorni(new Date(), 1),
-            })
-          }
-        >
-          + Nuova prenotazione
-        </Button>
+        {puoScrivere && (
+          <Button
+            variant="contained"
+            color="primary"
+            size="medium"
+            disabled={!strutturaId || !camere.data || camere.data.length === 0}
+            onClick={() =>
+              setDialogo({
+                modo: 'crea',
+                cameraId: null,
+                checkIn: inizioGiornoLocale(new Date()),
+                checkOut: aggiungiGiorni(new Date(), 1),
+              })
+            }
+          >
+            + Nuova prenotazione
+          </Button>
+        )}
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2 }}>
@@ -156,7 +167,13 @@ export function DashboardPage() {
         />
         <KpiCard
           etichetta="Occupazione"
-          valore={occupate === null || totaleCamere === null ? null : `${occupate}/${totaleCamere}`}
+          valore={
+            arriviInCorso.isLoading || camere.isLoading
+              ? null
+              : occupate === null || totaleCamere === null
+                ? '—'
+                : `${occupate}/${totaleCamere}`
+          }
           dettaglio={
             occupate !== null && totaleCamere !== null && totaleCamere > 0
               ? `${Math.round((occupate / totaleCamere) * 100)}%`

@@ -34,6 +34,7 @@ import { differenzaGiorni, formatoInputData, isoLocale, parsaInputData } from '.
 import { CampoData } from './CampoData'
 import { SelectComune } from './SelectComune'
 import { fontDisplay, tokens } from '../theme'
+import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 interface Props {
   strutturaId: string
@@ -146,6 +147,8 @@ function SchedaOspitiForm({
   onGeneraFattura?: () => void
   fatturaGenerata: DatiFatturaDto | null
 }) {
+  const puoScrivere = usePuoScrivere('reservationWrite')
+  const puoFatturare = usePuoScrivere('financeWrite')
   const stati = useStati()
   const documenti = useDocumenti()
   const tipiAlloggiato = useTipiAlloggiato()
@@ -337,9 +340,11 @@ function SchedaOspitiForm({
 
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 13.5 }}>Altri ospiti ({membri.length})</Typography>
-              <Button size="small" onClick={aggiungiMembro} disabled={salva.isPending}>
-                + Aggiungi ospite
-              </Button>
+              {puoScrivere && (
+                <Button size="small" onClick={aggiungiMembro} disabled={salva.isPending}>
+                  + Aggiungi ospite
+                </Button>
+              )}
             </Box>
 
             {membri.map((m, indice) => (
@@ -368,9 +373,11 @@ function SchedaOspitiForm({
                     <MenuItem value={String(Sesso.Maschio)}>Maschio</MenuItem>
                     <MenuItem value={String(Sesso.Femmina)}>Femmina</MenuItem>
                   </TextField>
-                  <IconButton size="small" onClick={() => rimuoviMembro(indice)} disabled={salva.isPending}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                  {puoScrivere && (
+                    <IconButton size="small" onClick={() => rimuoviMembro(indice)} disabled={salva.isPending}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  )}
                 </Box>
                 <Box sx={{ display: 'flex', gap: 2 }}>
                   <SelectRiferimento
@@ -423,7 +430,8 @@ function SchedaOspitiForm({
               sx={{ bgcolor: tokens.ok600, color: '#fff', fontWeight: 700, alignSelf: 'center' }}
             />
           ) : (
-            onGeneraFattura && (
+            onGeneraFattura &&
+            puoFatturare && (
               <Button onClick={onGeneraFattura} disabled={salva.isPending}>
                 Genera fattura
               </Button>
@@ -433,9 +441,11 @@ function SchedaOspitiForm({
         <Button onClick={onClose} disabled={salva.isPending}>
           Chiudi
         </Button>
-        <Button variant="contained" color="primary" onClick={onSalva} disabled={salva.isPending}>
-          Salva scheda
-        </Button>
+        {puoScrivere && (
+          <Button variant="contained" color="primary" onClick={onSalva} disabled={salva.isPending}>
+            Salva scheda
+          </Button>
+        )}
       </DialogActions>
     </>
   )
