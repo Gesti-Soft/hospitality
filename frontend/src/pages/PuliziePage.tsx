@@ -10,7 +10,7 @@ import { fontDisplay, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 
 export function PuliziePage() {
-  const { strutturaId, strutturaCorrente } = useStruttura()
+  const { strutturaId } = useStruttura()
   const camere = useCamere(strutturaId)
   const segnaPulita = useSegnaCameraPulita(strutturaId)
   const toast = useToast()

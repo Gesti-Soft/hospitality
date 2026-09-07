@@ -50,8 +50,19 @@ function RootRoute() {
     return null
   }
 
+  // Non basta guardare sezioni[0]: per un Super Admin la sezione "Super Admin" è sempre la prima
+  // (soloSuperAdmin la fa comunque restare in elenco, vedi useSezioniVisibili), quindi sezioni[0]
+  // sarebbe sempre "/super-admin" anche quando può benissimo vedere il Cruscotto operativo — bug
+  // reale: cliccando la tab "Operativo" (che porta a "/") un Super Admin con Struttura già
+  // selezionata veniva rimbalzato indietro su "/super-admin". Il Cruscotto va cercato ovunque tra le
+  // sezioni visibili, non assunto assente solo perché non è la prima.
+  const cruscottoVisibile = sezioni.some((s) => s.voci.some((v) => v.path === '/'))
+  if (cruscottoVisibile) {
+    return <DashboardPage />
+  }
+
   const primaVoceDisponibile = sezioni[0]?.voci[0]
-  if (primaVoceDisponibile && primaVoceDisponibile.path !== '/') {
+  if (primaVoceDisponibile) {
     return <Navigate to={primaVoceDisponibile.path} replace />
   }
 
