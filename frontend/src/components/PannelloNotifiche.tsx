@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Badge from '@mui/material/Badge'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -9,13 +9,43 @@ import { tokens } from '../theme'
 import { IconNotifiche } from '../layout/navIcons'
 import { useContoNotificheNonLette, useNotifiche, useSegnaNotificaLetta, useSegnaTutteNotificheLette, type NotificaDto } from '../api/notifiche'
 
+// Notifiche mostrate alla volta: si parte con una sola pagina, poi se ne rivela un'altra ogni volta
+// che si scorre fino in fondo all'elenco (stesso principio di usePaginazioneScroll usato altrove,
+// qui reimplementato localmente perché quell'hook è tipizzato per righe di tabella, non per un
+// elenco in un pannello a tendina) — i dati sono già tutti caricati in un solo giro (fino a 100, vedi
+// NotificaRepository), qui si rivelano solo progressivamente, nessuna nuova chiamata di rete.
+const NOTIFICHE_PER_PAGINA = 5
+
 /** Bottone campanella con badge non-lette + pannello a tendina, nella topbar (vedi AppShell). */
 export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null }) {
   const [ancora, setAncora] = useState<HTMLElement | null>(null)
+  const [numeroVisibili, setNumeroVisibili] = useState(NOTIFICHE_PER_PAGINA)
   const { data: conteggio } = useContoNotificheNonLette(strutturaId)
   const { data: notifiche } = useNotifiche(strutturaId, false)
   const segnaLetta = useSegnaNotificaLetta(strutturaId)
   const segnaTutteLette = useSegnaTutteNotificheLette(strutturaId)
+
+  const contenitoreRef = useRef<HTMLDivElement | null>(null)
+  const sentinellaRef = useRef<HTMLDivElement | null>(null)
+  const totale = notifiche?.length ?? 0
+  const altreDaCaricare = numeroVisibili < totale
+
+  useEffect(() => {
+    if (!altreDaCaricare) return
+    const el = sentinellaRef.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setNumeroVisibili((n) => n + NOTIFICHE_PER_PAGINA)
+        }
+      },
+      { root: contenitoreRef.current, rootMargin: '100px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [altreDaCaricare])
 
   if (!strutturaId) {
     return null
@@ -23,9 +53,17 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
 
   const aperto = !!ancora
 
+  function apri(elemento: HTMLElement) {
+    setAncora(elemento)
+    // Riparte sempre dalle prime 5 alla riapertura, non da dove si era arrivati l'ultima volta.
+    setNumeroVisibili(NOTIFICHE_PER_PAGINA)
+  }
+
+  const notificheVisibili = (notifiche ?? []).slice(0, numeroVisibili)
+
   return (
     <>
-      <IconButton size="small" onClick={(e) => setAncora(e.currentTarget)} sx={{ color: '#7E899A' }}>
+      <IconButton size="small" onClick={(e) => apri(e.currentTarget)} sx={{ color: '#7E899A' }}>
         <Badge badgeContent={conteggio ?? 0} color="error" max={99} sx={{ '& .MuiBadge-badge': { fontSize: 9.5, fontWeight: 700 } }}>
           <IconNotifiche width={19} height={19} />
         </Badge>
@@ -48,11 +86,16 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
           )}
         </Box>
 
-        <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+        <Box ref={contenitoreRef} sx={{ maxHeight: 400, overflowY: 'auto' }}>
           {!notifiche || notifiche.length === 0 ? (
             <Typography sx={{ p: 2.5, fontSize: 13, color: tokens.textSecondary, textAlign: 'center' }}>Nessuna notifica.</Typography>
           ) : (
-            notifiche.map((n) => <RigaNotifica key={n.id} notifica={n} onClick={() => segnaLetta.mutate(n.id)} />)
+            <>
+              {notificheVisibili.map((n) => (
+                <RigaNotifica key={n.id} notifica={n} onClick={() => segnaLetta.mutate(n.id)} />
+              ))}
+              {altreDaCaricare && <Box ref={sentinellaRef} sx={{ height: 1 }} />}
+            </>
           )}
         </Box>
       </Popover>
