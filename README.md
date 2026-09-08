@@ -92,6 +92,14 @@ docker run --rm -v gestisoftgestionale_gestisoft_postgres_data:/var/lib/postgres
   -u postgres gestisoftgestionale-postgres `
   pgbackrest --stanza=gestisoft --type=time --target="2026-09-07 23:59:00" restore
 ```
+oppure un backup specifico tra quelli elencati da `pgbackrest info` (etichetta esatta, es.
+`20260908-130218F`, invece di un istante di tempo):
+```powershell
+docker run --rm -v gestisoftgestionale_gestisoft_postgres_data:/var/lib/postgresql/data `
+  -v gestisoftgestionale_gestisoft_pgbackrest_repo:/var/lib/pgbackrest:ro `
+  -u postgres gestisoftgestionale-postgres `
+  pgbackrest --stanza=gestisoft --type=backup --set=20260908-130218F restore
+```
 Infine `docker compose up -d` e verifica i dati prima di considerare il ripristino concluso.
 Dettagli completi (incluso il caso "il repository pgBackRest stesso è inutilizzabile") in
 `docs/backup-restore.md`.
