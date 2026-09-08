@@ -46,6 +46,15 @@ public class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepository
             query = query.Where(l => l.Categoria != null && categorieVisibili.Contains(l.Categoria));
         }
 
+        if (!string.IsNullOrWhiteSpace(filtro.Ricerca))
+        {
+            var pattern = $"%{filtro.Ricerca.Trim()}%";
+            query = query.Where(l =>
+                EF.Functions.ILike(l.Messaggio, pattern) ||
+                (l.Operatore != null && EF.Functions.ILike(l.Operatore, pattern)) ||
+                (l.CorrelationId != null && EF.Functions.ILike(l.CorrelationId, pattern)));
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
 
         var items = await query

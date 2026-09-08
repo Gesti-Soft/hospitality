@@ -6,6 +6,7 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import Button from '@mui/material/Button'
+import InputAdornment from '@mui/material/InputAdornment'
 import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import Table from '@mui/material/Table'
@@ -15,6 +16,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import SearchIcon from '@mui/icons-material/Search'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
@@ -45,9 +47,19 @@ export function LogPage() {
   const categorieDisponibili = sessione?.isSuperAdmin ? CATEGORIE_LOG : CATEGORIE_LOG_CLIENTE
   const [livello, setLivello] = useState<string>('')
   const [categoria, setCategoria] = useState<string>('')
+  const [ricerca, setRicerca] = useState('')
+  const [ricercaDebounced, setRicercaDebounced] = useState('')
   const [dettaglio, setDettaglio] = useState<LogEventoDto | null>(null)
 
-  const logs = useLogs(strutturaId, livello === '' ? null : (Number(livello) as LivelloLog), categoria === '' ? null : categoria, PAGE_SIZE)
+  // Debounce: la ricerca è server-side (il log può contenere mesi di righe, non ha senso caricarle
+  // tutte per filtrarle in memoria come nelle altre pagine) — senza attesa ogni tasto premuto
+  // scatenerebbe una nuova query.
+  useEffect(() => {
+    const timeout = setTimeout(() => setRicercaDebounced(ricerca), 400)
+    return () => clearTimeout(timeout)
+  }, [ricerca])
+
+  const logs = useLogs(strutturaId, livello === '' ? null : (Number(livello) as LivelloLog), categoria === '' ? null : categoria, ricercaDebounced, PAGE_SIZE)
 
   const eventi = logs.data?.pages.flatMap((p) => p.items) ?? []
   const totaleEventi = logs.data?.pages[0]?.totalCount ?? 0
@@ -87,7 +99,24 @@ export function LogPage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
-        <Box sx={{ display: 'flex', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+          <TextField
+            size="small"
+            placeholder="Cerca per messaggio, operatore o correlation id..."
+            value={ricerca}
+            onChange={(e) => setRicerca(e.target.value)}
+            sx={{ minWidth: 280 }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" sx={{ color: tokens.textTertiary }} />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+
           <TextField
             select
             size="small"

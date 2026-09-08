@@ -14,6 +14,7 @@ public record LogEventoFiltro(
     Guid? StrutturaId,
     LivelloLog? Livello,
     string? Categoria = null,
+    string? Ricerca = null,
     int Page = 1,
     int PageSize = 50,
     IReadOnlyList<string>? CategorieVisibili = null);
