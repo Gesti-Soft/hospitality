@@ -11,17 +11,19 @@ public partial class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepo
 {
     private static readonly TimeZoneInfo FusoItaliano = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
 
-    [GeneratedRegex(@"^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?$")]
+    [GeneratedRegex(@"^(\d{1,2})(?:[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?)?$")]
     private static partial Regex RegexData();
 
     /// <summary>
-    /// "08/05" (o "08/05/2026", "08-05-26", "08.05") nella ricerca testuale del log deve trovare gli
-    /// eventi di quel giorno — richiesta esplicita dell'utente. Anno assente: si assume l'anno
-    /// corrente (con la conservazione di 6-12 mesi introdotta di recente, di rado sono presenti log
-    /// di più di un anno insieme; chi vuole un anno diverso lo scrive per esteso). Il confronto va
-    /// fatto sul giorno di calendario italiano, non UTC: CreatedAtUtc va convertito con
-    /// TimeZoneInfo.ConvertTimeToUtc PRIMA di comporre la query (calcolo in C#, mai tradotto in SQL),
-    /// così l'ora legale/solare è gestita correttamente senza bisogno di "AT TIME ZONE" lato Postgres.
+    /// "08/05" (o "08/05/2026", "08-05-26", "08.05", o solo "08") nella ricerca testuale del log deve
+    /// trovare gli eventi di quel giorno — richiesta esplicita dell'utente, che ha segnalato non
+    /// funzionare anche con il solo giorno ("08" da solo, mese/anno assenti). Mese/anno assenti:
+    /// si assume il mese/anno correnti (con la conservazione di 6-12 mesi introdotta di recente, di
+    /// rado sono presenti log di più mesi/anni insieme; chi vuole un mese o anno diverso lo scrive per
+    /// esteso). Il confronto va fatto sul giorno di calendario italiano, non UTC: CreatedAtUtc va
+    /// convertito con TimeZoneInfo.ConvertTimeToUtc PRIMA di comporre la query (calcolo in C#, mai
+    /// tradotto in SQL), così l'ora legale/solare è gestita correttamente senza bisogno di
+    /// "AT TIME ZONE" lato Postgres.
     /// </summary>
     internal static bool ProvaEstraiIntervalloData(string testo, out DateTime inizioUtc, out DateTime fineUtc)
     {
@@ -34,11 +36,10 @@ public partial class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepo
             return false;
         }
 
+        var oggiLocale = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, FusoItaliano);
         var giorno = int.Parse(match.Groups[1].Value);
-        var mese = int.Parse(match.Groups[2].Value);
-        var anno = match.Groups[3].Success
-            ? NormalizzaAnno(match.Groups[3].Value)
-            : TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, FusoItaliano).Year;
+        var mese = match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : oggiLocale.Month;
+        var anno = match.Groups[3].Success ? NormalizzaAnno(match.Groups[3].Value) : oggiLocale.Year;
 
         DateTime giornoLocale;
         try

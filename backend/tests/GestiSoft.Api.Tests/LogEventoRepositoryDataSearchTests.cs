@@ -29,6 +29,24 @@ public class LogEventoRepositoryDataSearchTests
     }
 
     [Theory]
+    [InlineData("8")]
+    [InlineData("08")]
+    public void Solo_il_giorno_usa_mese_e_anno_correnti(string testo)
+    {
+        // Bug segnalato dall'utente: cercando solo "08" (senza mese) non trovava gli eventi
+        // dell'8 del mese corrente, perché il pattern richiedeva sempre almeno giorno/mese.
+        var trovato = LogEventoRepository.ProvaEstraiIntervalloData(testo, out var inizioUtc, out var fineUtc);
+
+        var fuso = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
+        var oggiLocale = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, fuso);
+        var atteso = TimeZoneInfo.ConvertTimeToUtc(new DateTime(oggiLocale.Year, oggiLocale.Month, 8, 0, 0, 0, DateTimeKind.Unspecified), fuso);
+
+        Assert.True(trovato);
+        Assert.Equal(atteso, inizioUtc);
+        Assert.Equal(TimeSpan.FromDays(1), fineUtc - inizioUtc);
+    }
+
+    [Theory]
     [InlineData("08/05/2026")]
     [InlineData("08/05/26")]
     public void Con_anno_esplicito_ritorna_lo_stesso_intervallo_a_prescindere_dal_formato(string testo)
@@ -47,6 +65,8 @@ public class LogEventoRepositoryDataSearchTests
     [InlineData("osservatorio")] // testo libero, non una data
     [InlineData("")]
     [InlineData("12/2026")] // un solo separatore: ambiguo (mese/anno?), non un giorno/mese valido
+    [InlineData("00")] // nessun mese ha un giorno 0
+    [InlineData("45")] // nessun mese ha un giorno 45
     public void Testo_non_riconoscibile_come_data_non_trova_nulla_ne_lancia(string testo)
     {
         var trovato = LogEventoRepository.ProvaEstraiIntervalloData(testo, out _, out _);
