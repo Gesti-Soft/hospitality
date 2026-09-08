@@ -124,6 +124,11 @@ export function LogPage() {
         </Typography>
       </Box>
 
+      {/* Valori duplicati da LogEventoService.GiorniConservazioneInfo/GiorniConservazioneAltri: tenere allineati. */}
+      <Typography sx={{ fontSize: 11.5, color: tokens.textTertiary }}>
+        Per limitare la conservazione dei dati (art. 5.1.e GDPR), i log vengono eliminati automaticamente dopo 6 mesi (Info) o 12 mesi (Avviso/Errore).
+      </Typography>
+
       {logs.isLoading && <Skeleton variant="rounded" height={320} />}
 
       {!logs.isLoading && mobile && (

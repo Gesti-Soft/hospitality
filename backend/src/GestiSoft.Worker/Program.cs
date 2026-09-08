@@ -71,6 +71,15 @@ try
             .ForJob(checkOutDimenticatoJobKey)
             .WithIdentity("checkout-dimenticato-notifica-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(1).RepeatForever()));
+
+        // Pulizia LogEvento (richiesta esplicita dell'utente, politica di conservazione GDPR): non
+        // urgente, un giro al giorno basta.
+        var puliziaLogJobKey = new JobKey("pulizia-log");
+        quartz.AddJob<PuliziaLogJob>(options => options.WithIdentity(puliziaLogJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(puliziaLogJobKey)
+            .WithIdentity("pulizia-log-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(24).RepeatForever()));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 

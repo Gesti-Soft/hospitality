@@ -1,5 +1,6 @@
 using GestiSoft.Application.Logging;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 using GestiSoft.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,4 +56,11 @@ public class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepository
 
         return (items, totalCount);
     }
+
+    public Task<int> EliminaPrecedentiAsync(DateTime sogliaInfoUtc, DateTime sogliaAltriUtc, CancellationToken cancellationToken) =>
+        db.LogEventi
+            .Where(l =>
+                (l.Livello == LivelloLog.Info && l.CreatedAtUtc < sogliaInfoUtc) ||
+                (l.Livello != LivelloLog.Info && l.CreatedAtUtc < sogliaAltriUtc))
+            .ExecuteDeleteAsync(cancellationToken);
 }

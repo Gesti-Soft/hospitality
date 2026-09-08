@@ -19,4 +19,7 @@ public interface ILogEventoService
         CancellationToken cancellationToken = default);
 
     Task<PagedResult<LogEvento>> CercaAsync(LogEventoFiltro filtro, CancellationToken cancellationToken = default);
+
+    /// <summary>Applica la politica di conservazione (vedi LogEventoService) ed elimina i log scaduti. Ritorna il numero di righe eliminate.</summary>
+    Task<int> PulisciVecchiAsync(CancellationToken cancellationToken = default);
 }
