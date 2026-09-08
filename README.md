@@ -60,8 +60,41 @@ Backup fisico + WAL archiving continuo (pgBackRest, retention 30 giorni) e dump 
 indipendente (`pg_dump`, retention 7 giorni), entrambi automatici (Windows Task Scheduler in
 locale, cron sulla VPS di produzione — script equivalenti in `docker/postgres/scripts/`, `.ps1` e
 `.sh`), con test di restore mensile automatico. Storico e orari visibili anche dal pannello Super
-Admin (pagina "Backup"). Vedi `docs/backup-restore.md` per il runbook completo (controlli di
-salute, restore di emergenza, come aggiungere una copia off-site).
+Admin (pagina "Backup") — solo in sola lettura/download: il ripristino non è disponibile da lì
+di proposito (spegnerebbe Postgres per tutti i clienti e sovrascriverebbe il database corrente,
+un'operazione da eseguire consapevolmente da chi ha accesso diretto al server, non a un click da
+un pannello web). Vedi `docs/backup-restore.md` per il runbook completo (controlli di salute, PITR,
+come aggiungere una copia off-site).
+
+**Vedere i backup esistenti** (PowerShell):
+```powershell
+docker exec -u postgres gestisoft-gestionale-postgres pgbackrest --stanza=gestisoft info
+```
+Mostra ogni backup completo con timestamp, dimensione e range di WAL coperto — indica fino a
+quando indietro nel tempo puoi ripristinare (max 30 giorni, oltre sono già stati ruotati via).
+
+**Ripristinare il database** (PowerShell — ferma prima lo stack, un restore sovrascrive i dati):
+```powershell
+docker compose stop postgres
+```
+Se ripristini sullo stesso volume, rinomina/rimuovi prima `gestisoft_postgres_data` (mai
+sovrascrivere alla cieca). Poi, restore fino al punto più recente disponibile:
+```powershell
+docker run --rm -v gestisoftgestionale_gestisoft_postgres_data:/var/lib/postgresql/data `
+  -v gestisoftgestionale_gestisoft_pgbackrest_repo:/var/lib/pgbackrest:ro `
+  -u postgres gestisoftgestionale-postgres `
+  pgbackrest --stanza=gestisoft restore
+```
+oppure fino a un istante preciso nel passato (PITR, es. un momento prima di un errore):
+```powershell
+docker run --rm -v gestisoftgestionale_gestisoft_postgres_data:/var/lib/postgresql/data `
+  -v gestisoftgestionale_gestisoft_pgbackrest_repo:/var/lib/pgbackrest:ro `
+  -u postgres gestisoftgestionale-postgres `
+  pgbackrest --stanza=gestisoft --type=time --target="2026-09-07 23:59:00" restore
+```
+Infine `docker compose up -d` e verifica i dati prima di considerare il ripristino concluso.
+Dettagli completi (incluso il caso "il repository pgBackRest stesso è inutilizzabile") in
+`docs/backup-restore.md`.
 
 ## Deploy in produzione
 
