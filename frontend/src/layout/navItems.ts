@@ -1,5 +1,6 @@
 import type { ComponentType, SVGProps } from 'react'
 import {
+  IconBackup,
   IconCalendario,
   IconCamere,
   IconCauzioni,
@@ -73,6 +74,7 @@ export const navSections: NavSection[] = [
     items: [
       { label: 'Dashboard', path: '/super-admin', icon: IconSuperAdmin },
       { label: 'Clienti', path: '/super-admin/clienti', icon: IconUtenti },
+      { label: 'Backup', path: '/super-admin/backup', icon: IconBackup },
       { label: 'Impostazioni', path: '/super-admin/impostazioni', icon: IconImpostazioni },
     ],
   },

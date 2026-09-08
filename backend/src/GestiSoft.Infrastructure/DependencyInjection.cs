@@ -26,6 +26,7 @@ using GestiSoft.Infrastructure.PayTourist;
 using GestiSoft.Infrastructure.Persistence;
 using GestiSoft.Infrastructure.Repositories;
 using GestiSoft.Infrastructure.Seed;
+using GestiSoft.Infrastructure.SuperAdmin;
 using GestiSoft.Infrastructure.Wubook;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -80,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IPayTouristStrutturaRepository, PayTouristStrutturaRepository>();
         services.AddScoped<IRiferimentiRepository, RiferimentiRepository>();
         services.AddScoped<ISuperAdminRepository, SuperAdminRepository>();
+        services.AddScoped<IBackupExporter, PgDumpBackupExporter>();
         services.AddScoped<IStatisticheRepository, StatisticheRepository>();
         services.AddScoped<IStatisticheSuperAdminRepository, StatisticheSuperAdminRepository>();
         services.AddScoped<IImpostazioniGlobaliRepository, ImpostazioniGlobaliRepository>();

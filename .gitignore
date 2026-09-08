@@ -14,6 +14,11 @@ frontend/.env.local
 .env
 docker-compose.env
 
+# Backup DB (contengono dati reali dei clienti, mai da versionare)
+docker/postgres/dumps/
+docker/postgres/logs/
+docker/postgres/pre-migration-safety-dump/
+
 # OS
 .DS_Store
 Thumbs.db

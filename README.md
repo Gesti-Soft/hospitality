@@ -50,6 +50,13 @@ docker compose up -d --build
 - Api: `http://localhost:5080`
 - Postgres: `localhost:5432` (solo da localhost)
 
+## Backup del database
+
+Backup fisico + WAL archiving continuo (pgBackRest, retention 30 giorni) e dump logico
+indipendente (`pg_dump`, retention 7 giorni), entrambi automatici via Windows Task Scheduler, con
+test di restore mensile automatico. Vedi `docs/backup-restore.md` per il runbook completo
+(controlli di salute, restore di emergenza, come aggiungere una copia off-site).
+
 ## Integrazioni esterne mantenute
 
 - Wubook (channel manager OTA)

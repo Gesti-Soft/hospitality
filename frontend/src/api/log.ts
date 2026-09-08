@@ -28,7 +28,7 @@ export interface PagedResultDto<T> {
 }
 
 /** Tutte le categorie — solo per il Super Admin (vedi LogVisibilita lato backend, applicata comunque anche se il filtro qui non venisse rispettato). */
-export const CATEGORIE_LOG = ['Prenotazione', 'Utente', 'Servizi', 'Wubook', 'AlloggiatiWeb', 'Osservatorio', 'PayTourist', 'Auth', 'SuperAdmin'] as const
+export const CATEGORIE_LOG = ['Prenotazione', 'Utente', 'Servizi', 'Wubook', 'AlloggiatiWeb', 'Osservatorio', 'PayTourist', 'Auth', 'SuperAdmin', 'Backup'] as const
 
 /**
  * Sottoinsieme visibile a un Cliente — deve restare identico a LogVisibilita.CategorieVisibiliCliente

@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    build: ./docker/postgres
     container_name: gestisoft-gestionale-postgres
     restart: unless-stopped
     environment:
@@ -9,8 +9,18 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - gestisoft_postgres_data:/var/lib/postgresql/data
+      - gestisoft_pgbackrest_repo:/var/lib/pgbackrest
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    # archive_mode/archive_command abilitano il WAL archiving continuo per pgBackRest (PITR,
+    # vedi docs/backup-restore.md) — forma a lista per evitare problemi di quoting/split dei
+    # comandi Compose sulla stringa di archive_command.
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=gestisoft archive-push %p
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gestisoft} -d ${POSTGRES_DB:-gestisoft}"]
       interval: 5s
@@ -102,3 +112,4 @@ services:
 
 volumes:
   gestisoft_postgres_data:
+  gestisoft_pgbackrest_repo:

@@ -27,12 +27,23 @@ public class SuperAdminService(
     IStrutturaRepository strutture,
     IUtenteRepository utenti,
     IPasswordHasher<Utente> passwordHasher,
-    ILogEventoService logEventi)
+    ILogEventoService logEventi,
+    IBackupExporter backupExporter)
 {
     public async Task<DashboardSuperAdminInfo> GetDashboardAsync(ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         RichiediSuperAdmin(currentUser);
         return await repository.GetDashboardAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Dump completo del database generato al volo per il download manuale — indipendente dal
+    /// sistema di backup automatico notturno (vedi docs/backup-restore.md).
+    /// </summary>
+    public async Task<byte[]> EsportaBackupAsync(ICurrentUser currentUser, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+        return await backupExporter.EsportaAsync(cancellationToken);
     }
 
     public async Task<Cliente> ImpostaAttivoAsync(ICurrentUser currentUser, Guid clienteId, bool attivo, CancellationToken cancellationToken)

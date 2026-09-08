@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiDelete, apiGet, apiPut } from './client'
+import { apiDelete, apiGet, apiPut, apiScaricaFile } from './client'
 
 export interface StrutturaAdminDto {
   id: string
@@ -140,6 +140,12 @@ export function useEliminaStrutturaDefinitivamente() {
     mutationFn: (strutturaId: string) => apiDelete(`/super-admin/strutture/${strutturaId}`),
     onSuccess: invalida,
   })
+}
+
+/** Dump completo del database generato al volo — indipendente dai backup automatici notturni (vedi docs/backup-restore.md). */
+export function scaricaBackupDatabase() {
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')
+  return apiScaricaFile('/super-admin/backup/export', `gestisoft-backup-${timestamp}.dump`)
 }
 
 export const GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA = 90

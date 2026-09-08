@@ -24,6 +24,13 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
         return Ok(ToDto(dashboard));
     }
 
+    [HttpGet("backup/export")]
+    public async Task<IActionResult> EsportaBackup(CancellationToken cancellationToken)
+    {
+        var dump = await service.EsportaBackupAsync(currentUser, cancellationToken);
+        return File(dump, "application/octet-stream", $"gestisoft-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}.dump");
+    }
+
     [HttpPut("clienti/{clienteId:guid}/attivo")]
     public async Task<IActionResult> ImpostaAttivo(Guid clienteId, [FromBody] ImpostaAttivoRequest request, CancellationToken cancellationToken)
     {

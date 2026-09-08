@@ -23,6 +23,7 @@ import { StatistichePage } from '../pages/StatistichePage'
 import { SuperAdminDashboardPage } from '../pages/SuperAdminDashboardPage'
 import { SuperAdminClientiPage } from '../pages/SuperAdminClientiPage'
 import { SuperAdminImpostazioniPage } from '../pages/SuperAdminImpostazioniPage'
+import { SuperAdminBackupPage } from '../pages/SuperAdminBackupPage'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RouteGuard } from './RouteGuard'
 import { useSezioniVisibili } from '../layout/useSezioniVisibili'
@@ -96,6 +97,7 @@ const router = createBrowserRouter([
       { path: '/log', element: <RouteGuard path="/log"><LogPage /></RouteGuard> },
       { path: '/super-admin', element: <RouteGuard path="/super-admin"><SuperAdminDashboardPage /></RouteGuard> },
       { path: '/super-admin/clienti', element: <RouteGuard path="/super-admin/clienti"><SuperAdminClientiPage /></RouteGuard> },
+      { path: '/super-admin/backup', element: <RouteGuard path="/super-admin/backup"><SuperAdminBackupPage /></RouteGuard> },
       { path: '/super-admin/impostazioni', element: <RouteGuard path="/super-admin/impostazioni"><SuperAdminImpostazioniPage /></RouteGuard> },
     ],
   },

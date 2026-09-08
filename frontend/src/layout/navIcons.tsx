@@ -199,6 +199,15 @@ export function IconImpostazioni(props: IconProps) {
   )
 }
 
+export function IconBackup(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 2.7V11.3M9 11.3L5.8 8.1M9 11.3L12.2 8.1" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.7 12.6V13.9C2.7 14.7 3.3 15.3 4.1 15.3H13.9C14.7 15.3 15.3 14.7 15.3 13.9V12.6" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function IconStatistiche(props: IconProps) {
   return (
     <svg {...base} {...props}>

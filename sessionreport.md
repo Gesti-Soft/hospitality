@@ -1,6 +1,162 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-07 (sessione successiva — **Guardia di rotta per permesso di lettura (bug reale: URL digitato a mano bypassava il filtro del menu) e pulsanti di scrittura nascosti in base ai permessi granulari in tutta l'app**, vedi sezione dedicata per il dettaglio completo: partita da un bug segnalato dal vivo, un Addetto pulizie che raggiungeva `/camere` digitando l'URL nonostante il menu (sessione precedente) lo nascondesse — il filtro esistente operava solo sulla lista di navigazione, mai sulle rotte stesse. Aggiunto `useVoceProtetta`/`RouteGuard.tsx`, che riusa la stessa lista del menu per reindirizzare chi naviga direttamente a un path non permesso. Poi, segnalato un secondo bug più ampio: un Receptionist con "Camere e tariffe: solo Consulta" vedeva comunque i pulsanti di creazione/modifica/eliminazione, pur mancando il permesso di scrittura — il backend rifiutava già correttamente il salvataggio (verificato via curl diretto, nessuna modifica backend necessaria), ma l'utente non lo capiva dal solo trovarsi il pulsante lì. Nuovo hook condiviso `usePuoScrivere` applicato a **tutte** le pagine con azioni di scrittura (Camere/Tipologie/Prezzi/Canali vendita, Calendario/Prenotazioni/Ospiti, Finanze/Fatturazione, Invii automatici, Impostazioni, Wubook) — un pulsante o un'intera tab (per i permessi "a sé" come `settingAgency`/`statePoliceSettings`, dove anche la sola lettura richiede quel permesso) sparisce quando manca il permesso di scrittura corrispondente, non solo quando manca il permesso di lettura. Trovato e corretto anche un bug satellite in `DashboardPage.tsx` (query non protette che generavano fino a 18 errori 403 in console per un utente di sola lettura, e un widget "Occupazione" bloccato su uno skeleton di caricamento infinito). Verificato con più cicli di Playwright contro Docker, utenti di test temporanei con combinazioni mirate di permessi, mai lasciati sul database.
+Ultimo aggiornamento: 2026-09-08 (sessione successiva — **Fase 11: backup & gestione DB (pgBackRest + pg_dump), solo parte locale** — pianificata in Plan Mode su richiesta esplicita dell'utente di andare con cautela (primo approccio ai backup), vedi sezione dedicata per il dettaglio completo: nuova immagine Postgres custom con pgBackRest incluso (backup fisico completo notturno + WAL archiving continuo per PITR, retention 30gg) più `pg_dump` logico indipendente (retention 7gg, fedele al piano originale); scheduling del backup notturno lasciato fuori da Docker (Windows Task Scheduler, non un sidecar con socket Docker montato né cron dentro il container); test di restore reale eseguito subito (non solo pianificato per il mese prossimo), su un container/volume usa-e-getta, con conteggi verificati identici al database live. Copia off-site esplicitamente rimandata (l'utente non ha ancora scelto la destinazione), pronta da aggiungere in seguito come `repo2` senza refactor. **Stessa sessione, proseguita con una seconda richiesta**: nuova pagina "Backup" nel pannello Super Admin che genera e scarica un dump del database al volo dal browser (`pg_dump` lanciato dal container `api` via rete verso Postgres, non i file dei backup automatici) — richiesta l'installazione di `postgresql-client-17` nell'immagine Docker dell'`api` (scoperto e corretto un problema reale di versione: l'immagine base Ubuntu 24.04 offre di default solo la v16, incompatibile col server v17), verificata end-to-end in browser con Playwright (login reale, download effettivo, nessun errore console). **Terza richiesta, stessa sessione**: la pagina Backup mostra ora anche lo storico dei backup automatici (data/ora, esito) e gli orari fissi dello scheduling — riuso quasi totale di infrastruttura già esistente (nessun nuovo endpoint backend: gli script PowerShell scrivono una riga in `log_eventi`, categoria "Backup", stessa tabella già usata da tutta l'app; il frontend riusa 1:1 l'hook `useLogs` già esistente della pagina Log generale). Un bug di encoding non banale scoperto e risolto durante l'implementazione: `$OutputEncoding` impostato dentro una funzione PowerShell non viene applicato in modo affidabile al pipe verso un processo nativo in Windows PowerShell 5.1, corrompendo silenziosamente caratteri non-ASCII (trattini lunghi) nei messaggi salvati — spostato a livello di script, verificato byte per byte prima di dichiararlo risolto.
+
+## Fatto — Fase 11: backup & gestione DB (pgBackRest + pg_dump), solo parte locale
+
+Sessione partita da "leggi il session report e fai la fase 12" — numerazione imprecisa
+dell'utente, chiarita insieme (era la Fase 11 — Backup & gestione DB, mai fatta, non la Fase 12
+già completata in una sessione precedente). L'utente ha chiesto esplicitamente di procedere "con
+cautela", essendo il primo approccio ai backup — pianificato in Plan Mode, con un agente Plan
+dedicato a validare/correggere l'architettura prima di scrivere codice (versione pgBackRest reale
+su Alpine, sintassi retention, sequenza stanza-create/check/backup, rischi di permessi). Verificato
+passo per passo, non solo scritto: dump di sicurezza manuale prima di toccare il container
+Postgres reale (12 giorni di uptime, dati reali del cliente Villa Chifeci Scopello), poi ogni fase
+del setup (build immagine, WAL archiving, primo backup, restore di prova) confermata con l'output
+reale dei comandi prima di passare alla successiva. Committato in git insieme al resto del lavoro
+di questa sessione (punti 445-454 sotto).
+
+433. **Nuova immagine Postgres custom** (`docker/postgres/Dockerfile`, estende `postgres:17-alpine`
+     con `pgbackrest` da apk — versione 2.58.0, ben oltre la 2.52 che ha introdotto supporto PG17,
+     nessun problema di compatibilità riscontrato) al posto dell'immagine ufficiale diretta in
+     `docker-compose.yml`. **Bug reale scoperto e corretto durante il setup**: pgBackRest per
+     default si connette come utente `postgres`, ma questo cluster (avviato con
+     `POSTGRES_USER=gestisoft`) non ha affatto un ruolo `postgres` — `stanza-create` falliva con
+     "role postgres does not exist" finché non è stato aggiunto `pg1-user=gestisoft` esplicito in
+     `pgbackrest.conf`, con un commento che avvisa di aggiornarlo se `POSTGRES_USER` cambia in
+     futuro.
+434. **WAL archiving continuo attivato** (`archive_mode=on`, `archive_command=pgbackrest
+     --stanza=gestisoft archive-push %p`, passati come `command:` in forma lista in
+     `docker-compose.yml` per evitare problemi di quoting) — verificato con `pgbackrest check`
+     (forza uno switch WAL reale e conferma che venga archiviato) prima di fidarsene, non solo
+     dato per scontato dalla configurazione.
+435. **Primo backup fisico completo** (`pgbackrest --type=full backup`) su un nuovo volume Docker
+     dedicato `gestisoft_pgbackrest_repo` (separato dal volume dati, cosicché un problema sul dato
+     non si porti via anche i backup) — confermato con `pgbackrest info` (34.3MB dati, 4.6MB
+     compresso). Retention 30 giorni configurata (`repo1-retention-full-type=time`,
+     `repo1-retention-full=30`).
+436. **`pg_dump` logico indipendente aggiunto su richiesta esplicita dell'utente**, dopo che
+     l'agente di piano ha segnalato che il piano originale (`precious-dreaming-summit.md`, Fase 11)
+     chiedeva sia `pg_dump` sia pgBackRest, non pgBackRest da solo — seconda rete di sicurezza
+     indipendente dal formato/catena del repo pgBackRest, retention 7 giorni.
+437. **Scheduling del backup notturno deliberatamente tenuto fuori da Docker**: niente cron dentro
+     il container Postgres (avrebbe richiesto wrappare l'entrypoint ufficiale, che fa un
+     privilege-drop delicato) né un sidecar con il socket Docker montato (accesso root-equivalente
+     su tutto l'host, sproporzionato per uno scheduler) — invece 3 task Windows Task Scheduler
+     (`GestiSoft-Backup-Nightly` alle 3:00, `GestiSoft-Check-Archiver` ogni ora,
+     `GestiSoft-Test-Restore-Monthly` ogni 4 settimane) che lanciano script PowerShell con
+     `docker exec`; lo stesso comando andrà in un cron job quando in futuro esisterà una VPS Linux,
+     nessun cambio architetturale. **Verificato che i task girino davvero nel contesto di Task
+     Scheduler** (`Start-ScheduledTask`), non solo quando lanciati a mano — `LastTaskResult=0`,
+     log aggiornato.
+438. **Rischio esplicito indirizzato subito, non rimandato**: se `archive_command` fallisce
+     silenziosamente (repo pieno, permessi, bug config) Postgres accumula WAL fino a riempire il
+     disco — non solo "manca il backup", rischio di crash del database live. Nuovo script
+     `check-archiver.ps1` (orario) legge `pg_stat_archiver` e segnala WARNING solo se l'ultimo
+     tentativo fallito è più recente dell'ultimo successo (evita falsi allarmi su un sistema
+     inattivo con vecchi fallimenti storici già superati — verificato con i 4 fallimenti reali
+     avvenuti durante il setup prima del fix del punto 433, correttamente non segnalati perché
+     superati dal successo successivo).
+439. **Test di restore reale eseguito subito** (`test-restore.ps1`), non solo pianificato per il
+     giro mensile: container Postgres temporaneo su un volume dati nuovo con nome a timestamp (mai
+     `gestisoft_postgres_data`), volume repo montato in sola lettura, restore, avvio, conteggio
+     righe su `prenotazioni`/`ospiti` confrontato con il database live (71/70 su entrambi,
+     combaciano), poi container e volume temporanei rimossi (verificato che spariscano davvero).
+     **Bug reale trovato e corretto durante il primo tentativo**: il container di restore, se
+     riavviato senza il volume repo ancora montato, falliva a raggiungere la consistenza
+     (`could not locate required checkpoint record`) — il replay WAL necessario dopo un
+     `pgbackrest restore` richiede il repo disponibile anche all'avvio di Postgres, non solo
+     durante il comando `restore` stesso; corretto tenendo il volume repo montato (sola lettura)
+     anche nel container Postgres di verifica.
+440. **Bug di encoding scoperto e corretto sugli script PowerShell**: i file `.ps1` scritti in
+     UTF-8 senza BOM mandavano in errore di parsing Windows PowerShell 5.1 (`powershell.exe`, non
+     pwsh) sulle stringhe contenenti caratteri non-ASCII (es. il trattino lungo "—" nei log) — il
+     terminatore di stringa veniva letto male. Corretto riscrivendo i 3 script con BOM UTF-8
+     esplicito.
+441. **Copia off-site deliberatamente rimandata**, su richiesta esplicita dell'utente ("prima
+     parliamo e poi vediamo") — l'utente non ha ancora una VPS reale né ha scelto una destinazione
+     (S3-compatibile vs SFTP); l'architettura scelta (pgBackRest `repo1` locale) permette di
+     aggiungere un `repo2` off-site in seguito solo con configurazione, documentato in
+     `docs/backup-restore.md`.
+442. **Nessuna replica master/slave**, come già deciso in precedenza (non rimesso in discussione).
+443. **Documentazione completa**: `docs/backup-restore.md` (runbook: cosa gira in automatico, come
+     controllare la salute dei backup, restore di emergenza passo-passo con PITR, cosa manca
+     ancora) e riferimento aggiunto in `README.md`.
+444. **Nessun dato reale toccato in nessun momento**: dump di sicurezza preventivo prima di
+     ricreare il container reale (`docker/postgres/pre-migration-safety-dump/`, mai committato —
+     contiene dati reali del cliente), stack (`api`/`worker`/`worker-schedine`/`frontend`)
+     verificato invariato dopo ogni ricreazione del container Postgres (log puliti, nessuna
+     interruzione), tutti i restore di prova solo su volumi usa-e-getta con nome a timestamp mai
+     riutilizzato.
+
+### Seguito nella stessa sessione — pagina "Backup" nel pannello Super Admin (download dump dal browser)
+
+445. **Nuovo endpoint `GET /super-admin/backup/export`** (Super Admin only, stesso guard
+     `RichiediSuperAdmin` di ogni altro endpoint in `SuperAdminController`): genera un dump
+     completo al volo lanciando `pg_dump --format=custom` come processo esterno dal container
+     `api` verso `postgres:5432` **via rete** (stessa connection string già usata da EF Core,
+     letta con `NpgsqlConnectionStringBuilder`) — deliberatamente indipendente dal sistema di
+     backup automatico (Fase 11 sopra): nessuna coupling nuova con il volume dati/repo pgBackRest.
+     Nuova interfaccia `IBackupExporter`/`PgDumpBackupExporter` (Application/Infrastructure, stesso
+     pattern repository del resto del progetto), password passata a `pg_dump` solo via variabile
+     d'ambiente `PGPASSWORD` (mai sulla riga di comando).
+446. **Bug di versione reale scoperto e corretto prima di scrivere codice** (stesso tipo di
+     diligenza già applicata a pgBackRest/Alpine nella Fase 11): l'immagine `api`
+     (`mcr.microsoft.com/dotnet/aspnet:10.0`) è risultata Ubuntu 24.04, il cui repo apt di default
+     offre solo `postgresql-client` v16 — più vecchio del server (Postgres 17), non supportato in
+     modo affidabile per `pg_dump`. Aggiunto il repo ufficiale PGDG apt nel Dockerfile per
+     `postgresql-client-17` esatto, verificato dal vivo (`pg_dump (PostgreSQL) 17.11`) sia come
+     root sia come `appuser` (utente non privilegiato del container).
+447. **Nuova pagina frontend** `/super-admin/backup` (voce di menu "Backup" tra "Clienti" e
+     "Impostazioni" nella sezione Super Admin), pulsante "Scarica backup adesso" — riusa 1:1
+     `apiScaricaFile` già esistente (stesso helper usato per l'export schedine Alloggiati Web).
+448. **Verificato end-to-end, non solo compilato**: `dotnet build`/`test` (26+19 test) puliti,
+     `tsc -b`/`oxlint` puliti (nessun nuovo warning); build reale dell'immagine `api` con
+     `postgresql-client-17` incluso; **download reale testato via curl** (login Super Admin vero,
+     token JWT, file scaricato) e **contenuto del dump verificato con `pg_restore --list`** (228
+     voci TOC, tutte le tabelle reali presenti, non solo "il file esiste"); **verificato in browser
+     con Playwright** (login reale, voce di menu presente, click sul pulsante → download reale del
+     file `.dump` con nome corretto, toast di successo, zero errori console). Endpoint verificato
+     protetto (401 senza token; il 403 per un utente autenticato non-Super-Admin è garantito per
+     costruzione dallo stesso `RichiediSuperAdmin`/`ForbiddenException`→`GlobalExceptionHandler`
+     già usato identicamente da ogni altro endpoint Super Admin, non ri-testato con un utente
+     usa-e-getta per non generare dati di test non necessari).
+449. **Committato in git** insieme al resto del lavoro di questa sessione.
+
+### Seguito ancora nella stessa sessione — storico backup e orari sulla pagina Backup
+
+450. **Nessun nuovo endpoint backend**: riuso diretto della tabella `log_eventi` già esistente
+     (stessa usata da tutta l'app per il log applicativo) — i 3 script PowerShell del backup
+     automatico (`backup-nightly.ps1`, `check-archiver.ps1`, `test-restore.ps1`) scrivono ora una
+     riga via `psql` a fine esecuzione, categoria `"Backup"` (nuova, aggiunta a `CATEGORIE_LOG`
+     lato frontend), `Operatore=null` (evento di sistema, stessa convenzione già in uso). Il
+     backup notturno e il test di restore mensile loggano **sempre** (successo o errore); il
+     controllo orario dell'archiviazione WAL logga **solo su problema reale**, per non riempire lo
+     storico con 24 righe "OK" identiche al giorno.
+451. **Pagina Backup estesa** con due nuove sezioni: "Backup automatici sul server" (testo statico
+     con gli orari fissi — notturno 3:00, controllo orario, test di restore ogni 4 settimane — e la
+     retention) e "Ultimi backup eseguiti" (le ultime 10 righe categoria "Backup", riusando **1:1**
+     l'hook `useLogs` già esistente della pagina Log generale — zero nuovo codice di fetch, solo
+     nuova UI). Un Super Admin vede quindi da questa pagina se i backup stanno davvero girando,
+     senza dover aprire il terminale o la pagina Log generale.
+452. **Bug di encoding reale scoperto e risolto, non banale**: i messaggi con un trattino lungo
+     (es. "Backup notturno completato — pgBackRest: OK...") arrivavano nel database come `?`
+     (un singolo byte, non i 3 byte UTF-8 corretti) — isolato con una serie di test A/B mirati
+     (non per tentativi): la causa non era né il file `.ps1` (già con BOM, verificato) né `psql`
+     lato container (client_encoding/server_encoding già UTF8, verificato), ma **`$OutputEncoding`
+     impostato dentro lo scope locale della funzione `Write-LogEvento` non viene applicato in modo
+     affidabile al pipe verso un processo nativo (`docker exec`) in Windows PowerShell 5.1** —
+     spostandolo a livello di script (prima di ogni chiamata a funzioni), il problema è sparito in
+     modo riproducibile. Verificato byte per byte (`octet_length` vs `length` in Postgres, `xxd` sul
+     contenuto) prima e dopo il fix, non solo "sembra funzionare".
+453. **Verificato end-to-end**: `tsc -b`/`oxlint` puliti sul frontend, `dotnet build` pulito sul
+     backend; tutti e 3 gli script rieseguiti manualmente dopo il fix con esito e contenuto
+     verificati direttamente in `log_eventi`; **verificato in browser con Playwright** (storico
+     visibile con l'encoding corretto, testo degli orari presente, zero errori console). Righe di
+     test con l'encoding corrotto (create durante il debug, prima del fix) ripulite con una
+     `DELETE` mirata per contenuto esatto — mai una `DELETE` generica sulla categoria "Backup"
+     (che avrebbe cancellato anche le righe reali già scritte dai backup di questa stessa sessione).
+454. **Committato in git** insieme al resto della sessione.
 
 ## Fatto — Guardia di rotta per permesso + pulsanti di scrittura nascosti in base ai permessi granulari
 
