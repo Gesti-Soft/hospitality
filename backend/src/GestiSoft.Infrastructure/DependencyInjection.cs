@@ -32,6 +32,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace GestiSoft.Infrastructure;
 
@@ -43,7 +44,30 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Connection string 'Default' non configurata (ConnectionStrings:Default oppure env var ConnectionStrings__Default).");
 
-        services.AddDbContext<GestiSoftDbContext>(options => options.UseNpgsql(connectionString));
+        // Senza keepalive, una connessione morta senza una chiusura pulita (container Postgres
+        // ucciso, blip di rete) resta bloccata in attesa di un ACK per i ~15-20 minuti del retry TCP
+        // di default del kernel, invece di fallire in pochi secondi. TcpKeepAlive* rileva a livello
+        // di sistema operativo una connessione la cui controparte non risponde più; KeepAlive fa
+        // inviare a Npgsql una query innocua sulle connessioni che stanno ferme nel pool, così una
+        // connessione morta viene scartata prima che una richiesta reale provi a riusarla.
+        // EnableRetryOnFailure fa poi riprovare automaticamente la query una volta che l'errore
+        // transitorio è rilevato, invece di propagarlo subito (utile soprattutto per i job in
+        // background di Worker/WorkerSchedine, dove non c'è un utente pronto a ripetere manualmente
+        // l'operazione).
+        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            KeepAlive = 30,
+            TcpKeepAlive = true,
+            TcpKeepAliveTime = 15,
+            TcpKeepAliveInterval = 5,
+        };
+
+        services.AddDbContext<GestiSoftDbContext>(options => options.UseNpgsql(
+            connectionStringBuilder.ConnectionString,
+            npgsql => npgsql.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorCodesToAdd: null)));
         services.AddScoped<ReferenceDataSeeder>();
         services.AddScoped<IdentitySeeder>();
 
