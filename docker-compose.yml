@@ -3,6 +3,11 @@ services:
     build: ./docker/postgres
     container_name: gestisoft-gestionale-postgres
     restart: unless-stopped
+    # Limiti di risorse: la VPS ospita anche altri siti/programmi oltre a questo stack — un tetto
+    # (mai raggiunto in condizioni normali, è 5-15x il consumo osservato in locale) impedisce che un
+    # problema qui (query impazzita, leak) affami gli altri servizi sulla stessa macchina, e viceversa.
+    mem_limit: 3g
+    cpus: 2.0
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-gestisoft}
       POSTGRES_USER: ${POSTGRES_USER:-gestisoft}
@@ -33,6 +38,8 @@ services:
       dockerfile: backend/src/GestiSoft.Api/Dockerfile
     container_name: gestisoft-gestionale-api
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.5
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,6 +72,8 @@ services:
       dockerfile: backend/src/GestiSoft.Worker/Dockerfile
     container_name: gestisoft-gestionale-worker
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,6 +99,8 @@ services:
       dockerfile: backend/src/GestiSoft.WorkerSchedine/Dockerfile
     container_name: gestisoft-gestionale-worker-schedine
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,6 +123,8 @@ services:
         VITE_API_URL: /api
     container_name: gestisoft-gestionale-frontend
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
     depends_on:
       - api
     ports:
