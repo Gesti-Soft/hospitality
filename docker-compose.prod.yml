@@ -1,0 +1,21 @@
+# Override di produzione — aggiunge solo Caddy (reverse proxy + TLS automatico) sopra lo stack
+# base, invariato per lo sviluppo locale. Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: gestisoft-gestionale-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - gestisoft_caddy_data:/data
+      - gestisoft_caddy_config:/config
+    depends_on:
+      - frontend
+
+volumes:
+  gestisoft_caddy_data:
+  gestisoft_caddy_config:

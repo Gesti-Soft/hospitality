@@ -1,0 +1,3 @@
+gsthospitality.gestisoft.it {
+	reverse_proxy frontend:80
+}

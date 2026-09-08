@@ -1,6 +1,6 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-08 (sessione successiva — **Fase 11: backup & gestione DB (pgBackRest + pg_dump), solo parte locale** — pianificata in Plan Mode su richiesta esplicita dell'utente di andare con cautela (primo approccio ai backup), vedi sezione dedicata per il dettaglio completo: nuova immagine Postgres custom con pgBackRest incluso (backup fisico completo notturno + WAL archiving continuo per PITR, retention 30gg) più `pg_dump` logico indipendente (retention 7gg, fedele al piano originale); scheduling del backup notturno lasciato fuori da Docker (Windows Task Scheduler, non un sidecar con socket Docker montato né cron dentro il container); test di restore reale eseguito subito (non solo pianificato per il mese prossimo), su un container/volume usa-e-getta, con conteggi verificati identici al database live. Copia off-site esplicitamente rimandata (l'utente non ha ancora scelto la destinazione), pronta da aggiungere in seguito come `repo2` senza refactor. **Stessa sessione, proseguita con una seconda richiesta**: nuova pagina "Backup" nel pannello Super Admin che genera e scarica un dump del database al volo dal browser (`pg_dump` lanciato dal container `api` via rete verso Postgres, non i file dei backup automatici) — richiesta l'installazione di `postgresql-client-17` nell'immagine Docker dell'`api` (scoperto e corretto un problema reale di versione: l'immagine base Ubuntu 24.04 offre di default solo la v16, incompatibile col server v17), verificata end-to-end in browser con Playwright (login reale, download effettivo, nessun errore console). **Terza richiesta, stessa sessione**: la pagina Backup mostra ora anche lo storico dei backup automatici (data/ora, esito) e gli orari fissi dello scheduling — riuso quasi totale di infrastruttura già esistente (nessun nuovo endpoint backend: gli script PowerShell scrivono una riga in `log_eventi`, categoria "Backup", stessa tabella già usata da tutta l'app; il frontend riusa 1:1 l'hook `useLogs` già esistente della pagina Log generale). Un bug di encoding non banale scoperto e risolto durante l'implementazione: `$OutputEncoding` impostato dentro una funzione PowerShell non viene applicato in modo affidabile al pipe verso un processo nativo in Windows PowerShell 5.1, corrompendo silenziosamente caratteri non-ASCII (trattini lunghi) nei messaggi salvati — spostato a livello di script, verificato byte per byte prima di dichiararlo risolto.
+Ultimo aggiornamento: 2026-09-08 (sessione successiva — **Fase 11: backup & gestione DB (pgBackRest + pg_dump), solo parte locale** — pianificata in Plan Mode su richiesta esplicita dell'utente di andare con cautela (primo approccio ai backup), vedi sezione dedicata per il dettaglio completo: nuova immagine Postgres custom con pgBackRest incluso (backup fisico completo notturno + WAL archiving continuo per PITR, retention 30gg) più `pg_dump` logico indipendente (retention 7gg, fedele al piano originale); scheduling del backup notturno lasciato fuori da Docker (Windows Task Scheduler, non un sidecar con socket Docker montato né cron dentro il container); test di restore reale eseguito subito (non solo pianificato per il mese prossimo), su un container/volume usa-e-getta, con conteggi verificati identici al database live. Copia off-site esplicitamente rimandata (l'utente non ha ancora scelto la destinazione), pronta da aggiungere in seguito come `repo2` senza refactor. **Stessa sessione, proseguita con una seconda richiesta**: nuova pagina "Backup" nel pannello Super Admin che genera e scarica un dump del database al volo dal browser (`pg_dump` lanciato dal container `api` via rete verso Postgres, non i file dei backup automatici) — richiesta l'installazione di `postgresql-client-17` nell'immagine Docker dell'`api` (scoperto e corretto un problema reale di versione: l'immagine base Ubuntu 24.04 offre di default solo la v16, incompatibile col server v17), verificata end-to-end in browser con Playwright (login reale, download effettivo, nessun errore console). **Terza richiesta, stessa sessione**: la pagina Backup mostra ora anche lo storico dei backup automatici (data/ora, esito) e gli orari fissi dello scheduling — riuso quasi totale di infrastruttura già esistente (nessun nuovo endpoint backend: gli script PowerShell scrivono una riga in `log_eventi`, categoria "Backup", stessa tabella già usata da tutta l'app; il frontend riusa 1:1 l'hook `useLogs` già esistente della pagina Log generale). Un bug di encoding non banale scoperto e risolto durante l'implementazione: `$OutputEncoding` impostato dentro una funzione PowerShell non viene applicato in modo affidabile al pipe verso un processo nativo in Windows PowerShell 5.1, corrompendo silenziosamente caratteri non-ASCII (trattini lunghi) nei messaggi salvati — spostato a livello di script, verificato byte per byte prima di dichiararlo risolto. **Quarta richiesta, stessa sessione**: preparato il primo deploy in produzione (VPS OVH/Debian già pronta, dati reali esistenti da migrare, non partire vuoti) — pianificato in Plan Mode data la portata (reverse proxy/TLS, migrazione dati, migrazioni EF automatiche, backup su Linux); durante la pianificazione emerso un rischio reale evitato per tempo: il dominio `gestisoft.it` punta già a un'altra VM in produzione (`GestiSoftWeb`, licenze/abbonamenti) — un sottopercorso avrebbe richiesto modificare quel server già live, deciso invece un sottodominio dedicato (`gsthospitality.gestisoft.it`) che non tocca nulla di esistente. Aggiunta la migrazione EF automatica all'avvio (mai fatta finora), creati Caddy/docker-compose.prod.yml/runbook completo/porting bash dei 3 script di backup — tutto verificato in locale prima di consegnarlo (build, restart reale, `pg_dump`/`pg_restore` provato su un database temporaneo separato, i 3 script bash rieseguiti con lo stesso esito di quelli PowerShell). Nessun accesso diretto alla VPS: solo istruzioni/script, su richiesta esplicita dell'utente. Aggiunto anche `deploy/update.sh` (lo script vero e proprio per gli aggiornamenti futuri, prima erano solo comandi scritti nel runbook) e aggiornato `README.md` (sezione "Deploy in produzione" mancante, nota Backup non più solo Windows Task Scheduler, albero cartelle con `docker/`/`deploy/`/`docs/`).
 
 ## Fatto — Fase 11: backup & gestione DB (pgBackRest + pg_dump), solo parte locale
 
@@ -157,6 +157,62 @@ di questa sessione (punti 445-454 sotto).
      `DELETE` mirata per contenuto esatto — mai una `DELETE` generica sulla categoria "Backup"
      (che avrebbe cancellato anche le righe reali già scritte dai backup di questa stessa sessione).
 454. **Committato in git** insieme al resto della sessione.
+
+### Seguito ancora nella stessa sessione — preparazione primo deploy in produzione
+
+455. **Rischio reale scoperto durante la pianificazione, prima di scrivere qualunque config**:
+     l'utente voleva inizialmente `gestisoft.it/gsthospitality/` (sottopercorso) — chiarito che
+     `gestisoft.it` (dominio nudo) punta già a un'altra VM, in produzione, che fa girare
+     `GestiSoftWeb` (licenze/abbonamenti Wubook/PayTourist di CUI questo stesso gestionale è
+     cliente). Un sottopercorso avrebbe richiesto modificare la configurazione di quel server già
+     live per instradare `/gsthospitality/*` qui — rischio non necessario. Deciso invece un
+     **sottodominio dedicato `gsthospitality.gestisoft.it`**: un solo nuovo record DNS A verso la
+     VPS nuova, zero modifiche alla VM esistente, e come effetto collaterale positivo elimina anche
+     la necessità di configurare `base`/`basename` nel frontend (rilevante solo per un sottopercorso).
+456. **Migrazioni EF applicate automaticamente all'avvio** (`Program.cs`, mai fatto finora — punto
+     rimasto in sospeso da sessioni precedenti): `dbContext.Database.MigrateAsync()` eseguito una
+     volta all'avvio della sola `api` (non `worker`/`worker-schedine`, per evitare corse
+     concorrenti sulla stessa migrazione), prima dei seeder già esistenti. **Verificato dal vivo in
+     locale**: rebuild + riavvio del container reale, log conferma `No migrations were applied. The
+     database is already up to date.` — nessuna sorpresa quando girerà per la prima volta sulla
+     VPS. Da questo deploy in poi un aggiornamento futuro è solo `git pull` + rebuild + restart.
+457. **`docker-compose.prod.yml`** (override, non tocca il file base usato in sviluppo) + **Caddy**
+     come reverse proxy/TLS — configurazione minima (`reverse_proxy frontend:80`) perché
+     `frontend/nginx.conf` fa già lui stesso da proxy interno per `/api/` verso il container `api`
+     (verificato leggendo il file, non assunto) — Caddy inoltra semplicemente tutto il traffico del
+     sottodominio, nessuna regola di path separata. Verificato che il merge dei due file
+     docker-compose sia sintatticamente valido e includa tutti i servizi attesi.
+458. **`docs/deploy.md`** — runbook completo passo-passo (linguaggio semplice, comandi pronti da
+     incollare): prerequisiti DNS/porte, `.env` di produzione (segreti nuovi, stessi endpoint reali
+     delle integrazioni esterne già in uso), build, **migrazione dati reali** (dump locale fresco →
+     `scp` → `pg_restore` su Postgres vuoto PRIMA di avviare api/worker — verificato che
+     `IdentitySeeder` si fermi da solo trovando già un Super Admin reale nel dump, nessun rischio
+     di duplicazione), avvio + Caddy, verifica (`/health`, login reale, conteggio righe), rollback
+     (nessuna azione distruttiva verso l'ambiente locale in nessun momento), aggiornamenti futuri.
+459. **Porting bash dei 3 script di backup** (`backup-nightly.sh`, `check-archiver.sh`,
+     `test-restore.sh`, stessa identica logica delle versioni PowerShell già in produzione qui in
+     locale) per la VPS Debian, registrati via cron invece di Task Scheduler negli stessi orari già
+     in uso. **Verificati dal vivo uno per uno** (non solo scritti): tutti e 3 rieseguiti contro lo
+     stack Docker reale con lo stesso esito delle controparti PowerShell — `test-restore.sh` ha
+     ripristinato, verificato i conteggi (71 prenotazioni/70 ospiti, combacianti) e ripulito tutto
+     correttamente; **nessun bug di encoding replicato** (bash gestisce UTF-8 nativamente, verificato
+     esplicitamente con trattini lunghi e accenti — a differenza del bug PowerShell del punto 452).
+     **Comando `pg_dump`/`pg_restore` del runbook (diverso da pgBackRest, mai testato prima in
+     questa forma) verificato dal vivo** su un database temporaneo separato (`deploy_restore_test`,
+     creato e distrutto nello stesso test, mai toccato il database reale) — conteggi combacianti
+     prima di mettere quel comando nel runbook.
+460. **Nessun accesso diretto alla VPS**, su richiesta esplicita dell'utente: solo file/istruzioni
+     preparati qui, da eseguire lui stesso. Deploy vero e proprio non ancora avvenuto a fine
+     sessione — in attesa che l'utente esegua i passi del runbook.
+461. **`deploy/update.sh`**: script reale per gli aggiornamenti futuri sulla VPS (`git pull` +
+     `docker compose build` + `docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+     -d`, log dell'avvio api mostrati a schermo) — prima nel runbook c'erano solo i comandi scritti,
+     non un file eseguibile. Sintassi verificata (`bash -n`).
+462. **`README.md` aggiornato** — mancava del tutto una sezione sul deploy in produzione (ora
+     presente, rimanda a `docs/deploy.md`/`deploy/update.sh`); corretta la nota sul backup (non più
+     "via Windows Task Scheduler" soltanto, ora menziona anche cron sulla VPS); albero delle
+     cartelle aggiornato con `docker/`/`deploy/`/`docs/`, mancanti da quando sono state introdotte.
+463. **Committato in git** insieme al resto della sessione.
 
 ## Fatto — Guardia di rotta per permesso + pulsanti di scrittura nascosti in base ai permessi granulari
 

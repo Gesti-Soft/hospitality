@@ -7,9 +7,11 @@ using GestiSoft.Application.Auth;
 using GestiSoft.Contracts.Health;
 using GestiSoft.Infrastructure;
 using GestiSoft.Infrastructure.Auth;
+using GestiSoft.Infrastructure.Persistence;
 using GestiSoft.Infrastructure.Seed;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuestPDF.Infrastructure;
 using Serilog;
@@ -103,6 +105,16 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Migrazioni EF applicate automaticamente all'avvio (idempotente — applica solo quelle mancanti,
+// no-op se lo schema è già aggiornato): da qui in poi un aggiornamento è solo git pull + rebuild +
+// restart, senza più un passo manuale `dotnet ef database update` a parte. Solo l'Api la esegue
+// (non Worker/WorkerSchedine, per evitare corse concorrenti sulla stessa migrazione).
+using (var migrationScope = app.Services.CreateScope())
+{
+    var dbContext = migrationScope.ServiceProvider.GetRequiredService<GestiSoftDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
 
 // Popola i dati di base se assenti (idempotente, non richiede alcun file esterno):
 // tabelle di riferimento Alloggiati Web + primo Super Admin (da configurazione, non hardcoded

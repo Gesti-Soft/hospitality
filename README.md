@@ -15,7 +15,11 @@ avanzamento e prossimi passi) e il piano approvato in
 ```
 backend/    soluzione .NET 10 (Domain, Application, Infrastructure, Contracts, Api, Worker)
 frontend/   React + TypeScript + Vite
-docker-compose.yml   postgres, api, worker, frontend
+docker/     immagine Postgres custom (pgBackRest incluso) + script di backup
+deploy/     Caddyfile e script per il deploy in produzione
+docs/       runbook (backup/restore, deploy)
+docker-compose.yml        postgres, api, worker, worker-schedine, frontend (sviluppo/base)
+docker-compose.prod.yml   override che aggiunge Caddy (reverse proxy + TLS) per la produzione
 ```
 
 ## Sviluppo locale (senza Docker)
@@ -53,9 +57,18 @@ docker compose up -d --build
 ## Backup del database
 
 Backup fisico + WAL archiving continuo (pgBackRest, retention 30 giorni) e dump logico
-indipendente (`pg_dump`, retention 7 giorni), entrambi automatici via Windows Task Scheduler, con
-test di restore mensile automatico. Vedi `docs/backup-restore.md` per il runbook completo
-(controlli di salute, restore di emergenza, come aggiungere una copia off-site).
+indipendente (`pg_dump`, retention 7 giorni), entrambi automatici (Windows Task Scheduler in
+locale, cron sulla VPS di produzione — script equivalenti in `docker/postgres/scripts/`, `.ps1` e
+`.sh`), con test di restore mensile automatico. Storico e orari visibili anche dal pannello Super
+Admin (pagina "Backup"). Vedi `docs/backup-restore.md` per il runbook completo (controlli di
+salute, restore di emergenza, come aggiungere una copia off-site).
+
+## Deploy in produzione
+
+VPS Debian, dietro Caddy (reverse proxy + HTTPS automatico), con le migrazioni EF applicate da
+sole all'avvio dell'Api. Vedi `docs/deploy.md` per il runbook completo (primo deploy con
+migrazione dei dati esistenti, verifica, rollback). Aggiornamenti successivi: `./deploy/update.sh`
+(`git pull` + rebuild + restart).
 
 ## Integrazioni esterne mantenute
 
