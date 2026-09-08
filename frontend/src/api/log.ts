@@ -41,9 +41,17 @@ export const CATEGORIE_LOG_CLIENTE = ['Prenotazione', 'Utente', 'Servizi', 'Allo
 // Scroll infinito (stesso principio di Ospiti/Arrivi-InCorso-Storico, ma qui la paginazione è
 // server-side, non un semplice slice client-side di dati già tutti caricati): parte da 25 righe,
 // ne carica altre 25 via fetchNextPage quando la sentinella in fondo alla tabella entra in vista.
-export function useLogs(strutturaId: string | null, livello: LivelloLog | null, categoria: string | null, ricerca: string, pageSize: number) {
+export function useLogs(
+  strutturaId: string | null,
+  livello: LivelloLog | null,
+  categoria: string | null,
+  ricerca: string,
+  da: string,
+  a: string,
+  pageSize: number,
+) {
   return useInfiniteQuery({
-    queryKey: ['logs', strutturaId, livello, categoria, ricerca, pageSize],
+    queryKey: ['logs', strutturaId, livello, categoria, ricerca, da, a, pageSize],
     initialPageParam: 1,
     queryFn: ({ pageParam }) => {
       const parametri = new URLSearchParams({ page: String(pageParam), pageSize: String(pageSize) })
@@ -51,6 +59,8 @@ export function useLogs(strutturaId: string | null, livello: LivelloLog | null, 
       if (livello != null) parametri.set('livello', String(livello))
       if (categoria) parametri.set('categoria', categoria)
       if (ricerca.trim()) parametri.set('ricerca', ricerca.trim())
+      if (da) parametri.set('da', da)
+      if (a) parametri.set('a', a)
       return apiGet<PagedResultDto<LogEventoDto>>(`/logs?${parametri.toString()}`)
     },
     getNextPageParam: (lastPage, allPages) => {

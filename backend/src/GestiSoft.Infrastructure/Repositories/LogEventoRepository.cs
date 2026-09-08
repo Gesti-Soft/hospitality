@@ -51,12 +51,16 @@ public partial class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepo
             return false;
         }
 
-        inizioUtc = TimeZoneInfo.ConvertTimeToUtc(giornoLocale, FusoItaliano);
-        fineUtc = TimeZoneInfo.ConvertTimeToUtc(giornoLocale.AddDays(1), FusoItaliano);
+        inizioUtc = InizioGiornoUtc(giornoLocale);
+        fineUtc = InizioGiornoUtc(giornoLocale.AddDays(1));
         return true;
     }
 
     private static int NormalizzaAnno(string testo) => testo.Length <= 2 ? 2000 + int.Parse(testo) : int.Parse(testo);
+
+    /// <summary>Istante UTC di mezzanotte (inizio giorno) in Italia per la data di calendario indicata — ignora l'eventuale componente ora, usa solo giorno/mese/anno.</summary>
+    private static DateTime InizioGiornoUtc(DateTime giornoLocale) =>
+        TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(giornoLocale.Date, DateTimeKind.Unspecified), FusoItaliano);
 
     public async Task AddAsync(LogEvento evento, CancellationToken cancellationToken)
     {
@@ -94,6 +98,19 @@ public partial class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepo
         if (filtro.CategorieVisibili is { } categorieVisibili)
         {
             query = query.Where(l => l.Categoria != null && categorieVisibili.Contains(l.Categoria));
+        }
+
+        if (filtro.Da is { } da)
+        {
+            var inizioUtcDa = InizioGiornoUtc(da);
+            query = query.Where(l => l.CreatedAtUtc >= inizioUtcDa);
+        }
+
+        if (filtro.A is { } a)
+        {
+            // "A" è inclusivo (fino alla fine di quel giorno) — confronto < inizio del giorno successivo.
+            var fineUtcA = InizioGiornoUtc(a.AddDays(1));
+            query = query.Where(l => l.CreatedAtUtc < fineUtcA);
         }
 
         if (!string.IsNullOrWhiteSpace(filtro.Ricerca))

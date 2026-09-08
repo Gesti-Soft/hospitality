@@ -21,6 +21,8 @@ public class LogController(ILogEventoService logEventoService, UtenteManagementS
         [FromQuery] LivelloLog? livello,
         [FromQuery] string? categoria = null,
         [FromQuery] string? ricerca = null,
+        [FromQuery] DateTime? da = null,
+        [FromQuery] DateTime? a = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -52,7 +54,7 @@ public class LogController(ILogEventoService logEventoService, UtenteManagementS
         var clienteId = currentUser.IsSuperAdmin ? null : currentUser.ClienteId;
         IReadOnlyList<string>? categorieVisibili = currentUser.IsSuperAdmin ? null : [.. LogVisibilita.CategorieVisibiliCliente, "Auth"];
 
-        var filtro = new LogEventoFiltro(clienteId, strutturaId, livello, categoria, ricerca, page, pageSize, categorieVisibili);
+        var filtro = new LogEventoFiltro(clienteId, strutturaId, livello, categoria, ricerca, da, a, page, pageSize, categorieVisibili);
         var risultato = await logEventoService.CercaAsync(filtro, cancellationToken);
 
         return Ok(new PagedResultDto<LogEventoDto>(risultato.Items.Select(ToDto).ToList(), risultato.TotalCount, risultato.Page, risultato.PageSize));

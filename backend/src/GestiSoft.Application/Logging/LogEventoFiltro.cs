@@ -15,6 +15,9 @@ public record LogEventoFiltro(
     LivelloLog? Livello,
     string? Categoria = null,
     string? Ricerca = null,
+    // Entrambi giorni di calendario italiano (non UTC), inclusivi — vedi LogEventoRepository.InizioGiornoUtc.
+    DateTime? Da = null,
+    DateTime? A = null,
     int Page = 1,
     int PageSize = 50,
     IReadOnlyList<string>? CategorieVisibili = null);

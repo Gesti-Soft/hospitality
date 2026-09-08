@@ -24,6 +24,7 @@ import { CATEGORIE_LOG, CATEGORIE_LOG_CLIENTE, LivelloLog, useLogs, type LogEven
 import { fontMono, tokens } from '../theme'
 import { useMobile } from '../lib/useMobile'
 import { CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../components/CardElenco'
+import { CampoData } from '../components/CampoData'
 
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 const PAGE_SIZE = 25
@@ -49,6 +50,8 @@ export function LogPage() {
   const [categoria, setCategoria] = useState<string>('')
   const [ricerca, setRicerca] = useState('')
   const [ricercaDebounced, setRicercaDebounced] = useState('')
+  const [da, setDa] = useState('')
+  const [a, setA] = useState('')
   const [dettaglio, setDettaglio] = useState<LogEventoDto | null>(null)
 
   // Debounce: la ricerca è server-side (il log può contenere mesi di righe, non ha senso caricarle
@@ -59,7 +62,7 @@ export function LogPage() {
     return () => clearTimeout(timeout)
   }, [ricerca])
 
-  const logs = useLogs(strutturaId, livello === '' ? null : (Number(livello) as LivelloLog), categoria === '' ? null : categoria, ricercaDebounced, PAGE_SIZE)
+  const logs = useLogs(strutturaId, livello === '' ? null : (Number(livello) as LivelloLog), categoria === '' ? null : categoria, ricercaDebounced, da, a, PAGE_SIZE)
 
   const eventi = logs.data?.pages.flatMap((p) => p.items) ?? []
   const totaleEventi = logs.data?.pages[0]?.totalCount ?? 0
@@ -146,6 +149,9 @@ export function LogPage() {
               </MenuItem>
             ))}
           </TextField>
+
+          <CampoData label="Da" value={da} onChange={setDa} size="small" max={a || undefined} />
+          <CampoData label="A" value={a} onChange={setA} size="small" min={da || undefined} />
         </Box>
 
         <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
