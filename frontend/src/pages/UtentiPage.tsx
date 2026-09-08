@@ -26,8 +26,10 @@ import {
 } from '../api/utenti'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
+import { useMobile } from '../lib/useMobile'
 import { AssegnaRuoloDialog, type StatoAssegnazioneIniziale } from '../components/AssegnaRuoloDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 
 const ETICHETTA_RUOLO: Record<RuoloUtente, string> = {
   [RuoloUtente.Administrator]: 'Amministratore',
@@ -52,6 +54,7 @@ function contaPermessi(a: AssegnazioneStrutturaDto): number {
 }
 
 export function UtentiPage() {
+  const mobile = useMobile()
   const { strutturaId, strutturaCorrente } = useStruttura()
   const { sessione } = useAuth()
   const clienteId = strutturaCorrente?.clienteId ?? null
@@ -94,19 +97,46 @@ export function UtentiPage() {
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Utenti con accesso a questa struttura</Typography>
         <Box sx={{ display: 'flex', gap: 1.5 }}>
           {puoAssegnareUtenteEsistente && (
-            <Button variant="outlined" size="small" onClick={() => setDialogo({ modo: 'assegna' })} disabled={!strutturaId}>
-              + Assegna utente esistente
-            </Button>
+            <BottoneNuovo
+              etichetta="+ Assegna utente esistente"
+              variant="outlined"
+              onClick={() => setDialogo({ modo: 'assegna' })}
+              disabilitato={!strutturaId}
+            />
           )}
-          <Button variant="contained" color="primary" size="small" onClick={() => setDialogo({ modo: 'nuovo' })} disabled={!strutturaId}>
-            + Nuovo utente
-          </Button>
+          <BottoneNuovo etichetta="+ Nuovo utente" onClick={() => setDialogo({ modo: 'nuovo' })} disabilitato={!strutturaId} />
         </Box>
       </Box>
 
       {(assegnazioni.isLoading || utentiCliente.isLoading) && <Skeleton variant="rounded" height={220} />}
 
-      {!assegnazioni.isLoading && !utentiCliente.isLoading && (
+      {!assegnazioni.isLoading && !utentiCliente.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {(assegnazioni.data ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessun utente ha ancora accesso a questa struttura." />}
+          {(assegnazioni.data ?? []).map((a) => (
+            <CardElenco key={a.id}>
+              <TestataCardElenco
+                titolo={a.email}
+                sottotitolo={a.nome || a.cognome ? `${a.nome ?? ''} ${a.cognome ?? ''}`.trim() : undefined}
+                azioneDestra={<Chip size="small" label={ETICHETTA_RUOLO[a.ruolo]} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />}
+              />
+              <RigaCardMeta voci={[{ etichetta: 'Permessi attivi', valore: `${contaPermessi(a)}/16` }]} />
+              <AzioniCardElenco>
+                <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', assegnazione: a })}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                {a.utenteId !== sessione?.utenteId && (
+                  <IconButton size="small" color="error" onClick={() => setDaEliminare(a)}>
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </AzioniCardElenco>
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!assegnazioni.isLoading && !utentiCliente.isLoading && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
           <Table size="small">
             <TableHead>
@@ -177,6 +207,7 @@ export function UtentiPage() {
 }
 
 function CambiaPasswordCard() {
+  const mobile = useMobile()
   const [passwordAttuale, setPasswordAttuale] = useState('')
   const [passwordNuova, setPasswordNuova] = useState('')
   const toast = useToast()
@@ -205,7 +236,7 @@ function CambiaPasswordCard() {
     <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 560 }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Cambia la tua password</Typography>
 
-      <Box sx={{ display: 'flex', gap: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
         <TextField label="Password attuale" type="password" value={passwordAttuale} onChange={(e) => setPasswordAttuale(e.target.value)} fullWidth disabled={cambiaPassword.isPending} />
         <TextField label="Nuova password" type="password" value={passwordNuova} onChange={(e) => setPasswordNuova(e.target.value)} fullWidth disabled={cambiaPassword.isPending} />
       </Box>

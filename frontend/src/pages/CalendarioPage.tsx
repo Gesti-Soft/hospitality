@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import MenuItem from '@mui/material/MenuItem'
@@ -18,7 +18,9 @@ import { useCanaliVendita } from '../api/canaliVendita'
 import { useTipologie } from '../api/tipologie'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { aggiungiGiorni, differenzaGiorni, inizioGiornoLocale } from '../lib/date'
-import { PrenotazioneDialog, type StatoIniziale } from '../components/PrenotazioneDialog'
+import { useMobile } from '../lib/useMobile'
+import { PrenotazioneDialog, type StatoIniziale, ETICHETTA_STATO, COLORE_STATO } from '../components/PrenotazioneDialog'
+import { BottoneNuovo, CardElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 const GIORNI_VISIBILI_DEFAULT = 14
@@ -62,6 +64,7 @@ const COLORE_STATO_CAMERA: Record<StatoCamera, string> = {
 }
 
 export function CalendarioPage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const puoScrivere = usePuoScrivere('reservationWrite')
   const [inizioFinestra, setInizioFinestra] = useState(() => inizioGiornoLocale(new Date()))
@@ -138,13 +141,13 @@ export function CalendarioPage() {
     <Box ref={contenitoreRef} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, -7))}>
+          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? -1 : -7))}>
             <ChevronLeftIcon fontSize="small" />
           </IconButton>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 14.5, px: 0.5, minWidth: 190, textAlign: 'center' }}>
-            {FORMATTATORE_LABEL.format(giorni[0])} – {FORMATTATORE_LABEL.format(giorni[giorni.length - 1])}
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 14.5, px: 0.5, minWidth: mobile ? 130 : 190, textAlign: 'center' }}>
+            {mobile ? FORMATTATORE_LABEL.format(giorni[0]) : `${FORMATTATORE_LABEL.format(giorni[0])} – ${FORMATTATORE_LABEL.format(giorni[giorni.length - 1])}`}
           </Typography>
-          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, 7))}>
+          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? 1 : 7))}>
             <ChevronRightIcon fontSize="small" />
           </IconButton>
           <IconButton size="small" onClick={() => setInizioFinestra(inizioGiornoLocale(new Date()))} title="Torna a oggi">
@@ -155,11 +158,10 @@ export function CalendarioPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Legenda agenzieDistinct={agenzieDistinct} />
           {puoScrivere && (
-            <Button
-              variant="contained"
-              color="primary"
+            <BottoneNuovo
+              etichetta="+ Nuova prenotazione"
               size="medium"
-              disabled={!strutturaId || !camere.data || camere.data.length === 0}
+              disabilitato={!strutturaId || !camere.data || camere.data.length === 0}
               onClick={() =>
                 setDialogo({
                   modo: 'crea',
@@ -168,15 +170,13 @@ export function CalendarioPage() {
                   checkOut: aggiungiGiorni(new Date(), 1),
                 })
               }
-            >
-              + Nuova prenotazione
-            </Button>
+            />
           )}
         </Box>
       </Box>
 
       {!caricamento && camere.data && camere.data.length > 0 && (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: mobile ? 'flex-start' : 'flex-end', gap: 1.5, flexWrap: 'wrap' }}>
           <TextField select size="small" label="Tipologia" value={filtroTipologiaId} onChange={(e) => setFiltroTipologiaId(e.target.value)} sx={{ minWidth: 180 }}>
             <MenuItem value="">Tutte</MenuItem>
             {(tipologie.data ?? []).map((t) => (
@@ -218,7 +218,86 @@ export function CalendarioPage() {
         </Box>
       )}
 
-      {!caricamento && gruppi.length > 0 && (
+      {!caricamento && gruppi.length > 0 && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {gruppi.map((gruppo) => (
+            <Box key={gruppo.tipologia} sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.textSecondary, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                {gruppo.tipologia}
+              </Typography>
+              {gruppo.camere.map((camera) => {
+                const prenotazioneGiorno = (prenotazioniPerCamera.get(camera.id) ?? []).find((p) => {
+                  const ci = inizioGiornoLocale(new Date(p.checkIn!))
+                  const co = inizioGiornoLocale(new Date(p.checkOut!))
+                  return giorni[0] >= ci && giorni[0] < co
+                })
+                const nomeOspite = prenotazioneGiorno
+                  ? prenotazioneGiorno.ospiteNome || prenotazioneGiorno.ospiteCognome
+                    ? `${prenotazioneGiorno.ospiteNome ?? ''} ${prenotazioneGiorno.ospiteCognome ?? ''}`.trim()
+                    : null
+                  : null
+                const { colore: coloreCanaleGiorno, etichetta: etichettaCanale } = prenotazioneGiorno
+                  ? coloreCanale(prenotazioneGiorno.agenzia, agenzieDistinct)
+                  : { colore: undefined, etichetta: undefined }
+
+                return (
+                  <CardElenco
+                    key={camera.id}
+                    coloreAccento={coloreCanaleGiorno}
+                    onClick={
+                      prenotazioneGiorno
+                        ? () => setDialogo({ modo: 'modifica', prenotazione: prenotazioneGiorno })
+                        : puoScrivere
+                          ? () => setDialogo({ modo: 'crea', cameraId: camera.id, checkIn: giorni[0], checkOut: aggiungiGiorni(giorni[0], 1) })
+                          : undefined
+                    }
+                  >
+                    <TestataCardElenco
+                      titolo={camera.nome}
+                      sottotitolo={prenotazioneGiorno ? nomeOspite ?? (prenotazioneGiorno.numeroPrenotazione ? `#${prenotazioneGiorno.numeroPrenotazione}` : etichettaCanale) : undefined}
+                      azioneDestra={
+                        prenotazioneGiorno?.statoPrenotazione != null ? (
+                          <Chip
+                            size="small"
+                            label={ETICHETTA_STATO[prenotazioneGiorno.statoPrenotazione]}
+                            sx={{ bgcolor: COLORE_STATO[prenotazioneGiorno.statoPrenotazione], color: '#fff', fontWeight: 700 }}
+                          />
+                        ) : (
+                          // Nessuna prenotazione in questo giorno: lo stato mostrato è quello di
+                          // pulizia/manutenzione della camera (indipendente dal giorno), non lo stato
+                          // di una prenotazione — stesso pallino colorato sempre visibile nella
+                          // colonna camera della griglia desktop.
+                          <Chip
+                            size="small"
+                            label={ETICHETTA_STATO_CAMERA[camera.stateRoom]}
+                            sx={{ bgcolor: COLORE_STATO_CAMERA[camera.stateRoom], color: '#fff', fontWeight: 700 }}
+                          />
+                        )
+                      }
+                    />
+                    {prenotazioneGiorno ? (
+                      <RigaCardMeta
+                        voci={[
+                          { etichetta: 'Check-in', valore: FORMATTATORE_LABEL.format(new Date(prenotazioneGiorno.checkIn!)) },
+                          { etichetta: 'Check-out', valore: FORMATTATORE_LABEL.format(new Date(prenotazioneGiorno.checkOut!)) },
+                          { etichetta: 'Canale', valore: etichettaCanale ?? '—' },
+                          { etichetta: 'Ospiti', valore: prenotazioneGiorno.numeroOspiti ?? '—' },
+                        ]}
+                      />
+                    ) : (
+                      <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
+                        {puoScrivere ? 'Libera — tocca per creare una prenotazione' : 'Libera'}
+                      </Typography>
+                    )}
+                  </CardElenco>
+                )
+              })}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {!caricamento && gruppi.length > 0 && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, overflow: 'hidden', bgcolor: tokens.surface }}>
           {/* Intestazione giorni */}
           <Box sx={{ display: 'flex', position: 'sticky', top: 0, zIndex: 3, bgcolor: tokens.surface, borderBottom: `1px solid ${tokens.surfaceBorder}` }}>

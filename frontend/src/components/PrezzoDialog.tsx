@@ -16,6 +16,7 @@ import type { CameraDto } from '../api/camere'
 import type { TipologiaCameraDto } from '../api/tipologie'
 import { useImpostaPrezzo, type ImpostaPrezzoRequest } from '../api/prezzi'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 
 interface Props {
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props) {
+  const mobile = useMobile()
   // La Tipologia va sempre scelta per prima (richiesta esplicita): "per camera specifica" filtra
   // solo le camere di quella tipologia, non elenca più tutte le camere della struttura insieme.
   const [tipologiaId, setTipologiaId] = useState('')
@@ -77,7 +79,7 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>Nuovo periodo di prezzo</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
@@ -129,7 +131,7 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
           />
         )}
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} fullWidth disabled={imposta.isPending} />
           <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} fullWidth disabled={imposta.isPending} />
         </Box>

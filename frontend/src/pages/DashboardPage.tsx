@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
 import { useStruttura } from '../struttura/StrutturaContext'
@@ -19,6 +18,7 @@ import {
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { aggiungiGiorni, inizioGiornoLocale } from '../lib/date'
 import { PrenotazioneDialog, type StatoIniziale } from '../components/PrenotazioneDialog'
+import { BottoneNuovo } from '../components/CardElenco'
 import { KpiCard, KpiCardDoppia } from '../components/KpiCard'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
@@ -138,11 +138,10 @@ export function DashboardPage() {
           {formattatoreData.format(new Date())}
         </Typography>
         {puoScrivere && (
-          <Button
-            variant="contained"
-            color="primary"
+          <BottoneNuovo
+            etichetta="+ Nuova prenotazione"
             size="medium"
-            disabled={!strutturaId || !camere.data || camere.data.length === 0}
+            disabilitato={!strutturaId || !camere.data || camere.data.length === 0}
             onClick={() =>
               setDialogo({
                 modo: 'crea',
@@ -151,9 +150,7 @@ export function DashboardPage() {
                 checkOut: aggiungiGiorni(new Date(), 1),
               })
             }
-          >
-            + Nuova prenotazione
-          </Button>
+          />
         )}
       </Box>
 

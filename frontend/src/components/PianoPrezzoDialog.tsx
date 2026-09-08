@@ -10,6 +10,7 @@ import MenuItem from '@mui/material/MenuItem'
 import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { useAggiornaPianoPrezzo, useCreaPianoPrezzo, type PianoPrezzoDto } from '../api/integrazioni'
+import { useMobile } from '../lib/useMobile'
 
 interface Props {
   strutturaId: string
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function PianoPrezzoDialog({ strutturaId, piano, piani, onClose }: Props) {
+  const mobile = useMobile()
   const [nome, setNome] = useState(piano?.nome ?? '')
   const [parentId, setParentId] = useState(piano?.parentId != null ? String(piano.parentId) : '0')
   const [tipoVariazione, setTipoVariazione] = useState(piano?.tipoVariazione != null ? String(piano.tipoVariazione) : '1')
@@ -55,7 +57,7 @@ export function PianoPrezzoDialog({ strutturaId, piano, piani, onClose }: Props)
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>{piano ? 'Modifica piano prezzo' : 'Nuovo piano prezzo'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>

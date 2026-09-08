@@ -54,6 +54,8 @@ import { useToast } from '../toast/ToastContext'
 import { KpiCard } from '../components/KpiCard'
 import { CampoData } from '../components/CampoData'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -88,6 +90,7 @@ const SERVIZI: {
 ]
 
 export function SuperAdminClientiPage() {
+  const mobile = useMobile()
   const { isSuperAdmin } = useStruttura()
   const dashboard = useDashboardSuperAdmin(isSuperAdmin)
 
@@ -169,40 +172,71 @@ export function SuperAdminClientiPage() {
               (camere, prenotazioni, ospiti, fatture...). Nessuna cancellazione automatica: va confermata singolarmente.
             </Typography>
           </Box>
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Cliente</TableCell>
-                  <TableCell>Struttura</TableCell>
-                  <TableCell>Disattivata il</TableCell>
-                  <TableCell align="right">Giorni</TableCell>
-                  <TableCell align="right">Azioni</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {struttureEliminabili.map(({ struttura, clienteRagioneSociale }) => (
-                  <TableRow key={struttura.id} hover>
-                    <TableCell sx={{ color: tokens.textSecondary }}>{clienteRagioneSociale}</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>{struttura.nome}</TableCell>
-                    <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
-                      {struttura.disattivataAtUtc ? formattatoreData.format(new Date(struttura.disattivataAtUtc)) : '—'}
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                      {struttura.disattivataAtUtc ? giorniDaDisattivazione(struttura.disattivataAtUtc) : '—'}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip title="Elimina definitivamente">
-                        <IconButton size="small" color="error" onClick={() => setStrutturaDaEliminare({ struttura, clienteRagioneSociale })}>
-                          <DeleteForeverIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
+          {mobile && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 1.5 }}>
+              {struttureEliminabili.map(({ struttura, clienteRagioneSociale }) => (
+                <CardElenco key={struttura.id}>
+                  <TestataCardElenco titolo={struttura.nome} sottotitolo={clienteRagioneSociale} />
+                  <RigaCardMeta
+                    voci={[
+                      {
+                        etichetta: 'Disattivata il',
+                        valore: struttura.disattivataAtUtc ? formattatoreData.format(new Date(struttura.disattivataAtUtc)) : '—',
+                      },
+                      {
+                        etichetta: 'Giorni',
+                        valore: struttura.disattivataAtUtc ? giorniDaDisattivazione(struttura.disattivataAtUtc) : '—',
+                      },
+                    ]}
+                  />
+                  <AzioniCardElenco>
+                    <Tooltip title="Elimina definitivamente">
+                      <IconButton size="small" color="error" onClick={() => setStrutturaDaEliminare({ struttura, clienteRagioneSociale })}>
+                        <DeleteForeverIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </AzioniCardElenco>
+                </CardElenco>
+              ))}
+            </Box>
+          )}
+
+          {!mobile && (
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Cliente</TableCell>
+                    <TableCell>Struttura</TableCell>
+                    <TableCell>Disattivata il</TableCell>
+                    <TableCell align="right">Giorni</TableCell>
+                    <TableCell align="right">Azioni</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
+                </TableHead>
+                <TableBody>
+                  {struttureEliminabili.map(({ struttura, clienteRagioneSociale }) => (
+                    <TableRow key={struttura.id} hover>
+                      <TableCell sx={{ color: tokens.textSecondary }}>{clienteRagioneSociale}</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>{struttura.nome}</TableCell>
+                      <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+                        {struttura.disattivataAtUtc ? formattatoreData.format(new Date(struttura.disattivataAtUtc)) : '—'}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontFamily: fontMono }}>
+                        {struttura.disattivataAtUtc ? giorniDaDisattivazione(struttura.disattivataAtUtc) : '—'}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Tooltip title="Elimina definitivamente">
+                          <IconButton size="small" color="error" onClick={() => setStrutturaDaEliminare({ struttura, clienteRagioneSociale })}>
+                            <DeleteForeverIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          )}
         </Box>
       )}
 
@@ -214,9 +248,7 @@ export function SuperAdminClientiPage() {
               control={<Switch size="small" checked={mostraNonAttivi} onChange={(e) => setMostraNonAttivi(e.target.checked)} />}
               label={<Typography sx={{ fontSize: 12.5, fontWeight: 600, color: tokens.textSecondary }}>Mostra non attivi</Typography>}
             />
-            <Button variant="contained" color="primary" size="small" onClick={() => setNuovoClienteAperto(true)}>
-              + Nuovo Cliente
-            </Button>
+            <BottoneNuovo etichetta="+ Nuovo Cliente" onClick={() => setNuovoClienteAperto(true)} />
           </Box>
         </Box>
 
@@ -641,6 +673,7 @@ function RinnovoLicenzaDialog({
 type FiltroLetta = 'tutte' | 'lette' | 'non-lette'
 
 function PrenotazioniRicevuteDialog({ strutturaId, onClose }: { strutturaId: string; onClose: () => void }) {
+  const mobile = useMobile()
   const eventi = useWubookEventiRicevuti(strutturaId, true)
   const [filtro, setFiltro] = useState<FiltroLetta>('tutte')
 
@@ -650,8 +683,10 @@ function PrenotazioniRicevuteDialog({ strutturaId, onClose }: { strutturaId: str
     return true
   })
 
+  const messaggioVuoto = (eventi.data ?? []).length === 0 ? 'Nessuna prenotazione ricevuta finora.' : 'Nessuna prenotazione per questo filtro.'
+
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>Prenotazioni Wubook ricevute</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
         <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
@@ -669,7 +704,16 @@ function PrenotazioniRicevuteDialog({ strutturaId, onClose }: { strutturaId: str
         {eventi.isLoading && <Skeleton variant="rounded" height={220} />}
         {eventi.isError && <Alert severity="error">Impossibile caricare le prenotazioni ricevute. Riprova.</Alert>}
 
-        {!eventi.isLoading && !eventi.isError && (
+        {!eventi.isLoading && !eventi.isError && mobile && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {eventiFiltrati.length === 0 && <MessaggioVuotoElenco messaggio={messaggioVuoto} />}
+            {eventiFiltrati.map((e) => (
+              <CardEventoRicevuto key={e.id} evento={e} />
+            ))}
+          </Box>
+        )}
+
+        {!eventi.isLoading && !eventi.isError && !mobile && (
           <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, overflow: 'hidden' }}>
             <Table size="small">
               <TableHead>
@@ -684,7 +728,7 @@ function PrenotazioniRicevuteDialog({ strutturaId, onClose }: { strutturaId: str
                 {eventiFiltrati.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={4} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                      {(eventi.data ?? []).length === 0 ? 'Nessuna prenotazione ricevuta finora.' : 'Nessuna prenotazione per questo filtro.'}
+                      {messaggioVuoto}
                     </TableCell>
                   </TableRow>
                 )}
@@ -721,6 +765,32 @@ function RigaEventoRicevuto({ evento }: { evento: WubookEventoRicevutoDto }) {
   )
 
   return evento.messaggioErrore ? <Tooltip title={evento.messaggioErrore}>{riga}</Tooltip> : riga
+}
+
+function CardEventoRicevuto({ evento }: { evento: WubookEventoRicevutoDto }) {
+  const data = evento.updatedAtUtc ?? evento.createdAtUtc
+  const esito = (
+    <Chip
+      size="small"
+      label={evento.importazioneRiuscita ? 'Letta' : 'Non letta'}
+      sx={{ bgcolor: evento.importazioneRiuscita ? tokens.ok600 : tokens.error600, color: '#fff', fontWeight: 700 }}
+    />
+  )
+
+  return (
+    <CardElenco>
+      <TestataCardElenco
+        titolo={formattatoreDataOra.format(new Date(data))}
+        azioneDestra={evento.messaggioErrore ? <Tooltip title={evento.messaggioErrore}>{esito}</Tooltip> : esito}
+      />
+      <RigaCardMeta
+        voci={[
+          { etichetta: 'Lcode', valore: evento.lcode },
+          { etichetta: 'Rcode', valore: evento.rcode },
+        ]}
+      />
+    </CardElenco>
+  )
 }
 
 function EsitoServizioBadge({ nome, attivo, errore, dettaglio }: EsitoServizio & { nome: string }) {
@@ -914,6 +984,7 @@ function ModificaClienteDialog({
   adminUtente: UtenteAdminDto | null
   onClose: () => void
 }) {
+  const mobile = useMobile()
   const [ragioneSociale, setRagioneSociale] = useState(cliente.ragioneSociale)
   const [partitaIva, setPartitaIva] = useState(cliente.partitaIva ?? '')
   const [quotaAnnua, setQuotaAnnua] = useState(cliente.quotaAnnua != null ? String(cliente.quotaAnnua) : '')
@@ -986,7 +1057,7 @@ function ModificaClienteDialog({
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>Modifica Cliente</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
@@ -1030,7 +1101,7 @@ function ModificaClienteDialog({
               Utente amministratore
             </Typography>
             <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth disabled={inCorso} />
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
               <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={inCorso} />
               <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={inCorso} />
             </Box>
@@ -1043,7 +1114,7 @@ function ModificaClienteDialog({
             <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
               Reimposta la password di questo utente (non serve conoscere quella attuale).
             </Typography>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2, alignItems: mobile ? 'stretch' : 'flex-start' }}>
               <TextField
                 label="Nuova password"
                 type="password"
@@ -1079,6 +1150,7 @@ function ModificaClienteDialog({
 }
 
 function NuovoClienteDialog({ onClose }: { onClose: () => void }) {
+  const mobile = useMobile()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [nome, setNome] = useState('')
@@ -1134,18 +1206,18 @@ function NuovoClienteDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>Nuovo Cliente</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         {errore && <Alert severity="error">{errore}</Alert>}
         <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
           Crea il Cliente e le credenziali del suo primo utente, che sarà amministratore delle strutture che creerà.
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth disabled={salvataggioInCorso} autoFocus />
           <TextField label="Password" type="text" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth disabled={salvataggioInCorso} />
         </Box>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={salvataggioInCorso} />
           <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={salvataggioInCorso} />
         </Box>
@@ -1154,7 +1226,7 @@ function NuovoClienteDialog({ onClose }: { onClose: () => void }) {
           label="Super Admin (staff GestiSoft, non appartiene a un Cliente)"
         />
         {!isSuperAdmin && (
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
             <TextField label="Ragione sociale" value={ragioneSociale} onChange={(e) => setRagioneSociale(e.target.value)} fullWidth disabled={salvataggioInCorso} />
             <TextField label="P.IVA (opzionale)" value={partitaIva} onChange={(e) => setPartitaIva(e.target.value)} fullWidth disabled={salvataggioInCorso} />
           </Box>

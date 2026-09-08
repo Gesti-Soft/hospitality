@@ -9,6 +9,7 @@ import DialogTitle from '@mui/material/DialogTitle'
 import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { useCreaTipologia, useAggiornaTipologia, type TipologiaCameraDto, type TipologiaCameraRequest } from '../api/tipologie'
+import { useMobile } from '../lib/useMobile'
 
 interface Props {
   strutturaId: string
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
+  const mobile = useMobile()
   const [nome, setNome] = useState(tipologia?.tipologiaCamera ?? '')
   const [prezzoDefault, setPrezzoDefault] = useState(tipologia?.prezzoDefault != null ? String(tipologia.prezzoDefault) : '')
   const [numeroImplementoPersona, setNumeroImplementoPersona] = useState(String(tipologia?.numeroImplementoPersona ?? 2))
@@ -57,19 +59,19 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>{tipologia ? 'Modifica tipologia' : 'Nuova tipologia'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <TextField label="Nome tipologia" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso} autoFocus />
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Prezzo default (€/notte)" type="number" value={prezzoDefault} onChange={(e) => setPrezzoDefault(e.target.value)} fullWidth disabled={inCorso} />
           <TextField label="Cauzione (€)" type="number" value={cauzione} onChange={(e) => setCauzione(e.target.value)} fullWidth disabled={inCorso} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField
             label="Ospiti inclusi nel prezzo"
             type="number"
@@ -83,7 +85,7 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
           <TextField label="Supplemento per persona extra (€/notte)" type="number" value={implemento} onChange={(e) => setImplemento(e.target.value)} fullWidth disabled={inCorso} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Spese pulizia (€)" type="number" value={spesePulizia} onChange={(e) => setSpesePulizia(e.target.value)} fullWidth disabled={inCorso} />
           <TextField label="Supplemento animali (€)" type="number" value={animali} onChange={(e) => setAnimali(e.target.value)} fullWidth disabled={inCorso} />
         </Box>

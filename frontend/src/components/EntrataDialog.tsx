@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { useCreaEntrata, useAggiornaEntrata, type EntrataDto, type EntrataRequest } from '../api/entrate'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function EntrataDialog({ strutturaId, entrata, onClose }: Props) {
+  const mobile = useMobile()
   const [tipoEntrata, setTipoEntrata] = useState(entrata?.tipoEntrata ?? '')
   const [nome, setNome] = useState(entrata?.nome ?? '')
   const [importoEntrata, setImportoEntrata] = useState(String(entrata?.importoEntrata ?? ''))
@@ -55,17 +57,17 @@ export function EntrataDialog({ strutturaId, entrata, onClose }: Props) {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>{entrata ? 'Modifica entrata' : 'Nuova entrata'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required fullWidth disabled={inCorso} autoFocus />
           <TextField label="Importo (€)" type="number" value={importoEntrata} onChange={(e) => setImportoEntrata(e.target.value)} required fullWidth disabled={inCorso} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Tipo entrata" value={tipoEntrata} onChange={(e) => setTipoEntrata(e.target.value)} fullWidth disabled={inCorso} />
           <CampoData label="Data" value={data} onChange={setData} fullWidth disabled={inCorso} />
         </Box>

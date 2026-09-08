@@ -75,8 +75,8 @@ export function LoginPage() {
       </Box>
 
       {/* Pannello form */}
-      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 4 }}>
-        <Box component="form" onSubmit={handleSubmit} sx={{ width: 380, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', p: { xs: 2.5, md: 4 } }}>
+        <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <Box>
             <Typography sx={{ fontFamily: fontDisplay, fontWeight: 800, fontSize: 27, color: tokens.ink900 }}>
               Accedi

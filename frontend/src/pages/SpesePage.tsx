@@ -16,7 +16,9 @@ import { useSpese, useEliminaSpesa, type SpesaDto } from '../api/spese'
 import { ApiError } from '../api/client'
 import { fontMono, tokens } from '../theme'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
+import { useMobile } from '../lib/useMobile'
 import { SpesaDialog } from '../components/SpesaDialog'
+import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../components/CardElenco'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   AzioneNuovo,
@@ -34,6 +36,7 @@ import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 export function SpesePage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const puoScrivere = usePuoScrivere('financeWrite')
   const [anno, setAnno] = useState(ANNO_CORRENTE)
@@ -95,7 +98,47 @@ export function SpesePage() {
 
       {spese.isLoading && <Skeleton variant="rounded" height={220} />}
 
-      {!spese.isLoading && (
+      {!spese.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {dati.length === 0 && (
+            <MessaggioVuotoElenco
+              messaggio={testoRicerca || dataDa || dataA ? 'Nessuna spesa corrisponde ai filtri applicati.' : "Nessuna spesa registrata per l'anno selezionato."}
+            />
+          )}
+          {datiVisibili.map((s) => (
+            <CardElenco key={s.id}>
+              <TestataCardElenco
+                titolo={s.nome}
+                sottotitolo={s.tipoSpesa ?? undefined}
+                azioneDestra={
+                  <Box component="span" sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 15, color: tokens.error600 }}>
+                    {formattatoreValuta.format(s.importoSpesa)}
+                  </Box>
+                }
+              />
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Data', valore: s.dataSpesa ? formattatoreData.format(new Date(s.dataSpesa)) : '—' },
+                  { etichetta: 'Metodo', valore: s.metodoPagamento ?? '—' },
+                ]}
+              />
+              {puoScrivere && (
+                <AzioniCardElenco>
+                  <IconButton size="small" onClick={() => setDialogo(s)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => setDaEliminare(s)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </AzioniCardElenco>
+              )}
+            </CardElenco>
+          ))}
+          {altreDaCaricare && <SentinellaCaricamentoElenco ref={sentinellaRef} />}
+        </Box>
+      )}
+
+      {!spese.isLoading && !mobile && (
         <Cornice>
           <Table size="small">
             <TableHead>

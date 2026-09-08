@@ -78,6 +78,24 @@ export interface SalvaSchedaOspitiRequest {
   membri: MembroOspiteRequest[]
 }
 
+/**
+ * Una scheda esiste già non appena Wubook sincronizza una prenotazione (autocompila
+ * Nome/Cognome/Email/Cittadinanza dal canale OTA, vedi WubookPrenotazioniService) — non basta quindi
+ * la sola esistenza del record per dire che è pronta per la schedina Alloggiati Web. Servono anche i
+ * dati che Wubook non fornisce mai: data di nascita, sesso, documento (mai popolati dall'import).
+ */
+export function schedaOspitiCompleta(ospite: OspiteDto): boolean {
+  return !!(
+    ospite.cognome &&
+    ospite.nome &&
+    ospite.dataNascita &&
+    ospite.sesso &&
+    ospite.cittadinanza &&
+    ospite.documento &&
+    ospite.numeroDocumento
+  )
+}
+
 export function useOspite(strutturaId: string | null, prenotazioneId: string | null) {
   return useQuery({
     queryKey: ['ospiti', strutturaId, prenotazioneId],

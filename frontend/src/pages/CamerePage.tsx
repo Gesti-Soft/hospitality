@@ -41,9 +41,11 @@ import {
 import { ApiError } from '../api/client'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
+import { useMobile } from '../lib/useMobile'
 import { CameraDialog } from '../components/CameraDialog'
 import { PrezzoDialog } from '../components/PrezzoDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 const ETICHETTA_STATO_CAMERA: Record<StatoCamera, string> = {
@@ -116,8 +118,8 @@ export function CamerePage() {
         </TextField>
       )}
 
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ minHeight: 0 }}>
           <Tab label="Camere" value="camere" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
           <Tab label="Prezzi" value="prezzi" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
           {puoVedereCanali && <Tab label="Canali vendita" value="canali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
@@ -245,11 +247,7 @@ function IntestazioneTab({ titolo, azione }: { titolo: string; azione?: { etiche
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>{titolo}</Typography>
-      {azione && (
-        <Button variant="contained" color="primary" size="small" onClick={azione.onClick} disabled={azione.disabilitato}>
-          {azione.etichetta}
-        </Button>
-      )}
+      {azione && <BottoneNuovo etichetta={azione.etichetta} onClick={azione.onClick} disabilitato={azione.disabilitato} />}
     </Box>
   )
 }
@@ -285,6 +283,7 @@ function TabCamere({
   puoScrivere: boolean
   onErrore: (err: unknown) => void
 }) {
+  const mobile = useMobile()
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuova' | CameraDto>('chiuso')
   const [daEliminare, setDaEliminare] = useState<CameraDto | null>(null)
   const elimina = useEliminaCamera(strutturaId)
@@ -305,7 +304,37 @@ function TabCamere({
 
       {caricamento && <Skeleton variant="rounded" height={220} />}
 
-      {!caricamento && (
+      {!caricamento && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {camereFiltrate.length === 0 && <MessaggioVuotoElenco messaggio="Nessuna camera per questa tipologia." />}
+          {camereFiltrate.map((c) => (
+            <CardElenco key={c.id} coloreAccento={COLORE_STATO_CAMERA[c.stateRoom]}>
+              <TestataCardElenco
+                titolo={c.nome}
+                azioneDestra={<Chip size="small" label={ETICHETTA_STATO_CAMERA[c.stateRoom]} sx={{ bgcolor: COLORE_STATO_CAMERA[c.stateRoom], color: '#fff', fontWeight: 700 }} />}
+              />
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Capacità', valore: c.capacitaOspiti ?? '—' },
+                  { etichetta: 'Soggiorno minimo', valore: c.soggiornoMinimo ?? '—' },
+                ]}
+              />
+              {puoScrivere && (
+                <AzioniCardElenco>
+                  <IconButton size="small" onClick={() => setDialogo(c)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => setDaEliminare(c)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </AzioniCardElenco>
+              )}
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!caricamento && !mobile && (
         <Cornice>
           <Table size="small">
             <TableHead>
@@ -396,6 +425,7 @@ function TabPrezzi({
   puoScrivere: boolean
   onErrore: (err: unknown) => void
 }) {
+  const mobile = useMobile()
   const [dialogoAperto, setDialogoAperto] = useState(false)
   const [vista, setVista] = useState<'lista' | 'calendario'>('lista')
   const [daEliminare, setDaEliminare] = useState<PrezzoCameraDto | null>(null)
@@ -428,22 +458,46 @@ function TabPrezzi({
             <ToggleButton value="calendario">Calendario</ToggleButton>
           </ToggleButtonGroup>
           {puoScrivere && (
-            <Button
-              variant="contained"
-              color="primary"
-              size="small"
+            <BottoneNuovo
+              etichetta="+ Nuovo periodo"
               onClick={() => setDialogoAperto(true)}
-              disabled={!strutturaId || tipologie.length === 0}
-            >
-              + Nuovo periodo
-            </Button>
+              disabilitato={!strutturaId || tipologie.length === 0}
+            />
           )}
         </Box>
       </Box>
 
       {caricamento && <Skeleton variant="rounded" height={220} />}
 
-      {!caricamento && vista === 'lista' && (
+      {!caricamento && vista === 'lista' && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {prezziTipologia.length === 0 && <MessaggioVuotoElenco messaggio="Nessun periodo di prezzo configurato per questa tipologia." />}
+          {prezziTipologia
+            .slice()
+            .sort((a, b) => (a.dataInizio ?? '').localeCompare(b.dataInizio ?? ''))
+            .map((p) => (
+              <CardElenco key={p.id}>
+                <TestataCardElenco titolo={p.cameraId ? `Camera ${nomeCamera(p.cameraId) ?? '—'}` : `Tipologia ${nomeTipologia(p.tipologiaId) ?? '—'}`} />
+                <RigaCardMeta
+                  voci={[
+                    { etichetta: 'Dal', valore: p.dataInizio ? formattatoreData.format(new Date(p.dataInizio)) : '—' },
+                    { etichetta: 'Al', valore: p.dataFine ? formattatoreData.format(new Date(p.dataFine)) : '—' },
+                    { etichetta: 'Prezzo/notte', valore: p.prezzoPerNotte != null ? formattatoreValuta.format(p.prezzoPerNotte) : '—' },
+                  ]}
+                />
+                {puoScrivere && (
+                  <AzioniCardElenco>
+                    <IconButton size="small" onClick={() => eliminaPrezzo(p)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </AzioniCardElenco>
+                )}
+              </CardElenco>
+            ))}
+        </Box>
+      )}
+
+      {!caricamento && vista === 'lista' && !mobile && (
         <Cornice>
           <Table size="small">
             <TableHead>
@@ -659,6 +713,7 @@ function TabCanali({
   caricamento: boolean
   onErrore: (err: unknown) => void
 }) {
+  const mobile = useMobile()
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | CanaleVenditaDto>('chiuso')
   const [descrizione, setDescrizione] = useState('')
   const [erroreDialogo, setErroreDialogo] = useState<string | null>(null)
@@ -712,9 +767,7 @@ function TabCanali({
           <Button variant="outlined" size="small" onClick={importaDaPrenotazioni} disabled={!strutturaId || importa.isPending}>
             Importa da prenotazioni
           </Button>
-          <Button variant="contained" color="primary" size="small" onClick={() => apriDialogo('nuovo')} disabled={!strutturaId}>
-            + Nuovo canale
-          </Button>
+          <BottoneNuovo etichetta="+ Nuovo canale" onClick={() => apriDialogo('nuovo')} disabilitato={!strutturaId} />
         </Box>
       </Box>
       <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
@@ -725,7 +778,26 @@ function TabCanali({
 
       {caricamento && <Skeleton variant="rounded" height={160} />}
 
-      {!caricamento && (
+      {!caricamento && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {(canali ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessun canale configurato." />}
+          {(canali ?? []).map((c) => (
+            <CardElenco key={c.id}>
+              <TestataCardElenco titolo={c.descrizione} />
+              <AzioniCardElenco>
+                <IconButton size="small" onClick={() => apriDialogo(c)}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton size="small" onClick={() => setDaEliminare(c)}>
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </AzioniCardElenco>
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!caricamento && !mobile && (
         <Cornice>
           <Table size="small">
             <TableHead>

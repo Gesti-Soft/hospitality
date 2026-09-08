@@ -16,7 +16,9 @@ import { useEntrate, useEliminaEntrata, type EntrataDto } from '../api/entrate'
 import { ApiError } from '../api/client'
 import { fontMono, tokens } from '../theme'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
+import { useMobile } from '../lib/useMobile'
 import { EntrataDialog } from '../components/EntrataDialog'
+import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../components/CardElenco'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   AzioneNuovo,
@@ -34,6 +36,7 @@ import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
 export function EntratePage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const puoScrivere = usePuoScrivere('financeWrite')
   const [anno, setAnno] = useState(ANNO_CORRENTE)
@@ -93,7 +96,42 @@ export function EntratePage() {
 
       {entrate.isLoading && <Skeleton variant="rounded" height={220} />}
 
-      {!entrate.isLoading && (
+      {!entrate.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {dati.length === 0 && (
+            <MessaggioVuotoElenco
+              messaggio={testoRicerca || dataDa || dataA ? 'Nessuna entrata corrisponde ai filtri applicati.' : "Nessuna entrata registrata per l'anno selezionato."}
+            />
+          )}
+          {datiVisibili.map((e) => (
+            <CardElenco key={e.id}>
+              <TestataCardElenco
+                titolo={e.nome}
+                sottotitolo={e.tipoEntrata ?? undefined}
+                azioneDestra={
+                  <Box component="span" sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 15, color: tokens.ok600 }}>
+                    {formattatoreValuta.format(e.importoEntrata)}
+                  </Box>
+                }
+              />
+              <RigaCardMeta voci={[{ etichetta: 'Data', valore: e.data ? formattatoreData.format(new Date(e.data)) : '—' }]} />
+              {puoScrivere && (
+                <AzioniCardElenco>
+                  <IconButton size="small" onClick={() => setDialogo(e)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => setDaEliminare(e)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </AzioniCardElenco>
+              )}
+            </CardElenco>
+          ))}
+          {altreDaCaricare && <SentinellaCaricamentoElenco ref={sentinellaRef} />}
+        </Box>
+      )}
+
+      {!entrate.isLoading && !mobile && (
         <Cornice>
           <Table size="small">
             <TableHead>

@@ -33,6 +33,7 @@ import {
 } from '../api/prenotazioni'
 import { ApiError } from '../api/client'
 import { aggiungiGiorni, formatoInputData, inizioGiornoLocale, isoLocale, parsaInputData } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 import { tokens } from '../theme'
 import { OspiteDialog } from './OspiteDialog'
@@ -75,6 +76,7 @@ interface Props {
 }
 
 export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipologie, onClose }: Props) {
+  const mobile = useMobile()
   const puoScrivere = usePuoScrivere('reservationWrite')
   const puoCambiareStatoCamera = usePuoScrivere('roomStatusUpdate')
   const modifica = stato.modo === 'modifica' ? stato.prenotazione : null
@@ -343,7 +345,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         {modifica ? `Prenotazione ${modifica.numeroPrenotazione ? `#${modifica.numeroPrenotazione}` : ''}` : 'Nuova prenotazione'}
         {stato_ && <Chip size="small" label={ETICHETTA_STATO[stato_]} sx={{ bgcolor: COLORE_STATO[stato_], color: '#fff', fontWeight: 700 }} />}
@@ -356,7 +358,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
             bordo (bug reale di rendering riprodotto e isolato, non specifico di un singolo campo). */}
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <Autocomplete
             sx={{ flex: 1 }}
             options={tipologie}
@@ -382,7 +384,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <CampoData label="Check-in" value={checkIn} onChange={setCheckIn} fullWidth disabled={inCorso || soloImporti} />
           <CampoData
             label="Check-out"
@@ -400,7 +402,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
 
         {conflitto && <Alert severity="warning">{messaggioConflitto(conflitto)}</Alert>}
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField
             select
             label="Agenzia / canale"
@@ -437,7 +439,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           />
         )}
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField
             label="Importo totale (€)"
             type="number"

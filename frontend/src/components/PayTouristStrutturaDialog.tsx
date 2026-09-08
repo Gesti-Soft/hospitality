@@ -21,6 +21,7 @@ import {
   type PayTouristStrutturaRequest,
 } from '../api/integrazioni'
 import type { TipologiaCameraDto } from '../api/tipologie'
+import { useMobile } from '../lib/useMobile'
 
 interface Props {
   strutturaId: string
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export function PayTouristStrutturaDialog({ strutturaId, strutturaPayTourist, tipologie, onClose }: Props) {
+  const mobile = useMobile()
   const [nome, setNome] = useState(strutturaPayTourist?.nome ?? '')
   const [idStrutturaPaytourist, setIdStrutturaPaytourist] = useState(strutturaPayTourist?.idStrutturaPaytourist != null ? String(strutturaPayTourist.idStrutturaPaytourist) : '')
   const [tipologieIds, setTipologieIds] = useState<string[]>(strutturaPayTourist?.tipologieIds ?? [])
@@ -78,7 +80,7 @@ export function PayTouristStrutturaDialog({ strutturaId, strutturaPayTourist, ti
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>{strutturaPayTourist ? 'Modifica struttura PayTourist' : 'Nuova struttura PayTourist'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>

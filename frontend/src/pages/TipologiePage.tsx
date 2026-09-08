@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Skeleton from '@mui/material/Skeleton'
 import Table from '@mui/material/Table'
@@ -19,10 +18,13 @@ import { fontDisplay, fontMono, tokens } from '../theme'
 import { TipologiaDialog } from '../components/TipologiaDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
+import { useMobile } from '../lib/useMobile'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 
 export function TipologiePage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const puoScrivere = usePuoScrivere('settingRoomWrite')
   const [errore, setErrore] = useState<string | null>(null)
@@ -44,11 +46,7 @@ export function TipologiePage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tipologie camera</Typography>
-        {puoScrivere && (
-          <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuova')} disabled={!strutturaId}>
-            + Nuova tipologia
-          </Button>
-        )}
+        {puoScrivere && <BottoneNuovo etichetta="+ Nuova tipologia" onClick={() => setDialogo('nuova')} disabilitato={!strutturaId} />}
       </Box>
 
       {errore && (
@@ -59,7 +57,36 @@ export function TipologiePage() {
 
       {tipologie.isLoading && <Skeleton variant="rounded" height={220} />}
 
-      {!tipologie.isLoading && (
+      {!tipologie.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {(tipologie.data ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessuna tipologia configurata." />}
+          {(tipologie.data ?? []).map((t) => (
+            <CardElenco key={t.id}>
+              <TestataCardElenco titolo={t.tipologiaCamera} />
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Prezzo default', valore: t.prezzoDefault != null ? formattatoreValuta.format(t.prezzoDefault) : '—' },
+                  { etichetta: 'Ospiti inclusi', valore: t.numeroImplementoPersona },
+                  { etichetta: 'Supplemento persona', valore: formattatoreValuta.format(t.implemento) },
+                  { etichetta: 'Cauzione', valore: t.cauzione != null ? formattatoreValuta.format(t.cauzione) : '—' },
+                ]}
+              />
+              {puoScrivere && (
+                <AzioniCardElenco>
+                  <IconButton size="small" onClick={() => setDialogo(t)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => setDaEliminare(t)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </AzioniCardElenco>
+              )}
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!tipologie.isLoading && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
           <Table size="small">
             <TableHead>

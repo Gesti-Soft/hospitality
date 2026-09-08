@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
@@ -20,6 +20,8 @@ import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
 import { CATEGORIE_LOG, CATEGORIE_LOG_CLIENTE, LivelloLog, useLogs, type LogEventoDto } from '../api/log'
 import { fontMono, tokens } from '../theme'
+import { useMobile } from '../lib/useMobile'
+import { CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../components/CardElenco'
 
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 const PAGE_SIZE = 25
@@ -37,6 +39,7 @@ const COLORE_LIVELLO: Record<LivelloLog, string> = {
 }
 
 export function LogPage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const { sessione } = useAuth()
   const categorieDisponibili = sessione?.isSuperAdmin ? CATEGORIE_LOG : CATEGORIE_LOG_CLIENTE
@@ -49,10 +52,13 @@ export function LogPage() {
   const eventi = logs.data?.pages.flatMap((p) => p.items) ?? []
   const totaleEventi = logs.data?.pages[0]?.totalCount ?? 0
 
-  const sentinellaRef = useRef<HTMLTableRowElement | null>(null)
+  const elementoSentinella = useRef<HTMLElement | null>(null)
+  const sentinellaRef = useCallback((el: HTMLElement | null) => {
+    elementoSentinella.current = el
+  }, [])
   useEffect(() => {
     if (!logs.hasNextPage) return
-    const el = sentinellaRef.current
+    const el = elementoSentinella.current
     if (!el) return
 
     const observer = new IntersectionObserver(
@@ -120,7 +126,30 @@ export function LogPage() {
 
       {logs.isLoading && <Skeleton variant="rounded" height={320} />}
 
-      {!logs.isLoading && (
+      {!logs.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {eventi.length === 0 && <MessaggioVuotoElenco messaggio="Nessun evento registrato." />}
+          {eventi.map((l) => (
+            <CardElenco key={l.id} onClick={l.dettaglio ? () => setDettaglio(l) : undefined}>
+              <TestataCardElenco
+                titolo={l.categoria ?? l.origine}
+                sottotitolo={formattatoreDataOra.format(new Date(l.createdAtUtc))}
+                azioneDestra={<Chip size="small" label={ETICHETTA_LIVELLO[l.livello]} sx={{ bgcolor: COLORE_LIVELLO[l.livello], color: '#fff', fontWeight: 700 }} />}
+              />
+              <Typography sx={{ fontSize: 12.5 }}>{l.messaggio}</Typography>
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Operatore', valore: l.operatore ?? '—' },
+                  { etichetta: 'Correlation Id', valore: <Box component="span" sx={{ fontFamily: fontMono, fontSize: 11, color: tokens.textTertiary }}>{l.correlationId ?? '—'}</Box> },
+                ]}
+              />
+            </CardElenco>
+          ))}
+          {logs.hasNextPage && <SentinellaCaricamentoElenco ref={sentinellaRef} />}
+        </Box>
+      )}
+
+      {!logs.isLoading && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
           <Table size="small">
             <TableHead>
@@ -166,7 +195,7 @@ export function LogPage() {
       )}
 
       {dettaglio && (
-        <Dialog open onClose={() => setDettaglio(null)} maxWidth="md" fullWidth>
+        <Dialog open onClose={() => setDettaglio(null)} maxWidth="md" fullWidth fullScreen={mobile}>
           <DialogTitle>Dettaglio evento</DialogTitle>
           <DialogContent>
             <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary, mb: 1.5 }}>{dettaglio.messaggio}</Typography>

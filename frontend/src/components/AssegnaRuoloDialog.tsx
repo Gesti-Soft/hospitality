@@ -14,6 +14,7 @@ import MenuItem from '@mui/material/MenuItem'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { ApiError } from '../api/client'
+import { useMobile } from '../lib/useMobile'
 import {
   RuoloUtente,
   useAggiornaUtente,
@@ -148,6 +149,7 @@ interface Props {
 }
 
 export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDisponibili, onClose }: Props) {
+  const mobile = useMobile()
   const modifica = stato.modo === 'modifica' ? stato.assegnazione : null
 
   const [utenteEsistenteId, setUtenteEsistenteId] = useState('')
@@ -245,7 +247,7 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>
         {modifica ? `Modifica utente — ${modifica.email}` : stato.modo === 'nuovo' ? 'Nuovo utente' : 'Assegna utente esistente'}
       </DialogTitle>
@@ -267,11 +269,11 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
 
         {stato.modo === 'nuovo' && (
           <>
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
               <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth disabled={inCorso} />
               <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required fullWidth disabled={inCorso} />
             </Box>
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
               <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={inCorso} />
               <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={inCorso} />
             </Box>
@@ -281,7 +283,7 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
         {modifica && (
           <>
             <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth disabled={inCorso} />
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
               <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={inCorso} />
               <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={inCorso} />
             </Box>
@@ -328,7 +330,7 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
           <>
             <Divider />
             <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>Reimposta la password di questo utente (non serve conoscere quella attuale).</Typography>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2, alignItems: mobile ? 'stretch' : 'flex-start' }}>
               <TextField
                 label="Nuova password"
                 type="password"

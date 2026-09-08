@@ -25,7 +25,9 @@ import {
   useRestrizioniPeriodoCamera,
 } from '../api/integrazioni'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
+import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta } from './CardElenco'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 
@@ -39,8 +41,9 @@ interface Props {
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 export function ChiusureRestrizioniDialog({ strutturaId, cameraId, cameraNome, onClose }: Props) {
+  const mobile = useMobile()
   return (
-    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth fullScreen={mobile}>
       <DialogTitle>Chiusure e restrizioni — {cameraNome}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 1 }}>
         <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
@@ -58,6 +61,7 @@ export function ChiusureRestrizioniDialog({ strutturaId, cameraId, cameraNome, o
 }
 
 function SezioneChiusure({ strutturaId, cameraId }: { strutturaId: string; cameraId: string }) {
+  const mobile = useMobile()
   const puoScrivere = usePuoScrivere('settingRoomWrite')
   const chiusure = useChiusureCamera(strutturaId, cameraId)
   const crea = useCreaChiusuraCamera(strutturaId, cameraId)
@@ -101,7 +105,7 @@ function SezioneChiusure({ strutturaId, cameraId }: { strutturaId: string; camer
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 14 }}>Chiusure (manutenzione + prenotazioni correnti)</Typography>
       {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
-      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
         <CampoData label="Filtro da" value={filtroDa} onChange={setFiltroDa} size="small" />
         <CampoData label="Filtro a" value={filtroA} onChange={setFiltroA} size="small" />
         {(filtroDa || filtroA) && (
@@ -109,43 +113,68 @@ function SezioneChiusure({ strutturaId, cameraId }: { strutturaId: string; camer
         )}
       </Box>
 
-      <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Dal</TableCell>
-              <TableCell>Al</TableCell>
-              <TableCell>Quantità</TableCell>
-              <TableCell>Motivo</TableCell>
-              <TableCell align="right">Azioni</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {righe.length === 0 && (
+      {mobile ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {righe.length === 0 && <MessaggioVuotoElenco messaggio="Nessuna chiusura." />}
+          {righe.map((c) => (
+            <CardElenco key={c.id ?? `${c.dataInizio}-${c.dataFine}-${c.motivo}`}>
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Dal', valore: formattatoreData.format(new Date(c.dataInizio)) },
+                  { etichetta: 'Al', valore: formattatoreData.format(new Date(c.dataFine)) },
+                  { etichetta: 'Quantità', valore: c.quantita ?? '—' },
+                  { etichetta: 'Motivo', valore: c.motivo ?? '—' },
+                ]}
+              />
+              {c.id != null && puoScrivere && (
+                <AzioniCardElenco>
+                  <IconButton size="small" onClick={() => elimina.mutate(c.id!)} disabled={elimina.isPending}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </AzioniCardElenco>
+              )}
+            </CardElenco>
+          ))}
+        </Box>
+      ) : (
+        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+          <Table size="small">
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 2 }}>
-                  Nessuna chiusura.
-                </TableCell>
+                <TableCell>Dal</TableCell>
+                <TableCell>Al</TableCell>
+                <TableCell>Quantità</TableCell>
+                <TableCell>Motivo</TableCell>
+                <TableCell align="right">Azioni</TableCell>
               </TableRow>
-            )}
-            {righe.map((c) => (
-              <TableRow key={c.id ?? `${c.dataInizio}-${c.dataFine}-${c.motivo}`} hover>
-                <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(c.dataInizio))}</TableCell>
-                <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(c.dataFine))}</TableCell>
-                <TableCell>{c.quantita ?? '—'}</TableCell>
-                <TableCell>{c.motivo ?? '—'}</TableCell>
-                <TableCell align="right">
-                  {c.id != null && puoScrivere && (
-                    <IconButton size="small" onClick={() => elimina.mutate(c.id!)} disabled={elimina.isPending}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Box>
+            </TableHead>
+            <TableBody>
+              {righe.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 2 }}>
+                    Nessuna chiusura.
+                  </TableCell>
+                </TableRow>
+              )}
+              {righe.map((c) => (
+                <TableRow key={c.id ?? `${c.dataInizio}-${c.dataFine}-${c.motivo}`} hover>
+                  <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(c.dataInizio))}</TableCell>
+                  <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(c.dataFine))}</TableCell>
+                  <TableCell>{c.quantita ?? '—'}</TableCell>
+                  <TableCell>{c.motivo ?? '—'}</TableCell>
+                  <TableCell align="right">
+                    {c.id != null && puoScrivere && (
+                      <IconButton size="small" onClick={() => elimina.mutate(c.id!)} disabled={elimina.isPending}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
 
       {puoScrivere && (
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -163,6 +192,7 @@ function SezioneChiusure({ strutturaId, cameraId }: { strutturaId: string; camer
 }
 
 function SezioneRestrizioni({ strutturaId, cameraId }: { strutturaId: string; cameraId: string }) {
+  const mobile = useMobile()
   const puoScrivere = usePuoScrivere('settingRoomWrite')
   const restrizioni = useRestrizioniPeriodoCamera(strutturaId, cameraId)
   const crea = useCreaRestrizionePeriodoCamera(strutturaId, cameraId)
@@ -212,7 +242,7 @@ function SezioneRestrizioni({ strutturaId, cameraId }: { strutturaId: string; ca
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 14 }}>Soggiorno minimo/massimo per periodo</Typography>
       {errore && <Alert severity="error" onClose={() => setErrore(null)}>{errore}</Alert>}
 
-      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
         <CampoData label="Filtro da" value={filtroDa} onChange={setFiltroDa} size="small" />
         <CampoData label="Filtro a" value={filtroA} onChange={setFiltroA} size="small" />
         {(filtroDa || filtroA) && (
@@ -220,45 +250,71 @@ function SezioneRestrizioni({ strutturaId, cameraId }: { strutturaId: string; ca
         )}
       </Box>
 
-      <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Dal</TableCell>
-              <TableCell>Al</TableCell>
-              <TableCell>Min</TableCell>
-              <TableCell>Max</TableCell>
-              <TableCell>Motivo</TableCell>
-              <TableCell align="right">Azioni</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {righe.length === 0 && (
+      {mobile ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {righe.length === 0 && <MessaggioVuotoElenco messaggio="Nessuna regola per periodo." />}
+          {righe.map((r) => (
+            <CardElenco key={r.id}>
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Dal', valore: formattatoreData.format(new Date(r.dataInizio)) },
+                  { etichetta: 'Al', valore: formattatoreData.format(new Date(r.dataFine)) },
+                  { etichetta: 'Min', valore: r.minStay ?? '—' },
+                  { etichetta: 'Max', valore: r.maxStay ?? '—' },
+                  { etichetta: 'Motivo', valore: r.motivo ?? '—' },
+                ]}
+              />
+              {puoScrivere && (
+                <AzioniCardElenco>
+                  <IconButton size="small" onClick={() => elimina.mutate(r.id)} disabled={elimina.isPending}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </AzioniCardElenco>
+              )}
+            </CardElenco>
+          ))}
+        </Box>
+      ) : (
+        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+          <Table size="small">
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 2 }}>
-                  Nessuna regola per periodo.
-                </TableCell>
+                <TableCell>Dal</TableCell>
+                <TableCell>Al</TableCell>
+                <TableCell>Min</TableCell>
+                <TableCell>Max</TableCell>
+                <TableCell>Motivo</TableCell>
+                <TableCell align="right">Azioni</TableCell>
               </TableRow>
-            )}
-            {righe.map((r) => (
-              <TableRow key={r.id} hover>
-                <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(r.dataInizio))}</TableCell>
-                <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(r.dataFine))}</TableCell>
-                <TableCell>{r.minStay ?? '—'}</TableCell>
-                <TableCell>{r.maxStay ?? '—'}</TableCell>
-                <TableCell>{r.motivo ?? '—'}</TableCell>
-                <TableCell align="right">
-                  {puoScrivere && (
-                    <IconButton size="small" onClick={() => elimina.mutate(r.id)} disabled={elimina.isPending}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Box>
+            </TableHead>
+            <TableBody>
+              {righe.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 2 }}>
+                    Nessuna regola per periodo.
+                  </TableCell>
+                </TableRow>
+              )}
+              {righe.map((r) => (
+                <TableRow key={r.id} hover>
+                  <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(r.dataInizio))}</TableCell>
+                  <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(r.dataFine))}</TableCell>
+                  <TableCell>{r.minStay ?? '—'}</TableCell>
+                  <TableCell>{r.maxStay ?? '—'}</TableCell>
+                  <TableCell>{r.motivo ?? '—'}</TableCell>
+                  <TableCell align="right">
+                    {puoScrivere && (
+                      <IconButton size="small" onClick={() => elimina.mutate(r.id)} disabled={elimina.isPending}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
 
       {puoScrivere && (
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>

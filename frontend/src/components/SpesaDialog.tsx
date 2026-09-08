@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { useCreaSpesa, useAggiornaSpesa, type SpesaDto, type SpesaRequest } from '../api/spese'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function SpesaDialog({ strutturaId, spesa, onClose }: Props) {
+  const mobile = useMobile()
   const [tipoSpesa, setTipoSpesa] = useState(spesa?.tipoSpesa ?? '')
   const [nome, setNome] = useState(spesa?.nome ?? '')
   const [importoSpesa, setImportoSpesa] = useState(String(spesa?.importoSpesa ?? ''))
@@ -57,17 +59,17 @@ export function SpesaDialog({ strutturaId, spesa, onClose }: Props) {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>{spesa ? 'Modifica spesa' : 'Nuova spesa'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required fullWidth disabled={inCorso} autoFocus />
           <TextField label="Importo (€)" type="number" value={importoSpesa} onChange={(e) => setImportoSpesa(e.target.value)} required fullWidth disabled={inCorso} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Tipo spesa" value={tipoSpesa} onChange={(e) => setTipoSpesa(e.target.value)} fullWidth disabled={inCorso} />
           <TextField label="Metodo di pagamento" value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value)} fullWidth disabled={inCorso} />
           <CampoData label="Data" value={dataSpesa} onChange={setDataSpesa} fullWidth disabled={inCorso} />

@@ -11,6 +11,7 @@ import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { StatoCamera, useAggiornaCamera, useCreaCamera, type CameraDto, type CameraRequest } from '../api/camere'
 import type { TipologiaCameraDto } from '../api/tipologie'
+import { useMobile } from '../lib/useMobile'
 
 const ETICHETTA_STATO: Record<StatoCamera, string> = {
   [StatoCamera.Pronta]: 'Pronta',
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export function CameraDialog({ strutturaId, camera, tipologie, tipologiaDiDefault, onClose }: Props) {
+  const mobile = useMobile()
   const [nome, setNome] = useState(camera?.nome ?? '')
   const [tipologiaId, setTipologiaId] = useState(camera?.tipologiaId ?? tipologiaDiDefault ?? '')
   const [stateRoom, setStateRoom] = useState<StatoCamera>(camera?.stateRoom ?? StatoCamera.Pronta)
@@ -69,7 +71,7 @@ export function CameraDialog({ strutturaId, camera, tipologie, tipologiaDiDefaul
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>{camera ? 'Modifica camera' : 'Nuova camera'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
@@ -93,7 +95,7 @@ export function CameraDialog({ strutturaId, camera, tipologie, tipologiaDiDefaul
           ))}
         </TextField>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField
             label="Capacità ospiti"
             type="number"

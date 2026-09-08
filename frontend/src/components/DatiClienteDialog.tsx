@@ -16,6 +16,7 @@ import { Sesso } from '../api/ospiti'
 import type { ComuneDto } from '../api/riferimenti'
 import { calcolaCodiceFiscale } from '../lib/codiceFiscale'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 import { SelectComune } from './SelectComune'
 import { fontDisplay, tokens } from '../theme'
@@ -47,6 +48,7 @@ function TitoloSezione({ children, nota }: { children: string; nota?: string }) 
 }
 
 export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, onClose }: Props) {
+  const mobile = useMobile()
   // Solo un cliente realmente salvato può essere aggiornato (PUT): una proposta non ancora
   // persistita va sempre creata da zero (POST), qui, quando l'operatore preme "Crea cliente" — mai
   // prima, altrimenti resterebbe un Cliente orfano ogni volta che si apre "Genera fattura" e si
@@ -151,7 +153,7 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth fullScreen={mobile}>
       <DialogTitle>{clienteEsistente ? 'Modifica cliente' : 'Nuovo cliente'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
@@ -159,11 +161,11 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TitoloSezione>Anagrafica</TitoloSezione>
           <TextField label="Denominazione (se azienda)" value={denominazione} onChange={(e) => setDenominazione(e.target.value)} disabled={inCorso} autoFocus />
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
             <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={inCorso} />
             <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={inCorso} />
           </Box>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
             <TextField label="Partita IVA" value={pIva} onChange={(e) => setPIva(e.target.value)} fullWidth disabled={inCorso} />
             <TextField label="Codice fiscale" value={codiceFiscale} onChange={(e) => setCodiceFiscale(e.target.value)} fullWidth disabled={inCorso} />
           </Box>
@@ -173,7 +175,7 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TitoloSezione nota="per il calcolo automatico del Codice Fiscale, se il cliente è italiano">Dati di nascita</TitoloSezione>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
             <CampoData label="Data di nascita" value={dataNascita} onChange={setDataNascita} fullWidth disabled={inCorso} />
             <TextField select label="Sesso" value={sesso} onChange={(e) => setSesso(e.target.value)} sx={{ minWidth: 150 }} disabled={inCorso}>
               <MenuItem value="">—</MenuItem>
@@ -194,12 +196,12 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TitoloSezione>Residenza</TitoloSezione>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
             <TextField label="Indirizzo" value={indirizzo} onChange={(e) => setIndirizzo(e.target.value)} fullWidth disabled={inCorso} />
             <TextField label="N. civico" value={nCivico} onChange={(e) => setNCivico(e.target.value)} sx={{ width: 110 }} disabled={inCorso} />
             <TextField label="CAP" value={cap} onChange={(e) => setCap(e.target.value)} sx={{ width: 110 }} disabled={inCorso} />
           </Box>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
             <SelectComune label="Comune di residenza" value={luogoResidenza} onChange={setLuogoResidenza} onComuneSelezionato={onComuneResidenzaSelezionato} disabled={inCorso} />
             <TextField label="Provincia" value={provincia} onChange={(e) => setProvincia(e.target.value)} sx={{ width: 110 }} disabled={inCorso} />
             <TextField label="Cittadinanza" value={cittadinanza} onChange={(e) => setCittadinanza(e.target.value)} fullWidth disabled={inCorso} />
@@ -210,7 +212,7 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TitoloSezione>Fatturazione elettronica</TitoloSezione>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
             <TextField label="Nazione (ISO2)" value={iso2} onChange={(e) => setIso2(e.target.value)} sx={{ width: 170 }} disabled={inCorso} />
             <TextField label="Codice destinatario SDI" value={codiceDestinatario} onChange={(e) => setCodiceDestinatario(e.target.value)} fullWidth disabled={inCorso} />
             <TextField label="PEC" value={pec} onChange={(e) => setPec(e.target.value)} fullWidth disabled={inCorso} />

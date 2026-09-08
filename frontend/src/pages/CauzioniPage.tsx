@@ -11,9 +11,12 @@ import { useStruttura } from '../struttura/StrutturaContext'
 import { useAnniDisponibiliFinanze, useCauzioni } from '../api/finanze'
 import { fontMono, tokens } from '../theme'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
+import { useMobile } from '../lib/useMobile'
 import { BarraTotale, Cornice, formattatoreData, formattatoreValuta, IntestazioneFinanze, RigaVuota } from '../components/finanze/FinanzeComuni'
+import { CardElenco, MessaggioVuotoElenco, RigaCardMeta } from '../components/CardElenco'
 
 export function CauzioniPage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const anniDisponibili = useAnniDisponibiliFinanze(strutturaId)
@@ -32,7 +35,30 @@ export function CauzioniPage() {
 
       {cauzioni.isLoading && <Skeleton variant="rounded" height={180} />}
 
-      {!cauzioni.isLoading && (
+      {!cauzioni.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {dati.length === 0 && <MessaggioVuotoElenco messaggio="Nessuna cauzione trattenuta per l'anno selezionato." />}
+          {dati.map((c) => (
+            <CardElenco key={c.id}>
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Data', valore: c.dataInserimento ? formattatoreData.format(new Date(c.dataInserimento)) : '—' },
+                  {
+                    etichetta: 'Importo trattenuto',
+                    valore: (
+                      <Box component="span" sx={{ color: tokens.error600 }}>
+                        {c.importoCauzione != null ? formattatoreValuta.format(c.importoCauzione) : '—'}
+                      </Box>
+                    ),
+                  },
+                ]}
+              />
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!cauzioni.isLoading && !mobile && (
         <Cornice>
           <Table size="small">
             <TableHead>

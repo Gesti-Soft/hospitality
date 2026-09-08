@@ -31,6 +31,7 @@ import {
 } from '../api/ospiti'
 import { useDocumenti, useStati, useTipiAlloggiato } from '../api/riferimenti'
 import { differenzaGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 import { SelectComune } from './SelectComune'
 import { fontDisplay, tokens } from '../theme'
@@ -47,11 +48,12 @@ interface Props {
 }
 
 export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenotazione, onGeneraFattura }: Props) {
+  const mobile = useMobile()
   const ospite = useOspite(strutturaId, prenotazione.id)
   const fattura = useFatturaPerPrenotazione(strutturaId, prenotazione.id)
 
   return (
-    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth fullScreen={mobile}>
       <DialogTitle>
         Scheda ospiti — {prenotazione.numeroPrenotazione ? `#${prenotazione.numeroPrenotazione}` : prenotazione.cameraNome}
       </DialogTitle>
@@ -147,6 +149,7 @@ function SchedaOspitiForm({
   onGeneraFattura?: () => void
   fatturaGenerata: DatiFatturaDto | null
 }) {
+  const mobile = useMobile()
   const puoScrivere = usePuoScrivere('reservationWrite')
   const puoFatturare = usePuoScrivere('financeWrite')
   const stati = useStati()
@@ -226,7 +229,7 @@ function SchedaOspitiForm({
         luogoNascita: '',
         statoNascita: '',
         luogoResidenza: '',
-        postoLetto: false,
+        postoLetto: true,
         esenteDaTassa: false,
       },
     ])
@@ -279,12 +282,12 @@ function SchedaOspitiForm({
 
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 13.5 }}>Capofamiglia</Typography>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth required disabled={salva.isPending} />
           <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth required disabled={salva.isPending} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <CampoData label="Data di nascita" value={dataNascita} onChange={setDataNascita} fullWidth disabled={salva.isPending} />
           <TextField select label="Sesso" value={sesso} onChange={(e) => setSesso(e.target.value)} fullWidth disabled={salva.isPending}>
             <MenuItem value="">—</MenuItem>
@@ -301,24 +304,24 @@ function SchedaOspitiForm({
           />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <SelectRiferimento label="Cittadinanza" value={cittadinanza} onChange={setCittadinanza} opzioni={opzioniStati} loading={stati.isLoading} disabled={salva.isPending} />
           <SelectRiferimento label="Stato di nascita" value={statoNascita} onChange={setStatoNascita} opzioni={opzioniStati} loading={stati.isLoading} disabled={salva.isPending} />
           <SelectComune label="Comune di nascita" value={luogoNascita} onChange={setLuogoNascita} disabled={salva.isPending} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <SelectComune label="Comune di residenza" value={luogoResidenza} onChange={setLuogoResidenza} disabled={salva.isPending} />
           <TextField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth disabled={salva.isPending} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <SelectRiferimento label="Tipo documento" value={documento} onChange={setDocumento} opzioni={opzioniDocumenti} loading={documenti.isLoading} disabled={salva.isPending} />
           <TextField label="Numero documento" value={numeroDocumento} onChange={(e) => setNumeroDocumento(e.target.value)} fullWidth disabled={salva.isPending} />
           <SelectComune label="Rilasciato da" value={rilascioDocumento} onChange={setRilascioDocumento} disabled={salva.isPending} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2, alignItems: mobile ? 'stretch' : 'center' }}>
           <SelectRiferimento
             label="Tipo ospite (classificazione schedina)"
             value={tipoOspite}
@@ -349,7 +352,7 @@ function SchedaOspitiForm({
 
             {membri.map((m, indice) => (
               <Box key={m._key} sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 1.5, p: 1.75, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-                <Box sx={{ display: 'flex', gap: 2 }}>
+                <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
                   <TextField label="Cognome" value={m.cognome ?? ''} onChange={(e) => aggiornaMembro(indice, { cognome: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
                   <TextField label="Nome" value={m.nome ?? ''} onChange={(e) => aggiornaMembro(indice, { nome: e.target.value })} fullWidth size="small" disabled={salva.isPending} />
                   <CampoData
@@ -379,7 +382,7 @@ function SchedaOspitiForm({
                     </IconButton>
                   )}
                 </Box>
-                <Box sx={{ display: 'flex', gap: 2 }}>
+                <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
                   <SelectRiferimento
                     label="Cittadinanza"
                     value={m.cittadinanza ?? ''}
@@ -401,7 +404,7 @@ function SchedaOspitiForm({
                   <SelectComune label="Comune di nascita" value={m.luogoNascita ?? ''} onChange={(v) => aggiornaMembro(indice, { luogoNascita: v })} disabled={salva.isPending} size="small" />
                   <SelectComune label="Comune di residenza" value={m.luogoResidenza ?? ''} onChange={(v) => aggiornaMembro(indice, { luogoResidenza: v })} disabled={salva.isPending} size="small" />
                 </Box>
-                <Box sx={{ display: 'flex', gap: 3 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
                   <FormControlLabel
                     control={<Checkbox size="small" checked={m.postoLetto ?? false} onChange={(e) => aggiornaMembro(indice, { postoLetto: e.target.checked })} disabled={salva.isPending} />}
                     label="Occupa un posto letto"
@@ -416,8 +419,8 @@ function SchedaOspitiForm({
           </>
         )}
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Box sx={{ display: 'flex', gap: 1, mr: 'auto' }}>
+      <DialogActions sx={{ px: 3, pb: 2.5, flexWrap: 'wrap', gap: 1 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mr: 'auto' }}>
           {onApriPrenotazione && (
             <Button onClick={onApriPrenotazione} disabled={salva.isPending}>
               Apri prenotazione

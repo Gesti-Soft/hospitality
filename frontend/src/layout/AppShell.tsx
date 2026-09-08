@@ -15,12 +15,12 @@ import Skeleton from '@mui/material/Skeleton'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import useMediaQuery from '@mui/material/useMediaQuery'
 import AddIcon from '@mui/icons-material/AddOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import MenuIcon from '@mui/icons-material/MenuOutlined'
 import { useAuth } from '../auth/AuthContext'
+import { useMobile } from '../lib/useMobile'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useAggiornaStruttura, useCreaStruttura, useImpostaAttivoStruttura, type StrutturaDto } from '../api/strutture'
 import { GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA } from '../api/superAdmin'
@@ -67,9 +67,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Sotto i 900px la sidebar fissa e le tab in barra non ci stanno: diventano un menu a comparsa
   // aperto dall'icona hamburger, che raccoglie anche Cliente/tab (in barra solo su desktop).
-  const mobile = useMediaQuery('(max-width:899.95px)')
+  const mobile = useMobile()
   const [menuAperto, setMenuAperto] = useState(false)
   useEffect(() => setMenuAperto(false), [location.pathname])
+
+  // Su mobile, toccare una sezione nel menu a comparsa non deve navigare né chiudere il menu — deve
+  // solo cambiare quale elenco di voci è mostrato sotto, per poi scegliere la pagina vera e propria
+  // (che naviga e chiude il menu). `sezioneMobileSelezionata` è quindi indipendente dalla pagina
+  // corrente finché non avviene una navigazione reale: da quel momento si azzera, così la prossima
+  // apertura del menu riparte allineata alla sezione della pagina appena raggiunta.
+  const [sezioneMobileSelezionata, setSezioneMobileSelezionata] = useState<string | null>(null)
+  useEffect(() => setSezioneMobileSelezionata(null), [location.pathname])
+  const sezioneDaMostrare = mobile ? (sezioniVisibili.find((s) => s.section.title === sezioneMobileSelezionata) ?? sezioneAttiva) : sezioneAttiva
 
   const selettoreCliente = isSuperAdmin && (
     <SelettoreCercabile
@@ -84,14 +93,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   )
 
   const tabSezioni = (
-    <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', alignItems: mobile ? 'stretch' : 'center', gap: 0.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'row', flexWrap: mobile ? 'wrap' : 'nowrap', alignItems: 'center', gap: mobile ? 1 : 0.5 }}>
       {sezioniVisibili.map(({ section, voci }) => (
         <TabSezione
           key={section.title}
           sezione={section}
-          attiva={section.title === sezioneAttiva?.section.title}
-          onClick={() => navigate(voci[0].path)}
-          larghezzaPiena={mobile}
+          attiva={section.title === sezioneDaMostrare?.section.title}
+          onClick={() => (mobile ? setSezioneMobileSelezionata(section.title) : navigate(voci[0].path))}
+          soloIcona={mobile}
         />
       ))}
     </Box>
@@ -145,7 +154,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {sezioneAttiva?.voci.map((item) => {
+        {sezioneDaMostrare?.voci.map((item) => {
           const attivo = item.path === location.pathname
           const Icon = item.icon
           return (
@@ -485,41 +494,43 @@ function TabSezione({
   sezione,
   attiva,
   onClick,
-  larghezzaPiena,
+  soloIcona,
 }: {
   sezione: NavSection
   attiva: boolean
   onClick: () => void
-  /** A tutta larghezza e allineata a sinistra, per l'elenco verticale nel menu a comparsa mobile. */
-  larghezzaPiena?: boolean
+  /** Solo icona, senza titolo — per la barra sezioni del menu a comparsa mobile (il titolo resta come tooltip/aria-label). */
+  soloIcona?: boolean
 }) {
   const Icon = sezione.icon
   return (
-    <Box
-      component="button"
-      onClick={onClick}
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: larghezzaPiena ? 'flex-start' : 'center',
-        width: larghezzaPiena ? '100%' : undefined,
-        gap: '8px',
-        px: '14px',
-        py: '7px',
-        border: 'none',
-        borderRadius: '9px',
-        fontFamily: fontDisplay,
-        fontSize: 13,
-        fontWeight: 700,
-        cursor: 'pointer',
-        color: attiva ? '#fff' : tokens.navText,
-        bgcolor: attiva ? tokens.blue600 : 'transparent',
-        '&:hover': { bgcolor: attiva ? tokens.blue600 : 'rgba(255,255,255,0.06)' },
-      }}
-    >
-      <Icon width={16} height={16} style={{ opacity: attiva ? 1 : 0.85, flex: '0 0 auto' }} />
-      {sezione.title}
-    </Box>
+    <Tooltip title={soloIcona ? sezione.title : ''}>
+      <Box
+        component="button"
+        onClick={onClick}
+        aria-label={sezione.title}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          px: soloIcona ? '12px' : '14px',
+          py: soloIcona ? '10px' : '7px',
+          border: 'none',
+          borderRadius: '9px',
+          fontFamily: fontDisplay,
+          fontSize: 13,
+          fontWeight: 700,
+          cursor: 'pointer',
+          color: attiva ? '#fff' : tokens.navText,
+          bgcolor: attiva ? tokens.blue600 : 'transparent',
+          '&:hover': { bgcolor: attiva ? tokens.blue600 : 'rgba(255,255,255,0.06)' },
+        }}
+      >
+        <Icon width={soloIcona ? 20 : 16} height={soloIcona ? 20 : 16} style={{ opacity: attiva ? 1 : 0.85, flex: '0 0 auto' }} />
+        {!soloIcona && sezione.title}
+      </Box>
+    </Tooltip>
   )
 }
 

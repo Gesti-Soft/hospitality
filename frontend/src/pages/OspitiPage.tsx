@@ -21,7 +21,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import SearchIcon from '@mui/icons-material/Search'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useArriviInCorso, useArriviProssimi, useStoricoPrenotazioni, StatoPrenotazione, type PrenotazioneDto } from '../api/prenotazioni'
-import { useOspite } from '../api/ospiti'
+import { schedaOspitiCompleta, useOspite } from '../api/ospiti'
 import { useCamere } from '../api/camere'
 import { useCanaliVendita } from '../api/canaliVendita'
 import { useTipologie } from '../api/tipologie'
@@ -30,6 +30,8 @@ import { OspiteDialog } from '../components/OspiteDialog'
 import { PrenotazioneDialog, type StatoIniziale, ETICHETTA_STATO, COLORE_STATO } from '../components/PrenotazioneDialog'
 import { FatturaDialog } from '../components/FatturaDialog'
 import { inizioGiornoLocale } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
+import { CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../components/CardElenco'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -56,6 +58,7 @@ function puoGenerareFattura(vista: VistaOspiti, p: PrenotazioneDto): boolean {
 }
 
 export function OspitiPage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const [vista, setVista] = useState<VistaOspiti>('arrivi')
   const [formato, setFormato] = useState<FormatoOspiti>(leggiFormatoPreferito)
@@ -117,7 +120,13 @@ export function OspitiPage() {
   const datiVisibili = datiFiltrati.slice(0, righeVisibili)
   const altreDaCaricare = righeVisibili < datiFiltrati.length
 
-  const sentinellaRef = useRef<HTMLTableRowElement | null>(null)
+  // Un solo ref condiviso dalla riga sentinella della tabella desktop e dalla card sentinella
+  // mobile: solo una delle due è montata alla volta (a seconda di `mobile`), la callback accetta
+  // l'elemento concreto qualunque esso sia — l'IntersectionObserver ha bisogno solo di un Element.
+  const sentinellaRef = useRef<HTMLElement | null>(null)
+  const impostaSentinella = (el: HTMLElement | null) => {
+    sentinellaRef.current = el
+  }
   useEffect(() => {
     if (!altreDaCaricare) return
     const el = sentinellaRef.current
@@ -133,7 +142,7 @@ export function OspitiPage() {
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [altreDaCaricare])
+  }, [altreDaCaricare, mobile])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -147,6 +156,9 @@ export function OspitiPage() {
             setRicerca('')
             setFiltroStato(StatoPrenotazione.Completata)
           }}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           sx={{ minHeight: 0 }}
         >
           <Tab label="Arrivi" value="arrivi" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
@@ -172,7 +184,7 @@ export function OspitiPage() {
         )}
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.5, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: mobile ? 'flex-start' : 'flex-end', gap: 1.5, flexWrap: 'wrap' }}>
         <TextField
           size="small"
           placeholder="Cerca per ospite, camera, numero prenotazione o agenzia..."
@@ -217,7 +229,46 @@ export function OspitiPage() {
         />
       )}
 
-      {!caricamento && (formato === 'lista' || giornoSelezionato) && (
+      {!caricamento && (formato === 'lista' || giornoSelezionato) && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {formato === 'calendario' && giornoSelezionato && (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography sx={{ fontSize: 12.5, fontWeight: 700 }}>{formattatoreData.format(giornoSelezionato)}</Typography>
+              <Typography sx={{ fontSize: 12, color: tokens.blue600, cursor: 'pointer', fontWeight: 600 }} onClick={() => setGiornoSelezionato(null)}>
+                Mostra tutti
+              </Typography>
+            </Box>
+          )}
+
+          {datiFiltrati.length === 0 && <MessaggioVuotoElenco messaggio="Nessuna prenotazione in questa vista." />}
+          {datiVisibili.map((p) => (
+            <CardElenco key={p.id} onClick={() => setPrenotazioneAperta(p)} coloreAccento={p.statoPrenotazione != null ? COLORE_STATO[p.statoPrenotazione] : undefined}>
+              <TestataCardElenco
+                titolo={p.numeroPrenotazione ? `#${p.numeroPrenotazione}` : p.cameraNome ?? '—'}
+                sottotitolo={p.ospiteNome || p.ospiteCognome ? `${p.ospiteNome ?? ''} ${p.ospiteCognome ?? ''}`.trim() : 'Ospite non ancora indicato'}
+                azioneDestra={
+                  p.statoPrenotazione != null && (
+                    <Chip size="small" label={ETICHETTA_STATO[p.statoPrenotazione]} sx={{ bgcolor: COLORE_STATO[p.statoPrenotazione], color: '#fff', fontWeight: 700 }} />
+                  )
+                }
+              />
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Camera', valore: p.cameraNome ?? '—' },
+                  { etichetta: 'Check-in', valore: p.checkIn ? formattatoreData.format(new Date(p.checkIn)) : '—' },
+                  { etichetta: 'Check-out', valore: p.checkOut ? formattatoreData.format(new Date(p.checkOut)) : '—' },
+                  { etichetta: 'Ospiti', valore: p.numeroOspiti ?? '—' },
+                  { etichetta: 'Tassa soggiorno', valore: p.totalTax != null ? formattatoreValuta.format(p.totalTax) : '—' },
+                  { etichetta: 'Scheda alloggiati', valore: <StatoSchedaChip strutturaId={strutturaId} prenotazioneId={p.id} /> },
+                ]}
+              />
+            </CardElenco>
+          ))}
+          {altreDaCaricare && <SentinellaCaricamentoElenco ref={impostaSentinella} />}
+        </Box>
+      )}
+
+      {!caricamento && (formato === 'lista' || giornoSelezionato) && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
           {formato === 'calendario' && giornoSelezionato && (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: '10px 14px', borderBottom: `1px solid ${tokens.surfaceBorder}`, bgcolor: tokens.paper }}>
@@ -277,7 +328,7 @@ export function OspitiPage() {
                 </TableRow>
               ))}
               {altreDaCaricare && (
-                <TableRow ref={sentinellaRef}>
+                <TableRow ref={impostaSentinella}>
                   <TableCell colSpan={9} sx={{ textAlign: 'center', color: tokens.textTertiary, py: 2, fontSize: 12 }}>
                     Caricamento altre prenotazioni...
                   </TableCell>
@@ -452,7 +503,10 @@ function VistaMeseConteggio({
 
 // La scheda ospiti è un'entità separata dalla Prenotazione (vedi api/ospiti.ts): `numeroOspiti`
 // sulla prenotazione può essere impostato direttamente alla creazione, senza che esista ancora
-// una scheda — va verificato per-riga con una vera GET, non dedotto da quel campo.
+// una scheda — va verificato per-riga con una vera GET, non dedotto da quel campo. L'esistenza del
+// record da sola non basta per dire "Compilata": Wubook lo crea già in autocompilazione ad ogni
+// sincronizzazione (solo nome/cognome/email/cittadinanza, mai data di nascita/sesso/documento) — vedi
+// schedaOspitiCompleta.
 function StatoSchedaChip({ strutturaId, prenotazioneId }: { strutturaId: string | null; prenotazioneId: string }) {
   const ospite = useOspite(strutturaId, prenotazioneId)
 
@@ -460,7 +514,7 @@ function StatoSchedaChip({ strutturaId, prenotazioneId }: { strutturaId: string 
     return <Chip size="small" label="…" sx={{ bgcolor: tokens.surfaceBorder, color: tokens.textSecondary, fontWeight: 700 }} />
   }
 
-  return ospite.data ? (
+  return ospite.data && schedaOspitiCompleta(ospite.data) ? (
     <Chip size="small" label="Compilata" sx={{ bgcolor: tokens.ok600, color: '#fff', fontWeight: 700 }} />
   ) : (
     <Chip size="small" label="Da compilare" sx={{ bgcolor: tokens.wait600, color: '#fff', fontWeight: 700 }} />

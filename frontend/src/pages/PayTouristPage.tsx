@@ -25,11 +25,14 @@ import {
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
+import { useMobile } from '../lib/useMobile'
+import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export function PayTouristPage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const puoInviare = usePuoScrivere('statePoliceWrite')
   const strutture = usePayTouristStrutture(strutturaId)
@@ -161,7 +164,43 @@ export function PayTouristPage() {
             </TextField>
           </Box>
           {prenotazioni.isLoading && <Skeleton variant="rounded" height={220} />}
-          {!prenotazioni.isLoading && (
+
+          {!prenotazioni.isLoading && mobile && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {(prenotazioni.data ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessuna prenotazione per l'anno selezionato." />}
+              {(prenotazioni.data ?? []).map((p) => (
+                <CardElenco key={p.ospiteId}>
+                  <TestataCardElenco
+                    titolo={p.nomeOspite}
+                    azioneDestra={
+                      <Chip size="small" label={p.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: p.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                    }
+                  />
+                  <RigaCardMeta
+                    voci={[
+                      { etichetta: 'Camera', valore: p.camera ?? '—' },
+                      { etichetta: 'Check-in', valore: p.checkIn ? formattatoreData.format(new Date(p.checkIn)) : '—' },
+                      { etichetta: 'Check-out', valore: p.checkOut ? formattatoreData.format(new Date(p.checkOut)) : '—' },
+                    ]}
+                  />
+                  {!p.inviata && puoInviare && (
+                    <AzioniCardElenco>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => eseguiInviaSingola(p.ospiteId)}
+                        disabled={invioSingoloInCorso === p.ospiteId}
+                      >
+                        {invioSingoloInCorso === p.ospiteId ? 'Invio…' : 'Invia'}
+                      </Button>
+                    </AzioniCardElenco>
+                  )}
+                </CardElenco>
+              ))}
+            </Box>
+          )}
+
+          {!prenotazioni.isLoading && !mobile && (
             <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
               <Table size="small">
                 <TableHead>

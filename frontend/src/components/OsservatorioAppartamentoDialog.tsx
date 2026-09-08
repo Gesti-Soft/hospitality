@@ -13,6 +13,7 @@ import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { useCreaOsservatorioAppartamento, useAggiornaOsservatorioAppartamento, type OsservatorioAppartamentoDto, type OsservatorioAppartamentoRequest } from '../api/integrazioni'
 import type { TipologiaCameraDto } from '../api/tipologie'
+import { useMobile } from '../lib/useMobile'
 
 interface Props {
   strutturaId: string
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipologie, onClose }: Props) {
+  const mobile = useMobile()
   const [nome, setNome] = useState(appartamento?.nome ?? '')
   const [entityCode, setEntityCode] = useState(appartamento?.entityCode ?? '')
   const [password, setPassword] = useState('')
@@ -62,7 +64,7 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>{appartamento ? 'Modifica appartamento' : 'Nuovo appartamento'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
@@ -76,7 +78,7 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
 
         <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso || salvato} autoFocus />
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Entity code" value={entityCode} onChange={(e) => setEntityCode(e.target.value)} fullWidth disabled={inCorso || salvato} />
           <TextField label="Hotel code" value={hotelCode} onChange={(e) => setHotelCode(e.target.value)} fullWidth disabled={inCorso || salvato} />
         </Box>

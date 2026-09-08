@@ -1,6 +1,5 @@
 import { forwardRef } from 'react'
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 import InputAdornment from '@mui/material/InputAdornment'
 import MenuItem from '@mui/material/MenuItem'
 import TableCell from '@mui/material/TableCell'
@@ -10,6 +9,7 @@ import Typography from '@mui/material/Typography'
 import SearchIcon from '@mui/icons-material/Search'
 import { fontDisplay, fontMono, tokens } from '../../theme'
 import { CampoData } from '../CampoData'
+import { BottoneNuovo } from '../CardElenco'
 import { inizioGiornoLocale, parsaInputData } from '../../lib/date'
 
 export { ANNO_CORRENTE } from '../../lib/anni'
@@ -53,11 +53,7 @@ export function IntestazioneFinanze({
 }
 
 export function AzioneNuovo({ etichetta, onClick, disabilitato }: { etichetta: string; onClick: () => void; disabilitato?: boolean }) {
-  return (
-    <Button variant="contained" color="primary" size="small" onClick={onClick} disabled={disabilitato}>
-      {etichetta}
-    </Button>
-  )
+  return <BottoneNuovo etichetta={etichetta} onClick={onClick} disabilitato={disabilitato} />
 }
 
 export function Cornice({ children }: { children: React.ReactNode }) {

@@ -26,11 +26,14 @@ import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
+import { useMobile } from '../lib/useMobile'
+import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export function PoliziaPage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const puoInviare = usePuoScrivere('statePoliceWrite')
   const [anno, setAnno] = useState(ANNO_CORRENTE)
@@ -128,7 +131,38 @@ export function PoliziaPage() {
           </TextField>
         </Box>
         {schedine.isLoading && <Skeleton variant="rounded" height={220} />}
-        {!schedine.isLoading && (
+
+        {!schedine.isLoading && mobile && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {(schedine.data ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessuna schedina per l'anno selezionato." />}
+            {(schedine.data ?? []).map((s) => (
+              <CardElenco key={s.ospiteId}>
+                <TestataCardElenco
+                  titolo={s.nomeOspite}
+                  azioneDestra={
+                    <Chip size="small" label={s.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: s.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                  }
+                />
+                <RigaCardMeta
+                  voci={[
+                    { etichetta: 'Camera', valore: s.camera ?? '—' },
+                    { etichetta: 'Check-in', valore: s.checkIn ? formattatoreData.format(new Date(s.checkIn)) : '—' },
+                    { etichetta: 'Check-out', valore: s.checkOut ? formattatoreData.format(new Date(s.checkOut)) : '—' },
+                  ]}
+                />
+                {!s.inviata && (
+                  <AzioniCardElenco>
+                    <Button size="small" variant="outlined" onClick={() => esportaSingola(s.ospiteId)}>
+                      Scarica
+                    </Button>
+                  </AzioniCardElenco>
+                )}
+              </CardElenco>
+            ))}
+          </Box>
+        )}
+
+        {!schedine.isLoading && !mobile && (
           <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
             <Table size="small">
               <TableHead>

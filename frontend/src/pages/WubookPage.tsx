@@ -49,9 +49,11 @@ import {
   type WubookIntegrazioneDto,
 } from '../api/integrazioni'
 import { aggiungiGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
+import { useMobile } from '../lib/useMobile'
 import { CampoData } from '../components/CampoData'
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 import { ChiusureRestrizioniDialog } from '../components/ChiusureRestrizioniDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ImpostazioniWubookCameraDialog } from '../components/ImpostazioniWubookCameraDialog'
@@ -76,7 +78,7 @@ export function WubookPage() {
 
       {!config.isLoading && config.data?.credenzialiPronte && <SincronizzazioneForm strutturaId={strutturaId!} />}
 
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 0 }}>
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ minHeight: 0 }}>
         <Tab label="Camere" value="camere" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
         <Tab label="Piani prezzo" value="piani-prezzo" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
         <Tab label="Piani restrizione" value="piani-restrizione" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
@@ -111,6 +113,7 @@ function StatoWubook({ dati }: { dati: WubookIntegrazioneDto }) {
 }
 
 function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
+  const mobile = useMobile()
   const puoScrivereCamere = usePuoScrivere('settingRoomWrite')
   const puoScrivereRenotazioni = usePuoScrivere('reservationWrite')
   const oggi = new Date()
@@ -157,7 +160,7 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
 
       {messaggio && <Alert severity="success" onClose={() => setMessaggio(null)}>{messaggio}</Alert>}
 
-      <Box sx={{ display: 'flex', gap: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
         <CampoData label="Dal" value={dataInizio} onChange={setDataInizio} fullWidth disabled={inCorso} />
         <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} fullWidth disabled={inCorso} />
       </Box>
@@ -192,6 +195,7 @@ function TabellaCamere({
   camere: CameraWubookInfoDto[]
   tipologie: { id: string; tipologiaCamera: string }[]
 }) {
+  const mobile = useMobile()
   const puoScrivere = usePuoScrivere('settingRoomWrite')
   const [tipologiaFiltro, setTipologiaFiltro] = useState('')
   const [dialogoChiusure, setDialogoChiusure] = useState<{ cameraId: string; cameraNome: string } | null>(null)
@@ -225,52 +229,48 @@ function TabellaCamere({
         ))}
       </TextField>
 
-      <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Camera</TableCell>
-              <TableCell>Tipologia</TableCell>
-              <TableCell>Disponibilità oggi</TableCell>
-              <TableCell>Associazione Wubook</TableCell>
-              <TableCell align="right">Azioni</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {camereFiltrate.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                  {tipologiaFiltro === '' ? 'Nessuna camera configurata.' : 'Nessuna camera per questa tipologia.'}
-                </TableCell>
-              </TableRow>
-            )}
-            {camereFiltrate.map((c) => (
-              <TableRow key={c.cameraId} hover>
-                <TableCell sx={{ fontWeight: 700 }}>{c.cameraNome}</TableCell>
-                <TableCell>{c.tipologiaNome ?? '—'}</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                    <Chip
-                      size="small"
-                      label={c.chiusaOggi ? 'Chiusa' : 'Disponibile'}
-                      sx={{ bgcolor: c.chiusaOggi ? tokens.error600 : tokens.ok600, color: '#fff', fontWeight: 700 }}
-                    />
-                    {c.chiusureCount > 0 && (
-                      <Chip size="small" label={`Chiusure: ${c.chiusureCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
-                    )}
-                    {c.restrizioniCount > 0 && (
-                      <Chip size="small" label={`Restrizioni: ${c.restrizioniCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
-                    )}
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  {c.wubookAttiva && c.idCameraWubook != null ? (
+      {mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {camereFiltrate.length === 0 && (
+            <MessaggioVuotoElenco messaggio={tipologiaFiltro === '' ? 'Nessuna camera configurata.' : 'Nessuna camera per questa tipologia.'} />
+          )}
+          {camereFiltrate.map((c) => (
+            <CardElenco key={c.cameraId} coloreAccento={c.chiusaOggi ? tokens.error600 : tokens.ok600}>
+              <TestataCardElenco
+                titolo={c.cameraNome}
+                sottotitolo={c.tipologiaNome ?? undefined}
+                azioneDestra={
+                  c.wubookAttiva && c.idCameraWubook != null ? (
                     <Chip size="small" label={`Associata (id ${c.idCameraWubook})`} sx={{ bgcolor: tokens.ok600, color: '#fff', fontWeight: 700 }} />
                   ) : (
                     <Chip size="small" label="Non associata" sx={{ bgcolor: tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
-                  )}
-                </TableCell>
-                <TableCell align="right">
+                  )
+                }
+              />
+              <RigaCardMeta
+                voci={[
+                  {
+                    etichetta: 'Disponibilità oggi',
+                    valore: (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        <Chip
+                          size="small"
+                          label={c.chiusaOggi ? 'Chiusa' : 'Disponibile'}
+                          sx={{ bgcolor: c.chiusaOggi ? tokens.error600 : tokens.ok600, color: '#fff', fontWeight: 700 }}
+                        />
+                        {c.chiusureCount > 0 && (
+                          <Chip size="small" label={`Chiusure: ${c.chiusureCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
+                        )}
+                        {c.restrizioniCount > 0 && (
+                          <Chip size="small" label={`Restrizioni: ${c.restrizioniCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
+                        )}
+                      </Box>
+                    ),
+                  },
+                ]}
+              />
+              {(c.wubookAttiva || puoScrivere) && (
+                <AzioniCardElenco>
                   {!c.wubookAttiva && puoScrivere && (
                     <>
                       <Tooltip title="Associa a una camera già esistente su Wubook">
@@ -308,12 +308,104 @@ function TabellaCamere({
                       )}
                     </>
                   )}
-                </TableCell>
+                </AzioniCardElenco>
+              )}
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!mobile && (
+        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Camera</TableCell>
+                <TableCell>Tipologia</TableCell>
+                <TableCell>Disponibilità oggi</TableCell>
+                <TableCell>Associazione Wubook</TableCell>
+                <TableCell align="right">Azioni</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Box>
+            </TableHead>
+            <TableBody>
+              {camereFiltrate.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                    {tipologiaFiltro === '' ? 'Nessuna camera configurata.' : 'Nessuna camera per questa tipologia.'}
+                  </TableCell>
+                </TableRow>
+              )}
+              {camereFiltrate.map((c) => (
+                <TableRow key={c.cameraId} hover>
+                  <TableCell sx={{ fontWeight: 700 }}>{c.cameraNome}</TableCell>
+                  <TableCell>{c.tipologiaNome ?? '—'}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                      <Chip
+                        size="small"
+                        label={c.chiusaOggi ? 'Chiusa' : 'Disponibile'}
+                        sx={{ bgcolor: c.chiusaOggi ? tokens.error600 : tokens.ok600, color: '#fff', fontWeight: 700 }}
+                      />
+                      {c.chiusureCount > 0 && (
+                        <Chip size="small" label={`Chiusure: ${c.chiusureCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
+                      )}
+                      {c.restrizioniCount > 0 && (
+                        <Chip size="small" label={`Restrizioni: ${c.restrizioniCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
+                      )}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    {c.wubookAttiva && c.idCameraWubook != null ? (
+                      <Chip size="small" label={`Associata (id ${c.idCameraWubook})`} sx={{ bgcolor: tokens.ok600, color: '#fff', fontWeight: 700 }} />
+                    ) : (
+                      <Chip size="small" label="Non associata" sx={{ bgcolor: tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
+                    )}
+                  </TableCell>
+                  <TableCell align="right">
+                    {!c.wubookAttiva && puoScrivere && (
+                      <>
+                        <Tooltip title="Associa a una camera già esistente su Wubook">
+                          <IconButton size="small" onClick={() => setDialogoAssocia(c)}>
+                            <LinkIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Crea su Wubook">
+                          <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
+                            <SettingsIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
+                    {c.wubookAttiva && (
+                      <>
+                        <Tooltip title="Chiusure e restrizioni per periodo">
+                          <IconButton size="small" onClick={() => setDialogoChiusure({ cameraId: c.cameraId, cameraNome: c.cameraNome })}>
+                            <EditCalendarIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        {puoScrivere && (
+                          <>
+                            <Tooltip title="Modifica su Wubook (codice camera, prezzo, WooDoo)">
+                              <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
+                                <SettingsIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Elimina da Wubook">
+                              <IconButton size="small" onClick={() => setDaEliminare(c)} disabled={rimuovi.isPending}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
 
       {dialogoChiusure && (
         <ChiusureRestrizioniDialog
@@ -412,6 +504,7 @@ function AssociaCameraWubookDialog({ strutturaId, camera, onClose }: { struttura
 }
 
 function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
+  const mobile = useMobile()
   const puoScrivere = usePuoScrivere('settingRoomWrite')
   const piani = usePianiPrezzo(strutturaId)
   const elimina = useEliminaPianoPrezzo(strutturaId)
@@ -431,15 +524,44 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
 
       {puoScrivere && (
         <Box>
-          <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>
-            + Nuovo piano
-          </Button>
+          <BottoneNuovo etichetta="+ Nuovo piano" onClick={() => setDialogo('nuovo')} />
         </Box>
       )}
 
       {piani.isLoading && <Skeleton variant="rounded" height={180} />}
 
-      {!piani.isLoading && (
+      {!piani.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {(piani.data ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessun piano prezzo." />}
+          {(piani.data ?? []).map((p) => (
+            <CardElenco key={p.id}>
+              <TestataCardElenco titolo={p.nome} sottotitolo={p.isVirtual ? `Virtuale (da ${p.parentId})` : 'Base'} />
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Id', valore: p.id },
+                  { etichetta: 'Variazione', valore: p.variazione != null ? `${p.variazione} (${p.tipoVariazione === 2 ? '%' : '€'})` : '—' },
+                ]}
+              />
+              {p.isVirtual && puoScrivere && (
+                <AzioniCardElenco>
+                  <Tooltip title="Modifica">
+                    <IconButton size="small" onClick={() => setDialogo(p)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Elimina">
+                    <IconButton size="small" onClick={() => elimina.mutate(p.id, { onError: gestisciErrore })} disabled={elimina.isPending}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </AzioniCardElenco>
+              )}
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!piani.isLoading && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
           <Table size="small">
             <TableHead>
@@ -496,6 +618,7 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
 }
 
 function TabPianiRestrizione({ strutturaId }: { strutturaId: string }) {
+  const mobile = useMobile()
   const puoScrivere = usePuoScrivere('settingRoomWrite')
   const piani = usePianiRestrizione(strutturaId)
   const elimina = useEliminaPianoRestrizione(strutturaId)
@@ -515,15 +638,44 @@ function TabPianiRestrizione({ strutturaId }: { strutturaId: string }) {
 
       {puoScrivere && (
         <Box>
-          <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')}>
-            + Nuovo piano
-          </Button>
+          <BottoneNuovo etichetta="+ Nuovo piano" onClick={() => setDialogo('nuovo')} />
         </Box>
       )}
 
       {piani.isLoading && <Skeleton variant="rounded" height={180} />}
 
-      {!piani.isLoading && (
+      {!piani.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {(piani.data ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessun piano restrizione." />}
+          {(piani.data ?? []).map((p) => (
+            <CardElenco key={p.id}>
+              <TestataCardElenco titolo={p.nome} sottotitolo={`Id ${p.id}`} />
+              <RigaCardMeta
+                voci={[
+                  { etichetta: 'Min/Max', valore: p.regole ? `${p.regole.minStay ?? '—'} / ${p.regole.maxStay ?? '—'}` : '—' },
+                  { etichetta: 'Chiuso', valore: p.regole?.chiuso ? 'Sì' : 'No' },
+                ]}
+              />
+              {puoScrivere && (
+                <AzioniCardElenco>
+                  <Tooltip title="Modifica">
+                    <IconButton size="small" onClick={() => setDialogo(p)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Elimina">
+                    <IconButton size="small" onClick={() => elimina.mutate(p.id, { onError: gestisciErrore })} disabled={elimina.isPending}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </AzioniCardElenco>
+              )}
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!piani.isLoading && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
           <Table size="small">
             <TableHead>

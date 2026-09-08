@@ -18,10 +18,13 @@ import { useAnniOsservatorio, useInviaOsservatorioOra, useOsservatorioAppartamen
 import { fontDisplay, fontMono, tokens } from '../theme'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
+import { useMobile } from '../lib/useMobile'
+import { CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 export function OsservatorioPage() {
+  const mobile = useMobile()
   const { strutturaId } = useStruttura()
   const puoInviare = usePuoScrivere('statePoliceWrite')
   const appartamenti = useOsservatorioAppartamenti(strutturaId)
@@ -125,7 +128,36 @@ export function OsservatorioPage() {
             </TextField>
           </Box>
           {schedine.isLoading && <Skeleton variant="rounded" height={220} />}
-          {!schedine.isLoading && (
+
+          {!schedine.isLoading && mobile && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {(schedine.data ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessun arrivo/partenza per l'anno selezionato." />}
+              {(schedine.data ?? []).map((s) => (
+                <CardElenco key={s.ospiteId}>
+                  <TestataCardElenco
+                    titolo={s.nomeOspite}
+                    azioneDestra={
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <Chip size="small" label={s.arrivoInviato ? 'Arrivo inviato' : 'Arrivo da inviare'} sx={{ bgcolor: s.arrivoInviato ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                        {s.partenzaInviata !== null && (
+                          <Chip size="small" label={s.partenzaInviata ? 'Partenza inviata' : 'Partenza da inviare'} sx={{ bgcolor: s.partenzaInviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                        )}
+                      </Box>
+                    }
+                  />
+                  <RigaCardMeta
+                    voci={[
+                      { etichetta: 'Camera', valore: s.camera ?? '—' },
+                      { etichetta: 'Check-in', valore: s.checkIn ? formattatoreData.format(new Date(s.checkIn)) : '—' },
+                      { etichetta: 'Check-out', valore: s.checkOut ? formattatoreData.format(new Date(s.checkOut)) : '—' },
+                    ]}
+                  />
+                </CardElenco>
+              ))}
+            </Box>
+          )}
+
+          {!schedine.isLoading && !mobile && (
             <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
               <Table size="small">
                 <TableHead>

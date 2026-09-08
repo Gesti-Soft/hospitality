@@ -23,6 +23,8 @@ import {
 import { KpiCard } from '../components/KpiCard'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
 import { fontDisplay, fontMono, tokens } from '../theme'
+import { useMobile } from '../lib/useMobile'
+import { CardElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -45,6 +47,7 @@ const COLORE_ESITO: Record<EsitoIntegrazione, string> = {
 }
 
 export function SuperAdminDashboardPage() {
+  const mobile = useMobile()
   const { isSuperAdmin } = useStruttura()
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const anniDisponibili = useAnniDisponibiliStatisticheSuperAdmin(isSuperAdmin)
@@ -109,6 +112,22 @@ export function SuperAdminDashboardPage() {
         <CardGrafico titolo="Licenze scadute (da sollecitare)">
           {dati.licenzeScadute.length === 0 ? (
             <Typography sx={{ fontSize: 13.5, color: tokens.textSecondary }}>Nessuna licenza scaduta.</Typography>
+          ) : mobile ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {dati.licenzeScadute.map((l: LicenzaScadutaDto) => (
+                <CardElenco key={l.strutturaId}>
+                  <TestataCardElenco
+                    titolo={l.nomeStruttura}
+                    sottotitolo={l.ragioneSocialeCliente}
+                    azioneDestra={
+                      <Box component="span" sx={{ fontFamily: fontMono, color: tokens.error600, fontWeight: 700, fontSize: 13 }}>
+                        {l.scadenza ? formattatoreData.format(new Date(l.scadenza)) : 'mai rinnovata'}
+                      </Box>
+                    }
+                  />
+                </CardElenco>
+              ))}
+            </Box>
           ) : (
             <Box sx={{ overflowX: 'auto' }}>
               <Table size="small">
@@ -138,6 +157,23 @@ export function SuperAdminDashboardPage() {
         <CardGrafico titolo="Licenze in scadenza (prossimi 30 giorni)">
           {dati.licenzeInScadenza.length === 0 ? (
             <Typography sx={{ fontSize: 13.5, color: tokens.textSecondary }}>Nessuna licenza in scadenza a breve.</Typography>
+          ) : mobile ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {dati.licenzeInScadenza.map((l: LicenzaInScadenzaDto) => (
+                <CardElenco key={l.strutturaId}>
+                  <TestataCardElenco
+                    titolo={l.nomeStruttura}
+                    sottotitolo={l.ragioneSocialeCliente}
+                    azioneDestra={
+                      <Box component="span" sx={{ fontFamily: fontMono, color: tokens.wait600, fontWeight: 700, fontSize: 13 }}>
+                        {l.giorniRimanenti} gg
+                      </Box>
+                    }
+                  />
+                  <RigaCardMeta voci={[{ etichetta: 'Scadenza', valore: formattatoreData.format(new Date(l.scadenza)) }]} />
+                </CardElenco>
+              ))}
+            </Box>
           ) : (
             <Box sx={{ overflowX: 'auto' }}>
               <Table size="small">
@@ -170,47 +206,68 @@ export function SuperAdminDashboardPage() {
       </Box>
 
       <CardGrafico titolo="Salute integrazioni">
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Struttura</TableCell>
-                <TableCell>Cliente</TableCell>
-                <TableCell>Alloggiati Web</TableCell>
-                <TableCell>Osservatorio</TableCell>
-                <TableCell>PayTourist</TableCell>
-                <TableCell>OTA</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {dati.saluteIntegrazioni.length === 0 && (
+        {mobile ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {dati.saluteIntegrazioni.length === 0 && (
+              <Typography sx={{ fontSize: 13.5, color: tokens.textSecondary }}>Nessuna struttura.</Typography>
+            )}
+            {dati.saluteIntegrazioni.map((s) => (
+              <CardElenco key={s.strutturaId}>
+                <TestataCardElenco titolo={s.nomeStruttura} sottotitolo={s.ragioneSocialeCliente} />
+                <RigaCardMeta
+                  voci={[
+                    { etichetta: 'Alloggiati Web', valore: <PallinoEsito esito={s.alloggiatiWeb} /> },
+                    { etichetta: 'Osservatorio', valore: <PallinoEsito esito={s.osservatorio} /> },
+                    { etichetta: 'PayTourist', valore: <PallinoEsito esito={s.payTourist} /> },
+                    { etichetta: 'OTA', valore: <PallinoEsito esito={s.wubook} /> },
+                  ]}
+                />
+              </CardElenco>
+            ))}
+          </Box>
+        ) : (
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                    Nessuna struttura.
-                  </TableCell>
+                  <TableCell>Struttura</TableCell>
+                  <TableCell>Cliente</TableCell>
+                  <TableCell>Alloggiati Web</TableCell>
+                  <TableCell>Osservatorio</TableCell>
+                  <TableCell>PayTourist</TableCell>
+                  <TableCell>OTA</TableCell>
                 </TableRow>
-              )}
-              {dati.saluteIntegrazioni.map((s) => (
-                <TableRow key={s.strutturaId} hover>
-                  <TableCell sx={{ fontWeight: 600 }}>{s.nomeStruttura}</TableCell>
-                  <TableCell sx={{ color: tokens.textSecondary }}>{s.ragioneSocialeCliente}</TableCell>
-                  <TableCell>
-                    <PallinoEsito esito={s.alloggiatiWeb} />
-                  </TableCell>
-                  <TableCell>
-                    <PallinoEsito esito={s.osservatorio} />
-                  </TableCell>
-                  <TableCell>
-                    <PallinoEsito esito={s.payTourist} />
-                  </TableCell>
-                  <TableCell>
-                    <PallinoEsito esito={s.wubook} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
+              </TableHead>
+              <TableBody>
+                {dati.saluteIntegrazioni.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                      Nessuna struttura.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {dati.saluteIntegrazioni.map((s) => (
+                  <TableRow key={s.strutturaId} hover>
+                    <TableCell sx={{ fontWeight: 600 }}>{s.nomeStruttura}</TableCell>
+                    <TableCell sx={{ color: tokens.textSecondary }}>{s.ragioneSocialeCliente}</TableCell>
+                    <TableCell>
+                      <PallinoEsito esito={s.alloggiatiWeb} />
+                    </TableCell>
+                    <TableCell>
+                      <PallinoEsito esito={s.osservatorio} />
+                    </TableCell>
+                    <TableCell>
+                      <PallinoEsito esito={s.payTourist} />
+                    </TableCell>
+                    <TableCell>
+                      <PallinoEsito esito={s.wubook} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
       </CardGrafico>
     </Box>
   )

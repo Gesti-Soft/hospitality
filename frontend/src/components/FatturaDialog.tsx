@@ -24,6 +24,7 @@ import {
   type DatiClienteDto,
   type DatiFatturaDto,
 } from '../api/fatturazione'
+import { useMobile } from '../lib/useMobile'
 import { DatiClienteDialog } from './DatiClienteDialog'
 
 export type StatoFatturaIniziale = { modo: 'crea' } | { modo: 'modifica'; fattura: DatiFatturaDto }
@@ -63,6 +64,7 @@ function etichettaPrenotazione(p: PrenotazioneDto): string {
 }
 
 export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, clienti, onClose }: Props) {
+  const mobile = useMobile()
   const modifica = stato.modo === 'modifica' ? stato.fattura : null
 
   // Se c'è una sola prenotazione disponibile (es. aperto da "Genera fattura" sulla scheda ospiti di
@@ -164,7 +166,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
 
   return (
     <>
-      <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>{modifica ? `Modifica fattura n. ${modifica.numeroDocumento}` : 'Nuova fattura da prenotazione'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
@@ -219,7 +221,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           </TextField>
         )}
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField select label="Tipo documento" value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)} fullWidth disabled={inCorso}>
             {Object.entries(ETICHETTA_TIPO_DOCUMENTO).map(([valore, etichetta]) => (
               <MenuItem key={valore} value={valore}>
@@ -238,7 +240,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
 
         <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} disabled={inCorso} />
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Quantità" type="number" value={quantita} onChange={(e) => setQuantita(e.target.value)} fullWidth disabled={inCorso} />
           <TextField
             label="Prezzo unitario (€)"
@@ -255,7 +257,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           <TextField label="Divisa" value={divisa} onChange={(e) => setDivisa(e.target.value)} sx={{ width: 100 }} disabled={inCorso} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField select label="Aliquota IVA" value={aliquotaIva} onChange={(e) => setAliquotaIva(e.target.value)} fullWidth disabled={inCorso}>
             {Object.entries(AliquotaIva).map(([nome, valore]) => (
               <MenuItem key={nome} value={String(valore)}>

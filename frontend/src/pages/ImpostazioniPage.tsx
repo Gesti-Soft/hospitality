@@ -43,6 +43,8 @@ import {
 } from '../api/integrazioni'
 import { fontDisplay, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
+import { useMobile } from '../lib/useMobile'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { OsservatorioAppartamentoDialog } from '../components/OsservatorioAppartamentoDialog'
 import { PayTouristStrutturaDialog } from '../components/PayTouristStrutturaDialog'
@@ -95,7 +97,7 @@ export function ImpostazioniPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <Tabs value={tabEffettivo} onChange={(_, v) => setTab(v)} sx={{ minHeight: 0 }}>
+      <Tabs value={tabEffettivo} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ minHeight: 0 }}>
         <Tab label="Generali" value="generali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
         {mostraPolizia && <Tab label="Alloggiati Web" value="polizia" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
         {mostraOsservatorio && <Tab label="Osservatorio Turistico" value="osservatorio" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
@@ -175,6 +177,7 @@ export function ImpostazioniGeneraliForm({
   servizi: ServiziConcessi
   extraColonnaDestra?: ReactNode
 }) {
+  const mobile = useMobile()
   const [poliziaStatoAttiva, setPoliziaStatoAttiva] = useState(dati.poliziaStatoAttiva)
   const [osservatorioAttivo, setOsservatorioAttivo] = useState(dati.osservatorioAttivo)
   const [payTouristAttivo, setPayTouristAttivo] = useState(dati.payTouristAttivo)
@@ -282,7 +285,7 @@ export function ImpostazioniGeneraliForm({
           <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tassa di soggiorno</Typography>
 
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
               <TextField
                 label="Prezzo per persona/notte (€)"
                 type="number"
@@ -302,7 +305,7 @@ export function ImpostazioniGeneraliForm({
               />
             </Box>
 
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
               <TextField
                 label="Esenti/scontati minori sotto (anni)"
                 type="number"
@@ -323,7 +326,7 @@ export function ImpostazioniGeneraliForm({
               />
             </Box>
 
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
               <TextField
                 label="Esenti/scontati anziani dai (anni)"
                 type="number"
@@ -360,7 +363,7 @@ export function ImpostazioniGeneraliForm({
               </Alert>
             )}
 
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
               <TextField
                 label="Comune di attività"
                 value={comuneAttivita}
@@ -450,6 +453,7 @@ function TabAlloggiatiWeb({ strutturaId }: { strutturaId: string | null }) {
 }
 
 function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: string; dati: AlloggiatiWebIntegrazioneDto }) {
+  const mobile = useMobile()
   const [utente, setUtente] = useState(dati.utente ?? '')
   const [password, setPassword] = useState('')
   const [wsKey, setWsKey] = useState('')
@@ -489,7 +493,7 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
       )}
 
       <TextField label="Utente" value={utente} onChange={(e) => setUtente(e.target.value)} disabled={aggiorna.isPending} />
-      <Box sx={{ display: 'flex', gap: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
         <TextField
           label={<EtichettaConPallino testo="Password" inserito={dati.credenzialiConfigurate} />}
           type="password"
@@ -524,6 +528,7 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
 // ---------------------------------------------------------------------------
 
 function TabOsservatorio({ strutturaId }: { strutturaId: string | null }) {
+  const mobile = useMobile()
   const appartamenti = useOsservatorioAppartamenti(strutturaId)
   const tipologie = useTipologie(strutturaId)
   const elimina = useEliminaOsservatorioAppartamento(strutturaId)
@@ -543,14 +548,44 @@ function TabOsservatorio({ strutturaId }: { strutturaId: string | null }) {
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Appartamenti</Typography>
-        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuovo')} disabled={!strutturaId}>
-          + Nuovo appartamento
-        </Button>
+        <BottoneNuovo etichetta="+ Nuovo appartamento" onClick={() => setDialogo('nuovo')} disabilitato={!strutturaId} />
       </Box>
 
       {(appartamenti.isLoading || tipologie.isLoading) && <Skeleton variant="rounded" height={220} />}
 
-      {!appartamenti.isLoading && !tipologie.isLoading && (
+      {!appartamenti.isLoading && !tipologie.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {(appartamenti.data ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessun appartamento configurato." />}
+          {(appartamenti.data ?? []).map((a) => (
+            <CardElenco key={a.id}>
+              <TestataCardElenco
+                titolo={a.nome}
+                azioneDestra={
+                  <Chip
+                    size="small"
+                    label={a.credenzialiConfigurate ? 'Configurate' : 'Da configurare'}
+                    sx={{ bgcolor: a.credenzialiConfigurate ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }}
+                  />
+                }
+              />
+              <AzioniCardElenco>
+                <Tooltip title="Modifica">
+                  <IconButton size="small" onClick={() => setDialogo(a)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Elimina">
+                  <IconButton size="small" onClick={() => setDaEliminare(a)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </AzioniCardElenco>
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!appartamenti.isLoading && !tipologie.isLoading && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
           <Table size="small">
             <TableHead>
@@ -624,6 +659,7 @@ function TabOsservatorio({ strutturaId }: { strutturaId: string | null }) {
 // ---------------------------------------------------------------------------
 
 function TabPayTourist({ strutturaId }: { strutturaId: string | null }) {
+  const mobile = useMobile()
   const config = usePayTouristConfig(strutturaId)
   const strutture = usePayTouristStrutture(strutturaId)
   const tipologie = useTipologie(strutturaId)
@@ -643,14 +679,36 @@ function TabPayTourist({ strutturaId }: { strutturaId: string | null }) {
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Strutture PayTourist</Typography>
-        <Button variant="contained" color="primary" size="small" onClick={() => setDialogo('nuova')} disabled={!strutturaId}>
-          + Nuova struttura
-        </Button>
+        <BottoneNuovo etichetta="+ Nuova struttura" onClick={() => setDialogo('nuova')} disabilitato={!strutturaId} />
       </Box>
 
       {(strutture.isLoading || tipologie.isLoading) && <Skeleton variant="rounded" height={200} />}
 
-      {!strutture.isLoading && !tipologie.isLoading && (
+      {!strutture.isLoading && !tipologie.isLoading && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {(strutture.data ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessuna struttura PayTourist configurata." />}
+          {(strutture.data ?? []).map((s) => (
+            <CardElenco key={s.id}>
+              <TestataCardElenco titolo={s.nome} />
+              <RigaCardMeta voci={[{ etichetta: 'Id PayTourist', valore: s.idStrutturaPaytourist ?? '—' }]} />
+              <AzioniCardElenco>
+                <Tooltip title="Modifica">
+                  <IconButton size="small" onClick={() => setDialogo(s)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Elimina">
+                  <IconButton size="small" onClick={() => setDaEliminare(s)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </AzioniCardElenco>
+            </CardElenco>
+          ))}
+        </Box>
+      )}
+
+      {!strutture.isLoading && !tipologie.isLoading && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
           <Table size="small">
             <TableHead>

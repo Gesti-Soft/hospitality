@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 // Righe caricate/mostrate alla volta: si parte con un'unica pagina (quante ce ne stanno a video),
 // poi se ne aggiunge un'altra ogni volta che si scorre fino in fondo alla tabella — stesso valore
@@ -6,12 +6,15 @@ import { useEffect, useRef, useState } from 'react'
 const RIGHE_PER_PAGINA = 25
 
 /**
- * Paginazione a scroll infinito per una tabella: mostra le prime `RIGHE_PER_PAGINA` righe di un
- * elenco già filtrato/ordinato, caricandone altre quando la sentinella (l'ultima riga, un
- * <TableRow ref={sentinellaRef}>) entra nel viewport. `resetDeps` deve elencare i valori che, se
- * cambiano, devono far ripartire la paginazione dalla prima pagina (es. testo di ricerca, filtri
- * data) — altrimenti, cambiando filtro mentre si è scrollato in fondo, si vedrebbe una tabella vuota
- * finché non si rifà lo scroll.
+ * Paginazione a scroll infinito per una tabella (o per un elenco di card su mobile): mostra le
+ * prime `RIGHE_PER_PAGINA` righe di un elenco già filtrato/ordinato, caricandone altre quando la
+ * sentinella entra nel viewport. `sentinellaRef` è una ref callback (non un `RefObject`) proprio per
+ * poter essere assegnata sia a un `<TableRow ref={sentinellaRef}>` su desktop sia a una card/`Box`
+ * su mobile — solo una delle due è montata alla volta a seconda del breakpoint, e una ref callback
+ * (a differenza di un `RefObject` tipizzato su un elemento specifico) è assegnabile a `ref` di
+ * qualunque elemento DOM. `resetDeps` deve elencare i valori che, se cambiano, devono far ripartire
+ * la paginazione dalla prima pagina (es. testo di ricerca, filtri data) — altrimenti, cambiando
+ * filtro mentre si è scrollato in fondo, si vedrebbe un elenco vuoto finché non si rifà lo scroll.
  */
 export function usePaginazioneScroll(totaleRighe: number, resetDeps: readonly unknown[]) {
   const [righeVisibili, setRigheVisibili] = useState(RIGHE_PER_PAGINA)
@@ -26,10 +29,14 @@ export function usePaginazioneScroll(totaleRighe: number, resetDeps: readonly un
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, resetDeps)
 
-  const sentinellaRef = useRef<HTMLTableRowElement | null>(null)
+  const elementoSentinella = useRef<HTMLElement | null>(null)
+  const sentinellaRef = useCallback((el: HTMLElement | null) => {
+    elementoSentinella.current = el
+  }, [])
+
   useEffect(() => {
     if (!altreDaCaricare) return
-    const el = sentinellaRef.current
+    const el = elementoSentinella.current
     if (!el) return
 
     const observer = new IntersectionObserver(

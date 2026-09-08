@@ -11,6 +11,7 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { useAggiornaPianoRestrizione, useCreaPianoRestrizione, type PianoRestrizioneDto } from '../api/integrazioni'
+import { useMobile } from '../lib/useMobile'
 
 interface Props {
   strutturaId: string
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function PianoRestrizioneDialog({ strutturaId, piano, onClose }: Props) {
+  const mobile = useMobile()
   const [nome, setNome] = useState(piano?.nome ?? '')
   const [minStay, setMinStay] = useState(piano?.regole?.minStay != null ? String(piano.regole.minStay) : '')
   const [maxStay, setMaxStay] = useState(piano?.regole?.maxStay != null ? String(piano.regole.maxStay) : '')
@@ -59,19 +61,19 @@ export function PianoRestrizioneDialog({ strutturaId, piano, onClose }: Props) {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
       <DialogTitle>{piano ? 'Modifica piano restrizione' : 'Nuovo piano restrizione'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso} autoFocus />
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Soggiorno minimo" type="number" value={minStay} onChange={(e) => setMinStay(e.target.value)} fullWidth disabled={inCorso} />
           <TextField label="Soggiorno massimo" type="number" value={maxStay} onChange={(e) => setMaxStay(e.target.value)} fullWidth disabled={inCorso} />
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Soggiorno minimo all'arrivo" type="number" value={minStayArrival} onChange={(e) => setMinStayArrival(e.target.value)} fullWidth disabled={inCorso} />
           <TextField label="Soggiorno massimo all'arrivo" type="number" value={maxStayArrival} onChange={(e) => setMaxStayArrival(e.target.value)} fullWidth disabled={inCorso} />
         </Box>
