@@ -102,7 +102,7 @@ export function LogPage() {
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
           <TextField
             size="small"
-            placeholder="Cerca per messaggio, operatore o correlation id..."
+            placeholder="Cerca per messaggio, operatore, correlation id o data (gg/mm)..."
             value={ricerca}
             onChange={(e) => setRicerca(e.target.value)}
             sx={{ minWidth: 280 }}

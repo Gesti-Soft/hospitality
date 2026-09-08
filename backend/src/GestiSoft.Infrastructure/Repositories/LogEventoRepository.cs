@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using GestiSoft.Application.Logging;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -6,8 +7,56 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GestiSoft.Infrastructure.Repositories;
 
-public class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepository
+public partial class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepository
 {
+    private static readonly TimeZoneInfo FusoItaliano = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
+
+    [GeneratedRegex(@"^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?$")]
+    private static partial Regex RegexData();
+
+    /// <summary>
+    /// "08/05" (o "08/05/2026", "08-05-26", "08.05") nella ricerca testuale del log deve trovare gli
+    /// eventi di quel giorno — richiesta esplicita dell'utente. Anno assente: si assume l'anno
+    /// corrente (con la conservazione di 6-12 mesi introdotta di recente, di rado sono presenti log
+    /// di più di un anno insieme; chi vuole un anno diverso lo scrive per esteso). Il confronto va
+    /// fatto sul giorno di calendario italiano, non UTC: CreatedAtUtc va convertito con
+    /// TimeZoneInfo.ConvertTimeToUtc PRIMA di comporre la query (calcolo in C#, mai tradotto in SQL),
+    /// così l'ora legale/solare è gestita correttamente senza bisogno di "AT TIME ZONE" lato Postgres.
+    /// </summary>
+    internal static bool ProvaEstraiIntervalloData(string testo, out DateTime inizioUtc, out DateTime fineUtc)
+    {
+        inizioUtc = default;
+        fineUtc = default;
+
+        var match = RegexData().Match(testo.Trim());
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var giorno = int.Parse(match.Groups[1].Value);
+        var mese = int.Parse(match.Groups[2].Value);
+        var anno = match.Groups[3].Success
+            ? NormalizzaAnno(match.Groups[3].Value)
+            : TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, FusoItaliano).Year;
+
+        DateTime giornoLocale;
+        try
+        {
+            giornoLocale = new DateTime(anno, mese, giorno, 0, 0, 0, DateTimeKind.Unspecified);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
+
+        inizioUtc = TimeZoneInfo.ConvertTimeToUtc(giornoLocale, FusoItaliano);
+        fineUtc = TimeZoneInfo.ConvertTimeToUtc(giornoLocale.AddDays(1), FusoItaliano);
+        return true;
+    }
+
+    private static int NormalizzaAnno(string testo) => testo.Length <= 2 ? 2000 + int.Parse(testo) : int.Parse(testo);
+
     public async Task AddAsync(LogEvento evento, CancellationToken cancellationToken)
     {
         db.LogEventi.Add(evento);
@@ -49,10 +98,17 @@ public class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepository
         if (!string.IsNullOrWhiteSpace(filtro.Ricerca))
         {
             var pattern = $"%{filtro.Ricerca.Trim()}%";
-            query = query.Where(l =>
-                EF.Functions.ILike(l.Messaggio, pattern) ||
-                (l.Operatore != null && EF.Functions.ILike(l.Operatore, pattern)) ||
-                (l.CorrelationId != null && EF.Functions.ILike(l.CorrelationId, pattern)));
+
+            query = ProvaEstraiIntervalloData(filtro.Ricerca, out var inizioUtc, out var fineUtc)
+                ? query.Where(l =>
+                    EF.Functions.ILike(l.Messaggio, pattern) ||
+                    (l.Operatore != null && EF.Functions.ILike(l.Operatore, pattern)) ||
+                    (l.CorrelationId != null && EF.Functions.ILike(l.CorrelationId, pattern)) ||
+                    (l.CreatedAtUtc >= inizioUtc && l.CreatedAtUtc < fineUtc))
+                : query.Where(l =>
+                    EF.Functions.ILike(l.Messaggio, pattern) ||
+                    (l.Operatore != null && EF.Functions.ILike(l.Operatore, pattern)) ||
+                    (l.CorrelationId != null && EF.Functions.ILike(l.CorrelationId, pattern)));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
