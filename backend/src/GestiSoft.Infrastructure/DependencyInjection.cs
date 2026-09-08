@@ -17,6 +17,7 @@ using GestiSoft.Application.SuperAdmin;
 using GestiSoft.Application.Utenti;
 using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 using GestiSoft.Infrastructure.AlloggiatiWeb;
 using GestiSoft.Infrastructure.Auth;
 using GestiSoft.Infrastructure.Fatturazione;
@@ -125,6 +126,14 @@ public static class DependencyInjection
                 client.BaseAddress = new Uri(osservatorioBaseUrl.TrimEnd('/') + "/");
             }
         });
+
+        // Un solo sistema regionale verificato/con clienti per ora (Sicilia). Registrato anche con
+        // chiave ProviderOsservatorio così OsservatorioClientResolver può scegliere l'implementazione
+        // giusta per Appartamento — aggiungere un'altra Regione (es. ROSS1000, adottato da diverse
+        // Regioni) significa registrare qui la sua implementazione con la sua chiave, nessun'altra
+        // modifica al modulo Osservatorio.
+        services.AddKeyedScoped<IOsservatorioClient>(ProviderOsservatorio.Sicilia, (sp, _) => sp.GetRequiredService<IOsservatorioClient>());
+        services.AddScoped<IOsservatorioClientResolver, OsservatorioClientResolver>();
 
         // PayTourist (Fase 8): a differenza delle altre integrazioni esterne, l'host NON è unico —
         // PayTourist assegna un sottodominio per Comune (es. https://palermo.paytourist.com). Qui

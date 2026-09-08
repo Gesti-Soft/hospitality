@@ -36,7 +36,7 @@ public class OsservatorioInvioService(
     IOsservatorioAppartamentoRepository appartamenti,
     IOsservatorioInvioRepository invii,
     IAnagraficaAlloggiatiWebRepository anagrafica,
-    IOsservatorioClient client,
+    IOsservatorioClientResolver clientResolver,
     IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard,
     ConcessioneServiziGuard concessioneGuard,
@@ -152,6 +152,7 @@ public class OsservatorioInvioService(
             return new RisultatoInvioOsservatorio(0, 0, 0, null);
         }
 
+        var client = clientResolver.Risolvi(appartamento.Provider);
         var login = await client.LoginAsync(appartamento.EntityCode, appartamento.Password, cancellationToken);
         if (!login.Ok || login.Token is null)
         {
@@ -194,7 +195,7 @@ public class OsservatorioInvioService(
                         $"Ci sono giornate non ancora chiuse (da {cursore:dd/MM/yyyy}) — la chiusura avviene solo automaticamente all'orario configurato, non con l'invio manuale.");
                 }
 
-                arriviInviati = await InviaArriviAsync(strutturaId, appartamento, login.Token, oggi, tipologieIds, cancellationToken);
+                arriviInviati = await InviaArriviAsync(client, strutturaId, appartamento, login.Token, oggi, tipologieIds, cancellationToken);
 
                 appartamento.UltimoInvioAtUtc = DateTime.UtcNow;
                 appartamento.UltimeSchedineInviate = arriviInviati;
@@ -217,7 +218,7 @@ public class OsservatorioInvioService(
             // passati (fedele al legacy — gli arrivi si inviano solo per il giorno corrente).
             while (cursore < oggi)
             {
-                checkoutInviati += await ChiudiGiornataAsync(strutturaId, appartamento, login.Token, cursore, tipologieIds, cancellationToken);
+                checkoutInviati += await ChiudiGiornataAsync(client, strutturaId, appartamento, login.Token, cursore, tipologieIds, cancellationToken);
                 giorniChiusi++;
                 cursore = cursore.AddDays(1);
                 appartamento.CursoreDataAtUtc = cursore;
@@ -226,8 +227,8 @@ public class OsservatorioInvioService(
 
             if (cursore == oggi)
             {
-                arriviInviati = await InviaArriviAsync(strutturaId, appartamento, login.Token, oggi, tipologieIds, cancellationToken);
-                checkoutInviati += await ChiudiGiornataAsync(strutturaId, appartamento, login.Token, oggi, tipologieIds, cancellationToken);
+                arriviInviati = await InviaArriviAsync(client, strutturaId, appartamento, login.Token, oggi, tipologieIds, cancellationToken);
+                checkoutInviati += await ChiudiGiornataAsync(client, strutturaId, appartamento, login.Token, oggi, tipologieIds, cancellationToken);
                 giorniChiusi++;
                 appartamento.CursoreDataAtUtc = oggi.AddDays(1);
             }
@@ -270,7 +271,7 @@ public class OsservatorioInvioService(
         }
     }
 
-    private async Task<int> InviaArriviAsync(Guid strutturaId, OsservatorioAppartamento appartamento, string token, DateTime giorno, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken)
+    private async Task<int> InviaArriviAsync(IOsservatorioClient client, Guid strutturaId, OsservatorioAppartamento appartamento, string token, DateTime giorno, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken)
     {
         var arrivi = await ospiti.ListArriviOsservatorioAsync(strutturaId, tipologieIds, giorno, cancellationToken);
         if (arrivi.Count == 0)
@@ -331,7 +332,7 @@ public class OsservatorioInvioService(
         return arrivi.Count;
     }
 
-    private async Task<int> ChiudiGiornataAsync(Guid strutturaId, OsservatorioAppartamento appartamento, string token, DateTime giorno, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken)
+    private async Task<int> ChiudiGiornataAsync(IOsservatorioClient client, Guid strutturaId, OsservatorioAppartamento appartamento, string token, DateTime giorno, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken)
     {
         var checkout = await ospiti.ListCheckoutOsservatorioAsync(strutturaId, tipologieIds, giorno, cancellationToken);
         var inviati = 0;

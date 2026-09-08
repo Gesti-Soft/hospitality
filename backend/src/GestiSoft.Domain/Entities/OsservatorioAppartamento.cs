@@ -1,4 +1,5 @@
 using GestiSoft.Domain.Common;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Domain.Entities;
 
@@ -21,6 +22,9 @@ public class OsservatorioAppartamento : TenantEntity
 {
     /// <summary>Etichetta libera per distinguere più appartamenti nella UI (il legacy non ne aveva una, identificava gli appartamenti solo per Id numerico).</summary>
     public string? Nome { get; set; }
+
+    /// <summary>Quale sistema regionale contattare per questo appartamento — vedi ProviderOsservatorio. Un solo valore possibile oggi, il campo esiste già per non dover toccare schema/dati quando si aggiungerà il secondo.</summary>
+    public ProviderOsservatorio Provider { get; set; } = ProviderOsservatorio.Sicilia;
 
     public string? EntityCode { get; set; }
 

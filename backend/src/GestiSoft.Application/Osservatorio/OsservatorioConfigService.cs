@@ -22,7 +22,7 @@ public record SalvaOsservatorioAppartamentoRequest(
 /// </summary>
 public class OsservatorioConfigService(
     IOsservatorioAppartamentoRepository repository,
-    IOsservatorioClient client,
+    IOsservatorioClientResolver clientResolver,
     IStrutturaRepository strutture,
     ILogEventoService logEventi,
     PermessoStrutturaGuard permessoGuard)
@@ -99,6 +99,7 @@ public class OsservatorioConfigService(
             return (false, "EntityCode, password e HotelCode sono obbligatori per la verifica.");
         }
 
+        var client = clientResolver.Risolvi(entity.Provider);
         var login = await client.LoginAsync(entity.EntityCode, entity.Password, cancellationToken);
         if (!login.Ok || login.Token is null)
         {
