@@ -38,9 +38,11 @@ public class StayBuilderOsservatorio
         var nomeCamera = ospite.Prenotazione?.Camera?.Nome ?? string.Empty;
         var tipoCapofamiglia = CodiceTipoAlloggiato(ospite.TipoOspite);
 
+        // Il capofamiglia/ospite singolo non ha un campo PostoLetto proprio (esiste solo su OspiteRiga,
+        // i membri aggiuntivi): occupa sempre un letto per definizione, è il primo occupante.
         var guests = new List<OsservatorioGuestDto>
         {
-            CostruisciGuest(guestIdCapofamiglia, ospite.DataNascita, ospite.Cittadinanza, ospite.LuogoNascita, ospite.LuogoResidenza, tipoCapofamiglia, ospite.Sesso, ospite.Email, checkIn, checkOutData, checkOut, nomeCamera),
+            CostruisciGuest(guestIdCapofamiglia, ospite.DataNascita, ospite.Cittadinanza, ospite.LuogoNascita, ospite.LuogoResidenza, tipoCapofamiglia, ospite.Sesso, ospite.Email, checkIn, checkOutData, checkOut, bedOccupancy: true, nomeCamera),
         };
 
         // Stessa regola di Alloggiati Web (Fase 6): il tipo dei membri dipende da quello del capofamiglia.
@@ -54,7 +56,7 @@ public class StayBuilderOsservatorio
                 continue;
             }
 
-            guests.Add(CostruisciGuest(guestId, membro.DataNascita, membro.Cittadinanza, membro.LuogoNascita, membro.LuogoResidenza, codiceTipoMembro, membro.Sesso, null, checkIn, checkOutData, checkOut, nomeCamera));
+            guests.Add(CostruisciGuest(guestId, membro.DataNascita, membro.Cittadinanza, membro.LuogoNascita, membro.LuogoResidenza, codiceTipoMembro, membro.Sesso, null, checkIn, checkOutData, checkOut, membro.PostoLetto ?? true, nomeCamera));
         }
 
         return new OsservatorioStayDto(stayId, guests);
@@ -62,7 +64,7 @@ public class StayBuilderOsservatorio
 
     private OsservatorioGuestDto CostruisciGuest(
         string guestId, DateTime? dataNascita, string? cittadinanza, string? luogoNascita, string? luogoResidenza,
-        int tipoAlloggiato, Sesso? sesso, string? email, DateTime checkIn, DateTime checkOut, bool isCheckout, string nomeCamera) =>
+        int tipoAlloggiato, Sesso? sesso, string? email, DateTime checkIn, DateTime checkOut, bool isCheckout, bool bedOccupancy, string nomeCamera) =>
         new(
             guestId,
             CalcolaEta(dataNascita),
@@ -75,6 +77,7 @@ public class StayBuilderOsservatorio
             checkIn,
             checkOut,
             isCheckout,
+            bedOccupancy,
             new[] { new OsservatorioRoomDto(nomeCamera, checkIn, checkOut) });
 
     private int CodiceTipoAlloggiato(string? descrizione)

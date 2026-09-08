@@ -18,6 +18,7 @@ public record OsservatorioGuestDto(
     DateTime ArrivalDate,
     DateTime DepartureDate,
     bool Checkout,
+    bool BedOccupancy,
     IReadOnlyList<OsservatorioRoomDto> Rooms);
 
 public record OsservatorioStayDto(string StayId, IReadOnlyList<OsservatorioGuestDto> Guests);

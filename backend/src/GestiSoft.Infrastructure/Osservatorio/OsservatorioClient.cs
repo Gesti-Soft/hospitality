@@ -175,7 +175,7 @@ public class OsservatorioClient(HttpClient http) : IOsservatorioClient
             new XElement("ArrivalDate", FormattaData(guest.ArrivalDate)),
             new XElement("DepartureDate", FormattaData(guest.DepartureDate)),
             new XElement("Checkout", guest.Checkout ? "true" : "false"),
-            new XElement("BedOccupancy", "true"),
+            new XElement("BedOccupancy", guest.BedOccupancy ? "true" : "false"),
             new XElement("Rooms", guest.Rooms.Select(CostruisciRoom)));
 
     private static XElement CostruisciRoom(OsservatorioRoomDto room) =>
