@@ -68,6 +68,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # L'Api applica le migrazioni EF all'avvio prima di iniziare ad ascoltare (vedi Program.cs) —
+      # aspettare che sia "healthy" (curl su /health, vedi Dockerfile) evita che il Worker interroghi
+      # tabelle/colonne non ancora create durante un deploy con nuove migrazioni.
+      api:
+        condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       # v. commento sul servizio "api" — i job di invio giornaliero confrontano l'orario configurato
@@ -87,6 +92,8 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      api:
         condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}

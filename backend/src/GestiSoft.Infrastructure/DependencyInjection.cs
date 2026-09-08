@@ -120,12 +120,13 @@ public static class DependencyInjection
         var gestisoftBaseUrl = configuration["Gestisoft:BaseUrl"];
         services.AddHttpClient<IGestisoftLicenzaClient, GestisoftLicenzaClient>(client =>
         {
+            client.Timeout = ClientEsterniTimeout;
             if (!string.IsNullOrWhiteSpace(gestisoftBaseUrl))
             {
                 client.BaseAddress = new Uri(gestisoftBaseUrl.TrimEnd('/') + "/");
             }
         });
-        services.AddHttpClient<IWubookClient, WubookXmlRpcClient>();
+        services.AddHttpClient<IWubookClient, WubookXmlRpcClient>(client => client.Timeout = ClientEsterniTimeout);
 
         // Servizio SOAP "Alloggiati Web" della Polizia di Stato (Fase 6): il legacy leggeva
         // l'endpoint da una env var ("EndPointPM") mai hardcoded nel codice; qui passa da
@@ -135,6 +136,7 @@ public static class DependencyInjection
         var alloggiatiWebEndpoint = configuration["AlloggiatiWeb:Endpoint"];
         services.AddHttpClient<IAlloggiatiWebClient, AlloggiatiWebSoapClient>(client =>
         {
+            client.Timeout = ClientEsterniTimeout;
             if (!string.IsNullOrWhiteSpace(alloggiatiWebEndpoint))
             {
                 client.BaseAddress = new Uri(alloggiatiWebEndpoint);
@@ -147,6 +149,7 @@ public static class DependencyInjection
         var osservatorioBaseUrl = configuration["Osservatorio:BaseUrl"];
         services.AddHttpClient<IOsservatorioClient, OsservatorioClient>(client =>
         {
+            client.Timeout = ClientEsterniTimeout;
             if (!string.IsNullOrWhiteSpace(osservatorioBaseUrl))
             {
                 client.BaseAddress = new Uri(osservatorioBaseUrl.TrimEnd('/') + "/");
@@ -167,8 +170,14 @@ public static class DependencyInjection
         // PayTourist__BaseUrl, es. "https://{comune}.paytourist.com"), risolto da PayTouristClient
         // ad ogni chiamata in base al Comune Attività della Struttura — quindi nessun
         // HttpClient.BaseAddress fissato qui in DI, su istruzione esplicita dell'utente.
-        services.AddHttpClient<IPayTouristClient, PayTouristClient>();
+        services.AddHttpClient<IPayTouristClient, PayTouristClient>(client => client.Timeout = ClientEsterniTimeout);
 
         return services;
     }
+
+    // Il default di HttpClient (100s) terrebbe un job "schedine" bloccato quasi 2 minuti su un
+    // singolo endpoint della Questura/PMS che non risponde, ritardando l'invio per tutte le altre
+    // strutture in coda nello stesso giro — 30s è un compromesso tra dare tempo a servizi SOAP
+    // lenti e non bloccare troppo a lungo il job (che comunque riprova al giro successivo).
+    private static readonly TimeSpan ClientEsterniTimeout = TimeSpan.FromSeconds(30);
 }
