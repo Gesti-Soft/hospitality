@@ -9,9 +9,12 @@ import DialogTitle from '@mui/material/DialogTitle'
 import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
 import { useCreaEntrata, useAggiornaEntrata, type EntrataDto, type EntrataRequest } from '../api/entrate'
+import { useCamere } from '../api/camere'
+import { useTipologie } from '../api/tipologie'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
+import { SelettoreTipoConCamera } from './finanze/FinanzeComuni'
 
 interface Props {
   strutturaId: string
@@ -22,26 +25,30 @@ interface Props {
 export function EntrataDialog({ strutturaId, entrata, onClose }: Props) {
   const mobile = useMobile()
   const [tipoEntrata, setTipoEntrata] = useState(entrata?.tipoEntrata ?? '')
-  const [nome, setNome] = useState(entrata?.nome ?? '')
   const [importoEntrata, setImportoEntrata] = useState(String(entrata?.importoEntrata ?? ''))
   const [descrizione, setDescrizione] = useState(entrata?.descrizione ?? '')
   const [data, setData] = useState(formatoInputData(entrata?.data ? new Date(entrata.data) : new Date()))
   const [errore, setErrore] = useState<string | null>(null)
+
+  const tipologie = useTipologie(strutturaId)
+  const camere = useCamere(strutturaId)
+  const listaTipologie = tipologie.data ?? []
+  const listaCamere = camere.data ?? []
 
   const crea = useCreaEntrata(strutturaId)
   const aggiorna = useAggiornaEntrata(strutturaId)
   const inCorso = crea.isPending || aggiorna.isPending
 
   function salva() {
-    if (nome.trim() === '' || importoEntrata.trim() === '' || Number(importoEntrata) < 0) {
-      setErrore('Nome e importo (non negativo) sono obbligatori.')
+    if (descrizione.trim() === '' || importoEntrata.trim() === '' || Number(importoEntrata) < 0) {
+      setErrore('Descrizione e importo (non negativo) sono obbligatori.')
       return
     }
     setErrore(null)
 
     const request: EntrataRequest = {
       tipoEntrata: tipoEntrata.trim() === '' ? null : tipoEntrata.trim(),
-      nome: nome.trim(),
+      nome: null,
       importoEntrata: Number(importoEntrata),
       descrizione: descrizione.trim() === '' ? null : descrizione.trim(),
       data: data === '' ? null : isoLocale(parsaInputData(data)),
@@ -63,16 +70,17 @@ export function EntrataDialog({ strutturaId, entrata, onClose }: Props) {
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-          <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required fullWidth disabled={inCorso} autoFocus />
+          <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} required fullWidth disabled={inCorso} autoFocus />
           <TextField label="Importo (€)" type="number" value={importoEntrata} onChange={(e) => setImportoEntrata(e.target.value)} required fullWidth disabled={inCorso} />
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-          <TextField label="Tipo entrata" value={tipoEntrata} onChange={(e) => setTipoEntrata(e.target.value)} fullWidth disabled={inCorso} />
-          <CampoData label="Data" value={data} onChange={setData} fullWidth disabled={inCorso} />
+          <SelettoreTipoConCamera label="Tipo entrata" valore={tipoEntrata} onChange={setTipoEntrata} tipologie={listaTipologie} camere={listaCamere} disabled={inCorso} />
         </Box>
 
-        <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} multiline minRows={2} disabled={inCorso} />
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
+          <CampoData label="Data" value={data} onChange={setData} fullWidth disabled={inCorso} />
+        </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
         <Button onClick={onClose} disabled={inCorso}>

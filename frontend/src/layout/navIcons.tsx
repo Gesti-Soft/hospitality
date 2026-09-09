@@ -187,13 +187,14 @@ export function IconUtenti(props: IconProps) {
 
 export function IconImpostazioni(props: IconProps) {
   return (
-    <svg {...base} {...props}>
-      <circle cx="9" cy="9" r="2.4" stroke="currentColor" strokeWidth={1.5} />
+    <svg {...base} viewBox="0 0 24 24" {...props}>
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth={2} />
       <path
-        d="M9 2.7V4.4M9 13.6V15.3M15.3 9H13.6M4.4 9H2.7M13.4 4.6L12.2 5.8M5.8 12.2L4.6 13.4M13.4 13.4L12.2 12.2M5.8 5.8L4.6 4.6"
+        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
         stroke="currentColor"
-        strokeWidth={1.5}
+        strokeWidth={2}
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   )

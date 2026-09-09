@@ -62,7 +62,7 @@ export function EntratePage() {
 
   const testoRicerca = ricerca.trim().toLowerCase()
   const dati = (entrate.data ?? []).filter(
-    (e) => (!testoRicerca || [e.nome, e.tipoEntrata, e.descrizione].some((campo) => campo?.toLowerCase().includes(testoRicerca))) && nelRangeData(e.data, dataDa, dataA),
+    (e) => (!testoRicerca || [e.tipoEntrata, e.descrizione].some((campo) => campo?.toLowerCase().includes(testoRicerca))) && nelRangeData(e.data, dataDa, dataA),
   )
   const totale = dati.reduce((acc, e) => acc + e.importoEntrata, 0)
   const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(dati.length, [anno, testoRicerca, dataDa, dataA])
@@ -80,7 +80,7 @@ export function EntratePage() {
       <FiltriRicercaData
         ricerca={ricerca}
         onRicercaChange={setRicerca}
-        placeholderRicerca="Cerca per nome o tipo..."
+        placeholderRicerca="Cerca per descrizione o tipo..."
         dataDa={dataDa}
         onDataDaChange={setDataDa}
         dataA={dataA}
@@ -105,7 +105,7 @@ export function EntratePage() {
           {datiVisibili.map((e) => (
             <CardElenco key={e.id}>
               <TestataCardElenco
-                titolo={e.nome}
+                titolo={e.descrizione ?? '—'}
                 sottotitolo={e.tipoEntrata ?? undefined}
                 azioneDestra={
                   <Box component="span" sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 15, color: tokens.ok600 }}>
@@ -136,7 +136,7 @@ export function EntratePage() {
             <TableHead>
               <TableRow>
                 <TableCell>Data</TableCell>
-                <TableCell>Nome</TableCell>
+                <TableCell>Descrizione</TableCell>
                 <TableCell>Tipo</TableCell>
                 <TableCell align="right">Importo</TableCell>
                 <TableCell align="right">Azioni</TableCell>
@@ -154,7 +154,7 @@ export function EntratePage() {
               {datiVisibili.map((e) => (
                 <TableRow key={e.id} hover>
                   <TableCell sx={{ fontFamily: fontMono }}>{e.data ? formattatoreData.format(new Date(e.data)) : '—'}</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>{e.nome}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>{e.descrizione ?? '—'}</TableCell>
                   <TableCell>{e.tipoEntrata ?? '—'}</TableCell>
                   <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700, color: tokens.ok600 }}>
                     {formattatoreValuta.format(e.importoEntrata)}
@@ -186,7 +186,7 @@ export function EntratePage() {
       {daEliminare && (
         <ConfirmDialog
           titolo="Eliminare entrata"
-          messaggio={`Eliminare l'entrata "${daEliminare.nome}"?`}
+          messaggio={`Eliminare l'entrata "${daEliminare.descrizione ?? ''}"?`}
           inCorso={elimina.isPending}
           onConferma={confermaEliminaEntrata}
           onAnnulla={() => setDaEliminare(null)}

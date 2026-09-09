@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import InputAdornment from '@mui/material/InputAdornment'
 import MenuItem from '@mui/material/MenuItem'
@@ -11,6 +12,8 @@ import { fontMono, tokens } from '../../theme'
 import { CampoData } from '../CampoData'
 import { BottoneNuovo } from '../CardElenco'
 import { inizioGiornoLocale, parsaInputData } from '../../lib/date'
+import type { CameraDto } from '../../api/camere'
+import type { TipologiaCameraDto } from '../../api/tipologie'
 
 export { ANNO_CORRENTE } from '../../lib/anni'
 
@@ -163,6 +166,90 @@ export function BarraTotale({ etichetta, valore, colore }: { etichetta: string; 
         {formattatoreValuta.format(valore)}
       </Typography>
     </Box>
+  )
+}
+
+const GENERALI = 'Generali'
+const SEPARATORE_CAMERA = ' - '
+
+/**
+ * "Tipo spesa"/"Tipo entrata" restano campi di testo libero lato backend (porta 1:1 dal sistema
+ * legacy) — qui si riconosce solo se il testo corrente combacia con "Generali" oppure con una
+ * Tipologia (eventualmente seguita da " - Nome camera") per mostrare le select a cascata del
+ * vecchio programma. Un valore che non combacia (es. testo libero già in uso, tipologia rinominata
+ * o eliminata) resta comunque modificabile come testo libero, senza perderlo.
+ */
+function trovaTipologiaECamera(testo: string, tipologie: TipologiaCameraDto[], camere: CameraDto[]) {
+  const valore = testo.trim()
+  if (!valore) return null
+
+  const indiceSeparatore = valore.lastIndexOf(SEPARATORE_CAMERA)
+  if (indiceSeparatore > 0) {
+    const nomeTipologia = valore.slice(0, indiceSeparatore)
+    const nomeCamera = valore.slice(indiceSeparatore + SEPARATORE_CAMERA.length)
+    const tipologia = tipologie.find((t) => t.tipologiaCamera.toLowerCase() === nomeTipologia.toLowerCase())
+    if (tipologia) {
+      const camera = camere.find((c) => c.tipologiaId === tipologia.id && c.nome.toLowerCase() === nomeCamera.toLowerCase()) ?? null
+      return { tipologia, camera }
+    }
+  }
+
+  const tipologia = tipologie.find((t) => t.tipologiaCamera.toLowerCase() === valore.toLowerCase())
+  return tipologia ? { tipologia, camera: null } : null
+}
+
+/**
+ * Select "Generali oppure Tipologia" con select a cascata "Camera" quando si sceglie una
+ * Tipologia — stesso comportamento del vecchio programma, riusato da Spese ed Entrate (unici due
+ * moduli Finanze con un campo "Tipo …" testuale). Il valore risultante resta una singola stringa
+ * (vedi `trovaTipologiaECamera`): "Generali", il nome della tipologia, o "Tipologia - Camera".
+ */
+export function SelettoreTipoConCamera({
+  label,
+  valore,
+  onChange,
+  tipologie,
+  camere,
+  disabled,
+}: {
+  label: string
+  valore: string
+  onChange: (valore: string) => void
+  tipologie: TipologiaCameraDto[]
+  camere: CameraDto[]
+  disabled?: boolean
+}) {
+  const opzioni = [GENERALI, ...tipologie.map((t) => t.tipologiaCamera)]
+  const corrispondenza = trovaTipologiaECamera(valore, tipologie, camere)
+  const camereTipologia = corrispondenza ? camere.filter((c) => c.tipologiaId === corrispondenza.tipologia.id) : []
+
+  return (
+    <>
+      <Autocomplete
+        freeSolo
+        forcePopupIcon
+        fullWidth
+        disabled={disabled}
+        options={opzioni}
+        inputValue={valore}
+        onInputChange={(_, nuovoValore) => onChange(nuovoValore)}
+        renderInput={(params) => <TextField {...params} label={label} />}
+      />
+      {corrispondenza && (
+        <Autocomplete
+          fullWidth
+          disabled={disabled}
+          options={camereTipologia}
+          getOptionLabel={(c) => c.nome}
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          value={corrispondenza.camera}
+          onChange={(_, nuovaCamera) =>
+            onChange(nuovaCamera ? `${corrispondenza.tipologia.tipologiaCamera}${SEPARATORE_CAMERA}${nuovaCamera.nome}` : corrispondenza.tipologia.tipologiaCamera)
+          }
+          renderInput={(params) => <TextField {...params} label="Camera" />}
+        />
+      )}
+    </>
   )
 }
 

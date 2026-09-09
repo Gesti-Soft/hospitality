@@ -63,7 +63,7 @@ export function SpesePage() {
   const testoRicerca = ricerca.trim().toLowerCase()
   const dati = (spese.data ?? []).filter(
     (s) =>
-      (!testoRicerca || [s.nome, s.tipoSpesa, s.metodoPagamento, s.descrizione].some((campo) => campo?.toLowerCase().includes(testoRicerca))) &&
+      (!testoRicerca || [s.tipoSpesa, s.metodoPagamento, s.descrizione].some((campo) => campo?.toLowerCase().includes(testoRicerca))) &&
       nelRangeData(s.dataSpesa, dataDa, dataA),
   )
   const totale = dati.reduce((acc, s) => acc + s.importoSpesa, 0)
@@ -82,7 +82,7 @@ export function SpesePage() {
       <FiltriRicercaData
         ricerca={ricerca}
         onRicercaChange={setRicerca}
-        placeholderRicerca="Cerca per nome, tipo o metodo di pagamento..."
+        placeholderRicerca="Cerca per descrizione, tipo o metodo di pagamento..."
         dataDa={dataDa}
         onDataDaChange={setDataDa}
         dataA={dataA}
@@ -107,7 +107,7 @@ export function SpesePage() {
           {datiVisibili.map((s) => (
             <CardElenco key={s.id}>
               <TestataCardElenco
-                titolo={s.nome}
+                titolo={s.descrizione ?? '—'}
                 sottotitolo={s.tipoSpesa ?? undefined}
                 azioneDestra={
                   <Box component="span" sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 15, color: tokens.error600 }}>
@@ -143,7 +143,7 @@ export function SpesePage() {
             <TableHead>
               <TableRow>
                 <TableCell>Data</TableCell>
-                <TableCell>Nome</TableCell>
+                <TableCell>Descrizione</TableCell>
                 <TableCell>Tipo</TableCell>
                 <TableCell>Metodo</TableCell>
                 <TableCell align="right">Importo</TableCell>
@@ -162,7 +162,7 @@ export function SpesePage() {
               {datiVisibili.map((s) => (
                 <TableRow key={s.id} hover>
                   <TableCell sx={{ fontFamily: fontMono }}>{s.dataSpesa ? formattatoreData.format(new Date(s.dataSpesa)) : '—'}</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>{s.nome}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>{s.descrizione ?? '—'}</TableCell>
                   <TableCell>{s.tipoSpesa ?? '—'}</TableCell>
                   <TableCell>{s.metodoPagamento ?? '—'}</TableCell>
                   <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700, color: tokens.error600 }}>
@@ -195,7 +195,7 @@ export function SpesePage() {
       {daEliminare && (
         <ConfirmDialog
           titolo="Eliminare spesa"
-          messaggio={`Eliminare la spesa "${daEliminare.nome}"?`}
+          messaggio={`Eliminare la spesa "${daEliminare.descrizione ?? ''}"?`}
           inCorso={elimina.isPending}
           onConferma={confermaEliminaSpesa}
           onAnnulla={() => setDaEliminare(null)}
