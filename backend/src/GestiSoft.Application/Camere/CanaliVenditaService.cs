@@ -1,18 +1,39 @@
+using System.Text.RegularExpressions;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Domain.Entities;
 
 namespace GestiSoft.Application.Camere;
 
-public record CreaCanaleVenditaRequest(string Descrizione);
+public record CreaCanaleVenditaRequest(string Descrizione, string? Colore = null);
 
 /// <summary>
 /// CRUD dei canali/agenzie di vendita (es. "Booking.com", "Diretto") — porta
 /// OrderManagement.Model.BusinesObject.SettingAgenzie del legacy, usato come elenco suggerimenti
 /// per il campo Agenzia (testo libero) di Prenotazione.
 /// </summary>
-public class CanaliVenditaService(ICanaleVenditaRepository canali, PermessoStrutturaGuard permessoGuard)
+public partial class CanaliVenditaService(ICanaleVenditaRepository canali, PermessoStrutturaGuard permessoGuard)
 {
+    // Stessa palette usata dal Calendario (frontend/src/pages/operativo/CalendarioPage.tsx,
+    // PALETTE_CANALI) — un colore fisso e persistito sul canale, non più ricalcolato in base
+    // all'ordine delle prenotazioni visibili in un dato periodo (era la causa del bug per cui i
+    // colori "saltavano" cambiando pagina/periodo).
+    private static readonly string[] PaletteColori =
+        ["#1C7EA8", "#DD7A2C", "#1F8A70", "#3A4453", "#4FB4DE", "#F0A868", "#C2921C", "#C24444"];
+
+    [GeneratedRegex("^#[0-9A-Fa-f]{6}$")]
+    private static partial Regex RegexColoreHex();
+
+    /// <summary>Colore valido esplicito → normalizzato in maiuscolo; altrimenti prossimo della palette in base al numero di canali già esistenti.</summary>
+    private static string ScegliColore(string? richiesto, int numeroCanaliEsistenti)
+    {
+        if (!string.IsNullOrWhiteSpace(richiesto) && RegexColoreHex().IsMatch(richiesto.Trim()))
+        {
+            return richiesto.Trim().ToUpperInvariant();
+        }
+        return PaletteColori[numeroCanaliEsistenti % PaletteColori.Length];
+    }
+
     public async Task<IReadOnlyList<SettingAgenzia>> ListaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingAgency, cancellationToken);
@@ -29,7 +50,8 @@ public class CanaliVenditaService(ICanaleVenditaRepository canali, PermessoStrut
             throw new ConflictException("Esiste già un canale di vendita con questo nome.");
         }
 
-        var entity = new SettingAgenzia { StrutturaId = strutturaId, Descrizione = descrizione };
+        var esistenti = await canali.ListByStrutturaAsync(strutturaId, cancellationToken);
+        var entity = new SettingAgenzia { StrutturaId = strutturaId, Descrizione = descrizione, Colore = ScegliColore(request.Colore, esistenti.Count) };
         await canali.AddAsync(entity, cancellationToken);
         return entity;
     }
@@ -52,6 +74,12 @@ public class CanaliVenditaService(ICanaleVenditaRepository canali, PermessoStrut
         }
 
         entity.Descrizione = descrizione;
+        // In modifica un colore mancante/non valido lascia invariato quello già assegnato — solo
+        // in creazione un colore assente fa scattare l'assegnazione automatica dalla palette.
+        if (!string.IsNullOrWhiteSpace(request.Colore) && RegexColoreHex().IsMatch(request.Colore.Trim()))
+        {
+            entity.Colore = request.Colore.Trim().ToUpperInvariant();
+        }
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await canali.UpdateAsync(entity, cancellationToken);
@@ -86,7 +114,7 @@ public class CanaliVenditaService(ICanaleVenditaRepository canali, PermessoStrut
         var creati = new List<SettingAgenzia>();
         foreach (var descrizione in daImportare)
         {
-            var entity = new SettingAgenzia { StrutturaId = strutturaId, Descrizione = descrizione };
+            var entity = new SettingAgenzia { StrutturaId = strutturaId, Descrizione = descrizione, Colore = ScegliColore(null, esistenti.Count + creati.Count) };
             await canali.AddAsync(entity, cancellationToken);
             creati.Add(entity);
         }

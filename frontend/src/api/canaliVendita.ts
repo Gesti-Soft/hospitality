@@ -5,6 +5,7 @@ export interface CanaleVenditaDto {
   id: string
   strutturaId: string
   descrizione: string
+  colore: string
 }
 
 export function useCanaliVendita(strutturaId: string | null) {
@@ -23,7 +24,8 @@ function useInvalidaCanali(strutturaId: string | null) {
 export function useCreaCanaleVendita(strutturaId: string | null) {
   const invalida = useInvalidaCanali(strutturaId)
   return useMutation({
-    mutationFn: (descrizione: string) => apiPost<CanaleVenditaDto>(`/strutture/${strutturaId}/canali-vendita`, { descrizione }),
+    mutationFn: ({ descrizione, colore }: { descrizione: string; colore: string }) =>
+      apiPost<CanaleVenditaDto>(`/strutture/${strutturaId}/canali-vendita`, { descrizione, colore }),
     onSuccess: invalida,
   })
 }
@@ -31,8 +33,8 @@ export function useCreaCanaleVendita(strutturaId: string | null) {
 export function useAggiornaCanaleVendita(strutturaId: string | null) {
   const invalida = useInvalidaCanali(strutturaId)
   return useMutation({
-    mutationFn: ({ canaleId, descrizione }: { canaleId: string; descrizione: string }) =>
-      apiPut<CanaleVenditaDto>(`/strutture/${strutturaId}/canali-vendita/${canaleId}`, { descrizione }),
+    mutationFn: ({ canaleId, descrizione, colore }: { canaleId: string; descrizione: string; colore: string }) =>
+      apiPut<CanaleVenditaDto>(`/strutture/${strutturaId}/canali-vendita/${canaleId}`, { descrizione, colore }),
     onSuccess: invalida,
   })
 }

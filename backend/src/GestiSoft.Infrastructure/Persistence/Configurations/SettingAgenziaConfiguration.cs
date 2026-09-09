@@ -12,6 +12,7 @@ public class SettingAgenziaConfiguration : IEntityTypeConfiguration<SettingAgenz
         builder.ConfigureTenant();
 
         builder.Property(a => a.Descrizione).IsRequired().HasMaxLength(200);
+        builder.Property(a => a.Colore).IsRequired().HasMaxLength(7);
         builder.HasIndex(a => new { a.StrutturaId, a.Descrizione }).IsUnique();
     }
 }

@@ -47,5 +47,5 @@ public class CanaliVenditaController(CanaliVenditaService service, ICurrentUser 
         return NoContent();
     }
 
-    private static CanaleVenditaDto ToDto(SettingAgenzia a) => new(a.Id, a.StrutturaId, a.Descrizione);
+    private static CanaleVenditaDto ToDto(SettingAgenzia a) => new(a.Id, a.StrutturaId, a.Descrizione, a.Colore);
 }

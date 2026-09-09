@@ -34,6 +34,7 @@ import {
 import { useCanaliVendita } from '../../api/canaliVendita'
 import { useTipologie } from '../../api/tipologie'
 import { fontDisplay, fontMono, tokens } from '../../theme'
+import { PALETTE_CANALI } from '../../lib/coloriCanali'
 import { aggiungiGiorni, differenzaGiorni, formatoInputData, inizioGiornoLocale, parsaInputData } from '../../lib/date'
 import { useMobile } from '../../lib/useMobile'
 import { PrenotazioneDialog, type StatoIniziale, ETICHETTA_STATO, COLORE_STATO } from '../../components/PrenotazioneDialog'
@@ -54,20 +55,26 @@ const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', c
 type FormatoCalendario = 'griglia' | 'lista'
 type VistaLista = 'arrivi' | 'in-corso' | 'storico'
 
-// Nessuna lista fissa di canali (Diretta/Booking.com/Airbnb...): i pallini colorati riflettono solo
-// le agenzie che esistono davvero — la distinct dei valori Prenotazione.Agenzia effettivamente in
-// uso nella finestra visibile del calendario, non un elenco statico né la tabella canali_vendita
-// (che è solo un suggerimento testo, vedi PrenotazioneDialog).
-const PALETTE_CANALI = [tokens.blue600, tokens.orange600, tokens.ok600, tokens.ink600, tokens.blue400, tokens.orange400, tokens.wait600, tokens.error600]
-
 function normalizzaAgenzia(agenzia: string | null): string {
   const a = (agenzia ?? '').trim()
   return a === '' ? 'Diretta' : a
 }
 
-function coloreCanale(agenzia: string | null, agenzieDistinct: string[]): { colore: string; etichetta: string } {
+/**
+ * Colore di un canale: preso dal colore configurato in Canali vendita quando esiste una
+ * corrispondenza (match case-insensitive sulla descrizione, l'agenzia sulla prenotazione resta
+ * testo libero), altrimenti dalla palette in base alla posizione nell'elenco STABILE di tutte le
+ * agenzie della struttura (`useAgenzieDistinct`, non filtrato per periodo). Bug corretto: prima
+ * l'indice veniva calcolato sulle sole agenzie presenti nel periodo/vista visibile in quel momento,
+ * quindi cambiando pagina o navigando ad un periodo senza prenotazioni di un canale i colori di
+ * TUTTI i canali si spostavano (l'indice di ognuno cambiava). Con un elenco stabile — o meglio,
+ * con il colore fisso persistito sul canale — lo stesso canale ha sempre lo stesso colore ovunque.
+ */
+function coloreCanale(agenzia: string | null, mappaColoriCanali: Map<string, string>, agenzieStabili: string[]): { colore: string; etichetta: string } {
   const etichetta = normalizzaAgenzia(agenzia)
-  const idx = Math.max(0, agenzieDistinct.indexOf(etichetta))
+  const coloreConfigurato = mappaColoriCanali.get(etichetta.toLowerCase())
+  if (coloreConfigurato) return { colore: coloreConfigurato, etichetta }
+  const idx = Math.max(0, agenzieStabili.indexOf(etichetta))
   return { colore: PALETTE_CANALI[idx % PALETTE_CANALI.length], etichetta }
 }
 
@@ -128,12 +135,13 @@ export function CalendarioPage() {
   const tipologie = useTipologie(strutturaId)
   const agenzieOpzioni = useAgenzieDistinct(strutturaId)
 
+  // In vista Calendario non c'è ricerca (la navigazione è per data, campo cerca nascosto) — il
+  // filtro camere qui è solo per Tipologia. In vista Lista la ricerca cerca dentro le prenotazioni
+  // (ospite, importo, data...), vedi testoRicercaLista più sotto.
   const gruppi = useMemo(() => {
     if (!camere.data) return []
-    const testoRicerca = ricerca.trim().toLowerCase()
     const filtrate = camere.data.filter((c) => {
       if (filtroTipologiaId && c.tipologiaId !== filtroTipologiaId) return false
-      if (testoRicerca && !c.nome.toLowerCase().includes(testoRicerca)) return false
       return true
     })
     const mappa = new Map<string, CameraDto[]>()
@@ -145,7 +153,7 @@ export function CalendarioPage() {
     return Array.from(mappa.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([tipologia, elenco]) => ({ tipologia, camere: elenco.sort((x, y) => x.nome.localeCompare(y.nome)) }))
-  }, [camere.data, filtroTipologiaId, ricerca])
+  }, [camere.data, filtroTipologiaId])
 
   const prenotazioniFiltrate = useMemo(() => {
     const dati = prenotazioni.data ?? []
@@ -162,10 +170,20 @@ export function CalendarioPage() {
     return mappa
   }, [prenotazioniFiltrate])
 
+  // Chi mostrare in legenda: solo i canali con almeno una prenotazione nel periodo/vista corrente.
   const agenzieDistinct = useMemo(
     () => Array.from(new Set(prenotazioniFiltrate.map((p) => normalizzaAgenzia(p.agenzia)))).sort(),
     [prenotazioniFiltrate],
   )
+
+  // Colore di ciascun canale: dalla configurazione in Canali vendita quando esiste, altrimenti da
+  // un elenco STABILE (tutte le agenzie della struttura, non filtrato per periodo) — vedi coloreCanale.
+  const mappaColoriCanali = useMemo(() => {
+    const mappa = new Map<string, string>()
+    for (const c of canali.data ?? []) mappa.set(normalizzaAgenzia(c.descrizione).toLowerCase(), c.colore)
+    return mappa
+  }, [canali.data])
+  const agenzieStabili = useMemo(() => (agenzieOpzioni.data ?? []).map(normalizzaAgenzia), [agenzieOpzioni.data])
 
   // Vista Lista: non è legata al periodo scelto per la griglia (quello serve solo alla vista
   // Calendario) — sfoglia per Arrivi/In corso/Storico come la pagina Ospiti, con gli stessi filtri
@@ -177,14 +195,32 @@ export function CalendarioPage() {
   const caricamentoLista = vistaLista === 'arrivi' ? arrivi.isLoading : vistaLista === 'in-corso' ? inCorsoLista.isLoading : storico.isLoading
 
   const idCamereFiltrate = useMemo(() => new Set(gruppi.flatMap((g) => g.camere.map((c) => c.id))), [gruppi])
+  const testoRicercaLista = formato === 'lista' ? ricerca.trim().toLowerCase() : ''
   const prenotazioniLista = useMemo(() => {
     const dati = datiVistaLista ?? []
     return dati.filter((p) => {
       if (filtroAgenzia && normalizzaAgenzia(p.agenzia) !== filtroAgenzia) return false
       if (p.cameraId && !idCamereFiltrate.has(p.cameraId)) return false
+      if (testoRicercaLista) {
+        const campi = [
+          p.ospiteNome,
+          p.ospiteCognome,
+          p.cameraNome,
+          p.numeroPrenotazione != null ? `#${p.numeroPrenotazione}` : null,
+          normalizzaAgenzia(p.agenzia),
+          p.checkIn ? FORMATTATORE_LABEL.format(new Date(p.checkIn)) : null,
+          p.checkOut ? FORMATTATORE_LABEL.format(new Date(p.checkOut)) : null,
+          p.importoTotale != null ? formattatoreValuta.format(p.importoTotale) : null,
+          p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : null,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        if (!campi.includes(testoRicercaLista)) return false
+      }
       return true
     })
-  }, [datiVistaLista, filtroAgenzia, idCamereFiltrate])
+  }, [datiVistaLista, filtroAgenzia, idCamereFiltrate, testoRicercaLista])
 
   const caricamento = formato === 'lista' ? camere.isLoading || caricamentoLista : camere.isLoading || prenotazioni.isLoading
 
@@ -229,7 +265,7 @@ export function CalendarioPage() {
             <ToggleButton value="griglia">Calendario</ToggleButton>
             <ToggleButton value="lista">Lista</ToggleButton>
           </ToggleButtonGroup>
-          {formato === 'griglia' && <Legenda agenzieDistinct={agenzieDistinct} />}
+          {formato === 'griglia' && <Legenda agenzieDistinct={agenzieDistinct} mappaColoriCanali={mappaColoriCanali} agenzieStabili={agenzieStabili} />}
           {puoScrivere && (
             <BottoneNuovo
               etichetta="+ Nuova prenotazione"
@@ -268,22 +304,24 @@ export function CalendarioPage() {
               ))}
             </TextField>
           )}
-          <TextField
-            size="small"
-            placeholder="Cerca camera..."
-            value={ricerca}
-            onChange={(e) => setRicerca(e.target.value)}
-            sx={{ minWidth: 220 }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" sx={{ color: tokens.textTertiary }} />
-                  </InputAdornment>
-                ),
-              },
-            }}
-          />
+          {formato === 'lista' && (
+            <TextField
+              size="small"
+              placeholder="Cerca ospite, camera, data, importo..."
+              value={ricerca}
+              onChange={(e) => setRicerca(e.target.value)}
+              sx={{ minWidth: 220 }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" sx={{ color: tokens.textTertiary }} />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+          )}
         </Box>
       )}
 
@@ -320,7 +358,7 @@ export function CalendarioPage() {
                     : null
                   : null
                 const { colore: coloreCanaleGiorno, etichetta: etichettaCanale } = prenotazioneGiorno
-                  ? coloreCanale(prenotazioneGiorno.agenzia, agenzieDistinct)
+                  ? coloreCanale(prenotazioneGiorno.agenzia, mappaColoriCanali, agenzieStabili)
                   : { colore: undefined, etichetta: undefined }
 
                 return (
@@ -464,7 +502,8 @@ export function CalendarioPage() {
                       : undefined
                   }
                   onPrenotazione={(p) => setDialogo({ modo: 'modifica', prenotazione: p })}
-                  agenzieDistinct={agenzieDistinct}
+                  mappaColoriCanali={mappaColoriCanali}
+                  agenzieStabili={agenzieStabili}
                 />
               ))}
             </Box>
@@ -567,13 +606,21 @@ export function CalendarioPage() {
   )
 }
 
-function Legenda({ agenzieDistinct }: { agenzieDistinct: string[] }) {
+function Legenda({
+  agenzieDistinct,
+  mappaColoriCanali,
+  agenzieStabili,
+}: {
+  agenzieDistinct: string[]
+  mappaColoriCanali: Map<string, string>
+  agenzieStabili: string[]
+}) {
   if (agenzieDistinct.length === 0) return null
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
       {agenzieDistinct.map((etichetta) => (
         <Box key={etichetta} sx={{ display: 'flex', alignItems: 'center', gap: 0.625 }}>
-          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: coloreCanale(etichetta, agenzieDistinct).colore }} />
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: coloreCanale(etichetta, mappaColoriCanali, agenzieStabili).colore }} />
           <Typography sx={{ fontSize: 11.5, color: tokens.textSecondary }}>{etichetta}</Typography>
         </Box>
       ))}
@@ -590,10 +637,11 @@ interface RigaCameraProps {
   prenotazioni: PrenotazioneDto[]
   onCellaVuota?: (giorno: Date) => void
   onPrenotazione: (p: PrenotazioneDto) => void
-  agenzieDistinct: string[]
+  mappaColoriCanali: Map<string, string>
+  agenzieStabili: string[]
 }
 
-function RigaCamera({ camera, giorni, giorniVisibili, inizioFinestra, fineFinestra, prenotazioni, onCellaVuota, onPrenotazione, agenzieDistinct }: RigaCameraProps) {
+function RigaCamera({ camera, giorni, giorniVisibili, inizioFinestra, fineFinestra, prenotazioni, onCellaVuota, onPrenotazione, mappaColoriCanali, agenzieStabili }: RigaCameraProps) {
   const barre = useMemo(() => {
     return prenotazioni
       .map((p) => {
@@ -654,7 +702,7 @@ function RigaCamera({ camera, giorni, giorniVisibili, inizioFinestra, fineFinest
         })}
 
         {barre.map(({ prenotazione, startIdx, span }) => {
-          const { colore, etichetta } = coloreCanale(prenotazione.agenzia, agenzieDistinct)
+          const { colore, etichetta } = coloreCanale(prenotazione.agenzia, mappaColoriCanali, agenzieStabili)
           const nomeOspite = prenotazione.ospiteNome || prenotazione.ospiteCognome ? `${prenotazione.ospiteNome ?? ''} ${prenotazione.ospiteCognome ?? ''}`.trim() : null
           const testoBarra = nomeOspite || (prenotazione.numeroPrenotazione ? `#${prenotazione.numeroPrenotazione}` : etichetta)
           return (

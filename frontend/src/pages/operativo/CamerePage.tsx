@@ -40,6 +40,7 @@ import {
 } from '../../api/canaliVendita'
 import { ApiError } from '../../api/client'
 import { fontDisplay, fontMono, tokens } from '../../theme'
+import { PALETTE_CANALI, coloreAutomatico } from '../../lib/coloriCanali'
 import { useToast } from '../../toast/ToastContext'
 import { useMobile } from '../../lib/useMobile'
 import { CameraDialog } from '../../components/CameraDialog'
@@ -716,6 +717,7 @@ function TabCanali({
   const mobile = useMobile()
   const [dialogo, setDialogo] = useState<'chiuso' | 'nuovo' | CanaleVenditaDto>('chiuso')
   const [descrizione, setDescrizione] = useState('')
+  const [colore, setColore] = useState('')
   const [erroreDialogo, setErroreDialogo] = useState<string | null>(null)
   const [daEliminare, setDaEliminare] = useState<CanaleVenditaDto | null>(null)
   const toast = useToast()
@@ -735,6 +737,9 @@ function TabCanali({
 
   function apriDialogo(canale: 'nuovo' | CanaleVenditaDto) {
     setDescrizione(canale === 'nuovo' ? '' : canale.descrizione)
+    // Colore assegnato subito in automatico (stessa palette usata dal backend quando non ne viene
+    // inviato uno esplicito) — l'utente può cambiarlo prima di salvare, ma parte già scelto.
+    setColore(canale === 'nuovo' ? coloreAutomatico((canali ?? []).length) : canale.colore)
     setErroreDialogo(null)
     setDialogo(canale)
   }
@@ -746,9 +751,9 @@ function TabCanali({
     }
     const onError = (err: unknown) => setErroreDialogo(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
     if (dialogo === 'nuovo' || dialogo === 'chiuso') {
-      crea.mutate(descrizione.trim(), { onSuccess: () => setDialogo('chiuso'), onError })
+      crea.mutate({ descrizione: descrizione.trim(), colore }, { onSuccess: () => setDialogo('chiuso'), onError })
     } else {
-      aggiorna.mutate({ canaleId: dialogo.id, descrizione: descrizione.trim() }, { onSuccess: () => setDialogo('chiuso'), onError })
+      aggiorna.mutate({ canaleId: dialogo.id, descrizione: descrizione.trim(), colore }, { onSuccess: () => setDialogo('chiuso'), onError })
     }
   }
 
@@ -778,7 +783,14 @@ function TabCanali({
           {(canali ?? []).length === 0 && <MessaggioVuotoElenco messaggio="Nessun canale configurato." />}
           {(canali ?? []).map((c) => (
             <CardElenco key={c.id}>
-              <TestataCardElenco titolo={c.descrizione} />
+              <TestataCardElenco
+                titolo={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: c.colore, flex: '0 0 auto' }} />
+                    {c.descrizione}
+                  </Box>
+                }
+              />
               <AzioniCardElenco>
                 <IconButton size="small" onClick={() => apriDialogo(c)}>
                   <EditIcon fontSize="small" />
@@ -805,7 +817,12 @@ function TabCanali({
               {(canali ?? []).length === 0 && <RigaVuota colSpan={2} messaggio="Nessun canale configurato." />}
               {(canali ?? []).map((c) => (
                 <TableRow key={c.id} hover>
-                  <TableCell sx={{ fontWeight: 700 }}>{c.descrizione}</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: c.colore, flex: '0 0 auto' }} />
+                      {c.descrizione}
+                    </Box>
+                  </TableCell>
                   <TableCell align="right">
                     <IconButton size="small" onClick={() => apriDialogo(c)}>
                       <EditIcon fontSize="small" />
@@ -827,6 +844,34 @@ function TabCanali({
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             {erroreDialogo && <Alert severity="error">{erroreDialogo}</Alert>}
             <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} autoFocus disabled={inCorso} />
+            <Box>
+              <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.textSecondary, mb: 1 }}>Colore</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                {PALETTE_CANALI.map((c) => (
+                  <Box
+                    key={c}
+                    onClick={() => !inCorso && setColore(c)}
+                    sx={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: '50%',
+                      bgcolor: c,
+                      cursor: inCorso ? 'default' : 'pointer',
+                      outline: colore.toUpperCase() === c.toUpperCase() ? `2px solid ${tokens.textPrimary}` : 'none',
+                      outlineOffset: '2px',
+                    }}
+                  />
+                ))}
+                <Box
+                  component="input"
+                  type="color"
+                  value={colore || '#1C7EA8'}
+                  onChange={(e) => setColore(e.target.value)}
+                  disabled={inCorso}
+                  sx={{ width: 34, height: 26, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 1, p: 0, cursor: inCorso ? 'default' : 'pointer' }}
+                />
+              </Box>
+            </Box>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2.5 }}>
             <Button onClick={() => setDialogo('chiuso')} disabled={inCorso}>

@@ -10,4 +10,11 @@ namespace GestiSoft.Domain.Entities;
 public class SettingAgenzia : TenantEntity
 {
     public string Descrizione { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Colore (hex "#RRGGBB") usato per identificare il canale nel Calendario — assegnato in
+    /// automatico alla creazione, modificabile dall'utente. Fisso sull'entità apposta per non
+    /// dipendere dall'ordine/composizione delle prenotazioni visibili in un dato periodo.
+    /// </summary>
+    public string Colore { get; set; } = string.Empty;
 }
