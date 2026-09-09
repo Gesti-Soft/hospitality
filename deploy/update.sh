@@ -13,8 +13,8 @@ git pull
 echo "=== build immagini ==="
 docker compose build
 
-echo "=== riavvio servizi (con Caddy) ==="
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+echo "=== riavvio servizi ==="
+docker compose up -d
 
 echo "=== stato ==="
 docker compose ps

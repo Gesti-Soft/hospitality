@@ -18,6 +18,7 @@ docker-compose.env
 docker/postgres/dumps/
 docker/postgres/logs/
 docker/postgres/pre-migration-safety-dump/
+*.dump
 
 # OS
 .DS_Store

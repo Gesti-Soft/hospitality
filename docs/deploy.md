@@ -12,9 +12,21 @@ sottodominio evita ogni modifica a quel server esistente).
 - VPS Debian con Docker + Docker Compose plugin già installati (verificare con `docker compose version`).
 - Un record DNS **A** per `hospitality.gestisoft.it` che punta all'IP pubblico della VPS
   (aggiunto dal pannello OVH — non è qualcosa che si fa da qui). Aspettare la propagazione
-  (`dig hospitality.gestisoft.it` deve restituire l'IP giusto) prima del passo 8.
-- Porte 80 e 443 raggiungibili dall'esterno sulla VPS (nessun altro servizio le occupa già —
-  verificare con `sudo ss -tlnp | grep -E ':80|:443'`, deve risultare vuoto prima di avviare Caddy).
+  (`dig +short hospitality.gestisoft.it` deve restituire l'IP giusto, confrontabile con
+  `curl -4 -s https://icanhazip.com` eseguito sulla VPS) prima del passo 7.
+- **Importante — VPS condivisa, non vuota**: `vps-5e0dcc6f` ospita già molti altri progetti
+  (didattic-sito, royalwatchery, managesuite, ecc.) e usa **Virtualmin**, che gestisce un Apache di
+  sistema con un virtual host per dominio — le porte 80/443 sono quindi **sempre già occupate** da
+  quell'Apache (non un problema: è così che funziona il resto della VPS, vedi punto 7 più sotto,
+  niente Caddy qui). Prima di scegliere le porte host per Postgres/Api/Frontend (punto 2),
+  verificare che siano libere — non dare per scontati i default:
+  ```bash
+  sudo ss -tulpn | grep :<porta>
+  # oppure, per porte già pubblicate da Docker altrove:
+  docker ps --filter "publish=<porta>"
+  ```
+  (successo il 2026-09-09: `5432` presa da `managesuite-db`, `8081` da `gestisoft-phpmyadmin` —
+  usati `5433`/`8082` al loro posto nel `.env`).
 
 ## 1. Codice sulla VPS
 
@@ -39,7 +51,7 @@ Valori da impostare:
 | `FRONTEND_ORIGIN` | `https://hospitality.gestisoft.it` |
 | `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` | Lasciare pure i valori di esempio — **non verranno usati**: il database ripristinato al passo 5 porta già il vero Super Admin, il seeder si ferma da solo appena trova un Super Admin già esistente (nessun rischio di duplicazione) |
 | `GESTISOFT_BASE_URL`, `ALLOGGIATIWEB_ENDPOINT`, `OSSERVATORIO_BASE_URL`, `PAYTOURIST_BASE_URL` | **Stessi valori già in uso in locale** (`.env` locale) — sono gli endpoint reali delle integrazioni esterne già funzionanti oggi per Villa Chifeci Scopello, non vanno cambiati |
-| `POSTGRES_HOST_PORT` / `API_HOST_PORT` / `FRONTEND_HOST_PORT` | Lasciare i default — restano legati a `127.0.0.1`, non raggiungibili dall'esterno; solo Caddy espone qualcosa pubblicamente |
+| `POSTGRES_HOST_PORT` / `API_HOST_PORT` / `FRONTEND_HOST_PORT` | Restano legati a `127.0.0.1`, non raggiungibili dall'esterno (solo l'Apache di Virtualmin espone qualcosa pubblicamente, vedi punto 7) — **verificare che siano libere prima di avviare**, vedi nota al punto 0 |
 
 ## 3. Build (senza avviare nulla)
 
@@ -98,7 +110,7 @@ Nei log dell'avvio dell'`api` deve comparire `No migrations were applied. The da
 up to date.` (la migrazione automatica introdotta in `Program.cs` — se invece ne applica qualcuna è
 perché il codice deployato è più recente del dump: normale, nessun problema).
 
-Verifica interna (ancora senza Caddy/dominio):
+Verifica interna (ancora senza dominio pubblico):
 
 ```bash
 curl http://127.0.0.1:5080/health
@@ -106,21 +118,48 @@ curl http://127.0.0.1:5080/health
 
 Deve rispondere `{"status":"ok",...}`.
 
-## 7. Caddy (reverse proxy + HTTPS automatico)
+## 7. Reverse proxy pubblico — Apache/Virtualmin, non Caddy
+
+`docker-compose.prod.yml` (che aggiunge un container Caddy) **non si usa su questa VPS**: Virtualmin
+gestisce già un Apache di sistema con un virtual host per dominio (incluso `hospitality.gestisoft.it`,
+creato automaticamente con certificato SSL già valido quando è stato aggiunto l'account) — Caddy
+competerebbe per le stesse porte 80/443 e fallirebbe ad avviarsi (successo il 2026-09-09). Si
+riusa invece l'Apache esistente, seguendo lo stesso schema già adottato per gli altri siti con
+frontend/backend separati su questa VPS (es. `managesuite`, vedi il suo
+`/etc/apache2/sites-enabled/managesuite.*.conf` come riferimento):
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f caddy
+sudo nano /etc/apache2/sites-enabled/hospitality.gestisoft.it.conf
 ```
 
-La prima volta Caddy ottiene un certificato Let's Encrypt in automatico (serve che il DNS sia già
-propagato, vedi punto 0) — nei log si vede `certificate obtained successfully`. Poi:
+Nel blocco `<VirtualHost *:443>` (quello con `SSLEngine on`), subito dopo la riga
+`ProxyPass /.well-known !`, aggiungere:
+
+```apache
+    ProxyPreserveHost On
+    ProxyRequests Off
+    ProxyPass / http://127.0.0.1:8082/
+    ProxyPassReverse / http://127.0.0.1:8082/
+```
+
+(`8082` è il valore scelto per `FRONTEND_HOST_PORT` — usare quello effettivamente impostato nel
+`.env` di questa VPS se diverso). Non serve toccare il blocco `*:80`: il sito resta comunque
+raggiungibile in HTTPS. Poi:
+
+```bash
+sudo apachectl configtest   # deve dire "Syntax OK" — se dà errore, NON procedere
+sudo systemctl reload apache2
+```
+
+`reload` (non `restart`) ricarica la configurazione di *tutti* i siti su questa Apache senza
+downtime — sicuro anche su una VPS condivisa, a patto che `configtest` sia passato prima. Verifica:
 
 ```bash
 curl -I https://hospitality.gestisoft.it
 ```
 
-Deve rispondere `200`, con un certificato valido (nessun avviso in un browser reale).
+Deve rispondere `200` con `server: nginx` (il container `frontend`, raggiunto attraverso il proxy
+Apache) — non più `server: Apache` (la pagina statica di default di Virtualmin).
 
 ## 8. Verifica finale
 
@@ -174,11 +213,13 @@ continua a girare in locale indipendentemente da come va il deploy. Se qualcosa 
 VPS:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+docker compose down
 ```
 
-ferma tutto senza cancellare i volumi (dati Postgres e certificati Caddy restano). Si può
-correggere e ripartire dal punto 6 senza dover rifare la migrazione dati (già nel volume).
+ferma tutto senza cancellare i volumi (dati Postgres restano). Si può correggere e ripartire dal
+punto 6 senza dover rifare la migrazione dati (già nel volume). Il virtual host Apache/Virtualmin
+(punto 7) non viene toccato da questo comando — resterà a servire l'ultima risposta ottenuta
+dall'app finché i container non ripartono.
 
 ## Aggiornamenti futuri
 
@@ -188,6 +229,8 @@ Da questo deploy in poi, un aggiornamento è solo:
 ./deploy/update.sh
 ```
 
-(`git pull` + rebuild + restart con Caddy incluso, log dell'`api` mostrati a schermo per
-controllare che la migrazione — automatica da questo deploy in poi, vedi `Program.cs` — sia andata
-a buon fine). Non serve più alcun passo manuale `dotnet ef database update` a parte.
+(`git pull` + rebuild + restart dei container di questo repo — niente Caddy, vedi punto 7 — con
+log dell'`api` mostrati a schermo per controllare che la migrazione — automatica da questo deploy
+in poi, vedi `Program.cs` — sia andata a buon fine). Non serve più alcun passo manuale
+`dotnet ef database update` a parte. Il virtual host Apache/Virtualmin (punto 7) resta invariato
+tra un aggiornamento e l'altro: va toccato di nuovo solo se cambia la porta `FRONTEND_HOST_PORT`.
