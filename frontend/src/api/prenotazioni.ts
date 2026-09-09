@@ -116,6 +116,15 @@ export function usePrenotazioniPeriodo(strutturaId: string | null, dataInizio: D
   })
 }
 
+/** Agenzie (canali) distinte realmente usate dalla struttura (mai annullate) — per il filtro del Calendario, che non deve proporre canali mai usati. */
+export function useAgenzieDistinct(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['prenotazioni', strutturaId, 'agenzie'],
+    queryFn: () => apiGet<string[]>(`/strutture/${strutturaId}/prenotazioni/agenzie`),
+    enabled: !!strutturaId,
+  })
+}
+
 export function usePreventivo(
   strutturaId: string | null,
   cameraId: string | null,

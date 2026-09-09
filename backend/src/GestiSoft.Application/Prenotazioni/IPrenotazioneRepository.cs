@@ -49,6 +49,13 @@ public interface IPrenotazioneRepository
     /// </summary>
     Task<IReadOnlyList<int>> ListaAnniConPrenotazioniAsync(Guid strutturaId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Agenzie (canali) distinte realmente presenti su prenotazioni non annullate della struttura
+    /// (Agenzia null/vuota conta come "Diretta") — per il filtro del Calendario, che su richiesta
+    /// esplicita non deve proporre canali mai usati (es. Expedia se non è mai stata usata).
+    /// </summary>
+    Task<IReadOnlyList<string>> ListaAgenzieAsync(Guid strutturaId, CancellationToken cancellationToken);
+
     /// <summary>Prenotazioni non annullate di una camera che si sovrappongono al periodo — usata dalla sincronizzazione disponibilità Wubook di Fase 5.</summary>
     Task<IReadOnlyList<Prenotazione>> ListOccupazioneAsync(Guid strutturaId, Guid cameraId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken);
 

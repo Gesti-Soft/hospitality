@@ -4,7 +4,16 @@ import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import MenuItem from '@mui/material/MenuItem'
+import Table from '@mui/material/Table'
+import TableBody from '@mui/material/TableBody'
+import TableCell from '@mui/material/TableCell'
+import TableHead from '@mui/material/TableHead'
+import TableRow from '@mui/material/TableRow'
+import Tab from '@mui/material/Tab'
+import Tabs from '@mui/material/Tabs'
 import TextField from '@mui/material/TextField'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import Skeleton from '@mui/material/Skeleton'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
@@ -13,7 +22,15 @@ import CalendarIcon from '@mui/icons-material/CalendarTodayOutlined'
 import SearchIcon from '@mui/icons-material/Search'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { StatoCamera, useCamere, type CameraDto } from '../../api/camere'
-import { usePrenotazioniPeriodo, StatoPrenotazione, type PrenotazioneDto } from '../../api/prenotazioni'
+import {
+  useAgenzieDistinct,
+  useArriviInCorso,
+  useArriviProssimi,
+  usePrenotazioniPeriodo,
+  useStoricoPrenotazioni,
+  StatoPrenotazione,
+  type PrenotazioneDto,
+} from '../../api/prenotazioni'
 import { useCanaliVendita } from '../../api/canaliVendita'
 import { useTipologie } from '../../api/tipologie'
 import { fontDisplay, fontMono, tokens } from '../../theme'
@@ -32,6 +49,10 @@ const RIGA_ALTEZZA = 56
 
 const NOMI_GIORNO = ['DOM', 'LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB']
 const FORMATTATORE_LABEL = new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
+const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
+
+type FormatoCalendario = 'griglia' | 'lista'
+type VistaLista = 'arrivi' | 'in-corso' | 'storico'
 
 // Nessuna lista fissa di canali (Diretta/Booking.com/Airbnb...): i pallini colorati riflettono solo
 // le agenzie che esistono davvero — la distinct dei valori Prenotazione.Agenzia effettivamente in
@@ -70,8 +91,11 @@ export function CalendarioPage() {
   const puoScrivere = usePuoScrivere('reservationWrite')
   const [inizioFinestra, setInizioFinestra] = useState(() => inizioGiornoLocale(new Date()))
   const [anchorElCalendario, setAnchorElCalendario] = useState<HTMLElement | null>(null)
+  const [formato, setFormato] = useState<FormatoCalendario>('griglia')
+  const [vistaLista, setVistaLista] = useState<VistaLista>('arrivi')
   const [dialogo, setDialogo] = useState<StatoIniziale | null>(null)
   const [filtroTipologiaId, setFiltroTipologiaId] = useState('')
+  const [filtroAgenzia, setFiltroAgenzia] = useState('')
   const [ricerca, setRicerca] = useState('')
 
   // La griglia occupa tutto lo spazio disponibile: il numero di giorni visibili si ricalcola in
@@ -102,6 +126,7 @@ export function CalendarioPage() {
   const prenotazioni = usePrenotazioniPeriodo(strutturaId, inizioFinestra, fineFinestra)
   const canali = useCanaliVendita(strutturaId)
   const tipologie = useTipologie(strutturaId)
+  const agenzieOpzioni = useAgenzieDistinct(strutturaId)
 
   const gruppi = useMemo(() => {
     if (!camere.data) return []
@@ -122,53 +147,89 @@ export function CalendarioPage() {
       .map(([tipologia, elenco]) => ({ tipologia, camere: elenco.sort((x, y) => x.nome.localeCompare(y.nome)) }))
   }, [camere.data, filtroTipologiaId, ricerca])
 
+  const prenotazioniFiltrate = useMemo(() => {
+    const dati = prenotazioni.data ?? []
+    return filtroAgenzia ? dati.filter((p) => normalizzaAgenzia(p.agenzia) === filtroAgenzia) : dati
+  }, [prenotazioni.data, filtroAgenzia])
+
   const prenotazioniPerCamera = useMemo(() => {
     const mappa = new Map<string, PrenotazioneDto[]>()
-    for (const p of prenotazioni.data ?? []) {
+    for (const p of prenotazioniFiltrate) {
       if (!p.cameraId || !p.checkIn || !p.checkOut) continue
       if (!mappa.has(p.cameraId)) mappa.set(p.cameraId, [])
       mappa.get(p.cameraId)!.push(p)
     }
     return mappa
-  }, [prenotazioni.data])
+  }, [prenotazioniFiltrate])
 
   const agenzieDistinct = useMemo(
-    () => Array.from(new Set((prenotazioni.data ?? []).map((p) => normalizzaAgenzia(p.agenzia)))).sort(),
-    [prenotazioni.data],
+    () => Array.from(new Set(prenotazioniFiltrate.map((p) => normalizzaAgenzia(p.agenzia)))).sort(),
+    [prenotazioniFiltrate],
   )
 
-  const caricamento = camere.isLoading || prenotazioni.isLoading
+  // Vista Lista: non è legata al periodo scelto per la griglia (quello serve solo alla vista
+  // Calendario) — sfoglia per Arrivi/In corso/Storico come la pagina Ospiti, con gli stessi filtri
+  // Tipologia/camera cercata/Agenzia applicati sopra.
+  const arrivi = useArriviProssimi(strutturaId)
+  const inCorsoLista = useArriviInCorso(strutturaId)
+  const storico = useStoricoPrenotazioni(strutturaId, new Date().getFullYear())
+  const datiVistaLista = vistaLista === 'arrivi' ? arrivi.data : vistaLista === 'in-corso' ? inCorsoLista.data : storico.data
+  const caricamentoLista = vistaLista === 'arrivi' ? arrivi.isLoading : vistaLista === 'in-corso' ? inCorsoLista.isLoading : storico.isLoading
+
+  const idCamereFiltrate = useMemo(() => new Set(gruppi.flatMap((g) => g.camere.map((c) => c.id))), [gruppi])
+  const prenotazioniLista = useMemo(() => {
+    const dati = datiVistaLista ?? []
+    return dati.filter((p) => {
+      if (filtroAgenzia && normalizzaAgenzia(p.agenzia) !== filtroAgenzia) return false
+      if (p.cameraId && !idCamereFiltrate.has(p.cameraId)) return false
+      return true
+    })
+  }, [datiVistaLista, filtroAgenzia, idCamereFiltrate])
+
+  const caricamento = formato === 'lista' ? camere.isLoading || caricamentoLista : camere.isLoading || prenotazioni.isLoading
 
   return (
     <Box ref={contenitoreRef} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? -1 : -giorniVisibili))}>
-            <ChevronLeftIcon fontSize="small" />
-          </IconButton>
-          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 14.5, px: 0.5, minWidth: mobile ? 130 : 190, textAlign: 'center' }}>
-            {mobile ? FORMATTATORE_LABEL.format(giorni[0]) : `${FORMATTATORE_LABEL.format(giorni[0])} – ${FORMATTATORE_LABEL.format(giorni[giorni.length - 1])}`}
-          </Typography>
-          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? 1 : giorniVisibili))}>
-            <ChevronRightIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" onClick={(e) => setAnchorElCalendario(e.currentTarget)} title="Scegli un periodo">
-            <CalendarIcon fontSize="small" />
-          </IconButton>
-          <CalendarioPopover
-            anchorEl={anchorElCalendario}
-            valore={formatoInputData(inizioFinestra)}
-            mostraOggi
-            onSeleziona={(valore) => {
-              setInizioFinestra(inizioGiornoLocale(parsaInputData(valore)))
-              setAnchorElCalendario(null)
-            }}
-            onClose={() => setAnchorElCalendario(null)}
-          />
-        </Box>
+        {formato === 'griglia' ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? -1 : -giorniVisibili))}>
+              <ChevronLeftIcon fontSize="small" />
+            </IconButton>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 14.5, px: 0.5, minWidth: mobile ? 130 : 190, textAlign: 'center' }}>
+              {mobile ? FORMATTATORE_LABEL.format(giorni[0]) : `${FORMATTATORE_LABEL.format(giorni[0])} – ${FORMATTATORE_LABEL.format(giorni[giorni.length - 1])}`}
+            </Typography>
+            <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? 1 : giorniVisibili))}>
+              <ChevronRightIcon fontSize="small" />
+            </IconButton>
+            <IconButton size="small" onClick={(e) => setAnchorElCalendario(e.currentTarget)} title="Scegli un periodo">
+              <CalendarIcon fontSize="small" />
+            </IconButton>
+            <CalendarioPopover
+              anchorEl={anchorElCalendario}
+              valore={formatoInputData(inizioFinestra)}
+              mostraOggi
+              onSeleziona={(valore) => {
+                setInizioFinestra(inizioGiornoLocale(parsaInputData(valore)))
+                setAnchorElCalendario(null)
+              }}
+              onClose={() => setAnchorElCalendario(null)}
+            />
+          </Box>
+        ) : (
+          <Tabs value={vistaLista} onChange={(_, v) => setVistaLista(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ minHeight: 0 }}>
+            <Tab label="Arrivi" value="arrivi" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+            <Tab label="In corso" value="in-corso" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+            <Tab label="Storico" value="storico" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+          </Tabs>
+        )}
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Legenda agenzieDistinct={agenzieDistinct} />
+          <ToggleButtonGroup exclusive size="small" value={formato} onChange={(_, v) => v && setFormato(v)}>
+            <ToggleButton value="griglia">Calendario</ToggleButton>
+            <ToggleButton value="lista">Lista</ToggleButton>
+          </ToggleButtonGroup>
+          {formato === 'griglia' && <Legenda agenzieDistinct={agenzieDistinct} />}
           {puoScrivere && (
             <BottoneNuovo
               etichetta="+ Nuova prenotazione"
@@ -197,6 +258,16 @@ export function CalendarioPage() {
               </MenuItem>
             ))}
           </TextField>
+          {(agenzieOpzioni.data ?? []).length > 0 && (
+            <TextField select size="small" label="Agenzia" value={filtroAgenzia} onChange={(e) => setFiltroAgenzia(e.target.value)} sx={{ minWidth: 160 }}>
+              <MenuItem value="">Tutte</MenuItem>
+              {(agenzieOpzioni.data ?? []).map((a) => (
+                <MenuItem key={a} value={a}>
+                  {a}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
           <TextField
             size="small"
             placeholder="Cerca camera..."
@@ -230,7 +301,7 @@ export function CalendarioPage() {
         </Box>
       )}
 
-      {!caricamento && gruppi.length > 0 && mobile && (
+      {!caricamento && formato === 'griglia' && gruppi.length > 0 && mobile && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {gruppi.map((gruppo) => (
             <Box key={gruppo.tipologia} sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -309,7 +380,7 @@ export function CalendarioPage() {
         </Box>
       )}
 
-      {!caricamento && gruppi.length > 0 && !mobile && (
+      {!caricamento && formato === 'griglia' && gruppi.length > 0 && !mobile && (
         <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, overflow: 'hidden', bgcolor: tokens.surface }}>
           {/* Intestazione giorni */}
           <Box sx={{ display: 'flex', position: 'sticky', top: 0, zIndex: 3, bgcolor: tokens.surface, borderBottom: `1px solid ${tokens.surfaceBorder}` }}>
@@ -398,6 +469,87 @@ export function CalendarioPage() {
               ))}
             </Box>
           ))}
+        </Box>
+      )}
+
+      {!caricamento && formato === 'lista' && mobile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {prenotazioniLista.length === 0 && <Typography sx={{ fontSize: 13, color: tokens.textSecondary }}>Nessuna prenotazione in questa vista.</Typography>}
+          {prenotazioniLista.map((p) => {
+            const nomeOspite = p.ospiteNome || p.ospiteCognome ? `${p.ospiteNome ?? ''} ${p.ospiteCognome ?? ''}`.trim() : null
+            return (
+              <CardElenco key={p.id} onClick={() => setDialogo({ modo: 'modifica', prenotazione: p })} coloreAccento={p.statoPrenotazione != null ? COLORE_STATO[p.statoPrenotazione] : undefined}>
+                <TestataCardElenco
+                  titolo={p.numeroPrenotazione ? `#${p.numeroPrenotazione}` : p.cameraNome ?? '—'}
+                  sottotitolo={nomeOspite ?? 'Ospite non ancora indicato'}
+                  azioneDestra={
+                    p.statoPrenotazione != null && (
+                      <Chip size="small" label={ETICHETTA_STATO[p.statoPrenotazione]} sx={{ bgcolor: COLORE_STATO[p.statoPrenotazione], color: '#fff', fontWeight: 700 }} />
+                    )
+                  }
+                />
+                <RigaCardMeta
+                  voci={[
+                    { etichetta: 'Camera', valore: p.cameraNome ?? '—' },
+                    { etichetta: 'Check-in', valore: p.checkIn ? FORMATTATORE_LABEL.format(new Date(p.checkIn)) : '—' },
+                    { etichetta: 'Check-out', valore: p.checkOut ? FORMATTATORE_LABEL.format(new Date(p.checkOut)) : '—' },
+                    { etichetta: 'Importo prenotazione', valore: p.importoPrenotazione != null ? formattatoreValuta.format(p.importoPrenotazione) : '—' },
+                    { etichetta: 'Importo pagato', valore: p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : '—' },
+                  ]}
+                />
+              </CardElenco>
+            )
+          })}
+        </Box>
+      )}
+
+      {!caricamento && formato === 'lista' && !mobile && (
+        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Prenotazione</TableCell>
+                <TableCell>Stato</TableCell>
+                <TableCell>Ospite</TableCell>
+                <TableCell>Camera</TableCell>
+                <TableCell>Check-in</TableCell>
+                <TableCell>Check-out</TableCell>
+                <TableCell>Canale</TableCell>
+                <TableCell align="right">Importo prenotazione</TableCell>
+                <TableCell align="right">Importo pagato</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {prenotazioniLista.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={9} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                    Nessuna prenotazione in questa vista.
+                  </TableCell>
+                </TableRow>
+              )}
+              {prenotazioniLista.map((p) => (
+                <TableRow key={p.id} hover onClick={() => setDialogo({ modo: 'modifica', prenotazione: p })} sx={{ cursor: 'pointer' }}>
+                  <TableCell sx={{ fontWeight: 700 }}>{p.numeroPrenotazione ? `#${p.numeroPrenotazione}` : '—'}</TableCell>
+                  <TableCell>
+                    {p.statoPrenotazione != null && (
+                      <Chip size="small" label={ETICHETTA_STATO[p.statoPrenotazione]} sx={{ bgcolor: COLORE_STATO[p.statoPrenotazione], color: '#fff', fontWeight: 700 }} />
+                    )}
+                  </TableCell>
+                  <TableCell>{p.ospiteNome || p.ospiteCognome ? `${p.ospiteNome ?? ''} ${p.ospiteCognome ?? ''}`.trim() : '—'}</TableCell>
+                  <TableCell sx={{ fontFamily: fontMono }}>{p.cameraNome ?? '—'}</TableCell>
+                  <TableCell sx={{ fontFamily: fontMono }}>{p.checkIn ? FORMATTATORE_LABEL.format(new Date(p.checkIn)) : '—'}</TableCell>
+                  <TableCell sx={{ fontFamily: fontMono }}>{p.checkOut ? FORMATTATORE_LABEL.format(new Date(p.checkOut)) : '—'}</TableCell>
+                  <TableCell>{normalizzaAgenzia(p.agenzia)}</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
+                    {p.importoPrenotazione != null ? formattatoreValuta.format(p.importoPrenotazione) : '—'}
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
+                    {p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : '—'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </Box>
       )}
 

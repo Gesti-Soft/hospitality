@@ -37,6 +37,14 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
         return Ok(prenotazioni.Select(ToDto));
     }
 
+    /// <summary>Agenzie (canali) distinte realmente usate dalla struttura — per il filtro del Calendario.</summary>
+    [HttpGet("agenzie")]
+    public async Task<IActionResult> Agenzie(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var agenzie = await service.ListaAgenzieAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(agenzie);
+    }
+
     [HttpGet("{prenotazioneId:guid}")]
     public async Task<IActionResult> Get(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
     {

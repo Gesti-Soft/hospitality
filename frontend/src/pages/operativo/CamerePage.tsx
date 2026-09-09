@@ -770,11 +770,6 @@ function TabCanali({
           <BottoneNuovo etichetta="+ Nuovo canale" onClick={() => apriDialogo('nuovo')} disabilitato={!strutturaId} />
         </Box>
       </Box>
-      <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-        Le fonti di provenienza delle prenotazioni (es. Booking.com, Diretta) — selezionabili quando crei una prenotazione e usate per
-        colorare i pallini nel Calendario. "Importa da prenotazioni" aggiunge automaticamente i canali già presenti sulle prenotazioni
-        esistenti (es. da una sincronizzazione Wubook) ma non ancora configurati qui.
-      </Typography>
 
       {caricamento && <Skeleton variant="rounded" height={160} />}
 

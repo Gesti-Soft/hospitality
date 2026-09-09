@@ -93,6 +93,14 @@ public class PrenotazioneRepository(GestiSoftDbContext db) : IPrenotazioneReposi
             .Distinct()
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<string>> ListaAgenzieAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        await db.Prenotazioni.AsNoTracking()
+            .Where(p => p.StrutturaId == strutturaId && p.StatoPrenotazione != StatoPrenotazione.Annullata)
+            .Select(p => string.IsNullOrEmpty(p.Agenzia) ? "Diretta" : p.Agenzia!)
+            .Distinct()
+            .OrderBy(a => a)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<Prenotazione>> ListPeriodoAsync(Guid strutturaId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken)
     {
         dataInizio = DateTime.SpecifyKind(dataInizio, DateTimeKind.Utc);

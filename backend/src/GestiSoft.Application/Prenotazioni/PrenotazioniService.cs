@@ -131,6 +131,12 @@ public class PrenotazioniService(
         return await prenotazioni.ListPeriodoAsync(strutturaId, dataInizio, dataFine, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<string>> ListaAgenzieAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
+        return await prenotazioni.ListaAgenzieAsync(strutturaId, cancellationToken);
+    }
+
     public async Task<Prenotazione> GetAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
