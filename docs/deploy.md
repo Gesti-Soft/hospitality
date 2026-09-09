@@ -3,16 +3,16 @@
 Runbook per il primo deploy reale, passo per passo, con i dati esistenti (non si parte vuoti).
 Tutti i comandi vanno eseguiti **sulla VPS** via SSH, salvo dove indicato "in locale".
 
-Target: `gsthospitality.gestisoft.it` (sottodominio dedicato — **non** un sottopercorso di
+Target: `hospitality.gestisoft.it` (sottodominio dedicato — **non** un sottopercorso di
 `gestisoft.it`, che punta a un'altra VM già in produzione con `GestiSoftWeb`: usare un
 sottodominio evita ogni modifica a quel server esistente).
 
 ## 0. Prerequisiti
 
 - VPS Debian con Docker + Docker Compose plugin già installati (verificare con `docker compose version`).
-- Un record DNS **A** per `gsthospitality.gestisoft.it` che punta all'IP pubblico della VPS
+- Un record DNS **A** per `hospitality.gestisoft.it` che punta all'IP pubblico della VPS
   (aggiunto dal pannello OVH — non è qualcosa che si fa da qui). Aspettare la propagazione
-  (`dig gsthospitality.gestisoft.it` deve restituire l'IP giusto) prima del passo 8.
+  (`dig hospitality.gestisoft.it` deve restituire l'IP giusto) prima del passo 8.
 - Porte 80 e 443 raggiungibili dall'esterno sulla VPS (nessun altro servizio le occupa già —
   verificare con `sudo ss -tlnp | grep -E ':80|:443'`, deve risultare vuoto prima di avviare Caddy).
 
@@ -36,7 +36,7 @@ Valori da impostare:
 |---|---|
 | `POSTGRES_PASSWORD` | **Nuova**, generata apposta — mai riusare quella di sviluppo (`openssl rand -base64 32`) |
 | `JWT_SECRET` | **Nuovo**, generato apposta (`openssl rand -base64 48`) — invalida tutte le sessioni esistenti al primo avvio, normale |
-| `FRONTEND_ORIGIN` | `https://gsthospitality.gestisoft.it` |
+| `FRONTEND_ORIGIN` | `https://hospitality.gestisoft.it` |
 | `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` | Lasciare pure i valori di esempio — **non verranno usati**: il database ripristinato al passo 5 porta già il vero Super Admin, il seeder si ferma da solo appena trova un Super Admin già esistente (nessun rischio di duplicazione) |
 | `GESTISOFT_BASE_URL`, `ALLOGGIATIWEB_ENDPOINT`, `OSSERVATORIO_BASE_URL`, `PAYTOURIST_BASE_URL` | **Stessi valori già in uso in locale** (`.env` locale) — sono gli endpoint reali delle integrazioni esterne già funzionanti oggi per Villa Chifeci Scopello, non vanno cambiati |
 | `POSTGRES_HOST_PORT` / `API_HOST_PORT` / `FRONTEND_HOST_PORT` | Lasciare i default — restano legati a `127.0.0.1`, non raggiungibili dall'esterno; solo Caddy espone qualcosa pubblicamente |
@@ -117,14 +117,14 @@ La prima volta Caddy ottiene un certificato Let's Encrypt in automatico (serve c
 propagato, vedi punto 0) — nei log si vede `certificate obtained successfully`. Poi:
 
 ```bash
-curl -I https://gsthospitality.gestisoft.it
+curl -I https://hospitality.gestisoft.it
 ```
 
 Deve rispondere `200`, con un certificato valido (nessun avviso in un browser reale).
 
 ## 8. Verifica finale
 
-- Login reale dal browser su `https://gsthospitality.gestisoft.it` con il Super Admin vero (non
+- Login reale dal browser su `https://hospitality.gestisoft.it` con il Super Admin vero (non
   uno di test) — deve funzionare con la password già in uso oggi.
 - Un giro nell'app: Clienti, una Struttura, il Cruscotto — i dati devono essere gli stessi di oggi
   in locale.
