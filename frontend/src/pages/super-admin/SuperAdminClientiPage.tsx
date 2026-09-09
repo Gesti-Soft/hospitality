@@ -28,7 +28,7 @@ import Button from '@mui/material/Button'
 import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForeverOutlined'
-import { ApiError } from '../api/client'
+import { ApiError } from '../../api/client'
 import {
   GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA,
   giorniDaDisattivazione,
@@ -41,21 +41,21 @@ import {
   type ClienteAdminDto,
   type StrutturaAdminDto,
   type UtenteAdminDto,
-} from '../api/superAdmin'
-import { useAggiornaCliente, useCreaCliente } from '../api/clienti'
-import { useImpostaAttivoStruttura } from '../api/strutture'
-import { useCreaUtente } from '../api/utenti'
-import { useAggiornaWubookLicenzaSuperAdmin, useWubookLicenzaSuperAdmin, type WubookLicenzaDto } from '../api/superAdminImpostazioni'
-import { useAggiornaLicenzaStruttura, useLicenzaStruttura, type LicenzaStrutturaDto } from '../api/licenzaStruttura'
-import { useWubookEventiRicevuti, type WubookEventoRicevutoDto } from '../api/integrazioni'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { fontDisplay, fontMono, tokens } from '../theme'
-import { useToast } from '../toast/ToastContext'
-import { KpiCard } from '../components/KpiCard'
-import { CampoData } from '../components/CampoData'
-import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
-import { useMobile } from '../lib/useMobile'
-import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
+} from '../../api/superAdmin'
+import { useAggiornaCliente, useCreaCliente } from '../../api/clienti'
+import { useImpostaAttivoStruttura } from '../../api/strutture'
+import { useCreaUtente } from '../../api/utenti'
+import { useAggiornaWubookLicenzaSuperAdmin, useWubookLicenzaSuperAdmin, type WubookLicenzaDto } from '../../api/superAdminImpostazioni'
+import { useAggiornaLicenzaStruttura, useLicenzaStruttura, type LicenzaStrutturaDto } from '../../api/licenzaStruttura'
+import { useWubookEventiRicevuti, type WubookEventoRicevutoDto } from '../../api/integrazioni'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { fontDisplay, fontMono, tokens } from '../../theme'
+import { useToast } from '../../toast/ToastContext'
+import { KpiCard } from '../../components/KpiCard'
+import { CampoData } from '../../components/CampoData'
+import { formatoInputData, isoLocale, parsaInputData } from '../../lib/date'
+import { useMobile } from '../../lib/useMobile'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })

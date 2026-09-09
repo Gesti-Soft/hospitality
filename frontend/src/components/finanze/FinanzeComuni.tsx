@@ -7,7 +7,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import SearchIcon from '@mui/icons-material/Search'
-import { fontDisplay, fontMono, tokens } from '../../theme'
+import { fontMono, tokens } from '../../theme'
 import { CampoData } from '../CampoData'
 import { BottoneNuovo } from '../CardElenco'
 import { inizioGiornoLocale, parsaInputData } from '../../lib/date'
@@ -18,26 +18,23 @@ export const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'curre
 export const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 /**
- * Intestazione comune alle 4 pagine di Finanze: titolo a sinistra, selettore Anno (ed eventuali
- * azioni) a destra. `anni` è a carico di chi chiama (vedi `anniConAnnoCorrente`) — su richiesta
- * esplicita propone solo anni con dati reali più l'anno corrente, mai un range fisso arbitrario.
+ * Intestazione comune alle 4 pagine di Finanze: selettore Anno (ed eventuali azioni) a destra.
+ * `anni` è a carico di chi chiama (vedi `anniConAnnoCorrente`) — su richiesta esplicita propone
+ * solo anni con dati reali più l'anno corrente, mai un range fisso arbitrario.
  */
 export function IntestazioneFinanze({
-  titolo,
   anno,
   anni,
   onAnnoChange,
   azioni,
 }: {
-  titolo: string
   anno: number
   anni: number[]
   onAnnoChange: (anno: number) => void
   azioni?: React.ReactNode
 }) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 18 }}>{titolo}</Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         {azioni}
         <TextField select size="small" label="Anno" value={anno} onChange={(e) => onAnnoChange(Number(e.target.value))} sx={{ minWidth: 110 }}>

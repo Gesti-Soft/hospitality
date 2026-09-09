@@ -2,11 +2,11 @@ import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useAnniDisponibiliFinanze, useRiepilogoCassa } from '../api/finanze'
-import { fontMono, tokens } from '../theme'
-import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
-import { formattatoreValuta, IntestazioneFinanze } from '../components/finanze/FinanzeComuni'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useAnniDisponibiliFinanze, useRiepilogoCassa } from '../../api/finanze'
+import { fontMono, tokens } from '../../theme'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
+import { formattatoreValuta, IntestazioneFinanze } from '../../components/finanze/FinanzeComuni'
 
 export function RiepilogoCassaPage() {
   const { strutturaId } = useStruttura()
@@ -18,7 +18,7 @@ export function RiepilogoCassaPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <IntestazioneFinanze titolo="Riepilogo" anno={anno} anni={anni} onAnnoChange={setAnno} />
+      <IntestazioneFinanze anno={anno} anni={anni} onAnnoChange={setAnno} />
 
       {riepilogo.isLoading && <Skeleton variant="rounded" height={160} />}
 

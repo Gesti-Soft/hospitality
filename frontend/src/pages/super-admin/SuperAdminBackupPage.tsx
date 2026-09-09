@@ -5,12 +5,12 @@ import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { scaricaBackupDatabase } from '../api/superAdmin'
-import { ApiError } from '../api/client'
-import { LivelloLog, useLogs } from '../api/log'
-import { fontDisplay, fontMono, tokens } from '../theme'
-import { useToast } from '../toast/ToastContext'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { scaricaBackupDatabase } from '../../api/superAdmin'
+import { ApiError } from '../../api/client'
+import { LivelloLog, useLogs } from '../../api/log'
+import { fontDisplay, fontMono, tokens } from '../../theme'
+import { useToast } from '../../toast/ToastContext'
 
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -51,8 +51,6 @@ export function SuperAdminBackupPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 18 }}>Backup</Typography>
-
       <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 720 }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Scarica un backup adesso</Typography>
         <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>

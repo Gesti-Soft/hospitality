@@ -10,16 +10,16 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useAnniDisponibiliFinanze } from '../api/finanze'
-import { useSpese, useEliminaSpesa, type SpesaDto } from '../api/spese'
-import { ApiError } from '../api/client'
-import { fontMono, tokens } from '../theme'
-import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
-import { useMobile } from '../lib/useMobile'
-import { SpesaDialog } from '../components/SpesaDialog'
-import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../components/CardElenco'
-import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useAnniDisponibiliFinanze } from '../../api/finanze'
+import { useSpese, useEliminaSpesa, type SpesaDto } from '../../api/spese'
+import { ApiError } from '../../api/client'
+import { fontMono, tokens } from '../../theme'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
+import { useMobile } from '../../lib/useMobile'
+import { SpesaDialog } from '../../components/SpesaDialog'
+import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../../components/CardElenco'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import {
   AzioneNuovo,
   BarraTotale,
@@ -31,9 +31,9 @@ import {
   nelRangeData,
   RigaCaricamentoAltri,
   RigaVuota,
-} from '../components/finanze/FinanzeComuni'
-import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
-import { usePuoScrivere } from '../permessi/usePuoScrivere'
+} from '../../components/finanze/FinanzeComuni'
+import { usePaginazioneScroll } from '../../lib/usePaginazioneScroll'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 export function SpesePage() {
   const mobile = useMobile()
@@ -73,7 +73,6 @@ export function SpesePage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <IntestazioneFinanze
-        titolo="Spese"
         anno={anno}
         anni={anni}
         onAnnoChange={setAnno}

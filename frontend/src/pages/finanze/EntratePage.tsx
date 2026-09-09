@@ -10,16 +10,16 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useAnniDisponibiliFinanze } from '../api/finanze'
-import { useEntrate, useEliminaEntrata, type EntrataDto } from '../api/entrate'
-import { ApiError } from '../api/client'
-import { fontMono, tokens } from '../theme'
-import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
-import { useMobile } from '../lib/useMobile'
-import { EntrataDialog } from '../components/EntrataDialog'
-import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../components/CardElenco'
-import { ConfirmDialog } from '../components/ConfirmDialog'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useAnniDisponibiliFinanze } from '../../api/finanze'
+import { useEntrate, useEliminaEntrata, type EntrataDto } from '../../api/entrate'
+import { ApiError } from '../../api/client'
+import { fontMono, tokens } from '../../theme'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
+import { useMobile } from '../../lib/useMobile'
+import { EntrataDialog } from '../../components/EntrataDialog'
+import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../../components/CardElenco'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import {
   AzioneNuovo,
   BarraTotale,
@@ -31,9 +31,9 @@ import {
   nelRangeData,
   RigaCaricamentoAltri,
   RigaVuota,
-} from '../components/finanze/FinanzeComuni'
-import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
-import { usePuoScrivere } from '../permessi/usePuoScrivere'
+} from '../../components/finanze/FinanzeComuni'
+import { usePaginazioneScroll } from '../../lib/usePaginazioneScroll'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 export function EntratePage() {
   const mobile = useMobile()
@@ -71,7 +71,6 @@ export function EntratePage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <IntestazioneFinanze
-        titolo="Entrate"
         anno={anno}
         anni={anni}
         onAnnoChange={setAnno}

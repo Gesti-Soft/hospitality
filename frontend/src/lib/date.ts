@@ -1,6 +1,6 @@
 /**
  * Il backend tratta le date come "locali alla struttura" ritaggate con Kind=Utc, non convertite
- * (vedi il commento in pages/DashboardPage.tsx). Per evitare che il fuso orario del browser
+ * (vedi il commento in pages/operativo/DashboardPage.tsx). Per evitare che il fuso orario del browser
  * sposti il giorno quando si costruisce una richiesta, qui si serializza sempre una data-ora
  * locale senza suffisso "Z"/offset — mai `Date.toISOString()`, che shifterebbe la data.
  */

@@ -30,6 +30,13 @@ function conFiller(valore: string, s: Segmento): string {
   return (valore + FILLER[s].repeat(LUNGHEZZA[s])).slice(0, LUNGHEZZA[s])
 }
 
+/** Segmento corrispondente a una posizione del cursore nel testo "gg/mm/aaaa". */
+function segmentoDaIndice(idx: number): Segmento {
+  if (idx <= 2) return 'g'
+  if (idx <= 5) return 'm'
+  return 'a'
+}
+
 const GIORNI_SETTIMANA = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom']
 const DIMENSIONE_BLOCCO_ANNI = 12
 const formattatoreMese = new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' })
@@ -153,12 +160,22 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
     chiudi()
   }
 
-  /** Clic (o focus) sul campo: seleziona sempre il giorno, pronto per essere riscritto da capo. */
+  /** Focus da tastiera (es. Tab): seleziona il giorno, pronto per essere riscritto da capo. */
   function selezionaGiorno() {
     setInModifica(true)
     setSegmento('g')
     setFresh(true)
     inputRef.current?.setSelectionRange(...rangeSegmento('g'))
+  }
+
+  /** Clic sul campo: seleziona il segmento (giorno/mese/anno) su cui si è cliccato. */
+  function selezionaSegmentoAlClick(e: MouseEvent<HTMLElement>) {
+    const target = e.target as HTMLInputElement
+    const s = segmentoDaIndice(target.selectionStart ?? 0)
+    setInModifica(true)
+    setSegmento(s)
+    setFresh(true)
+    inputRef.current?.setSelectionRange(...rangeSegmento(s))
   }
 
   function valoreSegmento(s: Segmento): string {
@@ -304,7 +321,7 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
         label={label}
         value={testo}
         onFocus={selezionaGiorno}
-        onClick={selezionaGiorno}
+        onClick={selezionaSegmentoAlClick}
         onChange={() => {
           /* Input pienamente controllato via onKeyDown/onPaste: nessuna modifica diretta da qui. */
         }}

@@ -19,10 +19,10 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useTipologie } from '../api/tipologie'
-import { ApiError } from '../api/client'
-import { useAggiornaImpostazioni, useImpostazioni, type ImpostazioniStrutturaDto, type ImpostazioniStrutturaRequest } from '../api/impostazioni'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useTipologie } from '../../api/tipologie'
+import { ApiError } from '../../api/client'
+import { useAggiornaImpostazioni, useImpostazioni, type ImpostazioniStrutturaDto, type ImpostazioniStrutturaRequest } from '../../api/impostazioni'
 import {
   useAggiornaAlloggiatiWebConfig,
   useAggiornaPayTouristConfig,
@@ -40,15 +40,15 @@ import {
   type PayTouristIntegrazioneDto,
   type PayTouristStrutturaDto,
   type WubookIntegrazioneDto,
-} from '../api/integrazioni'
-import { fontDisplay, tokens } from '../theme'
-import { useToast } from '../toast/ToastContext'
-import { useMobile } from '../lib/useMobile'
-import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
-import { ConfirmDialog } from '../components/ConfirmDialog'
-import { OsservatorioAppartamentoDialog } from '../components/OsservatorioAppartamentoDialog'
-import { PayTouristStrutturaDialog } from '../components/PayTouristStrutturaDialog'
-import { usePuoScrivere } from '../permessi/usePuoScrivere'
+} from '../../api/integrazioni'
+import { fontDisplay, tokens } from '../../theme'
+import { useToast } from '../../toast/ToastContext'
+import { useMobile } from '../../lib/useMobile'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { OsservatorioAppartamentoDialog } from '../../components/OsservatorioAppartamentoDialog'
+import { PayTouristStrutturaDialog } from '../../components/PayTouristStrutturaDialog'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 type TabImpostazioni = 'generali' | 'polizia' | 'osservatorio' | 'paytourist'
 

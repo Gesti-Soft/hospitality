@@ -12,8 +12,8 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { ApiError } from '../api/client'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { ApiError } from '../../api/client'
 import {
   esportaPayTourist,
   useAnniPayTourist,
@@ -21,12 +21,12 @@ import {
   useInviaPayTouristSingola,
   usePayTouristStrutture,
   usePrenotazioniPayTourist,
-} from '../api/integrazioni'
-import { fontDisplay, fontMono, tokens } from '../theme'
-import { usePuoScrivere } from '../permessi/usePuoScrivere'
-import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
-import { useMobile } from '../lib/useMobile'
-import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
+} from '../../api/integrazioni'
+import { fontDisplay, fontMono, tokens } from '../../theme'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
+import { useMobile } from '../../lib/useMobile'
+import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })

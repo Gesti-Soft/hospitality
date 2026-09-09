@@ -2,25 +2,25 @@ import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useArriviInCorso, useArriviProssimi, type PrenotazioneDto } from '../api/prenotazioni'
-import { useCamere } from '../api/camere'
-import { useCanaliVendita } from '../api/canaliVendita'
-import { useTipologie } from '../api/tipologie'
-import { useRiepilogoCassa } from '../api/finanze'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useArriviInCorso, useArriviProssimi, type PrenotazioneDto } from '../../api/prenotazioni'
+import { useCamere } from '../../api/camere'
+import { useCanaliVendita } from '../../api/canaliVendita'
+import { useTipologie } from '../../api/tipologie'
+import { useRiepilogoCassa } from '../../api/finanze'
 import {
   useAlloggiatiWebConfig,
   useOsservatorioAppartamenti,
   usePayTouristConfig,
   usePayTouristStrutture,
   useWubookConfig,
-} from '../api/integrazioni'
-import { fontDisplay, fontMono, tokens } from '../theme'
-import { aggiungiGiorni, inizioGiornoLocale } from '../lib/date'
-import { PrenotazioneDialog, type StatoIniziale } from '../components/PrenotazioneDialog'
-import { BottoneNuovo } from '../components/CardElenco'
-import { KpiCard, KpiCardDoppia } from '../components/KpiCard'
-import { usePuoScrivere } from '../permessi/usePuoScrivere'
+} from '../../api/integrazioni'
+import { fontDisplay, fontMono, tokens } from '../../theme'
+import { aggiungiGiorni, inizioGiornoLocale } from '../../lib/date'
+import { PrenotazioneDialog, type StatoIniziale } from '../../components/PrenotazioneDialog'
+import { BottoneNuovo } from '../../components/CardElenco'
+import { KpiCard, KpiCardDoppia } from '../../components/KpiCard'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 /**
  * Le date arrivano dal backend come timestamp "locali alla struttura" ma serializzati con

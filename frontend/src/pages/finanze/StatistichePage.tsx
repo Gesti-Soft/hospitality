@@ -8,14 +8,19 @@ import Typography from '@mui/material/Typography'
 import { PieChart } from '@mui/x-charts/PieChart'
 import { LineChart } from '@mui/x-charts/LineChart'
 import { BarChart } from '@mui/x-charts/BarChart'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useAnniDisponibiliStatistiche, useStatisticheStruttura } from '../api/statistiche'
-import { KpiCard } from '../components/KpiCard'
-import { MatriceTipologieMese, NOMI_MESI } from '../components/statistiche/MatriceTipologieMese'
-import { coloriPerEtichette, PALETTE_CATEGORICA } from '../lib/chartColors'
-import { formattatoreAsseCompatto } from '../lib/numberFormat'
-import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
-import { fontDisplay, tokens } from '../theme'
+import BarChartIcon from '@mui/icons-material/BarChartRounded'
+import EuroIcon from '@mui/icons-material/EuroRounded'
+import AccessTimeIcon from '@mui/icons-material/AccessTimeRounded'
+import HomeIcon from '@mui/icons-material/HomeRounded'
+import PercentIcon from '@mui/icons-material/PercentRounded'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useAnniDisponibiliStatistiche, useStatisticheStruttura } from '../../api/statistiche'
+import { KpiCard } from '../../components/KpiCard'
+import { MatriceTipologieMese, NOMI_MESI } from '../../components/statistiche/MatriceTipologieMese'
+import { coloriPerEtichette, PALETTE_CATEGORICA } from '../../lib/chartColors'
+import { formattatoreAsseCompatto } from '../../lib/numberFormat'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
+import { fontDisplay, tokens } from '../../theme'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 
@@ -36,8 +41,7 @@ export function StatistichePage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 18 }}>Statistiche</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'end' }}>
         <TextField select size="small" label="Anno" value={anno} onChange={(e) => setAnno(Number(e.target.value))} sx={{ minWidth: 110 }}>
           {anniSelezionabili.map((a) => (
             <MenuItem key={a} value={a}>
@@ -53,16 +57,17 @@ export function StatistichePage() {
       {dati && (
         <>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
-            <KpiCard etichetta="Prenotazioni anno" valore={String(dati.kpi.numeroPrenotazioni)} />
-            <KpiCard etichetta="Ricavo stimato" valore={formattatoreValuta.format(dati.kpi.ricavoStimato)} dettaglio="importo totale prenotazioni" />
-            <KpiCard etichetta="Ricavo effettivo" valore={formattatoreValuta.format(dati.kpi.ricavoEffettivo)} dettaglio="importo pagato" accento />
+            <KpiCard etichetta="Prenotazioni anno" valore={String(dati.kpi.numeroPrenotazioni)} icona={<BarChartIcon />} />
+            <KpiCard etichetta="Ricavo stimato" valore={formattatoreValuta.format(dati.kpi.ricavoStimato)} icona={<EuroIcon />} />
+            <KpiCard etichetta="Ricavo effettivo" valore={formattatoreValuta.format(dati.kpi.ricavoEffettivo)} accento icona={<EuroIcon />} />
             <KpiCard
               etichetta="Permanenza media"
               valore={dati.kpi.permanenzaMediaNotti === null ? '—' : dati.kpi.permanenzaMediaNotti.toFixed(1)}
               dettaglio={dati.kpi.permanenzaMediaNotti === null ? undefined : 'notti'}
+              icona={<AccessTimeIcon />}
             />
-            <KpiCard etichetta="Tasso occupazione" valore={`${dati.kpi.tassoOccupazionePercentuale}%`} />
-            <KpiCard etichetta="Tassa di soggiorno" valore={formattatoreValuta.format(dati.tassaSoggiorno.totaleAnno)} dettaglio="totale anno" />
+            <KpiCard etichetta="Tasso occupazione" valore={`${dati.kpi.tassoOccupazionePercentuale}%`} icona={<HomeIcon />} />
+            <KpiCard etichetta="Tassa di soggiorno" valore={formattatoreValuta.format(dati.tassaSoggiorno.totaleAnno)} icona={<PercentIcon />} />
           </Box>
 
           {dati.kpi.numeroPrenotazioni === 0 ? (

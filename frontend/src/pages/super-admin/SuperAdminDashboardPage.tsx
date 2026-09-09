@@ -11,7 +11,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import { useStruttura } from '../struttura/StrutturaContext'
+import { useStruttura } from '../../struttura/StrutturaContext'
 import {
   EsitoIntegrazione,
   useAnniDisponibiliStatisticheSuperAdmin,
@@ -19,12 +19,12 @@ import {
   type EsitoIntegrazioneDto,
   type LicenzaInScadenzaDto,
   type LicenzaScadutaDto,
-} from '../api/statisticheSuperAdmin'
-import { KpiCard } from '../components/KpiCard'
-import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
-import { fontDisplay, fontMono, tokens } from '../theme'
-import { useMobile } from '../lib/useMobile'
-import { CardElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
+} from '../../api/statisticheSuperAdmin'
+import { KpiCard } from '../../components/KpiCard'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
+import { fontDisplay, fontMono, tokens } from '../../theme'
+import { useMobile } from '../../lib/useMobile'
+import { CardElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -72,8 +72,7 @@ export function SuperAdminDashboardPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 18 }}>Dashboard</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'end' }}>
         <TextField select size="small" label="Anno" value={anno} onChange={(e) => setAnno(Number(e.target.value))} sx={{ minWidth: 110 }}>
           {anniSelezionabili.map((a) => (
             <MenuItem key={a} value={a}>

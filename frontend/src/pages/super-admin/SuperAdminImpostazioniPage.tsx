@@ -5,11 +5,11 @@ import Button from '@mui/material/Button'
 import Skeleton from '@mui/material/Skeleton'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useAggiornaImpostazioniGlobali, useImpostazioniGlobali } from '../api/superAdminImpostazioni'
-import { ApiError } from '../api/client'
-import { fontDisplay, tokens } from '../theme'
-import { useToast } from '../toast/ToastContext'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useAggiornaImpostazioniGlobali, useImpostazioniGlobali } from '../../api/superAdminImpostazioni'
+import { ApiError } from '../../api/client'
+import { fontDisplay, tokens } from '../../theme'
+import { useToast } from '../../toast/ToastContext'
 
 export function SuperAdminImpostazioniPage() {
   const { isSuperAdmin } = useStruttura()
@@ -42,7 +42,6 @@ export function SuperAdminImpostazioniPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 18 }}>Impostazioni</Typography>
 
       <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 720 }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Globali</Typography>

@@ -3,11 +3,11 @@ import Button from '@mui/material/Button'
 import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
 import CheckCircleIcon from '@mui/icons-material/CheckCircleOutlined'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { StatoCamera, useCamere, useSegnaCameraPulita } from '../api/camere'
-import { ApiError } from '../api/client'
-import { fontDisplay, tokens } from '../theme'
-import { useToast } from '../toast/ToastContext'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { StatoCamera, useCamere, useSegnaCameraPulita } from '../../api/camere'
+import { ApiError } from '../../api/client'
+import { fontDisplay, tokens } from '../../theme'
+import { useToast } from '../../toast/ToastContext'
 
 export function PuliziePage() {
   const { strutturaId } = useStruttura()

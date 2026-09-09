@@ -13,9 +13,9 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useAuth } from '../auth/AuthContext'
-import { ApiError } from '../api/client'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useAuth } from '../../auth/AuthContext'
+import { ApiError } from '../../api/client'
 import {
   RuoloUtente,
   useAssegnazioniStruttura,
@@ -23,13 +23,13 @@ import {
   useRimuoviAssegnazione,
   useUtentiCliente,
   type AssegnazioneStrutturaDto,
-} from '../api/utenti'
-import { fontDisplay, fontMono, tokens } from '../theme'
-import { useToast } from '../toast/ToastContext'
-import { useMobile } from '../lib/useMobile'
-import { AssegnaRuoloDialog, type StatoAssegnazioneIniziale } from '../components/AssegnaRuoloDialog'
-import { ConfirmDialog } from '../components/ConfirmDialog'
-import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
+} from '../../api/utenti'
+import { fontDisplay, fontMono, tokens } from '../../theme'
+import { useToast } from '../../toast/ToastContext'
+import { useMobile } from '../../lib/useMobile'
+import { AssegnaRuoloDialog, type StatoAssegnazioneIniziale } from '../../components/AssegnaRuoloDialog'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
 
 const ETICHETTA_RUOLO: Record<RuoloUtente, string> = {
   [RuoloUtente.Administrator]: 'Amministratore',

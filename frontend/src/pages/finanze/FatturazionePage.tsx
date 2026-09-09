@@ -17,9 +17,9 @@ import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import CodeIcon from '@mui/icons-material/CodeOutlined'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useStoricoPrenotazioni } from '../api/prenotazioni'
-import { ApiError } from '../api/client'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useStoricoPrenotazioni } from '../../api/prenotazioni'
+import { ApiError } from '../../api/client'
 import {
   RegimeFiscale,
   scaricaFatturaPdf,
@@ -33,17 +33,17 @@ import {
   type DatiAziendaliRequest,
   type DatiClienteDto,
   type DatiFatturaDto,
-} from '../api/fatturazione'
-import { fontDisplay, fontMono, tokens } from '../theme'
-import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
-import { useToast } from '../toast/ToastContext'
-import { useMobile } from '../lib/useMobile'
-import { DatiClienteDialog } from '../components/DatiClienteDialog'
-import { FatturaDialog, type StatoFatturaIniziale } from '../components/FatturaDialog'
-import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../components/CardElenco'
-import { FiltriRicercaData, nelRangeData, RigaCaricamentoAltri } from '../components/finanze/FinanzeComuni'
-import { usePaginazioneScroll } from '../lib/usePaginazioneScroll'
-import { usePuoScrivere } from '../permessi/usePuoScrivere'
+} from '../../api/fatturazione'
+import { fontDisplay, fontMono, tokens } from '../../theme'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
+import { useToast } from '../../toast/ToastContext'
+import { useMobile } from '../../lib/useMobile'
+import { DatiClienteDialog } from '../../components/DatiClienteDialog'
+import { FatturaDialog, type StatoFatturaIniziale } from '../../components/FatturaDialog'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../../components/CardElenco'
+import { FiltriRicercaData, nelRangeData, RigaCaricamentoAltri } from '../../components/finanze/FinanzeComuni'
+import { usePaginazioneScroll } from '../../lib/usePaginazioneScroll'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })

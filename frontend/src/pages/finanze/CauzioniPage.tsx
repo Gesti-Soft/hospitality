@@ -7,13 +7,13 @@ import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useAnniDisponibiliFinanze, useCauzioni } from '../api/finanze'
-import { fontMono, tokens } from '../theme'
-import { anniConAnnoCorrente, ANNO_CORRENTE } from '../lib/anni'
-import { useMobile } from '../lib/useMobile'
-import { BarraTotale, Cornice, formattatoreData, formattatoreValuta, IntestazioneFinanze, RigaVuota } from '../components/finanze/FinanzeComuni'
-import { CardElenco, MessaggioVuotoElenco, RigaCardMeta } from '../components/CardElenco'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useAnniDisponibiliFinanze, useCauzioni } from '../../api/finanze'
+import { fontMono, tokens } from '../../theme'
+import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
+import { useMobile } from '../../lib/useMobile'
+import { BarraTotale, Cornice, formattatoreData, formattatoreValuta, IntestazioneFinanze, RigaVuota } from '../../components/finanze/FinanzeComuni'
+import { CardElenco, MessaggioVuotoElenco, RigaCardMeta } from '../../components/CardElenco'
 
 export function CauzioniPage() {
   const mobile = useMobile()
@@ -27,7 +27,7 @@ export function CauzioniPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <IntestazioneFinanze titolo="Cauzioni" anno={anno} anni={anni} onAnnoChange={setAnno} />
+      <IntestazioneFinanze anno={anno} anni={anni} onAnnoChange={setAnno} />
 
       <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
         Registrate automaticamente al check-out quando la cauzione non viene restituita per intero — nessuna registrazione manuale.

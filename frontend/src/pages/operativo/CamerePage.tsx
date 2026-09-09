@@ -25,11 +25,11 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import { aggiungiGiorni, differenzaGiorni, inizioGiornoLocale } from '../lib/date'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { StatoCamera, useCamere, useDuplicaCamere, useEliminaCamera, type CameraDto } from '../api/camere'
-import { useTipologie, type TipologiaCameraDto } from '../api/tipologie'
-import { usePrezzi, useEliminaPrezzo, type PrezzoCameraDto } from '../api/prezzi'
+import { aggiungiGiorni, differenzaGiorni, inizioGiornoLocale } from '../../lib/date'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { StatoCamera, useCamere, useDuplicaCamere, useEliminaCamera, type CameraDto } from '../../api/camere'
+import { useTipologie, type TipologiaCameraDto } from '../../api/tipologie'
+import { usePrezzi, useEliminaPrezzo, type PrezzoCameraDto } from '../../api/prezzi'
 import {
   useCanaliVendita,
   useCreaCanaleVendita,
@@ -37,16 +37,16 @@ import {
   useEliminaCanaleVendita,
   useImportaCanaliVendita,
   type CanaleVenditaDto,
-} from '../api/canaliVendita'
-import { ApiError } from '../api/client'
-import { fontDisplay, fontMono, tokens } from '../theme'
-import { useToast } from '../toast/ToastContext'
-import { useMobile } from '../lib/useMobile'
-import { CameraDialog } from '../components/CameraDialog'
-import { PrezzoDialog } from '../components/PrezzoDialog'
-import { ConfirmDialog } from '../components/ConfirmDialog'
-import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
-import { usePuoScrivere } from '../permessi/usePuoScrivere'
+} from '../../api/canaliVendita'
+import { ApiError } from '../../api/client'
+import { fontDisplay, fontMono, tokens } from '../../theme'
+import { useToast } from '../../toast/ToastContext'
+import { useMobile } from '../../lib/useMobile'
+import { CameraDialog } from '../../components/CameraDialog'
+import { PrezzoDialog } from '../../components/PrezzoDialog'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 const ETICHETTA_STATO_CAMERA: Record<StatoCamera, string> = {
   [StatoCamera.Pronta]: 'Pronta',

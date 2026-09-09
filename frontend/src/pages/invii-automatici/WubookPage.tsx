@@ -26,9 +26,9 @@ import EditCalendarIcon from '@mui/icons-material/EditCalendarOutlined'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import SettingsIcon from '@mui/icons-material/SettingsOutlined'
-import { useStruttura } from '../struttura/StrutturaContext'
-import { useTipologie } from '../api/tipologie'
-import { ApiError } from '../api/client'
+import { useStruttura } from '../../struttura/StrutturaContext'
+import { useTipologie } from '../../api/tipologie'
+import { ApiError } from '../../api/client'
 import {
   useAssociaCameraWubook,
   useCamerePerAssociazione,
@@ -47,19 +47,19 @@ import {
   type PianoPrezzoDto,
   type PianoRestrizioneDto,
   type WubookIntegrazioneDto,
-} from '../api/integrazioni'
-import { aggiungiGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
-import { useMobile } from '../lib/useMobile'
-import { CampoData } from '../components/CampoData'
-import { fontDisplay, fontMono, tokens } from '../theme'
-import { useToast } from '../toast/ToastContext'
-import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../components/CardElenco'
-import { ChiusureRestrizioniDialog } from '../components/ChiusureRestrizioniDialog'
-import { ConfirmDialog } from '../components/ConfirmDialog'
-import { ImpostazioniWubookCameraDialog } from '../components/ImpostazioniWubookCameraDialog'
-import { PianoPrezzoDialog } from '../components/PianoPrezzoDialog'
-import { PianoRestrizioneDialog } from '../components/PianoRestrizioneDialog'
-import { usePuoScrivere } from '../permessi/usePuoScrivere'
+} from '../../api/integrazioni'
+import { aggiungiGiorni, formatoInputData, isoLocale, parsaInputData } from '../../lib/date'
+import { useMobile } from '../../lib/useMobile'
+import { CampoData } from '../../components/CampoData'
+import { fontDisplay, fontMono, tokens } from '../../theme'
+import { useToast } from '../../toast/ToastContext'
+import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
+import { ChiusureRestrizioniDialog } from '../../components/ChiusureRestrizioniDialog'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { ImpostazioniWubookCameraDialog } from '../../components/ImpostazioniWubookCameraDialog'
+import { PianoPrezzoDialog } from '../../components/PianoPrezzoDialog'
+import { PianoRestrizioneDialog } from '../../components/PianoRestrizioneDialog'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 type TabWubook = 'camere' | 'piani-prezzo' | 'piani-restrizione'
 
