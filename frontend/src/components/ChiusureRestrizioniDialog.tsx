@@ -48,7 +48,7 @@ export function ChiusureRestrizioniDialog({ strutturaId, cameraId, cameraNome, o
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 1 }}>
         <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
           Da qui puoi bloccare la camera per un periodo (manutenzione) o impostare un soggiorno minimo/massimo valido solo in certe date.
-          Le modifiche si applicano su Wubook al prossimo "Sincronizza disponibilità".
+          Le modifiche si applicano sull'OTA al prossimo "Sincronizza disponibilità".
         </Typography>
         <SezioneChiusure strutturaId={strutturaId} cameraId={cameraId} />
         <SezioneRestrizioni strutturaId={strutturaId} cameraId={cameraId} />

@@ -13,7 +13,8 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { ApiError } from '../api/client'
 import { useAggiornaCamera, useCamere, type CameraRequest } from '../api/camere'
-import { useSincronizzaWubookCamera } from '../api/integrazioni'
+import { useCamereRemoteWubook, useSincronizzaWubookCamera } from '../api/integrazioni'
+import { useTipologie } from '../api/tipologie'
 import { fontMono, tokens } from '../theme'
 
 interface Props {
@@ -21,25 +22,41 @@ interface Props {
   cameraId: string
   cameraNome: string
   wubookAttiva: boolean
+  idCameraWubook: number | null
   onClose: () => void
 }
 
-export function ImpostazioniWubookCameraDialog({ strutturaId, cameraId, cameraNome, wubookAttiva, onClose }: Props) {
+/** Stesso algoritmo di GestiSoft.Application.Wubook.WubookCamereService.ShortNameDa (backend) — solo per una camera MAI creata su OTA: è il valore che verrebbe inviato se il campo resta invariato. Per una camera già associata non basta (il codice reale può essere stato scelto a mano, es. dal legacy, e non seguire questo algoritmo) — in quel caso il valore reale si legge da OTA stessa, vedi sotto. */
+function codiceDedottoDaNome(nome: string): string {
+  const alfanumerico = nome.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+  if (alfanumerico.length === 0) return 'ROOM'
+  return alfanumerico.length <= 4 ? alfanumerico.padEnd(4, 'X') : alfanumerico.slice(0, 4)
+}
+
+export function ImpostazioniWubookCameraDialog({ strutturaId, cameraId, cameraNome, wubookAttiva, idCameraWubook, onClose }: Props) {
   const camere = useCamere(strutturaId)
+  const tipologie = useTipologie(strutturaId)
+  // Per una camera già associata, il codice/prezzo "attualmente in uso" è quello registrato SU OTA
+  // — un valore storico, magari scelto a mano, che il nostro algoritmo di deduzione non può
+  // indovinare. Va letto da OTA stessa (fetch_rooms), non calcolato qui.
+  const remoto = useCamereRemoteWubook(strutturaId, wubookAttiva)
   const camera = (camere.data ?? []).find((c) => c.id === cameraId) ?? null
+  const tipologia = camera ? (tipologie.data ?? []).find((t) => t.id === camera.tipologiaId) ?? null : null
+  const cameraRemota = wubookAttiva && idCameraWubook != null ? (remoto.data ?? []).find((r) => r.id === idCameraWubook) ?? null : null
+  const caricamento = camere.isLoading || (wubookAttiva && remoto.isLoading)
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>{wubookAttiva ? 'Modifica' : 'Crea'} camera su Wubook — {cameraNome}</DialogTitle>
-      {camere.isLoading && (
+      <DialogTitle>{wubookAttiva ? 'Modifica' : 'Crea'} camera su OTA — {cameraNome}</DialogTitle>
+      {caricamento && (
         <DialogContent sx={{ pt: 1 }}>
           <Skeleton variant="rounded" height={160} />
         </DialogContent>
       )}
-      {!camere.isLoading && camera && (
-        <Form strutturaId={strutturaId} camera={camera} wubookAttiva={wubookAttiva} onClose={onClose} />
+      {!caricamento && camera && (
+        <Form strutturaId={strutturaId} camera={camera} tipologia={tipologia} cameraRemota={cameraRemota} wubookAttiva={wubookAttiva} onClose={onClose} />
       )}
-      {!camere.isLoading && !camera && (
+      {!caricamento && !camera && (
         <DialogContent sx={{ pt: 1 }}>
           <Alert severity="error">Camera non trovata.</Alert>
         </DialogContent>
@@ -51,6 +68,8 @@ export function ImpostazioniWubookCameraDialog({ strutturaId, cameraId, cameraNo
 function Form({
   strutturaId,
   camera,
+  tipologia,
+  cameraRemota,
   wubookAttiva,
   onClose,
 }: {
@@ -66,11 +85,19 @@ function Form({
     prezzoWubookOverride: number | null
     wubookSoloWoodoo: boolean
   }
+  tipologia: { tipologiaCamera: string; prezzoDefault: number | null } | null
+  cameraRemota: { shortName: string | null; prezzo: number } | null
   wubookAttiva: boolean
   onClose: () => void
 }) {
-  const [codiceCameraWubook, setCodiceCameraWubook] = useState(camera.codiceCameraWubook ?? '')
-  const [prezzoWubookOverride, setPrezzoWubookOverride] = useState(camera.prezzoWubookOverride != null ? String(camera.prezzoWubookOverride) : '')
+  // Il campo parte già valorizzato con quello che è realmente in uso oggi: l'override esplicito se
+  // c'è; altrimenti, se la camera è già associata, il valore letto da OTA (l'unico affidabile per
+  // una camera creata prima o a mano); altrimenti il valore che verrebbe dedotto alla creazione —
+  // mai una casella vuota che nasconde il dato reale.
+  const [codiceCameraWubook, setCodiceCameraWubook] = useState(
+    camera.codiceCameraWubook ?? cameraRemota?.shortName ?? codiceDedottoDaNome(camera.nome),
+  )
+  const [prezzoWubookOverride, setPrezzoWubookOverride] = useState(String(camera.prezzoWubookOverride ?? cameraRemota?.prezzo ?? tipologia?.prezzoDefault ?? 0))
   const [wubookSoloWoodoo, setWubookSoloWoodoo] = useState(camera.wubookSoloWoodoo)
   const [errore, setErrore] = useState<string | null>(null)
 
@@ -106,9 +133,14 @@ function Form({
     <>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         {errore && <Alert severity="error">{errore}</Alert>}
+        {wubookAttiva && !cameraRemota && (
+          <Alert severity="warning">
+            Non è stato possibile leggere i valori attuali da OTA — quelli qui sotto sono solo una stima, verificali prima di salvare.
+          </Alert>
+        )}
         <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-          "Salva" {wubookAttiva ? 'aggiorna subito' : 'crea subito'} questa camera su Wubook con i valori qui sotto — se
-          lasciati vuoti si usa il valore dedotto automaticamente (codice camera dal nome, prezzo dalla tipologia).
+          "Salva" {wubookAttiva ? 'aggiorna subito' : 'crea subito'} questa camera su OTA con i valori qui sotto —
+          già precompilati con quelli attualmente in uso.
         </Typography>
 
         <TextField
@@ -119,7 +151,7 @@ function Form({
           slotProps={{ htmlInput: { style: { fontFamily: fontMono } } }}
         />
         <TextField
-          label="Prezzo (override tipologia)"
+          label="Prezzo"
           type="number"
           value={prezzoWubookOverride}
           onChange={(e) => setPrezzoWubookOverride(e.target.value)}
@@ -129,11 +161,11 @@ function Form({
         <Box>
           <FormControlLabel
             control={<Checkbox checked={wubookSoloWoodoo} onChange={(e) => setWubookSoloWoodoo(e.target.checked)} disabled={inCorso} />}
-            label="WooDoo CM only (non vendibile sul motore Wubook)"
+            label="OTA CM only"
           />
           {woodooCambiato && wubookAttiva && (
             <Alert severity="info" sx={{ mt: 1 }}>
-              Questa camera è già associata a Wubook: il cambio si applica solo alla creazione — per renderlo effettivo,
+              Questa camera è già associata: il cambio si applica solo alla creazione — per renderlo effettivo,
               rimuovi l'associazione e sincronizza di nuovo.
             </Alert>
           )}
@@ -144,7 +176,7 @@ function Form({
           Annulla
         </Button>
         <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
-          {inCorso ? 'Salvataggio…' : wubookAttiva ? 'Salva e aggiorna su Wubook' : 'Salva e crea su Wubook'}
+          {inCorso ? 'Salvataggio…' : wubookAttiva ? 'Salva e aggiorna' : 'Salva e crea'}
         </Button>
       </DialogActions>
     </>

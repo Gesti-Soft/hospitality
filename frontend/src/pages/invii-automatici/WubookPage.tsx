@@ -9,6 +9,9 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
+import ListItemIcon from '@mui/material/ListItemIcon'
+import ListItemText from '@mui/material/ListItemText'
+import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import Tab from '@mui/material/Tab'
@@ -22,10 +25,12 @@ import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import LinkIcon from '@mui/icons-material/LinkOutlined'
+import LinkOffIcon from '@mui/icons-material/LinkOffOutlined'
 import EditCalendarIcon from '@mui/icons-material/EditCalendarOutlined'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import SettingsIcon from '@mui/icons-material/SettingsOutlined'
+import MoreVertIcon from '@mui/icons-material/MoreVertOutlined'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { useTipologie } from '../../api/tipologie'
 import { ApiError } from '../../api/client'
@@ -201,8 +206,11 @@ function TabellaCamere({
   const [dialogoChiusure, setDialogoChiusure] = useState<{ cameraId: string; cameraNome: string } | null>(null)
   const [dialogoAssocia, setDialogoAssocia] = useState<CameraWubookInfoDto | null>(null)
   const [dialogoImpostazioni, setDialogoImpostazioni] = useState<CameraWubookInfoDto | null>(null)
+  const [dialogoNuova, setDialogoNuova] = useState(false)
   const [daEliminare, setDaEliminare] = useState<CameraWubookInfoDto | null>(null)
+  const [daDisassociare, setDaDisassociare] = useState<CameraWubookInfoDto | null>(null)
   const rimuovi = useRimuoviWubookCamera(strutturaId)
+  const disassocia = useAssociaCameraWubook(strutturaId)
   const toast = useToast()
 
   function gestisciErrore(err: unknown) {
@@ -214,20 +222,39 @@ function TabellaCamere({
     rimuovi.mutate(daEliminare.cameraId, { onSuccess: () => setDaEliminare(null), onError: gestisciErrore })
   }
 
+  // Disassocia = scollega la camera locale da quella su OTA senza toccare OTA (nessun del_room): la
+  // room resta lì intatta, così si può riassociarla in seguito (anche a un'altra camera locale)
+  // scegliendola da "Associa a una camera già esistente" — a differenza di "Elimina da OTA", che
+  // invece la cancella davvero.
+  function confermaDisassocia() {
+    if (!daDisassociare) return
+    disassocia.mutate(
+      { cameraId: daDisassociare.cameraId, idCameraWubook: null },
+      { onSuccess: () => setDaDisassociare(null), onError: gestisciErrore },
+    )
+  }
+
   // Come otaservice.web (legacy): select Tipologia prima di tutto, poi solo le camere di quella
   // tipologia — mai la tabella piatta con tutte le camere della struttura insieme.
   const camereFiltrate = camere.filter((c) => tipologiaFiltro === '' || c.tipologiaId === tipologiaFiltro)
+  // Come il bottone globale "Nuova Camera" del vecchio programma: crea su OTA una camera locale
+  // esistente non ancora associata — non serve più passare dalla riga della tabella per scoprire
+  // che l'azione esiste.
+  const camereDaCreare = camere.filter((c) => !c.wubookAttiva)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <TextField select size="small" label="Tipologia" value={tipologiaFiltro} onChange={(e) => setTipologiaFiltro(e.target.value)} sx={{ minWidth: 240 }}>
-        <MenuItem value="">Tutte le tipologie</MenuItem>
-        {tipologie.map((t) => (
-          <MenuItem key={t.id} value={t.id}>
-            {t.tipologiaCamera}
-          </MenuItem>
-        ))}
-      </TextField>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
+        <TextField select size="small" label="Tipologia" value={tipologiaFiltro} onChange={(e) => setTipologiaFiltro(e.target.value)} sx={{ minWidth: 240 }}>
+          <MenuItem value="">Tutte le tipologie</MenuItem>
+          {tipologie.map((t) => (
+            <MenuItem key={t.id} value={t.id}>
+              {t.tipologiaCamera}
+            </MenuItem>
+          ))}
+        </TextField>
+        {puoScrivere && <BottoneNuovo etichetta="+ Nuova camera" onClick={() => setDialogoNuova(true)} disabilitato={camereDaCreare.length === 0} />}
+      </Box>
 
       {mobile && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -271,43 +298,17 @@ function TabellaCamere({
               />
               {(c.wubookAttiva || puoScrivere) && (
                 <AzioniCardElenco>
-                  {!c.wubookAttiva && puoScrivere && (
-                    <>
-                      <Tooltip title="Associa a una camera già esistente su Wubook">
-                        <IconButton size="small" onClick={() => setDialogoAssocia(c)}>
-                          <LinkIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Crea su Wubook">
-                        <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
-                          <SettingsIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </>
-                  )}
-                  {c.wubookAttiva && (
-                    <>
-                      <Tooltip title="Chiusure e restrizioni per periodo">
-                        <IconButton size="small" onClick={() => setDialogoChiusure({ cameraId: c.cameraId, cameraNome: c.cameraNome })}>
-                          <EditCalendarIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      {puoScrivere && (
-                        <>
-                          <Tooltip title="Modifica su Wubook (codice camera, prezzo, WooDoo)">
-                            <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
-                              <SettingsIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Elimina da Wubook">
-                            <IconButton size="small" onClick={() => setDaEliminare(c)} disabled={rimuovi.isPending}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </>
-                      )}
-                    </>
-                  )}
+                  <MenuAzioniCamera
+                    camera={c}
+                    puoScrivere={puoScrivere}
+                    onAssocia={() => setDialogoAssocia(c)}
+                    onImpostazioni={() => setDialogoImpostazioni(c)}
+                    onChiusure={() => setDialogoChiusure({ cameraId: c.cameraId, cameraNome: c.cameraNome })}
+                    onDisassocia={() => setDaDisassociare(c)}
+                    onElimina={() => setDaEliminare(c)}
+                    disassociaInCorso={disassocia.isPending}
+                    eliminaInCorso={rimuovi.isPending}
+                  />
                 </AzioniCardElenco>
               )}
             </CardElenco>
@@ -323,7 +324,7 @@ function TabellaCamere({
                 <TableCell>Camera</TableCell>
                 <TableCell>Tipologia</TableCell>
                 <TableCell>Disponibilità oggi</TableCell>
-                <TableCell>Associazione Wubook</TableCell>
+                <TableCell>Associazione OTA</TableCell>
                 <TableCell align="right">Azioni</TableCell>
               </TableRow>
             </TableHead>
@@ -362,43 +363,17 @@ function TabellaCamere({
                     )}
                   </TableCell>
                   <TableCell align="right">
-                    {!c.wubookAttiva && puoScrivere && (
-                      <>
-                        <Tooltip title="Associa a una camera già esistente su Wubook">
-                          <IconButton size="small" onClick={() => setDialogoAssocia(c)}>
-                            <LinkIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Crea su Wubook">
-                          <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
-                            <SettingsIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </>
-                    )}
-                    {c.wubookAttiva && (
-                      <>
-                        <Tooltip title="Chiusure e restrizioni per periodo">
-                          <IconButton size="small" onClick={() => setDialogoChiusure({ cameraId: c.cameraId, cameraNome: c.cameraNome })}>
-                            <EditCalendarIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        {puoScrivere && (
-                          <>
-                            <Tooltip title="Modifica su Wubook (codice camera, prezzo, WooDoo)">
-                              <IconButton size="small" onClick={() => setDialogoImpostazioni(c)}>
-                                <SettingsIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Elimina da Wubook">
-                              <IconButton size="small" onClick={() => setDaEliminare(c)} disabled={rimuovi.isPending}>
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </>
-                        )}
-                      </>
-                    )}
+                    <MenuAzioniCamera
+                      camera={c}
+                      puoScrivere={puoScrivere}
+                      onAssocia={() => setDialogoAssocia(c)}
+                      onImpostazioni={() => setDialogoImpostazioni(c)}
+                      onChiusure={() => setDialogoChiusure({ cameraId: c.cameraId, cameraNome: c.cameraNome })}
+                      onDisassocia={() => setDaDisassociare(c)}
+                      onElimina={() => setDaEliminare(c)}
+                      disassociaInCorso={disassocia.isPending}
+                      eliminaInCorso={rimuovi.isPending}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -420,26 +395,138 @@ function TabellaCamere({
         <AssociaCameraWubookDialog strutturaId={strutturaId} camera={dialogoAssocia} onClose={() => setDialogoAssocia(null)} />
       )}
 
+      {dialogoNuova && (
+        <NuovaCameraOtaDialog
+          camere={camereDaCreare}
+          onSeleziona={(c) => {
+            setDialogoNuova(false)
+            setDialogoImpostazioni(c)
+          }}
+          onClose={() => setDialogoNuova(false)}
+        />
+      )}
+
       {dialogoImpostazioni && (
         <ImpostazioniWubookCameraDialog
           strutturaId={strutturaId}
           cameraId={dialogoImpostazioni.cameraId}
           cameraNome={dialogoImpostazioni.cameraNome}
           wubookAttiva={dialogoImpostazioni.wubookAttiva}
+          idCameraWubook={dialogoImpostazioni.idCameraWubook}
           onClose={() => setDialogoImpostazioni(null)}
         />
       )}
 
       {daEliminare && (
         <ConfirmDialog
-          titolo="Eliminare da Wubook"
-          messaggio={`Eliminare "${daEliminare.cameraNome}" da Wubook? La camera locale resta, solo la camera su Wubook viene rimossa.`}
+          titolo="Eliminare da OTA"
+          messaggio={`Eliminare "${daEliminare.cameraNome}" da OTA? La camera locale resta, solo la camera sull'OTA viene rimossa.`}
           inCorso={rimuovi.isPending}
           onConferma={confermaEliminaDaWubook}
           onAnnulla={() => setDaEliminare(null)}
         />
       )}
+
+      {daDisassociare && (
+        <ConfirmDialog
+          titolo="Disassociare da OTA"
+          messaggio={`Disassociare "${daDisassociare.cameraNome}" da OTA? La camera resta invariata sull'OTA (non viene eliminata) — potrai riassociarla in seguito da "Associa a una camera già esistente".`}
+          inCorso={disassocia.isPending}
+          onConferma={confermaDisassocia}
+          onAnnulla={() => setDaDisassociare(null)}
+        />
+      )}
     </Box>
+  )
+}
+
+/** Azioni per riga camera raccolte in un menu a tendina (icona "···") invece di una fila di icone — la stessa riga arriva ad avere fino a 4 azioni possibili (chiusure, modifica, disassocia, elimina), troppe per stare bene affiancate. */
+function MenuAzioniCamera({
+  camera,
+  puoScrivere,
+  onAssocia,
+  onImpostazioni,
+  onChiusure,
+  onDisassocia,
+  onElimina,
+  disassociaInCorso,
+  eliminaInCorso,
+}: {
+  camera: CameraWubookInfoDto
+  puoScrivere: boolean
+  onAssocia: () => void
+  onImpostazioni: () => void
+  onChiusure: () => void
+  onDisassocia: () => void
+  onElimina: () => void
+  disassociaInCorso: boolean
+  eliminaInCorso: boolean
+}) {
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
+
+  if (!camera.wubookAttiva && !puoScrivere) return null
+
+  function esegui(azione: () => void) {
+    setAnchorEl(null)
+    azione()
+  }
+
+  return (
+    <>
+      <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
+        <MoreVertIcon fontSize="small" />
+      </IconButton>
+      <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={() => setAnchorEl(null)}>
+        {!camera.wubookAttiva && puoScrivere && (
+          <MenuItem onClick={() => esegui(onAssocia)}>
+            <ListItemIcon>
+              <LinkIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Associa a una camera già esistente su OTA</ListItemText>
+          </MenuItem>
+        )}
+        {!camera.wubookAttiva && puoScrivere && (
+          <MenuItem onClick={() => esegui(onImpostazioni)}>
+            <ListItemIcon>
+              <SettingsIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Crea su OTA</ListItemText>
+          </MenuItem>
+        )}
+        {camera.wubookAttiva && (
+          <MenuItem onClick={() => esegui(onChiusure)}>
+            <ListItemIcon>
+              <EditCalendarIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Chiusure e restrizioni per periodo</ListItemText>
+          </MenuItem>
+        )}
+        {camera.wubookAttiva && puoScrivere && (
+          <MenuItem onClick={() => esegui(onImpostazioni)}>
+            <ListItemIcon>
+              <SettingsIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Modifica su OTA</ListItemText>
+          </MenuItem>
+        )}
+        {camera.wubookAttiva && puoScrivere && (
+          <MenuItem onClick={() => esegui(onDisassocia)} disabled={disassociaInCorso}>
+            <ListItemIcon>
+              <LinkOffIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Disassocia</ListItemText>
+          </MenuItem>
+        )}
+        {camera.wubookAttiva && puoScrivere && (
+          <MenuItem onClick={() => esegui(onElimina)} disabled={eliminaInCorso}>
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Elimina da OTA</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
+    </>
   )
 }
 
@@ -451,7 +538,7 @@ function AssociaCameraWubookDialog({ strutturaId, camera, onClose }: { struttura
 
   function conferma() {
     if (!selezionata) {
-      setErrore('Seleziona una camera Wubook.')
+      setErrore('Seleziona una camera OTA.')
       return
     }
     setErrore(null)
@@ -465,15 +552,15 @@ function AssociaCameraWubookDialog({ strutturaId, camera, onClose }: { struttura
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Associa "{camera.cameraNome}" a Wubook</DialogTitle>
+      <DialogTitle>Associa "{camera.cameraNome}" a OTA</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         {errore && <Alert severity="error">{errore}</Alert>}
         <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-          Scegli la camera già presente su Wubook a cui corrisponde questa camera locale — nessuna nuova camera viene creata su Wubook,
-          solo l'associazione viene salvata (a differenza di "Crea su Wubook", che invece crea una camera nuova).
+          Scegli la camera già presente sull'OTA a cui corrisponde questa camera locale — nessuna nuova camera viene creata sull'OTA,
+          solo l'associazione viene salvata (a differenza di "Crea su OTA", che invece crea una camera nuova).
         </Typography>
         {remote.isLoading && <Skeleton variant="rounded" height={56} />}
-        {remote.isError && <Alert severity="error">Impossibile recuperare le camere da Wubook. Verifica le credenziali in Impostazioni.</Alert>}
+        {remote.isError && <Alert severity="error">Impossibile recuperare le camere dall'OTA. Verifica le credenziali in Impostazioni.</Alert>}
         {!remote.isLoading && !remote.isError && (
           <Autocomplete
             options={remote.data ?? []}
@@ -481,8 +568,8 @@ function AssociaCameraWubookDialog({ strutturaId, camera, onClose }: { struttura
             value={selezionata}
             onChange={(_, valore) => setSelezionata(valore)}
             disabled={associa.isPending}
-            noOptionsText="Nessuna camera trovata su Wubook"
-            renderInput={(params) => <TextField {...params} label="Camera Wubook" placeholder="Cerca per nome…" autoFocus />}
+            noOptionsText="Nessuna camera trovata sull'OTA"
+            renderInput={(params) => <TextField {...params} label="Camera OTA" placeholder="Cerca per nome…" autoFocus />}
           />
         )}
       </DialogContent>
@@ -497,6 +584,47 @@ function AssociaCameraWubookDialog({ strutturaId, camera, onClose }: { struttura
         </Button>
         <Button variant="contained" color="primary" onClick={conferma} disabled={associa.isPending || remote.isLoading}>
           Associa
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+/**
+ * Come il bottone globale "Nuova Camera" del vecchio programma (otaservice.web): un solo punto di
+ * ingresso per creare una camera su OTA, che parte scegliendo la camera locale già esistente da
+ * cui prendere nome/tipologia — non serve più andare a cercare la riga giusta in tabella. Dopo la
+ * scelta si riusa lo stesso dialog "Impostazioni OTA" già usato dall'azione per-riga.
+ */
+function NuovaCameraOtaDialog({
+  camere,
+  onSeleziona,
+  onClose,
+}: {
+  camere: CameraWubookInfoDto[]
+  onSeleziona: (camera: CameraWubookInfoDto) => void
+  onClose: () => void
+}) {
+  const [selezionata, setSelezionata] = useState<CameraWubookInfoDto | null>(null)
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Nuova camera su OTA</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>Scegli quale camera locale creare su OTA.</Typography>
+        <Autocomplete
+          options={camere}
+          getOptionLabel={(c) => (c.tipologiaNome ? `${c.cameraNome} · ${c.tipologiaNome}` : c.cameraNome)}
+          value={selezionata}
+          onChange={(_, valore) => setSelezionata(valore)}
+          noOptionsText="Nessuna camera locale da creare — sono già tutte associate."
+          renderInput={(params) => <TextField {...params} label="Camera locale" autoFocus />}
+        />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose}>Annulla</Button>
+        <Button variant="contained" color="primary" disabled={!selezionata} onClick={() => selezionata && onSeleziona(selezionata)}>
+          Continua
         </Button>
       </DialogActions>
     </Dialog>
@@ -519,7 +647,7 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
         Piani prezzo nominati/virtuali (es. "Non rimborsabile -10%"), derivati dal piano di partenza con una variazione fissa o
-        percentuale. La mappatura piano→canale si fa nel pannello Wubook.
+        percentuale. La mappatura piano→canale si fa nel pannello dell'OTA.
       </Typography>
 
       {puoScrivere && (

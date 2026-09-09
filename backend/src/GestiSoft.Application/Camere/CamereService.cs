@@ -1,5 +1,6 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -37,6 +38,8 @@ public class CamereService(
     IPrezzoCameraRepository prezzi,
     ICanaleVenditaRepository canali,
     IStrutturaRepository strutture,
+    IWubookClient wubookClient,
+    WubookLicenzaService wubookLicenzaService,
     PermessoStrutturaGuard permessoGuard)
 {
     // --- Tipologie ---
@@ -218,6 +221,18 @@ public class CamereService(
         // Fedele al legacy: nessun controllo su prenotazioni collegate, la FK
         // Prenotazione.CameraId è SetNull, quindi le prenotazioni passate restano ma "orfane".
         var entity = await GetCameraOwnedAsync(strutturaId, cameraId, cancellationToken);
+
+        // Se la camera è associata a Wubook, va rimossa anche lì prima di eliminarla in locale —
+        // altrimenti resterebbe su Wubook (visibile alle OTA, prenotabile) una room ormai orfana,
+        // senza più alcuna camera locale corrispondente. Stesso comando (del_room) usato da
+        // WubookCamereService.RimuoviAsync; se questa chiamata fallisce, l'eliminazione si ferma qui
+        // — meglio un errore esplicito che un disallineamento silenzioso con Wubook.
+        if (entity.WubookAttiva && entity.IdCameraWubook is { } idCameraWubook)
+        {
+            var (token, lcode) = await wubookLicenzaService.GetCredenzialiValideAsync(strutturaId, cancellationToken);
+            await wubookClient.DelRoomAsync(token, lcode, idCameraWubook, cancellationToken);
+        }
+
         await camere.DeleteAsync(entity, cancellationToken);
     }
 
