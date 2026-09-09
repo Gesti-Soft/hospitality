@@ -19,5 +19,5 @@ docker compose up -d
 echo "=== stato ==="
 docker compose ps
 
-echo "=== log avvio api (Ctrl+C per uscire) ==="
-docker compose logs -f --tail=30 api
+#echo "=== log avvio api (Ctrl+C per uscire) ==="
+#docker compose logs -f --tail=30 api

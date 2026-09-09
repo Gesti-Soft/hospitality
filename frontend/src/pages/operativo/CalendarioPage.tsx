@@ -9,18 +9,19 @@ import Typography from '@mui/material/Typography'
 import Skeleton from '@mui/material/Skeleton'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import CalendarIcon from '@mui/icons-material/CalendarTodayOutlined'
 import SearchIcon from '@mui/icons-material/Search'
-import TodayIcon from '@mui/icons-material/Today'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { StatoCamera, useCamere, type CameraDto } from '../../api/camere'
 import { usePrenotazioniPeriodo, StatoPrenotazione, type PrenotazioneDto } from '../../api/prenotazioni'
 import { useCanaliVendita } from '../../api/canaliVendita'
 import { useTipologie } from '../../api/tipologie'
 import { fontDisplay, fontMono, tokens } from '../../theme'
-import { aggiungiGiorni, differenzaGiorni, inizioGiornoLocale } from '../../lib/date'
+import { aggiungiGiorni, differenzaGiorni, formatoInputData, inizioGiornoLocale, parsaInputData } from '../../lib/date'
 import { useMobile } from '../../lib/useMobile'
 import { PrenotazioneDialog, type StatoIniziale, ETICHETTA_STATO, COLORE_STATO } from '../../components/PrenotazioneDialog'
 import { BottoneNuovo, CardElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
+import { CalendarioPopover } from '../../components/CalendarioPopover'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 const GIORNI_VISIBILI_DEFAULT = 14
@@ -68,6 +69,7 @@ export function CalendarioPage() {
   const { strutturaId } = useStruttura()
   const puoScrivere = usePuoScrivere('reservationWrite')
   const [inizioFinestra, setInizioFinestra] = useState(() => inizioGiornoLocale(new Date()))
+  const [anchorElCalendario, setAnchorElCalendario] = useState<HTMLElement | null>(null)
   const [dialogo, setDialogo] = useState<StatoIniziale | null>(null)
   const [filtroTipologiaId, setFiltroTipologiaId] = useState('')
   const [ricerca, setRicerca] = useState('')
@@ -141,18 +143,28 @@ export function CalendarioPage() {
     <Box ref={contenitoreRef} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, width: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? -1 : -7))}>
+          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? -1 : -giorniVisibili))}>
             <ChevronLeftIcon fontSize="small" />
           </IconButton>
           <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 14.5, px: 0.5, minWidth: mobile ? 130 : 190, textAlign: 'center' }}>
             {mobile ? FORMATTATORE_LABEL.format(giorni[0]) : `${FORMATTATORE_LABEL.format(giorni[0])} – ${FORMATTATORE_LABEL.format(giorni[giorni.length - 1])}`}
           </Typography>
-          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? 1 : 7))}>
+          <IconButton size="small" onClick={() => setInizioFinestra((d) => aggiungiGiorni(d, mobile ? 1 : giorniVisibili))}>
             <ChevronRightIcon fontSize="small" />
           </IconButton>
-          <IconButton size="small" onClick={() => setInizioFinestra(inizioGiornoLocale(new Date()))} title="Torna a oggi">
-            <TodayIcon fontSize="small" />
+          <IconButton size="small" onClick={(e) => setAnchorElCalendario(e.currentTarget)} title="Scegli un periodo">
+            <CalendarIcon fontSize="small" />
           </IconButton>
+          <CalendarioPopover
+            anchorEl={anchorElCalendario}
+            valore={formatoInputData(inizioFinestra)}
+            mostraOggi
+            onSeleziona={(valore) => {
+              setInizioFinestra(inizioGiornoLocale(parsaInputData(valore)))
+              setAnchorElCalendario(null)
+            }}
+            onClose={() => setAnchorElCalendario(null)}
+          />
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

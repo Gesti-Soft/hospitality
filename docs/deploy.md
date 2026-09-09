@@ -226,7 +226,7 @@ dall'app finché i container non ripartono.
 Da questo deploy in poi, un aggiornamento è solo:
 
 ```bash
-./deploy/update.sh
+bash ./deploy/update.sh
 ```
 
 (`git pull` + rebuild + restart dei container di questo repo — niente Caddy, vedi punto 7 — con
