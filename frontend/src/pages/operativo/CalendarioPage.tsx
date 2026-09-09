@@ -493,7 +493,7 @@ export function CalendarioPage() {
                     { etichetta: 'Camera', valore: p.cameraNome ?? '—' },
                     { etichetta: 'Check-in', valore: p.checkIn ? FORMATTATORE_LABEL.format(new Date(p.checkIn)) : '—' },
                     { etichetta: 'Check-out', valore: p.checkOut ? FORMATTATORE_LABEL.format(new Date(p.checkOut)) : '—' },
-                    { etichetta: 'Importo prenotazione', valore: p.importoPrenotazione != null ? formattatoreValuta.format(p.importoPrenotazione) : '—' },
+                    { etichetta: 'Importo totale', valore: p.importoTotale != null ? formattatoreValuta.format(p.importoTotale) : '—' },
                     { etichetta: 'Importo pagato', valore: p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : '—' },
                   ]}
                 />
@@ -515,7 +515,7 @@ export function CalendarioPage() {
                 <TableCell>Check-in</TableCell>
                 <TableCell>Check-out</TableCell>
                 <TableCell>Canale</TableCell>
-                <TableCell align="right">Importo prenotazione</TableCell>
+                <TableCell align="right">Importo totale</TableCell>
                 <TableCell align="right">Importo pagato</TableCell>
               </TableRow>
             </TableHead>
@@ -541,7 +541,7 @@ export function CalendarioPage() {
                   <TableCell sx={{ fontFamily: fontMono }}>{p.checkOut ? FORMATTATORE_LABEL.format(new Date(p.checkOut)) : '—'}</TableCell>
                   <TableCell>{normalizzaAgenzia(p.agenzia)}</TableCell>
                   <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                    {p.importoPrenotazione != null ? formattatoreValuta.format(p.importoPrenotazione) : '—'}
+                    {p.importoTotale != null ? formattatoreValuta.format(p.importoTotale) : '—'}
                   </TableCell>
                   <TableCell align="right" sx={{ fontFamily: fontMono }}>
                     {p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : '—'}

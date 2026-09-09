@@ -213,6 +213,7 @@ public class PrenotazioniService(
         var spesePuliziaPrima = entity.SpesePuliziaAttiva;
         var animaliPrima = entity.AnimaliAttiva;
         var cauzionePrima = entity.CauzioneAttiva;
+        var importoPrenotazionePrima = entity.ImportoPrenotazione;
         var importoTotalePrima = entity.ImportoTotale;
         var importoPagatoPrima = entity.ImportoPagato;
         var totalTaxPrima = entity.TotalTax;
@@ -267,6 +268,7 @@ public class PrenotazioniService(
             entity.CauzioneAttiva = request.CauzioneAttiva;
         }
 
+        entity.ImportoPrenotazione = request.ImportoPrenotazione;
         entity.ImportoPagato = request.ImportoPagato;
         entity.ImportoTotale = request.ImportoTotale;
         entity.UpdatedAtUtc = DateTime.UtcNow;
@@ -289,6 +291,10 @@ public class PrenotazioniService(
         if (cauzionePrima != entity.CauzioneAttiva)
         {
             modificheEconomiche.Add($"Cauzione {(cauzionePrima ? "attiva" : "disattivata")}→{(entity.CauzioneAttiva ? "attiva" : "disattivata")}");
+        }
+        if (importoPrenotazionePrima != entity.ImportoPrenotazione)
+        {
+            modificheEconomiche.Add($"Importo prenotazione {importoPrenotazionePrima?.ToString("0.00") ?? "—"}€→{entity.ImportoPrenotazione?.ToString("0.00") ?? "—"}€");
         }
         if (importoTotalePrima != entity.ImportoTotale)
         {
