@@ -37,3 +37,22 @@ export function parsaInputData(valore: string): Date {
   const [yyyy, mm, dd] = valore.split('-').map(Number)
   return new Date(yyyy, mm - 1, dd)
 }
+
+/**
+ * Le date arrivano dal backend come timestamp "locali alla struttura" ma serializzati con
+ * suffisso UTC (vedi GestiSoftDbContext — sono ritaggate, non convertite). Per l'Italia
+ * (sempre in anticipo su UTC) confrontare l'anno/mese/giorno letti in timezone locale del
+ * browser resta corretto; non è una soluzione generale multi-fuso.
+ */
+export function isOggi(iso: string | null): boolean {
+  if (!iso) return false
+  const d = new Date(iso)
+  const oggi = new Date()
+  return d.getFullYear() === oggi.getFullYear() && d.getMonth() === oggi.getMonth() && d.getDate() === oggi.getDate()
+}
+
+/** Oggi o prima — usato per le partenze: un check-out dimenticato non deve sparire dalla lista il giorno dopo, resta finché non viene fatto. */
+export function isOggiOPrima(iso: string | null): boolean {
+  if (!iso) return false
+  return inizioGiornoLocale(new Date(iso)) <= inizioGiornoLocale(new Date())
+}

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost, apiPut } from './client'
+import { confrontaNaturale } from '../lib/ordinamento'
 
 // L'Api non registra JsonStringEnumConverter, quindi gli enum arrivano sul wire come numeri
 // (valori esatti di GestiSoft.Domain.Enums.StatoCamera), non come stringhe.
@@ -30,6 +31,9 @@ export function useCamere(strutturaId: string | null) {
     queryKey: ['camere', strutturaId],
     queryFn: () => apiGet<CameraDto[]>(`/strutture/${strutturaId}/camere`),
     enabled: !!strutturaId,
+    // Ordinamento naturale applicato qui una sola volta: si riflette automaticamente in tutte le
+    // select/autocomplete dell'app che elencano camere, senza doverlo ripetere pagina per pagina.
+    select: (camere) => [...camere].sort((a, b) => confrontaNaturale(a.nome, b.nome)),
   })
 }
 

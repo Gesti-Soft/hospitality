@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost, apiPut } from './client'
+import { confrontaNaturale } from '../lib/ordinamento'
 
 export interface TipologiaCameraDto {
   id: string
@@ -35,6 +36,9 @@ export function useTipologie(strutturaId: string | null) {
     queryKey: ['tipologie-camera', strutturaId],
     queryFn: () => apiGet<TipologiaCameraDto[]>(`/strutture/${strutturaId}/tipologie-camera`),
     enabled: !!strutturaId,
+    // Ordinamento naturale applicato qui una sola volta: si riflette automaticamente in tutte le
+    // select/autocomplete dell'app che elencano tipologie, senza doverlo ripetere pagina per pagina.
+    select: (tipologie) => [...tipologie].sort((a, b) => confrontaNaturale(a.tipologiaCamera, b.tipologiaCamera)),
   })
 }
 

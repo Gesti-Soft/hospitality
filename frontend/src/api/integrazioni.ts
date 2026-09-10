@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiDelete, apiGet, apiPost, apiPut, apiScaricaFile } from './client'
+import { confrontaNaturale } from '../lib/ordinamento'
 
 export interface WubookIntegrazioneDto {
   strutturaId: string
@@ -554,6 +555,7 @@ export function useTipologiePerAssociazione(strutturaId: string | null) {
     queryKey: ['tipologie-wubook', strutturaId],
     queryFn: () => apiGet<TipologiaWubookInfoDto[]>(`/strutture/${strutturaId}/wubook/tipologie/per-associazione`),
     enabled: !!strutturaId,
+    select: (tipologie) => [...tipologie].sort((a, b) => confrontaNaturale(a.tipologiaNome, b.tipologiaNome)),
   })
 }
 

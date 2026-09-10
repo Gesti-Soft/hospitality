@@ -16,30 +16,11 @@ import {
   useWubookConfig,
 } from '../../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../../theme'
-import { aggiungiGiorni, inizioGiornoLocale } from '../../lib/date'
+import { aggiungiGiorni, inizioGiornoLocale, isOggi, isOggiOPrima } from '../../lib/date'
 import { PrenotazioneDialog, type StatoIniziale } from '../../components/PrenotazioneDialog'
 import { BottoneNuovo } from '../../components/CardElenco'
 import { KpiCard, KpiCardDoppia } from '../../components/KpiCard'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
-
-/**
- * Le date arrivano dal backend come timestamp "locali alla struttura" ma serializzati con
- * suffisso UTC (vedi GestiSoftDbContext — sono ritaggate, non convertite). Per l'Italia
- * (sempre in anticipo su UTC) confrontare l'anno/mese/giorno letti in timezone locale del
- * browser resta corretto; non è una soluzione generale multi-fuso.
- */
-function isOggi(iso: string | null): boolean {
-  if (!iso) return false
-  const d = new Date(iso)
-  const oggi = new Date()
-  return d.getFullYear() === oggi.getFullYear() && d.getMonth() === oggi.getMonth() && d.getDate() === oggi.getDate()
-}
-
-/** Oggi o prima — usato per le partenze: un check-out dimenticato non deve sparire dalla lista il giorno dopo, resta finché non viene fatto. */
-function isOggiOPrima(iso: string | null): boolean {
-  if (!iso) return false
-  return inizioGiornoLocale(new Date(iso)) <= inizioGiornoLocale(new Date())
-}
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })

@@ -36,6 +36,7 @@ import { useTipologie } from '../../api/tipologie'
 import { fontDisplay, fontMono, tokens } from '../../theme'
 import { PALETTE_CANALI } from '../../lib/coloriCanali'
 import { aggiungiGiorni, differenzaGiorni, formatoInputData, inizioGiornoLocale, parsaInputData } from '../../lib/date'
+import { confrontaNaturale } from '../../lib/ordinamento'
 import { useMobile } from '../../lib/useMobile'
 import { PrenotazioneDialog, type StatoIniziale, ETICHETTA_STATO, COLORE_STATO } from '../../components/PrenotazioneDialog'
 import { BottoneNuovo, CardElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
@@ -151,8 +152,8 @@ export function CalendarioPage() {
       mappa.get(chiave)!.push(c)
     }
     return Array.from(mappa.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([tipologia, elenco]) => ({ tipologia, camere: elenco.sort((x, y) => x.nome.localeCompare(y.nome)) }))
+      .sort(([a], [b]) => confrontaNaturale(a, b))
+      .map(([tipologia, elenco]) => ({ tipologia, camere: elenco.sort((x, y) => confrontaNaturale(x.nome, y.nome)) }))
   }, [camere.data, filtroTipologiaId])
 
   const prenotazioniFiltrate = useMemo(() => {

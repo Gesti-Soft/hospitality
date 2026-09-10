@@ -63,6 +63,18 @@ export function IconPulizie(props: IconProps) {
   )
 }
 
+export function IconCheckInOut(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M15.5 5V13" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M2.5 6H10.5" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M7.5 3L10.5 6L7.5 9" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.5 12H10.5" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M5.5 9L2.5 12L5.5 15" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function IconTipologie(props: IconProps) {
   return (
     <svg {...base} {...props}>

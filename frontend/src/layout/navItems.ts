@@ -4,6 +4,7 @@ import {
   IconCalendario,
   IconCamere,
   IconCauzioni,
+  IconCheckInOut,
   IconCruscotto,
   IconEntrate,
   IconFatturazione,
@@ -83,6 +84,7 @@ export const navSections: NavSection[] = [
     icon: IconCruscotto,
     items: [
       { label: 'Cruscotto', path: '/', icon: IconCruscotto, richiedePermesso: 'reservationRead' },
+      { label: 'Check-in / Check-out', path: '/check-in-out', icon: IconCheckInOut, richiedePermesso: ['reservationRead', 'roomStatusUpdate'] },
       { label: 'Calendario', path: '/calendario', icon: IconCalendario, richiedePermesso: 'reservationRead' },
       { label: 'Ospiti', path: '/ospiti', icon: IconOspiti, richiedePermesso: 'reservationRead' },
       { label: 'Tipologie', path: '/tipologie', icon: IconTipologie, richiedePermesso: ['settingRoomRead', 'reservationRead'] },

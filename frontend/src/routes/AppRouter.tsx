@@ -3,6 +3,7 @@ import { LoginPage } from '../pages/LoginPage'
 import { DashboardPage } from '../pages/operativo/DashboardPage'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { CalendarioPage } from '../pages/operativo/CalendarioPage'
+import { CheckInOutPage } from '../pages/operativo/CheckInOutPage'
 import { CamerePage } from '../pages/operativo/CamerePage'
 import { PuliziePage } from '../pages/operativo/PuliziePage'
 import { TipologiePage } from '../pages/operativo/TipologiePage'
@@ -77,6 +78,7 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <RootRoute /> },
       { path: '/calendario', element: <RouteGuard path="/calendario"><CalendarioPage /></RouteGuard> },
+      { path: '/check-in-out', element: <RouteGuard path="/check-in-out"><CheckInOutPage /></RouteGuard> },
       { path: '/camere', element: <RouteGuard path="/camere"><CamerePage /></RouteGuard> },
       { path: '/pulizie', element: <RouteGuard path="/pulizie"><PuliziePage /></RouteGuard> },
       { path: '/tipologie', element: <RouteGuard path="/tipologie"><TipologiePage /></RouteGuard> },
