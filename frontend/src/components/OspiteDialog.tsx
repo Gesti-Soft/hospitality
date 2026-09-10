@@ -45,9 +45,11 @@ interface Props {
   onApriPrenotazione?: () => void
   /** Se passata, mostra un bottone "Genera fattura" — solo per prenotazioni in corso o completate (vedi OspitiPage). */
   onGeneraFattura?: () => void
+  /** Se passata, viene invocata subito dopo il salvataggio riuscito della scheda (es. per eseguire il check-in solo a salvataggio avvenuto, mai chiudendo senza salvare). */
+  dopoSalvataggio?: () => void
 }
 
-export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenotazione, onGeneraFattura }: Props) {
+export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenotazione, onGeneraFattura, dopoSalvataggio }: Props) {
   const mobile = useMobile()
   const ospite = useOspite(strutturaId, prenotazione.id)
   const fattura = useFatturaPerPrenotazione(strutturaId, prenotazione.id)
@@ -70,6 +72,7 @@ export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenota
           onClose={onClose}
           onApriPrenotazione={onApriPrenotazione}
           onGeneraFattura={onGeneraFattura}
+          dopoSalvataggio={dopoSalvataggio}
           fatturaGenerata={fattura.data ?? null}
         />
       )}
@@ -139,6 +142,7 @@ function SchedaOspitiForm({
   onClose,
   onApriPrenotazione,
   onGeneraFattura,
+  dopoSalvataggio,
   fatturaGenerata,
 }: {
   strutturaId: string
@@ -147,6 +151,7 @@ function SchedaOspitiForm({
   onClose: () => void
   onApriPrenotazione?: () => void
   onGeneraFattura?: () => void
+  dopoSalvataggio?: () => void
   fatturaGenerata: DatiFatturaDto | null
 }) {
   const mobile = useMobile()
@@ -270,7 +275,10 @@ function SchedaOspitiForm({
     }
 
     salva.mutate(request, {
-      onSuccess: onClose,
+      onSuccess: () => {
+        dopoSalvataggio?.()
+        onClose()
+      },
       onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
     })
   }

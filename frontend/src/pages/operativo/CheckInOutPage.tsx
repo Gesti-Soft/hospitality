@@ -37,9 +37,9 @@ export function CheckInOutPage() {
   const checkIn = useCheckIn(strutturaId)
   const checkOut = useCheckOut(strutturaId)
   const [checkOutDaConfermare, setCheckOutDaConfermare] = useState<PrenotazioneDto | null>(null)
-  // Appena fatto il check-in si passa subito alla scheda ospiti da compilare (Nome/Cognome veri,
-  // non un testo libero) — stessa transizione già usata per una prenotazione appena creata in
-  // PrenotazioneDialog, qui innescata dal check-in invece che dalla creazione.
+  // Il check-in si apre sulla scheda ospiti da compilare (Nome/Cognome veri, non un testo libero) —
+  // ma il check-in vero e proprio scatta solo al salvataggio della scheda, mai chiudendo il dialog
+  // senza salvare (altrimenti risulterebbe fatto anche annullando).
   const [ospiteDaCompilare, setOspiteDaCompilare] = useState<PrenotazioneDto | null>(null)
   const toast = useToast()
 
@@ -51,11 +51,8 @@ export function CheckInOutPage() {
     toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
-  function eseguiCheckIn(p: PrenotazioneDto) {
-    checkIn.mutate(p.id, {
-      onSuccess: setOspiteDaCompilare,
-      onError: gestisciErrore,
-    })
+  function confermaCheckIn(p: PrenotazioneDto) {
+    checkIn.mutate(p.id, { onError: gestisciErrore })
   }
 
   // La cauzione va chiesta solo se è davvero prevista su questa prenotazione (tipologia della
@@ -95,7 +92,7 @@ export function CheckInOutPage() {
         {!caricamento && arriviOggi.length > 0 && (
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
             {arriviOggi.map((p) => (
-              <CardPrenotazione key={p.id} prenotazione={p} tipo="check-in" inCorso={checkIn.isPending} onAzione={() => eseguiCheckIn(p)} />
+              <CardPrenotazione key={p.id} prenotazione={p} tipo="check-in" inCorso={checkIn.isPending} onAzione={() => setOspiteDaCompilare(p)} />
             ))}
           </Box>
         )}
@@ -124,7 +121,12 @@ export function CheckInOutPage() {
       )}
 
       {ospiteDaCompilare && strutturaId && (
-        <OspiteDialog strutturaId={strutturaId} prenotazione={ospiteDaCompilare} onClose={() => setOspiteDaCompilare(null)} />
+        <OspiteDialog
+          strutturaId={strutturaId}
+          prenotazione={ospiteDaCompilare}
+          onClose={() => setOspiteDaCompilare(null)}
+          dopoSalvataggio={() => confermaCheckIn(ospiteDaCompilare)}
+        />
       )}
     </Box>
   )
