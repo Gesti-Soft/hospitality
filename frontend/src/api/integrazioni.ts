@@ -533,6 +533,8 @@ export interface TipologiaWubookInfoDto {
   tipologiaId: string
   tipologiaNome: string
   camereCollegate: number
+  chiusureCount: number
+  restrizioniCount: number
   idCameraWubook: number | null
   wubookAttiva: boolean
 }

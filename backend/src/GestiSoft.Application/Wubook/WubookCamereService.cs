@@ -9,6 +9,8 @@ public record TipologiaWubookInfo(
     Guid TipologiaId,
     string TipologiaNome,
     int CamereCollegate,
+    int ChiusureCount,
+    int RestrizioniCount,
     int? IdCameraWubook,
     bool WubookAttiva);
 
@@ -22,6 +24,8 @@ public record TipologiaWubookInfo(
 public class WubookCamereService(
     ITipologiaCameraRepository tipologie,
     ICameraRepository camere,
+    IChiusuraCameraRepository chiusure,
+    IRestrizioneSoggiornoCameraRepository restrizioniPeriodo,
     IWubookClient wubookClient,
     WubookLicenzaService licenzaService,
     PermessoStrutturaGuard permessoGuard)
@@ -111,29 +115,68 @@ public class WubookCamereService(
         }
     }
 
-    /// <summary>Elenco Tipologie della struttura con conteggio camere reali collegate e stato associazione OTA — per la tab "Camere" della pagina Servizi OTA.</summary>
+    /// <summary>
+    /// Elenco Tipologie della struttura con conteggio camere reali collegate, chiusure/restrizioni
+    /// locali configurate e stato associazione OTA — per la tab "Camere" della pagina Servizi OTA.
+    /// La disponibilità vera e propria (quella che conta per sapere se una camera è libera oggi)
+    /// arriva invece da Wubook stesso, vedi <see cref="ListaCamereRemoteAsync"/>.
+    /// </summary>
     public async Task<IReadOnlyList<TipologiaWubookInfo>> ListaPerAssociazioneAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomRead, cancellationToken);
 
         var lista = await tipologie.ListByStrutturaAsync(strutturaId, cancellationToken);
+
         var risultato = new List<TipologiaWubookInfo>();
         foreach (var t in lista)
         {
-            var count = (await camere.ListByTipologiaAsync(strutturaId, t.Id, cancellationToken)).Count;
-            risultato.Add(new TipologiaWubookInfo(t.Id, t.TipologiaCamera, count, t.IdCameraWubook, t.WubookAttiva));
+            var camereDelPool = await camere.ListByTipologiaAsync(strutturaId, t.Id, cancellationToken);
+            var chiusureCount = 0;
+            var restrizioniCount = 0;
+            foreach (var c in camereDelPool)
+            {
+                chiusureCount += (await chiusure.ListByCameraAsync(c.Id, cancellationToken)).Count;
+                restrizioniCount += (await restrizioniPeriodo.ListByCameraAsync(c.Id, cancellationToken)).Count;
+            }
+
+            risultato.Add(new TipologiaWubookInfo(t.Id, t.TipologiaCamera, camereDelPool.Count, chiusureCount, restrizioniCount, t.IdCameraWubook, t.WubookAttiva));
         }
 
         return risultato;
     }
 
-    /// <summary>Camere già presenti su Wubook (fetch_rooms) — elenco da cui l'operatore sceglie l'associazione manuale, invece del push automatico di SincronizzaAsync.</summary>
+    /// <summary>
+    /// Camere già presenti su Wubook (fetch_rooms) — elenco da cui l'operatore sceglie l'associazione
+    /// manuale, invece del push automatico di SincronizzaAsync. Il campo "avail" di fetch_rooms è
+    /// statico e spesso inattendibile (visto dal vivo restare a 0 anche su camere realmente libere):
+    /// qui viene sovrascritto con il valore reale di oggi letto da fetch_rooms_values, il
+    /// contro-pezzo in lettura di update_avail (quello usato da "Sincronizza disponibilità"). Se
+    /// quella seconda chiamata fallisse, si torna comunque all'elenco con l'"avail" grezzo invece di
+    /// far fallire l'intera tab.
+    /// </summary>
     public async Task<IReadOnlyList<WubookCamera>> ListaCamereRemoteAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomRead, cancellationToken);
 
         var (token, lcode) = await licenzaService.GetCredenzialiValideAsync(strutturaId, cancellationToken);
-        return await wubookClient.FetchRoomsAsync(token, lcode, cancellationToken);
+        var camereRemote = await wubookClient.FetchRoomsAsync(token, lcode, cancellationToken);
+        if (camereRemote.Count == 0)
+        {
+            return camereRemote;
+        }
+
+        try
+        {
+            var oggi = DateTime.UtcNow.Date;
+            var disponibilitaOggi = await wubookClient.FetchDisponibilitaAsync(token, lcode, oggi, oggi, camereRemote.Select(c => c.Id).ToList(), cancellationToken);
+            return camereRemote
+                .Select(c => disponibilitaOggi.TryGetValue(c.Id, out var giorni) && giorni.Count > 0 ? c with { Disponibilita = giorni[0].Avail } : c)
+                .ToList();
+        }
+        catch (ConflictException)
+        {
+            return camereRemote;
+        }
     }
 
     /// <summary>

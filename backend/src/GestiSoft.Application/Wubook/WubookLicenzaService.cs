@@ -163,6 +163,26 @@ public class WubookLicenzaService(
         await repository.UpsertAsync(integrazione, cancellationToken);
     }
 
+    /// <summary>
+    /// Registra (messaggio non nullo) o cancella (null) un errore di sincronizzazione Wubook diverso
+    /// da quelli di credenziali/licenza già gestiti sopra — visibile nel pannello "Stato
+    /// sincronizzazione" della pagina Servizi OTA. Usato dal push automatico di disponibilità dopo
+    /// ogni prenotazione creata/modificata/annullata (vedi PrenotazioniService): qui un fallimento è
+    /// un vero rischio di overbooking (Wubook risultava configurato ma la chiamata non è passata),
+    /// non deve sparire in silenzio.
+    /// </summary>
+    public async Task SegnalaEsitoSincronizzazioneAsync(Guid strutturaId, string? messaggio, CancellationToken cancellationToken)
+    {
+        var integrazione = await repository.GetByStrutturaIdAsync(strutturaId, cancellationToken);
+        if (integrazione is null || integrazione.UltimoErrore == messaggio)
+        {
+            return;
+        }
+
+        integrazione.UltimoErrore = messaggio;
+        await repository.UpsertAsync(integrazione, cancellationToken);
+    }
+
     private static void RichiediSuperAdmin(ICurrentUser currentUser)
     {
         if (!currentUser.IsSuperAdmin)

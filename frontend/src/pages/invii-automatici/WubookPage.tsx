@@ -208,6 +208,32 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
   )
 }
 
+// Il numero mostrato è quello reale che l'OTA riporta per oggi (fetch_rooms_values, il
+// contro-pezzo in lettura di update_avail — vedi WubookCamereService.ListaCamereRemoteAsync), non
+// più lo statico campo "avail" di fetch_rooms (risultava sempre 0 anche su camere reali). Le
+// Chiusure/Restrizioni restano invece calcolate sui nostri dati locali: sono le regole configurate
+// qui, non qualcosa che l'OTA riporta indietro. Testo utente sempre generico "OTA" (mai il nome del
+// servizio dietro, coerente col resto della pagina); se il dato non è disponibile si mostra 0
+// (mai libera per default) invece di un trattino ambiguo.
+function DisponibilitaOggi({ remoto, locale }: { remoto: CameraWubookRemoteDto | null; locale: TipologiaWubookInfoDto | null }) {
+  const disponibilita = remoto?.disponibilita ?? 0
+  return (
+    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+      <Chip
+        size="small"
+        label={disponibilita}
+        sx={{ bgcolor: disponibilita > 0 ? tokens.ok600 : tokens.error600, color: '#fff', fontWeight: 700 }}
+      />
+      {locale && locale.chiusureCount > 0 && (
+        <Chip size="small" label={`Chiusure: ${locale.chiusureCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
+      )}
+      {locale && locale.restrizioniCount > 0 && (
+        <Chip size="small" label={`Restrizioni: ${locale.restrizioniCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
+      )}
+    </Box>
+  )
+}
+
 function TabellaCamere({
   strutturaId,
   tipologiePerAssociazione,
@@ -317,7 +343,7 @@ function TabellaCamere({
                     voci={[
                       { etichetta: 'Posti', valore: r.remoto?.occupancy ?? '—' },
                       { etichetta: 'Prezzo', valore: r.remoto ? `€${r.remoto.prezzo.toFixed(2)}` : '—' },
-                      { etichetta: 'Disponibilità', valore: r.remoto?.disponibilita ?? '—' },
+                      { etichetta: 'Disponibilità oggi', valore: <DisponibilitaOggi remoto={r.remoto} locale={r.locale} /> },
                       { etichetta: 'Camere collegate', valore: r.locale?.camereCollegate ?? '—' },
                     ]}
                   />
@@ -347,7 +373,7 @@ function TabellaCamere({
                     <TableCell>Nome</TableCell>
                     <TableCell>Posti</TableCell>
                     <TableCell>Prezzo</TableCell>
-                    <TableCell>Disponibilità</TableCell>
+                    <TableCell>Disponibilità oggi</TableCell>
                     <TableCell>Camere collegate</TableCell>
                     <TableCell align="right">Azioni</TableCell>
                   </TableRow>
@@ -366,7 +392,9 @@ function TabellaCamere({
                       <TableCell sx={{ fontWeight: 700 }}>{r.remoto?.nome ?? r.locale!.tipologiaNome}</TableCell>
                       <TableCell>{r.remoto?.occupancy ?? '—'}</TableCell>
                       <TableCell>{r.remoto ? `€${r.remoto.prezzo.toFixed(2)}` : '—'}</TableCell>
-                      <TableCell>{r.remoto?.disponibilita ?? '—'}</TableCell>
+                      <TableCell>
+                        <DisponibilitaOggi remoto={r.remoto} locale={r.locale} />
+                      </TableCell>
                       <TableCell>{r.locale?.camereCollegate ?? '—'}</TableCell>
                       <TableCell align="right">
                         <MenuAzioniCamera
@@ -502,7 +530,10 @@ function MenuAzioniCamera({
             <ListItemText>Disassocia</ListItemText>
           </MenuItem>
         )}
-        {puoScrivere && (
+        {/* Finché è associata a una camera locale, l'unica azione distruttiva possibile è
+            "Disassocia" (non tocca l'OTA): "Elimina da OTA" richiede prima di essersi disassociati
+            esplicitamente, per non cancellare al volo una camera OTA ancora agganciata qui. */}
+        {puoScrivere && !associata && (
           <MenuItem onClick={() => esegui(onElimina)} disabled={eliminaInCorso}>
             <ListItemIcon>
               <DeleteIcon fontSize="small" />

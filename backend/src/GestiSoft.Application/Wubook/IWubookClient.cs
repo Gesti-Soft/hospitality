@@ -2,6 +2,9 @@ namespace GestiSoft.Application.Wubook;
 
 public record WubookCamera(int Id, string Nome, string? ShortName, int Occupancy, decimal Prezzo, int Disponibilita, int Subroom, string? Board);
 
+/// <summary>Valori di un singolo giorno per una camera Wubook, da fetch_rooms_values — il "avail" qui è quello reale del calendario giorno-per-giorno, non lo statico (e spesso inattendibile) campo "avail" di fetch_rooms.</summary>
+public record WubookDisponibilitaGiorno(int Avail, bool Prenotata, bool Chiusa);
+
 public record WubookNuovaCameraRequest(string Nome, string ShortName, int Occupancy, decimal PrezzoBase, int Disponibilita, string Board, bool Woodoo = false);
 
 public record WubookPrenotazione(
@@ -40,6 +43,10 @@ public record WubookPianoRestrizione(int Id, string Nome, WubookRegoleRestrizion
 public interface IWubookClient
 {
     Task<IReadOnlyList<WubookCamera>> FetchRoomsAsync(string token, string lcode, CancellationToken cancellationToken);
+
+    /// <summary>fetch_rooms_values — disponibilità/prenotato/chiuso reali per camera Wubook e giorno, nel periodo indicato (mai vuoto: dataInizio..dataFine inclusi). Se <paramref name="idCamereWubook"/> è null, Wubook risponde per tutte le camere della struttura.</summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyList<WubookDisponibilitaGiorno>>> FetchDisponibilitaAsync(
+        string token, string lcode, DateTime dataInizio, DateTime dataFine, IReadOnlyList<int>? idCamereWubook, CancellationToken cancellationToken);
 
     Task<int> NewRoomAsync(string token, string lcode, WubookNuovaCameraRequest request, CancellationToken cancellationToken);
 

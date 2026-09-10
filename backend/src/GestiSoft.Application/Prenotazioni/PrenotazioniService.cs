@@ -4,6 +4,7 @@ using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Logging;
 using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Ospiti;
+using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -63,8 +64,43 @@ public class PrenotazioniService(
     ILogEventoService logEventi,
     OspitiService ospitiService,
     NotificaService notificaService,
-    AssegnazioneCameraService assegnazioneCamera)
+    AssegnazioneCameraService assegnazioneCamera,
+    WubookDisponibilitaService disponibilitaOta,
+    WubookLicenzaService licenzaOta)
 {
+    /// <summary>
+    /// Spinge subito la disponibilità aggiornata su Wubook per il periodo appena toccato (creazione,
+    /// cambio camera/date, annullamento) — mai in differita: la camera che qui si libera o si occupa
+    /// deve risultare libera o occupata anche lato OTA nello stesso momento, non al prossimo giro di
+    /// un job né quando l'operatore si ricorda di premere "Sincronizza disponibilità" a mano — un
+    /// ritardo qui è esattamente la finestra in cui può capitare un overbooking.
+    /// La prenotazione locale resta comunque la fonte di verità: se la struttura non ha un'
+    /// integrazione OTA (il caso più comune, salta subito senza nemmeno tentare la chiamata) il
+    /// salvataggio non viene mai bloccato da questo. Se invece l'OTA risultava configurato e la
+    /// chiamata fallisce (Wubook irraggiungibile o l'ha rifiutata), quello è un vero rischio di
+    /// overbooking: va segnalato subito nel pannello "Stato sincronizzazione" di Servizi OTA invece
+    /// di sparire in silenzio, anche se non blocca comunque il salvataggio già avvenuto in locale.
+    /// </summary>
+    private async Task SincronizzaDisponibilitaOtaAsync(Guid strutturaId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken)
+    {
+        if (!await disponibilitaOta.HaSincronizzazioneAttivaAsync(strutturaId, cancellationToken))
+        {
+            return;
+        }
+
+        try
+        {
+            await disponibilitaOta.SincronizzaSistemaAsync(strutturaId, dataInizio.Date, dataFine.Date, cancellationToken);
+            await licenzaOta.SegnalaEsitoSincronizzazioneAsync(strutturaId, null, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var messaggio = ex is DomainException dominio
+                ? dominio.Message
+                : "Sincronizzazione automatica della disponibilità con l'OTA non riuscita: usa \"Sincronizza disponibilità\" per riprovare.";
+            await licenzaOta.SegnalaEsitoSincronizzazioneAsync(strutturaId, messaggio, cancellationToken);
+        }
+    }
     /// <summary>
     /// Se il numero non è stato scritto a mano e l'agenzia è "Diretta", genera il progressivo
     /// annuale (conteggio prenotazioni dirette dell'anno + 1) — sia alla creazione sia quando una
@@ -211,6 +247,7 @@ public class PrenotazioniService(
         };
 
         await prenotazioni.AddAsync(entity, cancellationToken);
+        await SincronizzaDisponibilitaOtaAsync(strutturaId, request.CheckIn, request.CheckOut, cancellationToken);
         await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione creata (camera {cameraId}, {request.CheckIn:dd/MM/yyyy}–{request.CheckOut:dd/MM/yyyy}).", cancellationToken);
         return entity;
     }
@@ -239,6 +276,12 @@ public class PrenotazioniService(
         var importoTotalePrima = entity.ImportoTotale;
         var importoPagatoPrima = entity.ImportoPagato;
         var totalTaxPrima = entity.TotalTax;
+        // Snapshot delle date "prima" — servono a spingere su Wubook l'intero periodo toccato dalla
+        // modifica (sia dove la vecchia camera si libera sia dove la nuova/stessa camera si occupa),
+        // non solo le nuove date: se il soggiorno si accorcia o si sposta, i giorni usciti dal nuovo
+        // intervallo vanno comunque risincronizzati per tornare "liberi" lato OTA.
+        var checkInPrima = entity.CheckIn;
+        var checkOutPrima = entity.CheckOut;
 
         if (!completata)
         {
@@ -249,7 +292,12 @@ public class PrenotazioniService(
 
             // Se la camera scelta in precedenza resta compatibile con le nuove date non la
             // ritocchiamo: rifare la ricerca "prima libera" ad ogni modifica sposterebbe senza motivo
-            // un ospite già assegnato a una camera del pool.
+            // un ospite già assegnato a una camera del pool. "Compatibile" richiede però anche che
+            // appartenga ancora alla Tipologia appena scelta — altrimenti, cambiando Tipologia in
+            // modalità pool, si rischia di tenere la camera della VECCHIA Tipologia (libera per quelle
+            // date, ma del pool sbagliato) invece di assegnarne una vera della nuova: bug reale
+            // riprodotto dal vivo (cambio da una Tipologia con 151 camere a una con 26, il sistema
+            // teneva la camera "100" della prima anche se nella seconda non esisteva affatto).
             Guid cameraId;
             if (request.CameraId is { } cameraIdEsplicita)
             {
@@ -257,10 +305,12 @@ public class PrenotazioniService(
             }
             else if (request.TipologiaId is { } tipologiaId)
             {
-                var restaValida = entity.CameraId is { } cameraIdAttuale
-                    && !await prenotazioni.EsisteSovrapposizioneAsync(strutturaId, cameraIdAttuale, request.CheckIn, request.CheckOut, prenotazioneId, cancellationToken);
+                var cameraAttuale = entity.CameraId is { } cameraIdAttuale ? await camere.GetAsync(cameraIdAttuale, cancellationToken) : null;
+                var restaValida = cameraAttuale is not null
+                    && cameraAttuale.TipologiaId == tipologiaId
+                    && !await prenotazioni.EsisteSovrapposizioneAsync(strutturaId, cameraAttuale.Id, request.CheckIn, request.CheckOut, prenotazioneId, cancellationToken);
                 cameraId = restaValida
-                    ? entity.CameraId!.Value
+                    ? cameraAttuale!.Id
                     : (await assegnazioneCamera.RisolviCameraLiberaAsync(strutturaId, tipologiaId, request.CheckIn, request.CheckOut, prenotazioneId, cancellationToken)).Id;
             }
             else
@@ -323,6 +373,13 @@ public class PrenotazioniService(
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await prenotazioni.UpdateAsync(entity, cancellationToken);
+
+        if (!completata && checkInPrima is not null && checkOutPrima is not null && entity.CheckIn is not null && entity.CheckOut is not null)
+        {
+            var dataInizio = (checkInPrima.Value < entity.CheckIn.Value ? checkInPrima.Value : entity.CheckIn.Value).Date;
+            var dataFine = (checkOutPrima.Value > entity.CheckOut.Value ? checkOutPrima.Value : entity.CheckOut.Value).Date;
+            await SincronizzaDisponibilitaOtaAsync(strutturaId, dataInizio, dataFine, cancellationToken);
+        }
 
         var modificheEconomiche = new List<string>();
         if (tassaSoggiornoPrima != entity.TassaSoggiornoAttiva)
@@ -389,6 +446,13 @@ public class PrenotazioniService(
         if (eraInCorso)
         {
             await LiberaCameraAsync(entity.CameraId, cancellationToken);
+        }
+
+        // La camera va riaperta lato OTA per l'intero periodo del soggiorno annullato, non solo se
+        // era già in corso: anche annullare un soggiorno futuro libera quelle date sul pool.
+        if (entity.CheckIn is not null && entity.CheckOut is not null)
+        {
+            await SincronizzaDisponibilitaOtaAsync(strutturaId, entity.CheckIn.Value, entity.CheckOut.Value, cancellationToken);
         }
 
         await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione #{entity.NumeroPrenotazione ?? entity.Id.ToString()[..8]} annullata.", cancellationToken);
@@ -461,7 +525,12 @@ public class PrenotazioniService(
         var camera = await GetCameraDellaPrenotazioneAsync(prenotazione, cancellationToken);
 
         var oggi = DateTime.UtcNow.Date;
-        if (prenotazione.CheckOut is { } checkOutPrevisto && checkOutPrevisto.Date > oggi && prenotazione.CheckIn is { } checkIn)
+        // Checkout anticipato = le notti tra oggi e il check-out originariamente previsto si
+        // liberano davvero (non sono più occupate da questo soggiorno): senza spingerlo su Wubook
+        // quella camera resta "chiusa" lato OTA anche per le date ormai libere — la stessa esigenza
+        // di "zero attese" già seguita per creazione/modifica/annullamento.
+        var checkOutPrevisto = prenotazione.CheckOut;
+        if (checkOutPrevisto is { } fine && fine.Date > oggi && prenotazione.CheckIn is { } checkIn)
         {
             prenotazione.CheckOut = oggi;
             await RicalcolaPermanenzaETassaAsync(strutturaId, prenotazione, checkIn.Date, oggi, cancellationToken);
@@ -487,6 +556,12 @@ public class PrenotazioniService(
 
         await camere.UpdateAsync(camera, cancellationToken);
         await prenotazioni.UpdateAsync(prenotazione, cancellationToken);
+
+        if (checkOutPrevisto is { } fineOriginale && fineOriginale.Date > oggi && prenotazione.CheckIn is { } checkInOriginale)
+        {
+            await SincronizzaDisponibilitaOtaAsync(strutturaId, checkInOriginale.Date, fineOriginale.Date, cancellationToken);
+        }
+
         // Il check-out è appena stato effettuato: se un job aveva già segnalato "check-out
         // dimenticato" per questa prenotazione (vedi CheckOutDimenticatoNotificaJob), il problema è
         // risolto — la notifica va segnata letta invece di restare visibile a torto.

@@ -25,6 +25,16 @@ public record CreaCameraRequest(
     int? CapacitaOspiti,
     int? SoggiornoMinimo);
 
+/// <summary>Crea in un colpo solo una sequenza di camere numerate (es. "101".."110") della stessa Tipologia — comodo per un pool di camere reali identiche, invece di ripetere "Nuova camera" una per una.</summary>
+public record CreaCamereNumerateRequest(
+    Guid? TipologiaId,
+    StatoCamera StateRoom,
+    string? Prefisso,
+    int Da,
+    int A,
+    int? CapacitaOspiti,
+    int? SoggiornoMinimo);
+
 public record RisultatoDuplicazioneCamere(int Tipologie, int Camere, int Prezzi, int Canali, int Saltati);
 
 /// <summary>
@@ -155,6 +165,60 @@ public class CamereService(
 
         await camere.AddAsync(entity, cancellationToken);
         return entity;
+    }
+
+    /// <summary>
+    /// Crea in sequenza le camere da "Prefisso+Da" a "Prefisso+A" (es. Prefisso "Camera ", Da 101, A
+    /// 110 → "Camera 101".."Camera 110"), stessa Tipologia/Stato/Capacità/Soggiorno minimo per tutte.
+    /// Valida TUTTI i nomi prima di crearne anche uno solo, per non lasciare a metà un pool se un
+    /// nome nel mezzo dell'intervallo esiste già.
+    /// </summary>
+    public async Task<IReadOnlyList<SettingRoom>> CreaCamereNumerateAsync(ICurrentUser currentUser, Guid strutturaId, CreaCamereNumerateRequest request, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomWrite, cancellationToken);
+
+        if (request.A < request.Da)
+        {
+            throw new ConflictException("Il numero finale deve essere maggiore o uguale al numero iniziale.");
+        }
+
+        var quantita = request.A - request.Da + 1;
+        if (quantita > 200)
+        {
+            throw new ConflictException("Troppe camere in un colpo solo (massimo 200): riduci l'intervallo.");
+        }
+
+        await EnsureTipologiaValidaAsync(strutturaId, request.TipologiaId, cancellationToken);
+
+        var prefisso = request.Prefisso?.Trim() ?? string.Empty;
+        var nomi = Enumerable.Range(request.Da, quantita).Select(n => $"{prefisso}{n}").ToList();
+
+        foreach (var nome in nomi)
+        {
+            if (await camere.ExistsByNomeAsync(strutturaId, nome, escludiId: null, cancellationToken))
+            {
+                throw new ConflictException($"Esiste già una camera con nome \"{nome}\".");
+            }
+        }
+
+        var entita = new List<SettingRoom>();
+        foreach (var nome in nomi)
+        {
+            var entity = new SettingRoom
+            {
+                StrutturaId = strutturaId,
+                TipologiaId = request.TipologiaId,
+                StateRoom = request.StateRoom,
+                Nome = nome,
+                CapacitaOspiti = request.CapacitaOspiti,
+                SoggiornoMinimo = request.SoggiornoMinimo,
+            };
+
+            await camere.AddAsync(entity, cancellationToken);
+            entita.Add(entity);
+        }
+
+        return entita;
     }
 
     public async Task<SettingRoom> AggiornaCameraAsync(ICurrentUser currentUser, Guid strutturaId, Guid cameraId, CreaCameraRequest request, CancellationToken cancellationToken)

@@ -11,6 +11,8 @@ export interface PrenotazioneDto {
   strutturaId: string
   cameraId: string | null
   cameraNome: string | null
+  tipologiaId: string | null
+  tipologiaNome: string | null
   agenzia: string | null
   numeroPrenotazione: string | null
   importoPrenotazione: number | null
@@ -36,7 +38,12 @@ export interface PrenotazioneDto {
 }
 
 export interface PrenotazioneRequest {
-  cameraId: string
+  // Esattamente uno tra i due va indicato: cameraId per una camera specifica, tipologiaId (con
+  // cameraId null) per lasciare che il sistema assegni la prima camera libera del pool — v.
+  // AssegnazioneCameraService lato backend. Se cameraId è valorizzata, tipologiaId può comunque
+  // essere inviato per tenere l'associazione Tipologia coerente sulla prenotazione.
+  cameraId: string | null
+  tipologiaId: string | null
   agenzia: string | null
   numeroPrenotazione: string | null
   importoPrenotazione: number | null

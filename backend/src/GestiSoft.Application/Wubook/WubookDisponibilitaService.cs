@@ -32,10 +32,30 @@ public class WubookDisponibilitaService(
     WubookLicenzaService licenzaService,
     PermessoStrutturaGuard permessoGuard)
 {
+    /// <summary>
+    /// True se la struttura ha almeno una Tipologia collegata a Wubook — usato dal push automatico
+    /// (PrenotazioniService) per decidere se vale la pena tentare la sincronizzazione, e quindi se un
+    /// eventuale fallimento è un vero problema da segnalare invece di un normale "OTA non configurato"
+    /// (la stragrande maggioranza delle strutture non ha alcuna integrazione).
+    /// </summary>
+    public async Task<bool> HaSincronizzazioneAttivaAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        (await tipologie.ListByStrutturaAsync(strutturaId, cancellationToken)).Any(t => t.WubookAttiva && t.IdCameraWubook is not null);
+
     public async Task SincronizzaAsync(ICurrentUser currentUser, Guid strutturaId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomWrite, cancellationToken);
+        await SincronizzaSistemaAsync(strutturaId, dataInizio, dataFine, cancellationToken);
+    }
 
+    /// <summary>
+    /// Usato dal job Quartz schedulato (Worker, vedi WubookDisponibilitaPushJob) — nessun
+    /// ICurrentUser, gira per conto del sistema dopo ogni cambiamento di prenotazione (creazione,
+    /// modifica camera/date, annullamento) per tenere la disponibilità su Wubook allineata senza
+    /// che l'operatore debba ricordarsi di premere "Sincronizza disponibilità" a mano — fondamentale
+    /// per evitare overbooking quando una camera del pool viene prenotata/liberata nel gestionale.
+    /// </summary>
+    public async Task SincronizzaSistemaAsync(Guid strutturaId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken)
+    {
         if (dataFine.Date < dataInizio.Date)
         {
             throw new ConflictException("La data di fine non può essere precedente alla data di inizio.");

@@ -24,6 +24,7 @@ public class WubookPrenotazioniService(
     IPrenotazioneRepository prenotazioni,
     IOspiteRepository ospiti,
     ITipologiaCameraRepository tipologie,
+    ICameraRepository camere,
     AssegnazioneCameraService assegnazioneCamera,
     ICanaleVenditaRepository canaliVendita,
     IWubookClient wubookClient,
@@ -173,12 +174,17 @@ public class WubookPrenotazioniService(
 
         // Non riassegnare se la camera già assegnata in precedenza (un aggiornamento di date su un
         // booking esistente) resta compatibile con le nuove date — evita di spostare inutilmente un
-        // ospite già assegnato a una camera del pool. Se il pool non ha nessuna unità libera per
-        // queste date, la prenotazione viene comunque registrata (l'ospite ha già prenotato per
-        // davvero su OTA, non va persa) con CameraId nullo: resta "in attesa di assegnazione camera"
-        // finché un operatore non gliene assegna una manualmente.
-        var cameraAttualeRestaValida = entity.CameraId is { } cameraIdAttuale
-            && !await prenotazioni.EsisteSovrapposizioneAsync(strutturaId, cameraIdAttuale, booking.CheckIn, booking.CheckOut, entity.Id, cancellationToken);
+        // ospite già assegnato a una camera del pool. Deve però appartenere ancora alla Tipologia
+        // risolta sopra: se nel frattempo la mappatura OTA→Tipologia è cambiata, tenere la vecchia
+        // camera per sole date libere assegnerebbe una camera del pool sbagliato (stesso bug corretto
+        // in PrenotazioniService.AggiornaAsync). Se il pool non ha nessuna unità libera per queste
+        // date, la prenotazione viene comunque registrata (l'ospite ha già prenotato per davvero su
+        // OTA, non va persa) con CameraId nullo: resta "in attesa di assegnazione camera" finché un
+        // operatore non gliene assegna una manualmente.
+        var cameraAttuale = entity.CameraId is { } cameraIdAttuale ? await camere.GetAsync(cameraIdAttuale, cancellationToken) : null;
+        var cameraAttualeRestaValida = cameraAttuale is not null
+            && cameraAttuale.TipologiaId == tipologia.Id
+            && !await prenotazioni.EsisteSovrapposizioneAsync(strutturaId, cameraAttuale.Id, booking.CheckIn, booking.CheckOut, entity.Id, cancellationToken);
         if (!cameraAttualeRestaValida)
         {
             var cameraLibera = await assegnazioneCamera.TrovaCameraLiberaAsync(strutturaId, tipologia.Id, booking.CheckIn, booking.CheckOut, entity.Id, cancellationToken);

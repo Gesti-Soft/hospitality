@@ -50,6 +50,10 @@ try
             .WithIdentity("wubook-eventi-polling-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInMinutes(1).RepeatForever()));
 
+        // Il push disponibilità verso Wubook non è più un job periodico: PrenotazioniService lo
+        // chiama direttamente (best-effort) subito dopo ogni creazione/modifica/annullamento che
+        // tocca camera o date — vedi PrenotazioniService.SincronizzaDisponibilitaOtaAsync.
+
         // Fase 6/7/8 — Alloggiati Web/Osservatorio/PayTourist ("schedine"): spostati in un processo
         // separato (GestiSoft.WorkerSchedine), condividono lo stesso Postgres ma girano in un
         // eseguibile a parte — un rallentamento/blocco su uno di questi sistemi esterni (Questura/

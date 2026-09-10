@@ -40,7 +40,7 @@ public class WubookTipologieController(WubookCamereService service, ICurrentUser
     public async Task<IActionResult> ListaPerAssociazione(Guid strutturaId, CancellationToken cancellationToken)
     {
         var lista = await service.ListaPerAssociazioneAsync(currentUser, strutturaId, cancellationToken);
-        return Ok(lista.Select(t => new TipologiaWubookInfoDto(t.TipologiaId, t.TipologiaNome, t.CamereCollegate, t.IdCameraWubook, t.WubookAttiva)));
+        return Ok(lista.Select(t => new TipologiaWubookInfoDto(t.TipologiaId, t.TipologiaNome, t.CamereCollegate, t.ChiusureCount, t.RestrizioniCount, t.IdCameraWubook, t.WubookAttiva)));
     }
 
     /// <summary>Camere già presenti su Wubook (fetch_rooms), da cui scegliere l'associazione manuale.</summary>

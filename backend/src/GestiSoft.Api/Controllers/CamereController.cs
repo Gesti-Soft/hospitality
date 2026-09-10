@@ -26,6 +26,14 @@ public class CamereController(CamereService service, ICurrentUser currentUser) :
         return Ok(ToDto(camera));
     }
 
+    /// <summary>Crea in un colpo solo una sequenza di camere numerate (es. "101".."110") della stessa Tipologia.</summary>
+    [HttpPost("numerate")]
+    public async Task<IActionResult> CreaNumerate(Guid strutturaId, [FromBody] CreaCamereNumerateRequest request, CancellationToken cancellationToken)
+    {
+        var camere = await service.CreaCamereNumerateAsync(currentUser, strutturaId, request, cancellationToken);
+        return Ok(camere.Select(ToDto));
+    }
+
     [HttpPut("{cameraId:guid}")]
     public async Task<IActionResult> Aggiorna(Guid strutturaId, Guid cameraId, [FromBody] CreaCameraRequest request, CancellationToken cancellationToken)
     {

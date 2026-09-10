@@ -43,6 +43,50 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         return camere;
     }
 
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<WubookDisponibilitaGiorno>>> FetchDisponibilitaAsync(
+        string token, string lcode, DateTime dataInizio, DateTime dataFine, IReadOnlyList<int>? idCamereWubook, CancellationToken cancellationToken)
+    {
+        var parametri = new List<object>
+        {
+            token, LcodeInt(lcode),
+            dataInizio.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture),
+            dataFine.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture),
+        };
+        if (idCamereWubook is { Count: > 0 })
+        {
+            parametri.Add(ArrayOf(idCamereWubook.Select(id => (object)id)));
+        }
+
+        var (codice, dati, fault) = await InvocaAsync("fetch_rooms_values", cancellationToken, parametri.ToArray());
+        VerificaEsito(codice, fault, "il recupero della disponibilità reale");
+
+        var risultato = new Dictionary<int, IReadOnlyList<WubookDisponibilitaGiorno>>();
+        var s = dati?.Element("struct");
+        if (s is null)
+        {
+            return risultato;
+        }
+
+        foreach (var membro in s.Elements("member"))
+        {
+            if (!int.TryParse(membro.Element("name")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var idCamera))
+            {
+                continue;
+            }
+
+            risultato[idCamera] = ElementiArray(membro.Element("value"))
+                .Select(v => v.Element("struct"))
+                .Where(giorno => giorno is not null)
+                .Select(giorno => new WubookDisponibilitaGiorno(
+                    Avail: MembroInt(giorno!, "avail"),
+                    Prenotata: MembroBool(giorno!, "booked"),
+                    Chiusa: MembroBool(giorno!, "closed")))
+                .ToList();
+        }
+
+        return risultato;
+    }
+
     public async Task<int> NewRoomAsync(string token, string lcode, WubookNuovaCameraRequest request, CancellationToken cancellationToken)
     {
         var (codice, dati, fault) = await InvocaAsync(

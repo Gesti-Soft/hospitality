@@ -46,6 +46,25 @@ export function useCreaCamera(strutturaId: string | null) {
   })
 }
 
+export interface CameraNumerateRequest {
+  tipologiaId: string | null
+  stateRoom: StatoCamera
+  prefisso: string | null
+  da: number
+  a: number
+  capacitaOspiti: number | null
+  soggiornoMinimo: number | null
+}
+
+/** Crea in un colpo solo una sequenza di camere numerate (es. "101".."110") della stessa Tipologia. */
+export function useCreaCamereNumerate(strutturaId: string | null) {
+  const invalida = useInvalidaCamere(strutturaId)
+  return useMutation({
+    mutationFn: (request: CameraNumerateRequest) => apiPost<CameraDto[]>(`/strutture/${strutturaId}/camere/numerate`, request),
+    onSuccess: invalida,
+  })
+}
+
 export function useAggiornaCamera(strutturaId: string | null) {
   const invalida = useInvalidaCamere(strutturaId)
   return useMutation({

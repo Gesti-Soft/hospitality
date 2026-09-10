@@ -83,13 +83,19 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const creaIniziale = stato.modo === 'crea' ? stato : null
 
   const cameraInizialeId = modifica ? modifica.cameraId ?? '' : creaIniziale!.cameraId ?? ''
-  const tipologiaInizialeId = camere.find((c) => c.id === cameraInizialeId)?.tipologiaId ?? ''
+  // Su una prenotazione esistente la Tipologia viene dal campo dedicato (può restare valorizzata
+  // anche senza una camera specifica, se creata in modalità pool); in creazione, dalla camera di
+  // partenza se ce n'è già una (es. click su una cella del calendario).
+  const tipologiaInizialeId = modifica?.tipologiaId ?? camere.find((c) => c.id === cameraInizialeId)?.tipologiaId ?? ''
 
   // Nel form la Tipologia va scelta per prima: appena selezionata, la Camera si filtra a quelle di
-  // quella tipologia (entrambe cercabili). Non è un campo inviato al backend, solo la guida alla
-  // scelta della Camera.
+  // quella tipologia (entrambe cercabili) — a meno che non sia attiva la modalità pool, nel qual caso
+  // la Camera non si sceglie affatto: è il backend ad assegnare la prima libera al salvataggio.
   const [tipologiaFiltroId, setTipologiaFiltroId] = useState(tipologiaInizialeId)
   const [cameraId, setCameraId] = useState<string>(cameraInizialeId)
+  // Riconosce che la prenotazione era stata creata in modalità pool (nessuna camera specifica, solo
+  // la Tipologia) per riproporre la stessa modalità riaprendo il dialog in modifica.
+  const [modalitaPool, setModalitaPool] = useState(!!modifica && !modifica.cameraId && !!modifica.tipologiaId)
   const [agenzia, setAgenzia] = useState(modifica?.agenzia ?? '')
   const [numeroPrenotazione, setNumeroPrenotazione] = useState(modifica?.numeroPrenotazione ?? '')
   const [checkIn, setCheckIn] = useState(formatoInputData(modifica ? inizioGiornoLocale(new Date(modifica.checkIn!)) : creaIniziale!.checkIn))
@@ -125,7 +131,8 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const checkOutMutation = useCheckOut(strutturaId)
 
   const cameraSelezionata = camere.find((c) => c.id === cameraId)
-  const tipologiaSelezionata = tipologie.find((t) => t.id === cameraSelezionata?.tipologiaId)
+  // In modalità pool non c'è una camera scelta: la Tipologia selezionata nel filtro è l'unica fonte.
+  const tipologiaSelezionata = tipologie.find((t) => t.id === (cameraSelezionata?.tipologiaId ?? tipologiaFiltroId))
   // Cauzione/Animali sono solo informazioni interne (si gestiscono di persona, non generano invii
   // esterni): se la tipologia della camera non ne prevede un importo, non ha senso mostrare il toggle.
   const cauzionePrevista = (tipologiaSelezionata?.cauzione ?? 0) > 0
@@ -134,6 +141,11 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   // Camere della tipologia scelta nel form — include comunque la camera già assegnata anche se non
   // corrisponde più alla tipologia selezionata, per non nascondere un'associazione esistente.
   const camereTipologia = camere.filter((c) => c.tipologiaId === tipologiaFiltroId || c.id === cameraId)
+  // Conteggio "pulito" (senza il fallback sulla camera già assegnata) mostrato nell'opzione pool.
+  const numeroCamereTipologia = camere.filter((c) => c.tipologiaId === tipologiaFiltroId).length
+  // Con una sola camera (o zero) non c'è nulla da "scegliere automaticamente": l'opzione si mostra
+  // solo quando esiste davvero un pool tra cui il sistema può selezionare.
+  const mostraOpzionePool = numeroCamereTipologia > 1
 
   const checkInDate = checkIn ? parsaInputData(checkIn) : null
   const checkOutDate = checkOut ? parsaInputData(checkOut) : null
@@ -259,8 +271,8 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   }
 
   function salva() {
-    if (!cameraId || !dateValide) {
-      setErrore('Seleziona una camera e un periodo valido (check-out dopo il check-in).')
+    if (!tipologiaFiltroId || (!modalitaPool && !cameraId) || !dateValide) {
+      setErrore("Seleziona una tipologia e una camera (o l'assegnazione automatica alla prima libera) e un periodo valido (check-out dopo il check-in).")
       return
     }
     setErrore(null)
@@ -278,7 +290,8 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
 
   function eseguiSalvataggio() {
     const request: PrenotazioneRequest = {
-      cameraId,
+      cameraId: modalitaPool ? null : cameraId,
+      tipologiaId: tipologiaFiltroId || null,
       agenzia: agenzia.trim() === '' ? null : agenzia.trim(),
       numeroPrenotazione: numeroPrenotazione.trim() === '' ? null : numeroPrenotazione.trim(),
       importoPrenotazione: modifica?.importoPrenotazione ?? null,
@@ -372,17 +385,37 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
             noOptionsText="Nessuna tipologia disponibile"
             renderInput={(params) => <TextField {...params} label="Tipologia" required placeholder="Cerca per nome…" />}
           />
-          <Autocomplete
-            sx={{ flex: 1 }}
-            options={camereTipologia}
-            getOptionLabel={(c) => c.nome}
-            value={camereTipologia.find((c) => c.id === cameraId) ?? null}
-            onChange={(_, valore) => setCameraId(valore?.id ?? '')}
-            disabled={inCorso || soloImporti || tipologiaFiltroId === ''}
-            noOptionsText="Nessuna camera per questa tipologia"
-            renderInput={(params) => <TextField {...params} label="Camera" required placeholder="Cerca per nome…" />}
-          />
+          {(!modalitaPool || !mostraOpzionePool) && (
+            <Autocomplete
+              sx={{ flex: 1 }}
+              options={camereTipologia}
+              getOptionLabel={(c) => c.nome}
+              value={camereTipologia.find((c) => c.id === cameraId) ?? null}
+              onChange={(_, valore) => setCameraId(valore?.id ?? '')}
+              disabled={inCorso || soloImporti || tipologiaFiltroId === ''}
+              noOptionsText="Nessuna camera per questa tipologia"
+              renderInput={(params) => <TextField {...params} label="Camera" required placeholder="Cerca per nome…" />}
+            />
+          )}
         </Box>
+
+        {/* Con una sola camera nella tipologia non c'è nessuna scelta da automatizzare: il campo
+            Camera sopra la propone già da sola, l'opzione andrebbe solo a confondere. */}
+        {mostraOpzionePool && !soloImporti && (
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={modalitaPool}
+                onChange={(e) => {
+                  setModalitaPool(e.target.checked)
+                  setCameraId('')
+                }}
+                disabled={inCorso}
+              />
+            }
+            label={`Assegna automaticamente la prima camera libera (${numeroCamereTipologia} camere in questa tipologia)`}
+          />
+        )}
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <CampoData label="Check-in" value={checkIn} onChange={setCheckIn} fullWidth disabled={inCorso || soloImporti} />
