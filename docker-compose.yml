@@ -49,7 +49,15 @@ services:
       # di invio giornaliero) sono sempre intese come ora locale italiana — senza questo, il
       # confronto con DateTime.Now nei job Worker userebbe UTC, con uno scarto di 1-2 ore (CET/CEST).
       TZ: ${TZ:-Europe/Rome}
-      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      # Maximum Pool Size: Postgres accetta 100 connessioni totali (default, 3 riservate ai
+      # superuser) ma ogni processo .NET ha il suo pool Npgsql separato, anch'esso da 100 di
+      # default — api + worker + worker-schedine potrebbero quindi chiederne fino a 300 e far
+      # rispondere al server "sorry, too many clients already" (FATAL 53300), un errore duro che
+      # colpisce anche pgBackRest e psql. Con tetti espliciti (25 + 8 + 8 = 41) si resta sotto il
+      # limite del server in ogni caso, e un eventuale picco oltre il tetto aspetta in coda sul
+      # pool invece di far fallire il database. Da rivedere se l'api viene replicata (il tetto è
+      # per processo) o se le strutture gestite crescono di un ordine di grandezza.
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD};Maximum Pool Size=25"
       Frontend__Origin: ${FRONTEND_ORIGIN:-http://localhost:8081}
       Jwt__Issuer: ${JWT_ISSUER:-GestiSoft.Gestionale}
       Jwt__Audience: ${JWT_AUDIENCE:-GestiSoft.Gestionale.Client}
@@ -87,7 +95,10 @@ services:
       # v. commento sul servizio "api" — i job di invio giornaliero confrontano l'orario configurato
       # con DateTime.Now, che senza TZ sarebbe UTC invece che ora locale italiana.
       TZ: ${TZ:-Europe/Rome}
-      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      # Maximum Pool Size: v. commento sul servizio "api". Qui basta molto poco — i job Quartz
+      # ciclano le strutture in sequenza e sono [DisallowConcurrentExecution], quindi le query in
+      # volo sono una o due alla volta a prescindere da quante strutture sono gestite.
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD};Maximum Pool Size=8"
       Gestisoft__BaseUrl: ${GESTISOFT_BASE_URL:-}
       AlloggiatiWeb__Endpoint: ${ALLOGGIATIWEB_ENDPOINT:-}
       Osservatorio__BaseUrl: ${OSSERVATORIO_BASE_URL:-}
@@ -109,7 +120,8 @@ services:
     environment:
       DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       TZ: ${TZ:-Europe/Rome}
-      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+      # Maximum Pool Size: v. commento sul servizio "api" (stesso ragionamento del worker).
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD};Maximum Pool Size=8"
       Gestisoft__BaseUrl: ${GESTISOFT_BASE_URL:-}
       AlloggiatiWeb__Endpoint: ${ALLOGGIATIWEB_ENDPOINT:-}
       Osservatorio__BaseUrl: ${OSSERVATORIO_BASE_URL:-}
