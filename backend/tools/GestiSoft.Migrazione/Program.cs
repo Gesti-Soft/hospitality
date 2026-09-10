@@ -551,7 +551,11 @@ var wubook = new WubookIntegrazione { StrutturaId = strutturaId };
 }
 
 // ---------------------------------------------------------------------------
-// OtaService.CamereAssociate -> WubookIntegrazione.Attivo + SettingRoom.IdCameraWubook/WubookAttiva
+// OtaService.CamereAssociate -> WubookIntegrazione.Attivo + SettingTipologia.IdCameraWubook/WubookAttiva
+// L'associazione OTA vive sulla Tipologia (il pool), non più sulla singola camera — se più camere
+// legacy della stessa Tipologia avessero un IdCameraRemoto diverso (caso non atteso: nel legacy
+// l'associazione era comunque 1 camera fisica = 1 camera Wubook, mai un pool), si segnala il
+// conflitto invece di sovrascrivere silenziosamente.
 // ---------------------------------------------------------------------------
 {
     await using var conn = new SqlConnection(connOtaService);
@@ -567,9 +571,25 @@ var wubook = new WubookIntegrazione { StrutturaId = strutturaId };
             Console.WriteLine($"  [skip] CamereAssociate.IdCameraLocale={idLocale} non trovato tra le camere migrate.");
             continue;
         }
+
         var camera = await db.Camere.FirstAsync(c => c.Id == cameraId);
-        camera.IdCameraWubook = reader.GetInt32(1);
-        camera.WubookAttiva = reader.GetBoolean(2);
+        if (camera.TipologiaId is not { } tipologiaId)
+        {
+            Console.WriteLine($"  [skip] Camera {cameraId} (legacy id {idLocale}) non ha una Tipologia: impossibile associarla a OTA.");
+            continue;
+        }
+
+        var tipologia = await db.TipologieCamera.FirstAsync(t => t.Id == tipologiaId);
+        var idRemoto = reader.GetInt32(1);
+        var attiva = reader.GetBoolean(2);
+        if (tipologia.WubookAttiva && tipologia.IdCameraWubook is { } giaAssociato && giaAssociato != idRemoto)
+        {
+            Console.WriteLine($"  [conflitto] Tipologia '{tipologia.TipologiaCamera}' già associata a IdCameraWubook={giaAssociato}, CamereAssociate propone {idRemoto} (camera legacy {idLocale}) — non sovrascritto, verificare manualmente.");
+            continue;
+        }
+
+        tipologia.IdCameraWubook = idRemoto;
+        tipologia.WubookAttiva = attiva;
         count++;
     }
     if (count > 0)
@@ -577,7 +597,7 @@ var wubook = new WubookIntegrazione { StrutturaId = strutturaId };
         wubook.Attivo = true;
     }
     await db.SaveChangesAsync();
-    Console.WriteLine($"Associazioni camere Wubook: {count}");
+    Console.WriteLine($"Associazioni camere Wubook (per Tipologia): {count}");
 }
 db.WubookIntegrazioni.Add(wubook);
 await db.SaveChangesAsync();

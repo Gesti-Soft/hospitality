@@ -493,38 +493,48 @@ export function useSincronizzaWubookPrenotazioni(strutturaId: string | null) {
   })
 }
 
-export function useSincronizzaWubookCamera(strutturaId: string | null) {
+export function useSincronizzaWubookTipologia(strutturaId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (cameraId: string) => apiPost(`/strutture/${strutturaId}/wubook/camere/${cameraId}/sincronizza`),
+    mutationFn: (tipologiaId: string) => apiPost(`/strutture/${strutturaId}/wubook/tipologie/${tipologiaId}/sincronizza`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['camere', strutturaId] })
-      queryClient.invalidateQueries({ queryKey: ['camere-wubook', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['tipologie-camera', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['tipologie-wubook', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['tipologie-wubook-remote', strutturaId] })
     },
   })
 }
 
-export function useRimuoviWubookCamera(strutturaId: string | null) {
+export function useRimuoviWubookTipologia(strutturaId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (cameraId: string) => apiDelete(`/strutture/${strutturaId}/wubook/camere/${cameraId}`),
+    mutationFn: (tipologiaId: string) => apiDelete(`/strutture/${strutturaId}/wubook/tipologie/${tipologiaId}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['camere', strutturaId] })
-      queryClient.invalidateQueries({ queryKey: ['camere-wubook', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['tipologie-camera', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['tipologie-wubook', strutturaId] })
     },
   })
 }
 
-export interface CameraWubookInfoDto {
-  cameraId: string
-  cameraNome: string
-  tipologiaId: string | null
-  tipologiaNome: string | null
+/** Elimina da OTA un pool senza (o senza più) una Tipologia locale associata — a differenza di useRimuoviWubookTipologia, che opera su una tipologia locale. */
+export function useRimuoviWubookTipologiaRemota(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (idCameraWubook: number) => apiDelete(`/strutture/${strutturaId}/wubook/tipologie/remote/${idCameraWubook}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tipologie-camera', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['tipologie-wubook', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['tipologie-wubook-remote', strutturaId] })
+    },
+  })
+}
+
+export interface TipologiaWubookInfoDto {
+  tipologiaId: string
+  tipologiaNome: string
+  camereCollegate: number
   idCameraWubook: number | null
   wubookAttiva: boolean
-  chiusaOggi: boolean
-  chiusureCount: number
-  restrizioniCount: number
 }
 
 export interface CameraWubookRemoteDto {
@@ -536,32 +546,32 @@ export interface CameraWubookRemoteDto {
   disponibilita: number
 }
 
-/** Camere locali con stato associazione/disponibilità odierna — per la select Tipologia → camere della tab Wubook ridisegnata. */
-export function useCamerePerAssociazione(strutturaId: string | null) {
+/** Tipologie della struttura con conteggio camere reali collegate e stato associazione OTA — per la tab Camere della pagina Servizi OTA. */
+export function useTipologiePerAssociazione(strutturaId: string | null) {
   return useQuery({
-    queryKey: ['camere-wubook', strutturaId],
-    queryFn: () => apiGet<CameraWubookInfoDto[]>(`/strutture/${strutturaId}/wubook/camere/per-associazione`),
+    queryKey: ['tipologie-wubook', strutturaId],
+    queryFn: () => apiGet<TipologiaWubookInfoDto[]>(`/strutture/${strutturaId}/wubook/tipologie/per-associazione`),
     enabled: !!strutturaId,
   })
 }
 
-/** Camere già presenti su Wubook (fetch_rooms) — caricate solo quando serve (dialog di associazione aperto), è una vera chiamata Wubook. */
+/** Camere già presenti su Wubook (fetch_rooms) — caricate solo quando serve, è una vera chiamata Wubook. */
 export function useCamereRemoteWubook(strutturaId: string | null, abilitato: boolean) {
   return useQuery({
-    queryKey: ['camere-wubook-remote', strutturaId],
-    queryFn: () => apiGet<CameraWubookRemoteDto[]>(`/strutture/${strutturaId}/wubook/camere/remote`),
+    queryKey: ['tipologie-wubook-remote', strutturaId],
+    queryFn: () => apiGet<CameraWubookRemoteDto[]>(`/strutture/${strutturaId}/wubook/tipologie/remote`),
     enabled: !!strutturaId && abilitato,
   })
 }
 
-export function useAssociaCameraWubook(strutturaId: string | null) {
+export function useAssociaTipologiaWubook(strutturaId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ cameraId, idCameraWubook }: { cameraId: string; idCameraWubook: number | null }) =>
-      apiPut(`/strutture/${strutturaId}/wubook/camere/${cameraId}/associazione`, { idCameraWubook }),
+    mutationFn: ({ tipologiaId, idCameraWubook }: { tipologiaId: string; idCameraWubook: number | null }) =>
+      apiPut(`/strutture/${strutturaId}/wubook/tipologie/${tipologiaId}/associazione`, { idCameraWubook }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['camere-wubook', strutturaId] })
-      queryClient.invalidateQueries({ queryKey: ['camere', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['tipologie-wubook', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['tipologie-camera', strutturaId] })
     },
   })
 }

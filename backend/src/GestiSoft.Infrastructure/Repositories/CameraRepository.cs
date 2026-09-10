@@ -10,13 +10,16 @@ public class CameraRepository(GestiSoftDbContext db) : ICameraRepository
     public Task<SettingRoom?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         db.Camere.FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
-    public Task<SettingRoom?> GetByIdWubookAsync(Guid strutturaId, int idCameraWubook, CancellationToken cancellationToken) =>
-        db.Camere.FirstOrDefaultAsync(r => r.StrutturaId == strutturaId && r.IdCameraWubook == idCameraWubook, cancellationToken);
-
     public async Task<IReadOnlyList<SettingRoom>> ListByStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken) =>
         await db.Camere.AsNoTracking()
             .Include(r => r.Tipologia)
             .Where(r => r.StrutturaId == strutturaId)
+            .OrderBy(r => r.Nome)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<SettingRoom>> ListByTipologiaAsync(Guid strutturaId, Guid tipologiaId, CancellationToken cancellationToken) =>
+        await db.Camere.AsNoTracking()
+            .Where(r => r.StrutturaId == strutturaId && r.TipologiaId == tipologiaId)
             .OrderBy(r => r.Nome)
             .ToListAsync(cancellationToken);
 

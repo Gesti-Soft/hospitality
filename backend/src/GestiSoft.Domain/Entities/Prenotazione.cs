@@ -14,6 +14,18 @@ public class Prenotazione : TenantEntity
 
     public SettingRoom? Camera { get; set; }
 
+    /// <summary>
+    /// Tipologia (pool di camere identiche) scelta al posto di una camera specifica — permette di
+    /// prenotare "una qualsiasi camera di questo tipo" lasciando che il sistema assegni la prima
+    /// libera (v. AssegnazioneCameraService). Se CameraId resta nullo mentre questo è valorizzato,
+    /// la prenotazione è "in attesa di assegnazione camera" (nessuna unità libera trovata al momento
+    /// — capita soprattutto per un booking importato da OTA su un pool già pieno): resta comunque
+    /// registrata, non persa, finché un operatore non le assegna una camera manualmente.
+    /// </summary>
+    public Guid? TipologiaId { get; set; }
+
+    public SettingTipologia? Tipologia { get; set; }
+
     /// <summary>Scheda alloggiati del capofamiglia/ospite principale, se già compilata (vedi OspitiService). Inverso di Ospite.PrenotazioneId.</summary>
     public Ospite? Ospite { get; set; }
 

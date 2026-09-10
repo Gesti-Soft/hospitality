@@ -1,6 +1,5 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
-using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -13,17 +12,18 @@ public record CreaTipologiaRequest(
     decimal? Cauzione,
     decimal? PrezzoDefault,
     int NumeroImplementoPersona,
-    decimal Implemento);
+    decimal Implemento,
+    // Impostazioni OTA per l'intero pool — editabili solo dal dialog camera della pagina Servizi
+    // OTA, mai dal form generale Tipologie: da passare sempre invariate per non azzerarle.
+    string? CodiceCameraWubook = null,
+    bool WubookSoloWoodoo = false);
 
 public record CreaCameraRequest(
     Guid? TipologiaId,
     StatoCamera StateRoom,
     string Nome,
     int? CapacitaOspiti,
-    int? SoggiornoMinimo,
-    string? CodiceCameraWubook,
-    decimal? PrezzoWubookOverride,
-    bool WubookSoloWoodoo);
+    int? SoggiornoMinimo);
 
 public record RisultatoDuplicazioneCamere(int Tipologie, int Camere, int Prezzi, int Canali, int Saltati);
 
@@ -38,8 +38,6 @@ public class CamereService(
     IPrezzoCameraRepository prezzi,
     ICanaleVenditaRepository canali,
     IStrutturaRepository strutture,
-    IWubookClient wubookClient,
-    WubookLicenzaService wubookLicenzaService,
     PermessoStrutturaGuard permessoGuard)
 {
     // --- Tipologie ---
@@ -70,6 +68,8 @@ public class CamereService(
             PrezzoDefault = request.PrezzoDefault,
             NumeroImplementoPersona = request.NumeroImplementoPersona,
             Implemento = request.Implemento,
+            CodiceCameraWubook = NormalizzaCodiceWubook(request.CodiceCameraWubook),
+            WubookSoloWoodoo = request.WubookSoloWoodoo,
         };
 
         await tipologie.AddAsync(entity, cancellationToken);
@@ -95,6 +95,8 @@ public class CamereService(
         entity.PrezzoDefault = request.PrezzoDefault;
         entity.NumeroImplementoPersona = request.NumeroImplementoPersona;
         entity.Implemento = request.Implemento;
+        entity.CodiceCameraWubook = NormalizzaCodiceWubook(request.CodiceCameraWubook);
+        entity.WubookSoloWoodoo = request.WubookSoloWoodoo;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await tipologie.UpdateAsync(entity, cancellationToken);
@@ -149,9 +151,6 @@ public class CamereService(
             Nome = nome,
             CapacitaOspiti = request.CapacitaOspiti,
             SoggiornoMinimo = request.SoggiornoMinimo,
-            CodiceCameraWubook = NormalizzaCodiceWubook(request.CodiceCameraWubook),
-            PrezzoWubookOverride = request.PrezzoWubookOverride,
-            WubookSoloWoodoo = request.WubookSoloWoodoo,
         };
 
         await camere.AddAsync(entity, cancellationToken);
@@ -177,9 +176,6 @@ public class CamereService(
         entity.Nome = nome;
         entity.CapacitaOspiti = request.CapacitaOspiti;
         entity.SoggiornoMinimo = request.SoggiornoMinimo;
-        entity.CodiceCameraWubook = NormalizzaCodiceWubook(request.CodiceCameraWubook);
-        entity.PrezzoWubookOverride = request.PrezzoWubookOverride;
-        entity.WubookSoloWoodoo = request.WubookSoloWoodoo;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await camere.UpdateAsync(entity, cancellationToken);
@@ -220,19 +216,10 @@ public class CamereService(
 
         // Fedele al legacy: nessun controllo su prenotazioni collegate, la FK
         // Prenotazione.CameraId è SetNull, quindi le prenotazioni passate restano ma "orfane".
+        // L'associazione OTA vive sulla Tipologia (il pool), non più sulla singola camera: eliminare
+        // una camera reale riduce semplicemente da sola la quantità che verrà inviata a Wubook al
+        // prossimo giro di sincronizzazione — nessuna chiamata Wubook da fare qui.
         var entity = await GetCameraOwnedAsync(strutturaId, cameraId, cancellationToken);
-
-        // Se la camera è associata a Wubook, va rimossa anche lì prima di eliminarla in locale —
-        // altrimenti resterebbe su Wubook (visibile alle OTA, prenotabile) una room ormai orfana,
-        // senza più alcuna camera locale corrispondente. Stesso comando (del_room) usato da
-        // WubookCamereService.RimuoviAsync; se questa chiamata fallisce, l'eliminazione si ferma qui
-        // — meglio un errore esplicito che un disallineamento silenzioso con Wubook.
-        if (entity.WubookAttiva && entity.IdCameraWubook is { } idCameraWubook)
-        {
-            var (token, lcode) = await wubookLicenzaService.GetCredenzialiValideAsync(strutturaId, cancellationToken);
-            await wubookClient.DelRoomAsync(token, lcode, idCameraWubook, cancellationToken);
-        }
-
         await camere.DeleteAsync(entity, cancellationToken);
     }
 

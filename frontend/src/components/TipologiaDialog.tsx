@@ -47,6 +47,10 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
       spesePulizia: spesePulizia.trim() === '' ? null : Number(spesePulizia),
       animali: animali.trim() === '' ? null : Number(animali),
       cauzione: cauzione.trim() === '' ? null : Number(cauzione),
+      // Non editabili da questo dialog (v. il dialog camera della pagina Servizi OTA) — passati
+      // invariati per non azzerarli ad ogni salvataggio della scheda tipologia principale.
+      codiceCameraWubook: tipologia?.codiceCameraWubook ?? null,
+      wubookSoloWoodoo: tipologia?.wubookSoloWoodoo ?? false,
     }
 
     const onError = (err: unknown) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')

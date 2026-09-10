@@ -3,6 +3,7 @@ using System;
 using GestiSoft.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestiSoft.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GestiSoftDbContext))]
-    partial class GestiSoftDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260910083105_AggiungiWubookDisponibilitaCamera")]
+    partial class AggiungiWubookDisponibilitaCamera
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1104,9 +1107,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
-                    b.Property<Guid?>("TipologiaId")
-                        .HasColumnType("uuid");
-
                     b.Property<decimal?>("TotalTax")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -1119,8 +1119,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.HasIndex("CameraId");
 
                     b.HasIndex("StrutturaId");
-
-                    b.HasIndex("TipologiaId");
 
                     b.HasIndex("StrutturaId", "IdPrenotazioneWubook")
                         .IsUnique()
@@ -1355,13 +1353,23 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<int?>("CapacitaOspiti")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CodiceCameraWubook")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("IdCameraWubook")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Nome")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("PrezzoWubookOverride")
+                        .HasColumnType("numeric");
 
                     b.Property<int?>("SoggiornoMinimo")
                         .HasColumnType("integer");
@@ -1378,11 +1386,24 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("WubookAttiva")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("WubookDisponibilita")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("WubookSoloWoodoo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.HasKey("Id");
 
                     b.HasIndex("StrutturaId");
 
                     b.HasIndex("TipologiaId");
+
+                    b.HasIndex("StrutturaId", "IdCameraWubook");
 
                     b.HasIndex("StrutturaId", "Nome")
                         .IsUnique();
@@ -1404,15 +1425,8 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<string>("CodiceCameraWubook")
-                        .HasMaxLength(4)
-                        .HasColumnType("character varying(4)");
-
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("IdCameraWubook")
-                        .HasColumnType("integer");
 
                     b.Property<decimal>("Implemento")
                         .HasPrecision(18, 2)
@@ -1440,19 +1454,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("WubookAttiva")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("WubookSoloWoodoo")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.HasKey("Id");
 
                     b.HasIndex("StrutturaId");
-
-                    b.HasIndex("StrutturaId", "IdCameraWubook");
 
                     b.HasIndex("StrutturaId", "TipologiaCamera")
                         .IsUnique();
@@ -2017,14 +2021,7 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("GestiSoft.Domain.Entities.SettingTipologia", "Tipologia")
-                        .WithMany()
-                        .HasForeignKey("TipologiaId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("Camera");
-
-                    b.Navigation("Tipologia");
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.RestrizioneSoggiornoCamera", b =>

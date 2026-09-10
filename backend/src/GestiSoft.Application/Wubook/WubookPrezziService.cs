@@ -7,13 +7,14 @@ namespace GestiSoft.Application.Wubook;
 
 /// <summary>
 /// Push del calendario prezzi verso Wubook (update_plan_prices, piano Parity id 0) — porta
-/// ComunicationLogic.SyncPricesLocalWithOta del legacy. Risolve il prezzo giorno-per-giorno con
-/// la stessa priorità camera-specifica &gt; tipologia &gt; default tipologia di PrezziCameraService
-/// (nessun supplemento persona qui: quello si applica solo al preventivo di una prenotazione, non
-/// al listino pubblicato sui canali OTA).
+/// ComunicationLogic.SyncPricesLocalWithOta del legacy. Ora per Tipologia (pool di camere
+/// identiche): esiste un solo canale prezzo per pool, quindi si usa solo il prezzo a livello di
+/// Tipologia (periodo dedicato o <see cref="SettingTipologia.PrezzoDefault"/>) — un eventuale
+/// prezzo camera-specifico non ha più senso da pushare qui (nessuna singola camera del pool ha più
+/// una propria voce OTA). Nessun supplemento persona qui: quello si applica solo al preventivo di
+/// una prenotazione, non al listino pubblicato sui canali OTA.
 /// </summary>
 public class WubookPrezziService(
-    ICameraRepository camere,
     ITipologiaCameraRepository tipologie,
     IPrezzoCameraRepository prezzi,
     IWubookClient wubookClient,
@@ -31,38 +32,36 @@ public class WubookPrezziService(
 
         var (token, lcode) = await licenzaService.GetCredenzialiValideAsync(strutturaId, cancellationToken);
 
-        var camereSincronizzate = (await camere.ListByStrutturaAsync(strutturaId, cancellationToken))
-            .Where(c => c.WubookAttiva && c.IdCameraWubook is not null)
+        var tipologieSincronizzate = (await tipologie.ListByStrutturaAsync(strutturaId, cancellationToken))
+            .Where(t => t.WubookAttiva && t.IdCameraWubook is not null)
             .ToList();
 
-        if (camereSincronizzate.Count == 0)
+        if (tipologieSincronizzate.Count == 0)
         {
-            throw new ConflictException("Nessuna camera sincronizzata con Wubook: sincronizza prima le camere.");
+            throw new ConflictException("Nessuna tipologia sincronizzata con Wubook: sincronizza prima le camere.");
         }
 
         var giorni = (dataFine.Date - dataInizio.Date).Days + 1;
-        var prezziPerCamera = new Dictionary<int, IReadOnlyList<decimal>>();
+        var prezziPerTipologia = new Dictionary<int, IReadOnlyList<decimal>>();
 
-        foreach (var camera in camereSincronizzate)
+        foreach (var tipologia in tipologieSincronizzate)
         {
-            var tipologia = camera.TipologiaId is { } tipologiaId ? await tipologie.GetAsync(tipologiaId, cancellationToken) : null;
-            var periodi = await prezzi.ListPerCalendarioAsync(strutturaId, camera.Id, camera.TipologiaId, dataInizio.Date, dataFine.Date, cancellationToken);
+            // cameraId=Guid.Empty: nessuna camera reale ha questo id, quindi la query (che matcha
+            // "CameraId == cameraId OR (CameraId nullo E TipologiaId == tipologiaId)") ritorna solo
+            // i periodi di prezzo a livello di Tipologia — l'unico canale che ha senso pushare qui.
+            var periodi = await prezzi.ListPerCalendarioAsync(strutturaId, Guid.Empty, tipologia.Id, dataInizio.Date, dataFine.Date, cancellationToken);
 
             var prezziGiorno = new List<decimal>(giorni);
             for (var giorno = dataInizio.Date; giorno <= dataFine.Date; giorno = giorno.AddDays(1))
             {
-                var specifico = periodi.FirstOrDefault(p => p.CameraId == camera.Id && Copre(p, giorno));
-                var diTipologia = specifico is null
-                    ? periodi.FirstOrDefault(p => p.CameraId == null && p.TipologiaId == camera.TipologiaId && Copre(p, giorno))
-                    : null;
-
-                prezziGiorno.Add(specifico?.PrezzoPerNotte ?? diTipologia?.PrezzoPerNotte ?? tipologia?.PrezzoDefault ?? 0m);
+                var diTipologia = periodi.FirstOrDefault(p => p.CameraId == null && p.TipologiaId == tipologia.Id && Copre(p, giorno));
+                prezziGiorno.Add(diTipologia?.PrezzoPerNotte ?? tipologia.PrezzoDefault ?? 0m);
             }
 
-            prezziPerCamera[camera.IdCameraWubook!.Value] = prezziGiorno;
+            prezziPerTipologia[tipologia.IdCameraWubook!.Value] = prezziGiorno;
         }
 
-        await wubookClient.UpdatePlanPricesAsync(token, lcode, dataInizio.Date, prezziPerCamera, cancellationToken);
+        await wubookClient.UpdatePlanPricesAsync(token, lcode, dataInizio.Date, prezziPerTipologia, cancellationToken);
     }
 
     private static bool Copre(GestionePrezzo periodo, DateTime giorno) =>

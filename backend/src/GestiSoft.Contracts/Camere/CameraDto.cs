@@ -10,9 +10,4 @@ public record CameraDto(
     StatoCamera StateRoom,
     string Nome,
     int? CapacitaOspiti,
-    int? SoggiornoMinimo,
-    int? IdCameraWubook,
-    bool WubookAttiva,
-    string? CodiceCameraWubook,
-    decimal? PrezzoWubookOverride,
-    bool WubookSoloWoodoo);
+    int? SoggiornoMinimo);

@@ -7,6 +7,8 @@ public record PrenotazioneDto(
     Guid StrutturaId,
     Guid? CameraId,
     string? CameraNome,
+    Guid? TipologiaId,
+    string? TipologiaNome,
     string? Agenzia,
     string? NumeroPrenotazione,
     decimal? ImportoPrenotazione,

@@ -5,117 +5,123 @@ using GestiSoft.Domain.Entities;
 
 namespace GestiSoft.Application.Wubook;
 
-public record CameraWubookInfo(
-    Guid CameraId,
-    string CameraNome,
-    Guid? TipologiaId,
-    string? TipologiaNome,
+public record TipologiaWubookInfo(
+    Guid TipologiaId,
+    string TipologiaNome,
+    int CamereCollegate,
     int? IdCameraWubook,
-    bool WubookAttiva,
-    bool ChiusaOggi,
-    int ChiusureCount,
-    int RestrizioniCount);
+    bool WubookAttiva);
 
-/// <summary>Push delle camere locali verso Wubook (new_room/mod_room/del_room) — porta RoomsController del legacy.</summary>
+/// <summary>
+/// Push del pool di camere di una Tipologia verso Wubook (new_room/mod_room/del_room) — porta
+/// RoomsController del legacy, ma con l'associazione OTA sulla Tipologia invece che sulla singola
+/// camera: una Tipologia rappresenta N camere reali identiche, la quantità inviata a Wubook è sempre
+/// il conteggio live di quelle camere (mai un numero digitato a mano), come richiesto da un cliente
+/// reale con più unità identiche gestite come un unico pool.
+/// </summary>
 public class WubookCamereService(
-    ICameraRepository camere,
     ITipologiaCameraRepository tipologie,
-    IChiusuraCameraRepository chiusure,
-    IRestrizioneSoggiornoCameraRepository restrizioniPeriodo,
+    ICameraRepository camere,
     IWubookClient wubookClient,
     WubookLicenzaService licenzaService,
     PermessoStrutturaGuard permessoGuard)
 {
-    public async Task<SettingRoom> SincronizzaAsync(ICurrentUser currentUser, Guid strutturaId, Guid cameraId, CancellationToken cancellationToken)
+    public async Task<SettingTipologia> SincronizzaAsync(ICurrentUser currentUser, Guid strutturaId, Guid tipologiaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomWrite, cancellationToken);
 
-        var camera = await camere.GetAsync(cameraId, cancellationToken) ?? throw new NotFoundException("Camera non trovata.");
-        if (camera.StrutturaId != strutturaId)
+        var tipologia = await GetTipologiaOwnedAsync(strutturaId, tipologiaId, cancellationToken);
+        var camereDelPool = await camere.ListByTipologiaAsync(strutturaId, tipologiaId, cancellationToken);
+        if (camereDelPool.Count == 0)
         {
-            throw new NotFoundException("Camera non trovata.");
+            throw new ConflictException("Nessuna camera reale collegata a questa tipologia: creane almeno una prima di sincronizzarla con OTA.");
         }
 
         var (token, lcode) = await licenzaService.GetCredenzialiValideAsync(strutturaId, cancellationToken);
 
-        var tipologia = camera.TipologiaId is { } tipologiaId ? await tipologie.GetAsync(tipologiaId, cancellationToken) : null;
         var request = new WubookNuovaCameraRequest(
-            Nome: camera.Nome,
-            ShortName: camera.CodiceCameraWubook ?? ShortNameDa(camera.Nome),
-            Occupancy: camera.CapacitaOspiti ?? 2,
-            PrezzoBase: camera.PrezzoWubookOverride ?? tipologia?.PrezzoDefault ?? 0,
-            Disponibilita: 1,
+            Nome: tipologia.TipologiaCamera,
+            ShortName: tipologia.CodiceCameraWubook ?? ShortNameDa(tipologia.TipologiaCamera),
+            Occupancy: camereDelPool.Max(c => c.CapacitaOspiti) ?? 2,
+            PrezzoBase: tipologia.PrezzoDefault ?? 0,
+            // Mai un numero digitato a mano: sempre il conteggio reale delle camere del pool in
+            // questo istante — è esattamente il bug segnalato dal vivo che questo modello risolve.
+            Disponibilita: camereDelPool.Count,
             Board: "nb",
-            Woodoo: camera.WubookSoloWoodoo);
+            Woodoo: tipologia.WubookSoloWoodoo);
 
         // Non basta guardare IdCameraWubook: dopo una rimozione resta valorizzato come storico
         // (v. RimuoviAsync) ma quella room su Wubook non esiste più — un mod_room su un id ormai
         // cancellato viene rifiutato da Wubook. Se l'associazione non è più attiva va sempre creata
         // una room nuova, indipendentemente dallo storico.
-        if (!camera.WubookAttiva || camera.IdCameraWubook is not { } idEsistente)
+        if (!tipologia.WubookAttiva || tipologia.IdCameraWubook is not { } idEsistente)
         {
             var nuovoId = await wubookClient.NewRoomAsync(token, lcode, request, cancellationToken);
-            camera.IdCameraWubook = nuovoId;
+            tipologia.IdCameraWubook = nuovoId;
         }
         else
         {
             await wubookClient.ModRoomAsync(token, lcode, idEsistente, request, cancellationToken);
         }
 
-        camera.WubookAttiva = true;
-        camera.UpdatedAtUtc = DateTime.UtcNow;
-        await camere.UpdateAsync(camera, cancellationToken);
-        return camera;
+        tipologia.WubookAttiva = true;
+        tipologia.UpdatedAtUtc = DateTime.UtcNow;
+        await tipologie.UpdateAsync(tipologia, cancellationToken);
+        return tipologia;
     }
 
-    public async Task<SettingRoom> RimuoviAsync(ICurrentUser currentUser, Guid strutturaId, Guid cameraId, CancellationToken cancellationToken)
+    public async Task<SettingTipologia> RimuoviAsync(ICurrentUser currentUser, Guid strutturaId, Guid tipologiaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomWrite, cancellationToken);
 
-        var camera = await camere.GetAsync(cameraId, cancellationToken) ?? throw new NotFoundException("Camera non trovata.");
-        if (camera.StrutturaId != strutturaId)
-        {
-            throw new NotFoundException("Camera non trovata.");
-        }
+        var tipologia = await GetTipologiaOwnedAsync(strutturaId, tipologiaId, cancellationToken);
 
-        if (camera.IdCameraWubook is { } idCameraWubook)
+        if (tipologia.IdCameraWubook is { } idCameraWubook)
         {
             var (token, lcode) = await licenzaService.GetCredenzialiValideAsync(strutturaId, cancellationToken);
             await wubookClient.DelRoomAsync(token, lcode, idCameraWubook, cancellationToken);
         }
 
         // IdCameraWubook resta valorizzato come storico (fedele al legacy: CamereAssociate.Active=false, non delete).
-        camera.WubookAttiva = false;
-        camera.UpdatedAtUtc = DateTime.UtcNow;
-        await camere.UpdateAsync(camera, cancellationToken);
-        return camera;
+        tipologia.WubookAttiva = false;
+        tipologia.UpdatedAtUtc = DateTime.UtcNow;
+        await tipologie.UpdateAsync(tipologia, cancellationToken);
+        return tipologia;
     }
 
     /// <summary>
-    /// Elenco camere locali con stato associazione Wubook e disponibilità odierna (chiusa/aperta) —
-    /// per la tab "Camere" ridisegnata: select Tipologia → camere associate di quella tipologia,
-    /// come otaservice.web (il legacy), invece della tabella piatta di prima. La disponibilità qui
-    /// resta 0/1 per singola camera (il modello attuale è ancora 1 camera fisica = 1 camera Wubook,
-    /// il pooling per Tipologia è un refactor distinto e più grosso, non affrontato qui).
+    /// Elimina da OTA un pool che non ha (più) alcuna Tipologia locale associata — a differenza di
+    /// RimuoviAsync, che opera sulla SettingTipologia, qui l'unico dato è l'id OTA stesso. Cerca
+    /// comunque, per difesa, una Tipologia che punti ancora a questo id (caso raro di disallineamento)
+    /// e la disassocia per non lasciare un puntatore verso una room ormai cancellata.
     /// </summary>
-    public async Task<IReadOnlyList<CameraWubookInfo>> ListaPerAssociazioneAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    public async Task RimuoviRemotoAsync(ICurrentUser currentUser, Guid strutturaId, int idCameraWubook, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomWrite, cancellationToken);
+
+        var (token, lcode) = await licenzaService.GetCredenzialiValideAsync(strutturaId, cancellationToken);
+        await wubookClient.DelRoomAsync(token, lcode, idCameraWubook, cancellationToken);
+
+        var tipologiaOrfana = await tipologie.GetByIdWubookAsync(strutturaId, idCameraWubook, cancellationToken);
+        if (tipologiaOrfana is not null)
+        {
+            tipologiaOrfana.WubookAttiva = false;
+            tipologiaOrfana.UpdatedAtUtc = DateTime.UtcNow;
+            await tipologie.UpdateAsync(tipologiaOrfana, cancellationToken);
+        }
+    }
+
+    /// <summary>Elenco Tipologie della struttura con conteggio camere reali collegate e stato associazione OTA — per la tab "Camere" della pagina Servizi OTA.</summary>
+    public async Task<IReadOnlyList<TipologiaWubookInfo>> ListaPerAssociazioneAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomRead, cancellationToken);
 
-        var lista = await camere.ListByStrutturaAsync(strutturaId, cancellationToken);
-        var oggi = DateTime.UtcNow.Date;
-
-        var risultato = new List<CameraWubookInfo>();
-        foreach (var c in lista)
+        var lista = await tipologie.ListByStrutturaAsync(strutturaId, cancellationToken);
+        var risultato = new List<TipologiaWubookInfo>();
+        foreach (var t in lista)
         {
-            var chiusureOggi = await chiusure.ListSovrapposteAsync(c.Id, oggi, oggi.AddDays(1), cancellationToken);
-            var tutteChiusure = await chiusure.ListByCameraAsync(c.Id, cancellationToken);
-            var tutteRestrizioni = await restrizioniPeriodo.ListByCameraAsync(c.Id, cancellationToken);
-            risultato.Add(new CameraWubookInfo(
-                c.Id, c.Nome, c.TipologiaId, c.Tipologia?.TipologiaCamera, c.IdCameraWubook, c.WubookAttiva,
-                ChiusaOggi: chiusureOggi.Count > 0,
-                ChiusureCount: tutteChiusure.Count,
-                RestrizioniCount: tutteRestrizioni.Count));
+            var count = (await camere.ListByTipologiaAsync(strutturaId, t.Id, cancellationToken)).Count;
+            risultato.Add(new TipologiaWubookInfo(t.Id, t.TipologiaCamera, count, t.IdCameraWubook, t.WubookAttiva));
         }
 
         return risultato;
@@ -131,27 +137,34 @@ public class WubookCamereService(
     }
 
     /// <summary>
-    /// Associazione manuale camera-locale ↔ camera-Wubook già esistente (pull, come otaservice.web):
-    /// a differenza di SincronizzaAsync (push, crea/aggiorna una room su Wubook a partire dalla
-    /// camera locale), qui NON si chiama alcuna API Wubook — si limita a salvare l'associazione
-    /// scelta dall'operatore, fedele al legacy CamereAssociate. Passare idCameraWubook=null rimuove
-    /// l'associazione senza toccare Wubook (per correggere un abbinamento sbagliato).
+    /// Associazione manuale tipologia-locale ↔ camera-Wubook già esistente (pull, come
+    /// otaservice.web): a differenza di SincronizzaAsync (push, crea/aggiorna una room su Wubook a
+    /// partire dalla tipologia), qui NON si chiama alcuna API Wubook — si limita a salvare
+    /// l'associazione scelta dall'operatore. Passare idCameraWubook=null rimuove l'associazione senza
+    /// toccare Wubook (per correggere un abbinamento sbagliato).
     /// </summary>
-    public async Task<SettingRoom> AssociaAsync(ICurrentUser currentUser, Guid strutturaId, Guid cameraId, int? idCameraWubook, CancellationToken cancellationToken)
+    public async Task<SettingTipologia> AssociaAsync(ICurrentUser currentUser, Guid strutturaId, Guid tipologiaId, int? idCameraWubook, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.SettingRoomWrite, cancellationToken);
 
-        var camera = await camere.GetAsync(cameraId, cancellationToken) ?? throw new NotFoundException("Camera non trovata.");
-        if (camera.StrutturaId != strutturaId)
+        var tipologia = await GetTipologiaOwnedAsync(strutturaId, tipologiaId, cancellationToken);
+
+        tipologia.IdCameraWubook = idCameraWubook;
+        tipologia.WubookAttiva = idCameraWubook is not null;
+        tipologia.UpdatedAtUtc = DateTime.UtcNow;
+        await tipologie.UpdateAsync(tipologia, cancellationToken);
+        return tipologia;
+    }
+
+    private async Task<SettingTipologia> GetTipologiaOwnedAsync(Guid strutturaId, Guid tipologiaId, CancellationToken cancellationToken)
+    {
+        var tipologia = await tipologie.GetAsync(tipologiaId, cancellationToken) ?? throw new NotFoundException("Tipologia non trovata.");
+        if (tipologia.StrutturaId != strutturaId)
         {
-            throw new NotFoundException("Camera non trovata.");
+            throw new NotFoundException("Tipologia non trovata.");
         }
 
-        camera.IdCameraWubook = idCameraWubook;
-        camera.WubookAttiva = idCameraWubook is not null;
-        camera.UpdatedAtUtc = DateTime.UtcNow;
-        await camere.UpdateAsync(camera, cancellationToken);
-        return camera;
+        return tipologia;
     }
 
     private static string ShortNameDa(string nome)

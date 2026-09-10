@@ -42,5 +42,6 @@ public class TipologieCameraController(CamereService service, ICurrentUser curre
 
     private static TipologiaCameraDto ToDto(SettingTipologia t) => new(
         t.Id, t.StrutturaId, t.TipologiaCamera, t.SpesePulizia, t.Animali, t.Cauzione,
-        t.PrezzoDefault, t.NumeroImplementoPersona, t.Implemento);
+        t.PrezzoDefault, t.NumeroImplementoPersona, t.Implemento,
+        t.IdCameraWubook, t.WubookAttiva, t.CodiceCameraWubook, t.WubookSoloWoodoo);
 }

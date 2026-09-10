@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<CamereService>();
         services.AddScoped<PrezziCameraService>();
         services.AddScoped<CanaliVenditaService>();
+        services.AddScoped<AssegnazioneCameraService>();
         services.AddScoped<PrenotazioniService>();
         services.AddScoped<OspitiService>();
         services.AddScoped<FinanzeService>();

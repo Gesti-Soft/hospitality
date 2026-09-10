@@ -23,7 +23,8 @@ public record RisultatoSincronizzazionePrenotazioni(int Importate, int Aggiornat
 public class WubookPrenotazioniService(
     IPrenotazioneRepository prenotazioni,
     IOspiteRepository ospiti,
-    ICameraRepository camere,
+    ITipologiaCameraRepository tipologie,
+    AssegnazioneCameraService assegnazioneCamera,
     ICanaleVenditaRepository canaliVendita,
     IWubookClient wubookClient,
     WubookLicenzaService licenzaService,
@@ -89,8 +90,8 @@ public class WubookPrenotazioniService(
             throw new InvalidOperationException($"Id camera Wubook non numerico: '{booking.CameraIdWubookRaw}'.");
         }
 
-        var camera = await camere.GetByIdWubookAsync(strutturaId, idCameraWubook, cancellationToken)
-            ?? throw new InvalidOperationException($"Nessuna camera locale associata a IdCameraWubook={idCameraWubook}.");
+        var tipologia = await tipologie.GetByIdWubookAsync(strutturaId, idCameraWubook, cancellationToken)
+            ?? throw new InvalidOperationException($"Nessuna tipologia locale associata a IdCameraWubook={idCameraWubook}.");
 
         var esistente = await prenotazioni.GetByIdPrenotazioneWubookAsync(strutturaId, booking.RCode, cancellationToken);
 
@@ -170,7 +171,33 @@ public class WubookPrenotazioniService(
             StatoPrenotazione = StatoPrenotazione.Incompleta,
         };
 
-        entity.CameraId = camera.Id;
+        // Non riassegnare se la camera già assegnata in precedenza (un aggiornamento di date su un
+        // booking esistente) resta compatibile con le nuove date — evita di spostare inutilmente un
+        // ospite già assegnato a una camera del pool. Se il pool non ha nessuna unità libera per
+        // queste date, la prenotazione viene comunque registrata (l'ospite ha già prenotato per
+        // davvero su OTA, non va persa) con CameraId nullo: resta "in attesa di assegnazione camera"
+        // finché un operatore non gliene assegna una manualmente.
+        var cameraAttualeRestaValida = entity.CameraId is { } cameraIdAttuale
+            && !await prenotazioni.EsisteSovrapposizioneAsync(strutturaId, cameraIdAttuale, booking.CheckIn, booking.CheckOut, entity.Id, cancellationToken);
+        if (!cameraAttualeRestaValida)
+        {
+            var cameraLibera = await assegnazioneCamera.TrovaCameraLiberaAsync(strutturaId, tipologia.Id, booking.CheckIn, booking.CheckOut, entity.Id, cancellationToken);
+            entity.CameraId = cameraLibera?.Id;
+            if (cameraLibera is null)
+            {
+                var numeroVisualizzatoSenzaCamera = entity.NumeroPrenotazione ?? booking.RCode.ToString();
+                await logEventi.RegistraAsync(
+                    LivelloLog.Warning,
+                    $"Prenotazione #{numeroVisualizzatoSenzaCamera} da {nomeCanale} (rcode={booking.RCode}): nessuna camera libera nel pool '{tipologia.TipologiaCamera}' per {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy} — registrata senza camera assegnata, serve assegnazione manuale.",
+                    origine: "Wubook",
+                    clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                    strutturaId: strutturaId,
+                    categoria: "Wubook",
+                    cancellationToken: cancellationToken);
+            }
+        }
+
+        entity.TipologiaId = tipologia.Id;
         entity.Agenzia = nomeCanale;
         await AssicuraCanaleVenditaAsync(strutturaId, nomeCanale, cancellationToken);
         entity.NumeroPrenotazione = !string.IsNullOrWhiteSpace(booking.ChannelReservationCode) ? booking.ChannelReservationCode : booking.RCode.ToString();

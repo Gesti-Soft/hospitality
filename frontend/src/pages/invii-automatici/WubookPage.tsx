@@ -3,11 +3,13 @@ import Alert from '@mui/material/Alert'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
@@ -24,7 +26,6 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import LinkIcon from '@mui/icons-material/LinkOutlined'
 import LinkOffIcon from '@mui/icons-material/LinkOffOutlined'
 import EditCalendarIcon from '@mui/icons-material/EditCalendarOutlined'
 import EditIcon from '@mui/icons-material/EditOutlined'
@@ -32,22 +33,25 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import SettingsIcon from '@mui/icons-material/SettingsOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVertOutlined'
 import { useStruttura } from '../../struttura/StrutturaContext'
-import { useTipologie } from '../../api/tipologie'
+import { useAggiornaTipologia, useTipologie, type TipologiaCameraDto, type TipologiaCameraRequest } from '../../api/tipologie'
+import { useCamere, type CameraDto } from '../../api/camere'
 import { ApiError } from '../../api/client'
 import {
-  useAssociaCameraWubook,
-  useCamerePerAssociazione,
+  useAssociaTipologiaWubook,
+  useTipologiePerAssociazione,
   useCamereRemoteWubook,
   useEliminaPianoPrezzo,
   useEliminaPianoRestrizione,
   usePianiPrezzo,
   usePianiRestrizione,
-  useRimuoviWubookCamera,
+  useRimuoviWubookTipologia,
+  useRimuoviWubookTipologiaRemota,
+  useSincronizzaWubookTipologia,
   useSincronizzaWubookDisponibilita,
   useSincronizzaWubookPrenotazioni,
   useSincronizzaWubookPrezzi,
   useWubookConfig,
-  type CameraWubookInfoDto,
+  type TipologiaWubookInfoDto,
   type CameraWubookRemoteDto,
   type PianoPrezzoDto,
   type PianoRestrizioneDto,
@@ -61,7 +65,6 @@ import { useToast } from '../../toast/ToastContext'
 import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
 import { ChiusureRestrizioniDialog } from '../../components/ChiusureRestrizioniDialog'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
-import { ImpostazioniWubookCameraDialog } from '../../components/ImpostazioniWubookCameraDialog'
 import { PianoPrezzoDialog } from '../../components/PianoPrezzoDialog'
 import { PianoRestrizioneDialog } from '../../components/PianoRestrizioneDialog'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
@@ -71,8 +74,14 @@ type TabWubook = 'camere' | 'piani-prezzo' | 'piani-restrizione'
 export function WubookPage() {
   const { strutturaId } = useStruttura()
   const config = useWubookConfig(strutturaId)
-  const camere = useCamerePerAssociazione(strutturaId)
-  const tipologie = useTipologie(strutturaId)
+  const credenzialiPronte = !!config.data?.credenzialiPronte
+  const tipologiePerAssociazione = useTipologiePerAssociazione(strutturaId)
+  // Come otaservice.web (legacy): l'elenco principale della tab Camere sono le camere già presenti
+  // sull'OTA (fetch_rooms), non quelle locali — caricato qui, non solo dentro un dialog, perché ora
+  // è la fonte primaria della tabella. L'associazione vive però sulla Tipologia (il pool di camere
+  // reali identiche), non più sulla singola camera.
+  const remote = useCamereRemoteWubook(strutturaId, credenzialiPronte)
+  const tipologieComplete = useTipologie(strutturaId)
   const [tab, setTab] = useState<TabWubook>('camere')
 
   return (
@@ -81,7 +90,7 @@ export function WubookPage() {
       {config.isLoading && <Skeleton variant="rounded" height={80} />}
       {!config.isLoading && config.data && <StatoWubook dati={config.data} />}
 
-      {!config.isLoading && config.data?.credenzialiPronte && <SincronizzazioneForm strutturaId={strutturaId!} />}
+      {!config.isLoading && credenzialiPronte && <SincronizzazioneForm strutturaId={strutturaId!} />}
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ minHeight: 0 }}>
         <Tab label="Camere" value="camere" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
@@ -91,8 +100,16 @@ export function WubookPage() {
 
       {tab === 'camere' && (
         <Box>
-          {camere.isLoading && <Skeleton variant="rounded" height={180} />}
-          {!camere.isLoading && <TabellaCamere strutturaId={strutturaId!} camere={camere.data ?? []} tipologie={tipologie.data ?? []} />}
+          {tipologiePerAssociazione.isLoading && <Skeleton variant="rounded" height={180} />}
+          {!tipologiePerAssociazione.isLoading && (
+            <TabellaCamere
+              strutturaId={strutturaId!}
+              tipologiePerAssociazione={tipologiePerAssociazione.data ?? []}
+              tipologieComplete={tipologieComplete.data ?? []}
+              remote={remote}
+              credenzialiPronte={credenzialiPronte}
+            />
+          )}
         </Box>
       )}
 
@@ -193,193 +210,194 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
 
 function TabellaCamere({
   strutturaId,
-  camere,
-  tipologie,
+  tipologiePerAssociazione,
+  tipologieComplete,
+  remote,
+  credenzialiPronte,
 }: {
   strutturaId: string
-  camere: CameraWubookInfoDto[]
-  tipologie: { id: string; tipologiaCamera: string }[]
+  tipologiePerAssociazione: TipologiaWubookInfoDto[]
+  tipologieComplete: TipologiaCameraDto[]
+  remote: ReturnType<typeof useCamereRemoteWubook>
+  credenzialiPronte: boolean
 }) {
   const mobile = useMobile()
   const puoScrivere = usePuoScrivere('settingRoomWrite')
-  const [tipologiaFiltro, setTipologiaFiltro] = useState('')
+  const camereComplete = useCamere(strutturaId)
   const [dialogoChiusure, setDialogoChiusure] = useState<{ cameraId: string; cameraNome: string } | null>(null)
-  const [dialogoAssocia, setDialogoAssocia] = useState<CameraWubookInfoDto | null>(null)
-  const [dialogoImpostazioni, setDialogoImpostazioni] = useState<CameraWubookInfoDto | null>(null)
-  const [dialogoNuova, setDialogoNuova] = useState(false)
-  const [daEliminare, setDaEliminare] = useState<CameraWubookInfoDto | null>(null)
-  const [daDisassociare, setDaDisassociare] = useState<CameraWubookInfoDto | null>(null)
-  const rimuovi = useRimuoviWubookCamera(strutturaId)
-  const disassocia = useAssociaCameraWubook(strutturaId)
+  const [scegliCameraChiusura, setScegliCameraChiusura] = useState<CameraDto[] | null>(null)
+  const [dialogoTipologia, setDialogoTipologia] = useState<'chiuso' | 'nuova' | CameraWubookRemoteDto>('chiuso')
+  const [daEliminare, setDaEliminare] = useState<{ remoto: CameraWubookRemoteDto | null; locale: TipologiaWubookInfoDto | null } | null>(null)
+  const [daDisassociare, setDaDisassociare] = useState<TipologiaWubookInfoDto | null>(null)
+  const rimuovi = useRimuoviWubookTipologia(strutturaId)
+  const rimuoviRemota = useRimuoviWubookTipologiaRemota(strutturaId)
+  const associa = useAssociaTipologiaWubook(strutturaId)
   const toast = useToast()
 
   function gestisciErrore(err: unknown) {
     toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
-  function confermaEliminaDaWubook() {
+  function confermaEliminaDaOta() {
     if (!daEliminare) return
-    rimuovi.mutate(daEliminare.cameraId, { onSuccess: () => setDaEliminare(null), onError: gestisciErrore })
+    if (daEliminare.locale) {
+      rimuovi.mutate(daEliminare.locale.tipologiaId, { onSuccess: () => setDaEliminare(null), onError: gestisciErrore })
+    } else if (daEliminare.remoto) {
+      rimuoviRemota.mutate(daEliminare.remoto.id, { onSuccess: () => setDaEliminare(null), onError: gestisciErrore })
+    }
   }
 
-  // Disassocia = scollega la camera locale da quella su OTA senza toccare OTA (nessun del_room): la
-  // room resta lì intatta, così si può riassociarla in seguito (anche a un'altra camera locale)
-  // scegliendola da "Associa a una camera già esistente" — a differenza di "Elimina da OTA", che
-  // invece la cancella davvero.
+  // Disassocia = scollega la Tipologia da quella su OTA senza toccare OTA (nessun del_room): la
+  // camera resta lì intatta, così si può riassociarla in seguito riaprendo "Modifica" sulla stessa
+  // riga OTA (o su un'altra) — a differenza di "Elimina da OTA", che invece la cancella davvero.
   function confermaDisassocia() {
     if (!daDisassociare) return
-    disassocia.mutate(
-      { cameraId: daDisassociare.cameraId, idCameraWubook: null },
+    associa.mutate(
+      { tipologiaId: daDisassociare.tipologiaId, idCameraWubook: null },
       { onSuccess: () => setDaDisassociare(null), onError: gestisciErrore },
     )
   }
 
-  // Come otaservice.web (legacy): select Tipologia prima di tutto, poi solo le camere di quella
-  // tipologia — mai la tabella piatta con tutte le camere della struttura insieme.
-  const camereFiltrate = camere.filter((c) => tipologiaFiltro === '' || c.tipologiaId === tipologiaFiltro)
-  // Come il bottone globale "Nuova Camera" del vecchio programma: crea su OTA una camera locale
-  // esistente non ancora associata — non serve più passare dalla riga della tabella per scoprire
-  // che l'azione esiste.
-  const camereDaCreare = camere.filter((c) => !c.wubookAttiva)
+  // "Chiudi periodo" agisce su una camera reale specifica del pool (manutenzione di quell'unità),
+  // mai sulla Tipologia intera: se il pool ha una sola camera si salta dritti al dialog (stesso
+  // comportamento di prima, zero click in più per il caso non-pool), altrimenti si chiede prima
+  // quale delle camere reali della Tipologia.
+  function apriChiusure(locale: TipologiaWubookInfoDto) {
+    const camereDelPool = camereComplete.data?.filter((c) => c.tipologiaId === locale.tipologiaId) ?? []
+    if (camereDelPool.length === 1) {
+      setDialogoChiusure({ cameraId: camereDelPool[0].id, cameraNome: camereDelPool[0].nome })
+    } else if (camereDelPool.length > 1) {
+      setScegliCameraChiusura(camereDelPool)
+    }
+  }
+
+  // Tipologie non ancora presenti su OTA — il bacino da cui pescare per "Tipologia esistente" nel
+  // dialog Nuova/Modifica, e con almeno una camera reale collegata (altrimenti non c'è nulla da
+  // sincronizzare: lo stesso vincolo già applicato lato backend).
+  const tipologieDisponibili = tipologiePerAssociazione.filter((t) => !t.wubookAttiva && t.camereCollegate > 0)
+
+  // Come otaservice.web: l'elenco principale della tabella sono le camere sull'OTA (fetch_rooms), non
+  // quelle locali — flat, senza filtro Tipologia (il legacy non ne ha uno). Ogni riga OTA corrisponde
+  // però ora a una Tipologia (il pool), non più a una singola camera.
+  type RigaCameraOta = { remoto: CameraWubookRemoteDto | null; locale: TipologiaWubookInfoDto | null }
+  const righe: RigaCameraOta[] = remote.data
+    ? remote.data.map((r) => ({ remoto: r, locale: tipologiePerAssociazione.find((t) => t.wubookAttiva && t.idCameraWubook === r.id) ?? null }))
+    : // OTA momentaneamente non raggiungibile: fallback alle sole tipologie già associate in precedenza,
+      // per non bloccare chi deve solo aprire le chiusure/disassociare/eliminare.
+      tipologiePerAssociazione.filter((t) => t.wubookAttiva).map((t) => ({ remoto: null, locale: t }))
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
-        <TextField select size="small" label="Tipologia" value={tipologiaFiltro} onChange={(e) => setTipologiaFiltro(e.target.value)} sx={{ minWidth: 240 }}>
-          <MenuItem value="">Tutte le tipologie</MenuItem>
-          {tipologie.map((t) => (
-            <MenuItem key={t.id} value={t.id}>
-              {t.tipologiaCamera}
-            </MenuItem>
-          ))}
-        </TextField>
-        {puoScrivere && <BottoneNuovo etichetta="+ Nuova camera" onClick={() => setDialogoNuova(true)} disabilitato={camereDaCreare.length === 0} />}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.5 }}>
+        {puoScrivere && <BottoneNuovo etichetta="+ Nuova camera" onClick={() => setDialogoTipologia('nuova')} disabilitato={tipologieDisponibili.length === 0} />}
       </Box>
 
-      {mobile && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {camereFiltrate.length === 0 && (
-            <MessaggioVuotoElenco messaggio={tipologiaFiltro === '' ? 'Nessuna camera configurata.' : 'Nessuna camera per questa tipologia.'} />
-          )}
-          {camereFiltrate.map((c) => (
-            <CardElenco key={c.cameraId} coloreAccento={c.chiusaOggi ? tokens.error600 : tokens.ok600}>
-              <TestataCardElenco
-                titolo={c.cameraNome}
-                sottotitolo={c.tipologiaNome ?? undefined}
-                azioneDestra={
-                  c.wubookAttiva && c.idCameraWubook != null ? (
-                    <Chip size="small" label={`Associata (id ${c.idCameraWubook})`} sx={{ bgcolor: tokens.ok600, color: '#fff', fontWeight: 700 }} />
-                  ) : (
-                    <Chip size="small" label="Non associata" sx={{ bgcolor: tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
-                  )
-                }
-              />
-              <RigaCardMeta
-                voci={[
-                  {
-                    etichetta: 'Disponibilità oggi',
-                    valore: (
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        <Chip
-                          size="small"
-                          label={c.chiusaOggi ? 'Chiusa' : 'Disponibile'}
-                          sx={{ bgcolor: c.chiusaOggi ? tokens.error600 : tokens.ok600, color: '#fff', fontWeight: 700 }}
-                        />
-                        {c.chiusureCount > 0 && (
-                          <Chip size="small" label={`Chiusure: ${c.chiusureCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
-                        )}
-                        {c.restrizioniCount > 0 && (
-                          <Chip size="small" label={`Restrizioni: ${c.restrizioniCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
-                        )}
-                      </Box>
-                    ),
-                  },
-                ]}
-              />
-              {(c.wubookAttiva || puoScrivere) && (
-                <AzioniCardElenco>
-                  <MenuAzioniCamera
-                    camera={c}
-                    puoScrivere={puoScrivere}
-                    onAssocia={() => setDialogoAssocia(c)}
-                    onImpostazioni={() => setDialogoImpostazioni(c)}
-                    onChiusure={() => setDialogoChiusure({ cameraId: c.cameraId, cameraNome: c.cameraNome })}
-                    onDisassocia={() => setDaDisassociare(c)}
-                    onElimina={() => setDaEliminare(c)}
-                    disassociaInCorso={disassocia.isPending}
-                    eliminaInCorso={rimuovi.isPending}
-                  />
-                </AzioniCardElenco>
-              )}
-            </CardElenco>
-          ))}
-        </Box>
+      {!credenzialiPronte && <Alert severity="info">Configura le credenziali OTA in Impostazioni per vedere e collegare le camere.</Alert>}
+
+      {credenzialiPronte && remote.isError && (
+        <Alert severity="warning">
+          Impossibile recuperare l'elenco camere dall'OTA in questo momento — mostrate solo le camere già associate in precedenza.
+        </Alert>
       )}
 
-      {!mobile && (
-        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Camera</TableCell>
-                <TableCell>Tipologia</TableCell>
-                <TableCell>Disponibilità oggi</TableCell>
-                <TableCell>Associazione OTA</TableCell>
-                <TableCell align="right">Azioni</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {camereFiltrate.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
-                    {tipologiaFiltro === '' ? 'Nessuna camera configurata.' : 'Nessuna camera per questa tipologia.'}
-                  </TableCell>
-                </TableRow>
-              )}
-              {camereFiltrate.map((c) => (
-                <TableRow key={c.cameraId} hover>
-                  <TableCell sx={{ fontWeight: 700 }}>{c.cameraNome}</TableCell>
-                  <TableCell>{c.tipologiaNome ?? '—'}</TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                      <Chip
-                        size="small"
-                        label={c.chiusaOggi ? 'Chiusa' : 'Disponibile'}
-                        sx={{ bgcolor: c.chiusaOggi ? tokens.error600 : tokens.ok600, color: '#fff', fontWeight: 700 }}
-                      />
-                      {c.chiusureCount > 0 && (
-                        <Chip size="small" label={`Chiusure: ${c.chiusureCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
-                      )}
-                      {c.restrizioniCount > 0 && (
-                        <Chip size="small" label={`Restrizioni: ${c.restrizioniCount}`} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
-                      )}
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    {c.wubookAttiva && c.idCameraWubook != null ? (
-                      <Chip size="small" label={`Associata (id ${c.idCameraWubook})`} sx={{ bgcolor: tokens.ok600, color: '#fff', fontWeight: 700 }} />
-                    ) : (
-                      <Chip size="small" label="Non associata" sx={{ bgcolor: tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
+      {credenzialiPronte && remote.isLoading && <Skeleton variant="rounded" height={180} />}
+
+      {credenzialiPronte && !remote.isLoading && (
+        <>
+          {mobile && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {righe.length === 0 && <MessaggioVuotoElenco messaggio="Nessuna camera trovata sull'OTA." />}
+              {righe.map((r) => (
+                <CardElenco key={r.remoto?.id ?? r.locale!.tipologiaId} coloreAccento={r.locale ? tokens.ok600 : tokens.wait600}>
+                  <TestataCardElenco
+                    titolo={r.remoto?.nome ?? r.locale!.tipologiaNome}
+                    sottotitolo={r.remoto ? `ID ${r.remoto.id}` : undefined}
+                  />
+                  <RigaCardMeta
+                    voci={[
+                      { etichetta: 'Posti', valore: r.remoto?.occupancy ?? '—' },
+                      { etichetta: 'Prezzo', valore: r.remoto ? `€${r.remoto.prezzo.toFixed(2)}` : '—' },
+                      { etichetta: 'Disponibilità', valore: r.remoto?.disponibilita ?? '—' },
+                      { etichetta: 'Camere collegate', valore: r.locale?.camereCollegate ?? '—' },
+                    ]}
+                  />
+                  <AzioniCardElenco>
                     <MenuAzioniCamera
-                      camera={c}
+                      riga={r}
                       puoScrivere={puoScrivere}
-                      onAssocia={() => setDialogoAssocia(c)}
-                      onImpostazioni={() => setDialogoImpostazioni(c)}
-                      onChiusure={() => setDialogoChiusure({ cameraId: c.cameraId, cameraNome: c.cameraNome })}
-                      onDisassocia={() => setDaDisassociare(c)}
-                      onElimina={() => setDaEliminare(c)}
-                      disassociaInCorso={disassocia.isPending}
-                      eliminaInCorso={rimuovi.isPending}
+                      onModifica={() => r.remoto && setDialogoTipologia(r.remoto)}
+                      onChiusure={() => r.locale && apriChiusure(r.locale)}
+                      onDisassocia={() => r.locale && setDaDisassociare(r.locale)}
+                      onElimina={() => setDaEliminare(r)}
+                      disassociaInCorso={associa.isPending}
+                      eliminaInCorso={rimuovi.isPending || rimuoviRemota.isPending}
                     />
-                  </TableCell>
-                </TableRow>
+                  </AzioniCardElenco>
+                </CardElenco>
               ))}
-            </TableBody>
-          </Table>
-        </Box>
+            </Box>
+          )}
+
+          {!mobile && (
+            <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, overflow: 'hidden' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>ID</TableCell>
+                    <TableCell>Nome</TableCell>
+                    <TableCell>Posti</TableCell>
+                    <TableCell>Prezzo</TableCell>
+                    <TableCell>Disponibilità</TableCell>
+                    <TableCell>Camere collegate</TableCell>
+                    <TableCell align="right">Azioni</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {righe.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                        Nessuna camera trovata sull'OTA.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {righe.map((r) => (
+                    <TableRow key={r.remoto?.id ?? r.locale!.tipologiaId} hover>
+                      <TableCell sx={{ fontFamily: fontMono, color: tokens.textTertiary }}>{r.remoto?.id ?? '—'}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{r.remoto?.nome ?? r.locale!.tipologiaNome}</TableCell>
+                      <TableCell>{r.remoto?.occupancy ?? '—'}</TableCell>
+                      <TableCell>{r.remoto ? `€${r.remoto.prezzo.toFixed(2)}` : '—'}</TableCell>
+                      <TableCell>{r.remoto?.disponibilita ?? '—'}</TableCell>
+                      <TableCell>{r.locale?.camereCollegate ?? '—'}</TableCell>
+                      <TableCell align="right">
+                        <MenuAzioniCamera
+                          riga={r}
+                          puoScrivere={puoScrivere}
+                          onModifica={() => r.remoto && setDialogoTipologia(r.remoto)}
+                          onChiusure={() => r.locale && apriChiusure(r.locale)}
+                          onDisassocia={() => r.locale && setDaDisassociare(r.locale)}
+                          onElimina={() => setDaEliminare(r)}
+                          disassociaInCorso={associa.isPending}
+                          eliminaInCorso={rimuovi.isPending || rimuoviRemota.isPending}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          )}
+        </>
+      )}
+
+      {scegliCameraChiusura && (
+        <SceltaCameraChiusuraDialog
+          camere={scegliCameraChiusura}
+          onSeleziona={(c) => {
+            setScegliCameraChiusura(null)
+            setDialogoChiusure({ cameraId: c.id, cameraNome: c.nome })
+          }}
+          onClose={() => setScegliCameraChiusura(null)}
+        />
       )}
 
       {dialogoChiusure && (
@@ -391,38 +409,22 @@ function TabellaCamere({
         />
       )}
 
-      {dialogoAssocia && (
-        <AssociaCameraWubookDialog strutturaId={strutturaId} camera={dialogoAssocia} onClose={() => setDialogoAssocia(null)} />
-      )}
-
-      {dialogoNuova && (
-        <NuovaCameraOtaDialog
-          camere={camereDaCreare}
-          onSeleziona={(c) => {
-            setDialogoNuova(false)
-            setDialogoImpostazioni(c)
-          }}
-          onClose={() => setDialogoNuova(false)}
-        />
-      )}
-
-      {dialogoImpostazioni && (
-        <ImpostazioniWubookCameraDialog
+      {dialogoTipologia !== 'chiuso' && (
+        <TipologiaOtaDialog
           strutturaId={strutturaId}
-          cameraId={dialogoImpostazioni.cameraId}
-          cameraNome={dialogoImpostazioni.cameraNome}
-          wubookAttiva={dialogoImpostazioni.wubookAttiva}
-          idCameraWubook={dialogoImpostazioni.idCameraWubook}
-          onClose={() => setDialogoImpostazioni(null)}
+          remoto={dialogoTipologia === 'nuova' ? null : dialogoTipologia}
+          tipologiePerAssociazione={tipologiePerAssociazione}
+          tipologieComplete={tipologieComplete}
+          onClose={() => setDialogoTipologia('chiuso')}
         />
       )}
 
       {daEliminare && (
         <ConfirmDialog
           titolo="Eliminare da OTA"
-          messaggio={`Eliminare "${daEliminare.cameraNome}" da OTA? La camera locale resta, solo la camera sull'OTA viene rimossa.`}
-          inCorso={rimuovi.isPending}
-          onConferma={confermaEliminaDaWubook}
+          messaggio={`Eliminare "${daEliminare.remoto?.nome ?? daEliminare.locale?.tipologiaNome}" da OTA? ${daEliminare.locale ? 'Le camere locali restano, solo la camera sull\'OTA viene rimossa.' : 'Non è associata a nessuna tipologia locale.'}`}
+          inCorso={rimuovi.isPending || rimuoviRemota.isPending}
+          onConferma={confermaEliminaDaOta}
           onAnnulla={() => setDaEliminare(null)}
         />
       )}
@@ -430,8 +432,8 @@ function TabellaCamere({
       {daDisassociare && (
         <ConfirmDialog
           titolo="Disassociare da OTA"
-          messaggio={`Disassociare "${daDisassociare.cameraNome}" da OTA? La camera resta invariata sull'OTA (non viene eliminata) — potrai riassociarla in seguito da "Associa a una camera già esistente".`}
-          inCorso={disassocia.isPending}
+          messaggio={`Disassociare "${daDisassociare.tipologiaNome}" da OTA? La camera resta invariata sull'OTA (non viene eliminata) — potrai riassociarla in seguito riaprendo "Modifica" su questa riga.`}
+          inCorso={associa.isPending}
           onConferma={confermaDisassocia}
           onAnnulla={() => setDaDisassociare(null)}
         />
@@ -440,22 +442,20 @@ function TabellaCamere({
   )
 }
 
-/** Azioni per riga camera raccolte in un menu a tendina (icona "···") invece di una fila di icone — la stessa riga arriva ad avere fino a 4 azioni possibili (chiusure, modifica, disassocia, elimina), troppe per stare bene affiancate. */
+/** Azioni per riga camera raccolte in un menu a tendina (icona "···") invece di una fila di icone. */
 function MenuAzioniCamera({
-  camera,
+  riga,
   puoScrivere,
-  onAssocia,
-  onImpostazioni,
+  onModifica,
   onChiusure,
   onDisassocia,
   onElimina,
   disassociaInCorso,
   eliminaInCorso,
 }: {
-  camera: CameraWubookInfoDto
+  riga: { remoto: CameraWubookRemoteDto | null; locale: TipologiaWubookInfoDto | null }
   puoScrivere: boolean
-  onAssocia: () => void
-  onImpostazioni: () => void
+  onModifica: () => void
   onChiusure: () => void
   onDisassocia: () => void
   onElimina: () => void
@@ -463,8 +463,9 @@ function MenuAzioniCamera({
   eliminaInCorso: boolean
 }) {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
+  const associata = riga.locale !== null
 
-  if (!camera.wubookAttiva && !puoScrivere) return null
+  if (!puoScrivere && !associata) return null
 
   function esegui(azione: () => void) {
     setAnchorEl(null)
@@ -477,39 +478,23 @@ function MenuAzioniCamera({
         <MoreVertIcon fontSize="small" />
       </IconButton>
       <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={() => setAnchorEl(null)}>
-        {!camera.wubookAttiva && puoScrivere && (
-          <MenuItem onClick={() => esegui(onAssocia)}>
-            <ListItemIcon>
-              <LinkIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Associa a una camera già esistente su OTA</ListItemText>
-          </MenuItem>
-        )}
-        {!camera.wubookAttiva && puoScrivere && (
-          <MenuItem onClick={() => esegui(onImpostazioni)}>
+        {puoScrivere && riga.remoto && (
+          <MenuItem onClick={() => esegui(onModifica)}>
             <ListItemIcon>
               <SettingsIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Crea su OTA</ListItemText>
+            <ListItemText>Modifica</ListItemText>
           </MenuItem>
         )}
-        {camera.wubookAttiva && (
+        {associata && (
           <MenuItem onClick={() => esegui(onChiusure)}>
             <ListItemIcon>
               <EditCalendarIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Chiusure e restrizioni per periodo</ListItemText>
+            <ListItemText>Chiudi periodo / Soggiorno min-max</ListItemText>
           </MenuItem>
         )}
-        {camera.wubookAttiva && puoScrivere && (
-          <MenuItem onClick={() => esegui(onImpostazioni)}>
-            <ListItemIcon>
-              <SettingsIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Modifica su OTA</ListItemText>
-          </MenuItem>
-        )}
-        {camera.wubookAttiva && puoScrivere && (
+        {associata && puoScrivere && (
           <MenuItem onClick={() => esegui(onDisassocia)} disabled={disassociaInCorso}>
             <ListItemIcon>
               <LinkOffIcon fontSize="small" />
@@ -517,12 +502,12 @@ function MenuAzioniCamera({
             <ListItemText>Disassocia</ListItemText>
           </MenuItem>
         )}
-        {camera.wubookAttiva && puoScrivere && (
+        {puoScrivere && (
           <MenuItem onClick={() => esegui(onElimina)} disabled={eliminaInCorso}>
             <ListItemIcon>
               <DeleteIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText>Elimina da OTA</ListItemText>
+            <ListItemText>Elimina</ListItemText>
           </MenuItem>
         )}
       </Menu>
@@ -530,95 +515,23 @@ function MenuAzioniCamera({
   )
 }
 
-function AssociaCameraWubookDialog({ strutturaId, camera, onClose }: { strutturaId: string; camera: CameraWubookInfoDto; onClose: () => void }) {
-  const remote = useCamereRemoteWubook(strutturaId, true)
-  const associa = useAssociaCameraWubook(strutturaId)
-  const [selezionata, setSelezionata] = useState<CameraWubookRemoteDto | null>(null)
-  const [errore, setErrore] = useState<string | null>(null)
-
-  function conferma() {
-    if (!selezionata) {
-      setErrore('Seleziona una camera OTA.')
-      return
-    }
-    setErrore(null)
-    associa.mutate({ cameraId: camera.cameraId, idCameraWubook: selezionata.id }, { onSuccess: onClose, onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.') })
-  }
-
-  function rimuoviAssociazione() {
-    setErrore(null)
-    associa.mutate({ cameraId: camera.cameraId, idCameraWubook: null }, { onSuccess: onClose, onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.') })
-  }
+/** Quando il pool ha più di una camera reale, chiede quale chiudere per periodo — nessuna ambiguità quando ce n'è solo una (v. apriChiusure). */
+function SceltaCameraChiusuraDialog({ camere, onSeleziona, onClose }: { camere: CameraDto[]; onSeleziona: (c: CameraDto) => void; onClose: () => void }) {
+  const [selezionata, setSelezionata] = useState<CameraDto | null>(null)
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Associa "{camera.cameraNome}" a OTA</DialogTitle>
+      <DialogTitle>Quale camera del pool?</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        {errore && <Alert severity="error">{errore}</Alert>}
         <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-          Scegli la camera già presente sull'OTA a cui corrisponde questa camera locale — nessuna nuova camera viene creata sull'OTA,
-          solo l'associazione viene salvata (a differenza di "Crea su OTA", che invece crea una camera nuova).
+          Questa tipologia ha più camere reali collegate: scegli quella da chiudere per periodo o su cui impostare un soggiorno minimo/massimo.
         </Typography>
-        {remote.isLoading && <Skeleton variant="rounded" height={56} />}
-        {remote.isError && <Alert severity="error">Impossibile recuperare le camere dall'OTA. Verifica le credenziali in Impostazioni.</Alert>}
-        {!remote.isLoading && !remote.isError && (
-          <Autocomplete
-            options={remote.data ?? []}
-            getOptionLabel={(r) => `${r.nome} (id ${r.id})`}
-            value={selezionata}
-            onChange={(_, valore) => setSelezionata(valore)}
-            disabled={associa.isPending}
-            noOptionsText="Nessuna camera trovata sull'OTA"
-            renderInput={(params) => <TextField {...params} label="Camera OTA" placeholder="Cerca per nome…" autoFocus />}
-          />
-        )}
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        {camera.wubookAttiva && (
-          <Button color="error" onClick={rimuoviAssociazione} disabled={associa.isPending} sx={{ mr: 'auto' }}>
-            Rimuovi associazione
-          </Button>
-        )}
-        <Button onClick={onClose} disabled={associa.isPending}>
-          Annulla
-        </Button>
-        <Button variant="contained" color="primary" onClick={conferma} disabled={associa.isPending || remote.isLoading}>
-          Associa
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
-/**
- * Come il bottone globale "Nuova Camera" del vecchio programma (otaservice.web): un solo punto di
- * ingresso per creare una camera su OTA, che parte scegliendo la camera locale già esistente da
- * cui prendere nome/tipologia — non serve più andare a cercare la riga giusta in tabella. Dopo la
- * scelta si riusa lo stesso dialog "Impostazioni OTA" già usato dall'azione per-riga.
- */
-function NuovaCameraOtaDialog({
-  camere,
-  onSeleziona,
-  onClose,
-}: {
-  camere: CameraWubookInfoDto[]
-  onSeleziona: (camera: CameraWubookInfoDto) => void
-  onClose: () => void
-}) {
-  const [selezionata, setSelezionata] = useState<CameraWubookInfoDto | null>(null)
-
-  return (
-    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Nuova camera su OTA</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-        <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>Scegli quale camera locale creare su OTA.</Typography>
         <Autocomplete
           options={camere}
-          getOptionLabel={(c) => (c.tipologiaNome ? `${c.cameraNome} · ${c.tipologiaNome}` : c.cameraNome)}
+          getOptionLabel={(c) => c.nome}
           value={selezionata}
           onChange={(_, valore) => setSelezionata(valore)}
-          noOptionsText="Nessuna camera locale da creare — sono già tutte associate."
-          renderInput={(params) => <TextField {...params} label="Camera locale" autoFocus />}
+          renderInput={(params) => <TextField {...params} label="Camera" autoFocus />}
         />
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
@@ -628,6 +541,200 @@ function NuovaCameraOtaDialog({
         </Button>
       </DialogActions>
     </Dialog>
+  )
+}
+
+function codiceDedottoDaNome(nome: string): string {
+  const alfanumerico = nome.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+  if (alfanumerico.length === 0) return 'ROOM'
+  return alfanumerico.length <= 4 ? alfanumerico.padEnd(4, 'X') : alfanumerico.slice(0, 4)
+}
+
+/**
+ * Un solo dialog "Nuova/Modifica camera" per creare, associare e modificare — il soggetto
+ * dell'associazione OTA è la Tipologia (il pool di camere reali identiche), non più una singola
+ * camera: niente più "Posti letto"/"Disponibilità iniziale" da digitare a mano, sono sempre dedotti
+ * dalle camere reali collegate. `remoto` null = creazione (nessuna camera OTA ancora esistente);
+ * valorizzato = modifica di una camera OTA già esistente (associata o meno a una Tipologia locale).
+ */
+function TipologiaOtaDialog({
+  strutturaId,
+  remoto,
+  tipologiePerAssociazione,
+  tipologieComplete,
+  onClose,
+}: {
+  strutturaId: string
+  remoto: CameraWubookRemoteDto | null
+  tipologiePerAssociazione: TipologiaWubookInfoDto[]
+  tipologieComplete: TipologiaCameraDto[]
+  onClose: () => void
+}) {
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{remoto ? `Camere - Modifica camera #${remoto.id}` : 'Camere - Nuova camera'}</DialogTitle>
+      <TipologiaOtaForm
+        strutturaId={strutturaId}
+        remoto={remoto}
+        tipologiePerAssociazione={tipologiePerAssociazione}
+        tipologieComplete={tipologieComplete}
+        onClose={onClose}
+      />
+    </Dialog>
+  )
+}
+
+function TipologiaOtaForm({
+  strutturaId,
+  remoto,
+  tipologiePerAssociazione,
+  tipologieComplete,
+  onClose,
+}: {
+  strutturaId: string
+  remoto: CameraWubookRemoteDto | null
+  tipologiePerAssociazione: TipologiaWubookInfoDto[]
+  tipologieComplete: TipologiaCameraDto[]
+  onClose: () => void
+}) {
+  const aggiorna = useAggiornaTipologia(strutturaId)
+  const associa = useAssociaTipologiaWubook(strutturaId)
+  const sincronizza = useSincronizzaWubookTipologia(strutturaId)
+
+  // La Tipologia già associata a questa riga OTA (se esiste) — quella da rilasciare se l'operatore
+  // ne sceglie un'altra dal combo "Tipologia esistente".
+  const tipologiaAttuale = remoto ? tipologiePerAssociazione.find((t) => t.wubookAttiva && t.idCameraWubook === remoto.id) ?? null : null
+  const tipologiaAttualeCompleta = tipologiaAttuale ? tipologieComplete.find((t) => t.id === tipologiaAttuale.tipologiaId) ?? null : null
+
+  // Opzioni del combo: le Tipologie non ancora su OTA (con almeno una camera reale), più quella
+  // eventualmente già associata a QUESTA riga (altrimenti sparirebbe dalle opzioni non appena la si osserva).
+  const opzioniCombo = tipologiePerAssociazione.filter(
+    (t) => (!t.wubookAttiva && t.camereCollegate > 0) || t.tipologiaId === tipologiaAttuale?.tipologiaId,
+  )
+
+  const [selezionataId, setSelezionataId] = useState<string | null>(tipologiaAttuale?.tipologiaId ?? null)
+  const [nome, setNome] = useState(remoto?.nome ?? '')
+  const [codice, setCodice] = useState(remoto?.shortName ?? (remoto ? codiceDedottoDaNome(remoto.nome) : ''))
+  const [prezzo, setPrezzo] = useState(remoto ? String(remoto.prezzo) : '')
+  const [woodoo, setWoodoo] = useState(tipologiaAttualeCompleta?.wubookSoloWoodoo ?? false)
+  const [errore, setErrore] = useState<string | null>(null)
+
+  const inCorso = aggiorna.isPending || associa.isPending || sincronizza.isPending
+  const opzioneSelezionata = opzioniCombo.find((t) => t.tipologiaId === selezionataId) ?? null
+
+  // Come il legacy: scegliere una Tipologia precompila gli altri campi SOLO in creazione (mai in
+  // modifica, dove i campi mostrano già il valore reale della camera OTA/dell'associazione).
+  function seleziona(t: TipologiaWubookInfoDto | null) {
+    setSelezionataId(t?.tipologiaId ?? null)
+    if (!remoto && t) {
+      const completa = tipologieComplete.find((x) => x.id === t.tipologiaId)
+      setNome(t.tipologiaNome)
+      setCodice(completa?.codiceCameraWubook ?? codiceDedottoDaNome(t.tipologiaNome))
+      setPrezzo(completa?.prezzoDefault != null ? String(completa.prezzoDefault) : '')
+      setWoodoo(completa?.wubookSoloWoodoo ?? false)
+    }
+  }
+
+  function salva() {
+    if (!selezionataId) {
+      setErrore('Seleziona una tipologia esistente.')
+      return
+    }
+    if (nome.trim() === '') {
+      setErrore('Il nome è obbligatorio.')
+      return
+    }
+    setErrore(null)
+
+    const selezionata = tipologieComplete.find((t) => t.id === selezionataId)
+    if (!selezionata) {
+      setErrore('Tipologia non trovata.')
+      return
+    }
+
+    const request: TipologiaCameraRequest = {
+      tipologiaCamera: nome.trim(),
+      prezzoDefault: prezzo.trim() === '' ? null : Number(prezzo),
+      numeroImplementoPersona: selezionata.numeroImplementoPersona,
+      implemento: selezionata.implemento,
+      spesePulizia: selezionata.spesePulizia,
+      animali: selezionata.animali,
+      cauzione: selezionata.cauzione,
+      codiceCameraWubook: codice.trim() === '' ? null : codice.trim(),
+      wubookSoloWoodoo: woodoo,
+    }
+
+    const onError = (err: unknown) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    const giaPuntaQui = remoto !== null && selezionata.idCameraWubook === remoto.id && selezionata.wubookAttiva
+
+    aggiorna.mutate(
+      { tipologiaId: selezionataId, request },
+      {
+        onSuccess: () => {
+          if (remoto && !giaPuntaQui) {
+            associa.mutate(
+              { tipologiaId: selezionataId, idCameraWubook: remoto.id },
+              {
+                onSuccess: () => {
+                  const push = () => sincronizza.mutate(selezionataId, { onSuccess: onClose, onError })
+                  if (tipologiaAttuale && tipologiaAttuale.tipologiaId !== selezionataId) {
+                    associa.mutate({ tipologiaId: tipologiaAttuale.tipologiaId, idCameraWubook: null }, { onSuccess: push, onError: push })
+                  } else {
+                    push()
+                  }
+                },
+                onError,
+              },
+            )
+          } else {
+            sincronizza.mutate(selezionataId, { onSuccess: onClose, onError })
+          }
+        },
+        onError,
+      },
+    )
+  }
+
+  return (
+    <>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        {errore && <Alert severity="error">{errore}</Alert>}
+        <Autocomplete
+          options={opzioniCombo}
+          getOptionLabel={(t) => t.tipologiaNome}
+          value={opzioneSelezionata}
+          onChange={(_, valore) => seleziona(valore)}
+          disabled={inCorso}
+          noOptionsText="Nessuna tipologia disponibile — creane una prima nella pagina Tipologie."
+          renderInput={(params) => <TextField {...params} label="Tipologia esistente" placeholder="Seleziona tipologia…" autoFocus />}
+        />
+        {opzioneSelezionata && (
+          <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
+            {opzioneSelezionata.camereCollegate} camera/e reale/i collegata/e — la quantità inviata a OTA segue sempre questo numero.
+          </Typography>
+        )}
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+          <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} disabled={inCorso} />
+          <TextField
+            label="Codice Camera (max 4)"
+            value={codice}
+            onChange={(e) => setCodice(e.target.value.toUpperCase().slice(0, 4))}
+            disabled={inCorso}
+            slotProps={{ htmlInput: { style: { fontFamily: fontMono } } }}
+          />
+        </Box>
+        <TextField label="Prezzo Default" type="number" value={prezzo} onChange={(e) => setPrezzo(e.target.value)} disabled={inCorso} slotProps={{ htmlInput: { min: 0 } }} />
+        <FormControlLabel control={<Checkbox checked={woodoo} onChange={(e) => setWoodoo(e.target.checked)} disabled={inCorso} />} label="WooDoo CM only" />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} disabled={inCorso}>
+          Annulla
+        </Button>
+        <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
+          {inCorso ? 'Salvataggio…' : 'Salva'}
+        </Button>
+      </DialogActions>
+    </>
   )
 }
 

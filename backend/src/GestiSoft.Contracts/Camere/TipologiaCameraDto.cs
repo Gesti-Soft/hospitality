@@ -9,4 +9,8 @@ public record TipologiaCameraDto(
     decimal? Cauzione,
     decimal? PrezzoDefault,
     int NumeroImplementoPersona,
-    decimal Implemento);
+    decimal Implemento,
+    int? IdCameraWubook,
+    bool WubookAttiva,
+    string? CodiceCameraWubook,
+    bool WubookSoloWoodoo);

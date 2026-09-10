@@ -19,5 +19,9 @@ public class SettingTipologiaConfiguration : IEntityTypeConfiguration<SettingTip
         builder.Property(t => t.Cauzione).HasPrecision(18, 2);
         builder.Property(t => t.PrezzoDefault).HasPrecision(18, 2);
         builder.Property(t => t.Implemento).HasPrecision(18, 2);
+
+        builder.Property(t => t.CodiceCameraWubook).HasMaxLength(4);
+        builder.Property(t => t.WubookSoloWoodoo).HasDefaultValue(false);
+        builder.HasIndex(t => new { t.StrutturaId, t.IdCameraWubook });
     }
 }

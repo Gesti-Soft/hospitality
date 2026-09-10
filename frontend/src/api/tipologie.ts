@@ -11,6 +11,10 @@ export interface TipologiaCameraDto {
   prezzoDefault: number | null
   numeroImplementoPersona: number
   implemento: number
+  idCameraWubook: number | null
+  wubookAttiva: boolean
+  codiceCameraWubook: string | null
+  wubookSoloWoodoo: boolean
 }
 
 export interface TipologiaCameraRequest {
@@ -21,6 +25,9 @@ export interface TipologiaCameraRequest {
   prezzoDefault: number | null
   numeroImplementoPersona: number
   implemento: number
+  /** Impostazioni OTA per l'intero pool — editabili solo dal dialog camera della pagina Servizi OTA, mai da qui: sempre da passare invariate per non azzerarle. */
+  codiceCameraWubook: string | null
+  wubookSoloWoodoo: boolean
 }
 
 export function useTipologie(strutturaId: string | null) {

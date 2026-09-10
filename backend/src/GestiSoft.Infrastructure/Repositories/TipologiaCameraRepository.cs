@@ -10,6 +10,9 @@ public class TipologiaCameraRepository(GestiSoftDbContext db) : ITipologiaCamera
     public Task<SettingTipologia?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         db.TipologieCamera.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
 
+    public Task<SettingTipologia?> GetByIdWubookAsync(Guid strutturaId, int idCameraWubook, CancellationToken cancellationToken) =>
+        db.TipologieCamera.FirstOrDefaultAsync(t => t.StrutturaId == strutturaId && t.IdCameraWubook == idCameraWubook, cancellationToken);
+
     public async Task<IReadOnlyList<SettingTipologia>> ListByStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken) =>
         await db.TipologieCamera.AsNoTracking()
             .Where(t => t.StrutturaId == strutturaId)

@@ -37,5 +37,10 @@ public class PrenotazioneConfiguration : IEntityTypeConfiguration<Prenotazione>
             .WithMany()
             .HasForeignKey(p => p.CameraId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(p => p.Tipologia)
+            .WithMany()
+            .HasForeignKey(p => p.TipologiaId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

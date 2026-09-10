@@ -10,7 +10,11 @@ using GestiSoft.Domain.Enums;
 namespace GestiSoft.Application.Prenotazioni;
 
 public record CreaPrenotazioneRequest(
-    Guid CameraId,
+    // Esattamente uno tra i due va indicato: CameraId per scegliere una camera specifica (come
+    // sempre), TipologiaId per prenotare "una qualsiasi camera di questo tipo" e lasciare che il
+    // sistema assegni la prima libera (v. AssegnazioneCameraService) — pool di camere identiche.
+    Guid? CameraId,
+    Guid? TipologiaId,
     string? Agenzia,
     string? NumeroPrenotazione,
     decimal? ImportoPrenotazione,
@@ -25,7 +29,8 @@ public record CreaPrenotazioneRequest(
     bool CauzioneAttiva = true);
 
 public record AggiornaPrenotazioneRequest(
-    Guid CameraId,
+    Guid? CameraId,
+    Guid? TipologiaId,
     string? Agenzia,
     string? NumeroPrenotazione,
     decimal? ImportoPrenotazione,
@@ -57,7 +62,8 @@ public class PrenotazioniService(
     PermessoStrutturaGuard permessoGuard,
     ILogEventoService logEventi,
     OspitiService ospitiService,
-    NotificaService notificaService)
+    NotificaService notificaService,
+    AssegnazioneCameraService assegnazioneCamera)
 {
     /// <summary>
     /// Se il numero non è stato scritto a mano e l'agenzia è "Diretta", genera il progressivo
@@ -147,8 +153,23 @@ public class PrenotazioniService(
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationWrite, cancellationToken);
 
-        await ValidaCameraECheckInOutAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, cancellationToken);
-        await EnsureNessunaSovrapposizioneAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, escludiPrenotazioneId: null, cancellationToken);
+        if (request.CheckOut.Date <= request.CheckIn.Date)
+        {
+            throw new ConflictException("La data di check-out deve essere successiva al check-in.");
+        }
+
+        // Scelta diretta di una camera (come sempre) oppure solo la Tipologia: in quel caso qui è
+        // il percorso "manuale" (l'operatore sta creando la prenotazione lui stesso), quindi se il
+        // pool è già pieno per queste date si blocca subito con un errore — a differenza del pull
+        // da OTA (WubookPrenotazioniService), che in questo caso registra comunque la prenotazione
+        // senza camera invece di perderla, perché lì l'ospite ha già prenotato per davvero altrove.
+        var cameraId = request.CameraId
+            ?? (request.TipologiaId is { } tipologiaId
+                ? (await assegnazioneCamera.RisolviCameraLiberaAsync(strutturaId, tipologiaId, request.CheckIn, request.CheckOut, escludiPrenotazioneId: null, cancellationToken)).Id
+                : throw new ConflictException("Specifica una camera o una tipologia."));
+
+        await ValidaCameraECheckInOutAsync(strutturaId, cameraId, request.CheckIn, request.CheckOut, cancellationToken);
+        await EnsureNessunaSovrapposizioneAsync(strutturaId, cameraId, request.CheckIn, request.CheckOut, escludiPrenotazioneId: null, cancellationToken);
 
         var numeroPrenotazione = await NumeroPrenotazioneOAutoIncrementoAsync(strutturaId, request.Agenzia, request.NumeroPrenotazione, request.CheckIn.Year, cancellationToken);
 
@@ -166,7 +187,8 @@ public class PrenotazioniService(
         var entity = new Prenotazione
         {
             StrutturaId = strutturaId,
-            CameraId = request.CameraId,
+            CameraId = cameraId,
+            TipologiaId = request.TipologiaId,
             Agenzia = request.Agenzia,
             NumeroPrenotazione = numeroPrenotazione,
             ImportoPrenotazione = request.ImportoPrenotazione,
@@ -189,7 +211,7 @@ public class PrenotazioniService(
         };
 
         await prenotazioni.AddAsync(entity, cancellationToken);
-        await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione creata (camera {request.CameraId}, {request.CheckIn:dd/MM/yyyy}–{request.CheckOut:dd/MM/yyyy}).", cancellationToken);
+        await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione creata (camera {cameraId}, {request.CheckIn:dd/MM/yyyy}–{request.CheckOut:dd/MM/yyyy}).", cancellationToken);
         return entity;
     }
 
@@ -220,10 +242,37 @@ public class PrenotazioniService(
 
         if (!completata)
         {
-            await ValidaCameraECheckInOutAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, cancellationToken);
-            await EnsureNessunaSovrapposizioneAsync(strutturaId, request.CameraId, request.CheckIn, request.CheckOut, escludiPrenotazioneId: prenotazioneId, cancellationToken);
+            if (request.CheckOut.Date <= request.CheckIn.Date)
+            {
+                throw new ConflictException("La data di check-out deve essere successiva al check-in.");
+            }
 
-            entity.CameraId = request.CameraId;
+            // Se la camera scelta in precedenza resta compatibile con le nuove date non la
+            // ritocchiamo: rifare la ricerca "prima libera" ad ogni modifica sposterebbe senza motivo
+            // un ospite già assegnato a una camera del pool.
+            Guid cameraId;
+            if (request.CameraId is { } cameraIdEsplicita)
+            {
+                cameraId = cameraIdEsplicita;
+            }
+            else if (request.TipologiaId is { } tipologiaId)
+            {
+                var restaValida = entity.CameraId is { } cameraIdAttuale
+                    && !await prenotazioni.EsisteSovrapposizioneAsync(strutturaId, cameraIdAttuale, request.CheckIn, request.CheckOut, prenotazioneId, cancellationToken);
+                cameraId = restaValida
+                    ? entity.CameraId!.Value
+                    : (await assegnazioneCamera.RisolviCameraLiberaAsync(strutturaId, tipologiaId, request.CheckIn, request.CheckOut, prenotazioneId, cancellationToken)).Id;
+            }
+            else
+            {
+                throw new ConflictException("Specifica una camera o una tipologia.");
+            }
+
+            await ValidaCameraECheckInOutAsync(strutturaId, cameraId, request.CheckIn, request.CheckOut, cancellationToken);
+            await EnsureNessunaSovrapposizioneAsync(strutturaId, cameraId, request.CheckIn, request.CheckOut, escludiPrenotazioneId: prenotazioneId, cancellationToken);
+
+            entity.CameraId = cameraId;
+            entity.TipologiaId = request.TipologiaId;
             entity.Agenzia = request.Agenzia;
             entity.NumeroPrenotazione = await NumeroPrenotazioneOAutoIncrementoAsync(strutturaId, request.Agenzia, request.NumeroPrenotazione, request.CheckIn.Year, cancellationToken);
             entity.CheckIn = request.CheckIn;

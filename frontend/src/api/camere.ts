@@ -15,11 +15,6 @@ export interface CameraDto {
   nome: string
   capacitaOspiti: number | null
   soggiornoMinimo: number | null
-  idCameraWubook: number | null
-  wubookAttiva: boolean
-  codiceCameraWubook: string | null
-  prezzoWubookOverride: number | null
-  wubookSoloWoodoo: boolean
 }
 
 export interface CameraRequest {
@@ -28,10 +23,6 @@ export interface CameraRequest {
   nome: string
   capacitaOspiti: number | null
   soggiornoMinimo: number | null
-  /** Impostazioni specifiche del push Wubook — editabili solo dal dialog "Impostazioni Wubook" nella pagina Wubook, mai da qui: sempre da passare invariate per non azzerarle ad ogni salvataggio. */
-  codiceCameraWubook: string | null
-  prezzoWubookOverride: number | null
-  wubookSoloWoodoo: boolean
 }
 
 export function useCamere(strutturaId: string | null) {
