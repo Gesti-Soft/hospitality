@@ -32,7 +32,7 @@ import {
   type PrenotazioneRequest,
 } from '../api/prenotazioni'
 import { ApiError } from '../api/client'
-import { aggiungiGiorni, formatoInputData, inizioGiornoLocale, isoLocale, parsaInputData } from '../lib/date'
+import { aggiungiGiorni, formatoInputData, inizioGiornoLocale, isOggiOPrima, isoLocale, parsaInputData } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 import { tokens } from '../theme'
@@ -541,11 +541,16 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2.5, flexWrap: 'wrap', gap: 1 }}>
-        {puoScrivere && modifica && modifica.statoPrenotazione !== StatoPrenotazione.Annullata && modifica.statoPrenotazione !== StatoPrenotazione.Completata && (
-          <Button color="error" onClick={eseguiAnnulla} disabled={inCorso} sx={{ mr: 'auto' }}>
-            Annulla prenotazione
-          </Button>
-        )}
+        {/* Una prenotazione già in corso (ospite dentro) non si annulla: si chiude con il check-out. */}
+        {puoScrivere &&
+          modifica &&
+          modifica.statoPrenotazione !== StatoPrenotazione.Annullata &&
+          modifica.statoPrenotazione !== StatoPrenotazione.Completata &&
+          modifica.statoPrenotazione !== StatoPrenotazione.InCorso && (
+            <Button color="error" onClick={eseguiAnnulla} disabled={inCorso} sx={{ mr: 'auto' }}>
+              Annulla prenotazione
+            </Button>
+          )}
         {modifica && (
           <Button onClick={() => setSchedaOspitiAperta(true)} disabled={inCorso}>
             Scheda ospiti
@@ -554,11 +559,15 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
         <Button onClick={onClose} disabled={inCorso}>
           Chiudi
         </Button>
-        {puoCambiareStatoCamera && modifica && modifica.statoPrenotazione === StatoPrenotazione.Incompleta && (
-          <Button variant="contained" onClick={eseguiCheckIn} disabled={inCorso}>
-            Check-in
-          </Button>
-        )}
+        {/* Il check-in si può fare solo dal giorno dell'arrivo in poi, mai su una prenotazione futura. */}
+        {puoCambiareStatoCamera &&
+          modifica &&
+          modifica.statoPrenotazione === StatoPrenotazione.Incompleta &&
+          isOggiOPrima(modifica.checkIn) && (
+            <Button variant="contained" onClick={eseguiCheckIn} disabled={inCorso}>
+              Check-in
+            </Button>
+          )}
         {puoCambiareStatoCamera && modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && (
           <Button variant="contained" onClick={eseguiCheckOut} disabled={inCorso}>
             Check-out
