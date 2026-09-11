@@ -46,7 +46,7 @@ export function RiepilogoCassaPage() {
           })}
           {[
             { etichetta: `Saldo netto (${anno})`, valore: dati.saldo },
-            { etichetta: 'Cassa attuale', valore: dati.cassaAttuale },
+            { etichetta: `Cassa (fino al ${anno})`, valore: dati.cassaAttuale },
           ].map((r) => {
             const colore = r.valore < 0 ? tokens.error600 : tokens.ok600
             return (

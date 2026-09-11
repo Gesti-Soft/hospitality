@@ -24,6 +24,11 @@ public class CauzioneRepository(GestiSoftDbContext db) : ICauzioneRepository
         return await query.OrderByDescending(c => c.DataInserimento).ToListAsync(cancellationToken);
     }
 
+    public Task<decimal> SommaFinoAdAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken) =>
+        db.Cauzioni.AsNoTracking()
+            .Where(c => c.StrutturaId == strutturaId && (c.DataInserimento == null || c.DataInserimento.Value.Year <= anno))
+            .SumAsync(c => c.ImportoCauzione ?? 0, cancellationToken);
+
     public async Task<IReadOnlyList<int>> ListaAnniConDatiAsync(Guid strutturaId, CancellationToken cancellationToken) =>
         await db.Cauzioni.AsNoTracking()
             .Where(c => c.StrutturaId == strutturaId && c.DataInserimento != null)

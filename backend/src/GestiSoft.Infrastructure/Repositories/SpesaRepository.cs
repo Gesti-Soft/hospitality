@@ -21,6 +21,11 @@ public class SpesaRepository(GestiSoftDbContext db) : ISpesaRepository
         return await query.OrderByDescending(s => s.DataSpesa).ToListAsync(cancellationToken);
     }
 
+    public Task<decimal> SommaFinoAdAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken) =>
+        db.Spese.AsNoTracking()
+            .Where(s => s.StrutturaId == strutturaId && (s.Anno == null || s.Anno <= anno))
+            .SumAsync(s => s.ImportoSpesa, cancellationToken);
+
     public async Task<IReadOnlyList<int>> ListaAnniConDatiAsync(Guid strutturaId, CancellationToken cancellationToken) =>
         await db.Spese.AsNoTracking()
             .Where(s => s.StrutturaId == strutturaId && s.Anno != null)

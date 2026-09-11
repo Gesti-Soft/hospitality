@@ -15,7 +15,8 @@ public record RiepilogoCassaResult(int Anno, decimal ImportoPagatoPrenotazioni, 
 /// Spese ed entrate di cassa — porta FinanzeLogic del legacy (CRUD puro, nessuna regola di
 /// business oltre allo scoping per struttura, assente nel legacy single-tenant). Il riepilogo
 /// cassa porta FinanzeLogic.GetCassa: nel legacy sommava su tutta la tabella senza filtro
-/// struttura; qui è sempre filtrato per StrutturaId e per anno.
+/// struttura; qui è sempre filtrato per StrutturaId — il Saldo per il solo anno selezionato,
+/// la Cassa attuale come cumulato dall'inizio fino a quell'anno incluso.
 /// </summary>
 public class FinanzeService(
     ISpesaRepository spese,
@@ -166,11 +167,14 @@ public class FinanzeService(
         var totaleSpese = (await spese.ListAsync(strutturaId, anno, cancellationToken)).Sum(s => s.ImportoSpesa);
         var saldo = incassoPrenotazioni + totaleCauzioni + totaleEntrate - totaleSpese;
 
-        var incassoTotale = await prenotazioni.SommaImportoPagatoTotaleAsync(strutturaId, cancellationToken);
-        var cauzioniTotale = (await cauzioni.ListByStrutturaAsync(strutturaId, null, cancellationToken)).Sum(c => c.ImportoCauzione ?? 0);
-        var entrateTotale = (await entrate.ListAsync(strutturaId, null, cancellationToken)).Sum(e => e.ImportoEntrata);
-        var speseTotale = (await spese.ListAsync(strutturaId, null, cancellationToken)).Sum(s => s.ImportoSpesa);
-        var cassaAttuale = incassoTotale + cauzioniTotale + entrateTotale - speseTotale;
+        // La cassa è cumulata: tutto quello che è entrato e uscito dall'inizio FINO all'anno
+        // selezionato incluso, mai gli anni successivi (altrimenti guardando il 2025 ci finirebbero
+        // dentro gli acconti delle prenotazioni 2026, soldi che a quella data non c'erano ancora).
+        var incassoFinoAdAnno = await prenotazioni.SommaImportoPagatoFinoAdAnnoAsync(strutturaId, anno, cancellationToken);
+        var cauzioniFinoAdAnno = await cauzioni.SommaFinoAdAnnoAsync(strutturaId, anno, cancellationToken);
+        var entrateFinoAdAnno = await entrate.SommaFinoAdAnnoAsync(strutturaId, anno, cancellationToken);
+        var speseFinoAdAnno = await spese.SommaFinoAdAnnoAsync(strutturaId, anno, cancellationToken);
+        var cassaAttuale = incassoFinoAdAnno + cauzioniFinoAdAnno + entrateFinoAdAnno - speseFinoAdAnno;
 
         return new RiepilogoCassaResult(anno, incassoPrenotazioni, totaleCauzioni, totaleEntrate, totaleSpese, saldo, cassaAttuale);
     }
