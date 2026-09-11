@@ -80,7 +80,9 @@ public class AuthService(
         if (BloccoAttivo(utente, out var minutiMancanti))
         {
             await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
-            throw new UnauthorizedAppException($"Troppi tentativi falliti: riprova tra {minutiMancanti} minuti.");
+            throw new UnauthorizedAppException(
+                $"Troppi tentativi falliti: riprova tra {minutiMancanti} minuti.",
+                await IndicazioneAssistenzaAsync(utente, cancellationToken));
         }
 
         var esito = passwordHasher.VerifyHashedPassword(utente, utente.PasswordHash, password);
@@ -88,13 +90,13 @@ public class AuthService(
         {
             await RegistraTentativoFallitoAsync(utente, cancellationToken);
             await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
-            throw new UnauthorizedAppException("Password errata.");
+            throw new UnauthorizedAppException("Password errata.", await IndicazioneAssistenzaAsync(utente, cancellationToken));
         }
 
         if (!utente.Attivo)
         {
             await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
-            throw new UnauthorizedAppException("Utente disabilitato. Contatta l'amministrazione.");
+            throw new UnauthorizedAppException("Utente disabilitato.", await IndicazioneAssistenzaAsync(utente, cancellationToken));
         }
 
         if (utente.ClienteId is { } clienteId)
@@ -103,7 +105,9 @@ public class AuthService(
             if (cliente is null || !cliente.Attivo)
             {
                 await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
-                throw new UnauthorizedAppException("Il tuo account è stato sospeso. Contatta l'amministrazione.");
+                throw new UnauthorizedAppException(
+                    "Il tuo account è stato sospeso.",
+                    await IndicazioneAssistenzaAsync(utente, cancellationToken));
             }
         }
 
@@ -117,7 +121,9 @@ public class AuthService(
         if (!utente.IsSuperAdmin && await TutteLeStruttureBloccateAsync(utente, cancellationToken))
         {
             await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
-            throw new UnauthorizedAppException("La licenza della tua struttura è scaduta. Contatta l'assistenza GestiSoft per rinnovarla.");
+            throw new UnauthorizedAppException(
+                "La licenza della tua struttura è scaduta.",
+                await IndicazioneAssistenzaAsync(utente, cancellationToken));
         }
 
         await AzzeraTentativiAsync(utente, cancellationToken);
@@ -151,7 +157,9 @@ public class AuthService(
 
         if (BloccoAttivo(utente, out var minutiMancanti))
         {
-            throw new UnauthorizedAppException($"Troppi tentativi falliti: riprova tra {minutiMancanti} minuti.");
+            throw new UnauthorizedAppException(
+                $"Troppi tentativi falliti: riprova tra {minutiMancanti} minuti.",
+                await IndicazioneAssistenzaAsync(utente, cancellationToken));
         }
 
         var codiceRecuperoUsato = false;
@@ -168,7 +176,7 @@ public class AuthService(
                     clienteId: utente.ClienteId,
                     categoria: "Auth",
                     cancellationToken: cancellationToken);
-                throw new UnauthorizedAppException("Codice non valido.");
+                throw new UnauthorizedAppException("Codice non valido.", await IndicazioneAssistenzaAsync(utente, cancellationToken));
             }
 
             await dueFattori.SegnaCodiceUsatoAsync(codiceRecupero, cancellationToken);
@@ -251,6 +259,34 @@ public class AuthService(
     /// soft-eliminata non conta né a favore né contro; una licenza mai impostata (null) non conta come
     /// scaduta.
     /// </summary>
+    /// <summary>
+    /// A chi rivolgersi quando il login non riesce: ognuno sale di un gradino nella propria catena,
+    /// mai oltre. Un dipendente si ferma all'amministratore della sua struttura (che può
+    /// reimpostargli la password), l'amministratore al titolare dell'account, e solo il titolare —
+    /// o il Super Admin, che è GestiSoft — arriva a noi. Prima questa indicazione era una riga fissa
+    /// in fondo alla pagina di login che mandava tutti quanti a info@gestisoft.it, compreso chi ha
+    /// un amministratore a due passi di distanza che gli risolve il problema in un minuto.
+    /// Il ruolo si conosce solo dopo aver trovato l'utente dall'email: per un'email sconosciuta non
+    /// viene data alcuna indicazione (vedi UnauthorizedAppException.Assistenza).
+    /// </summary>
+    private async Task<string> IndicazioneAssistenzaAsync(Utente utente, CancellationToken cancellationToken)
+    {
+        if (utente.IsSuperAdmin || utente.IsClienteAccount || utente.ClienteId is null)
+        {
+            return "Se non riesci ad accedere, Contatta GestiSoft: info@gestisoft.it.";
+        }
+
+        // "Amministratore" = chi gestisce gli utenti (permesso SettingUser su almeno una Struttura
+        // del suo Cliente): è esattamente chi ha in mano il reset della password altrui, quindi chi
+        // non ce l'ha deve rivolgersi a lui, e lui a chi sta sopra.
+        var amministratore = await utentiStrutture.HaGestioneUtentiClienteAsync(
+            utente.Id, utente.ClienteId.Value, cancellationToken);
+
+        return amministratore
+            ? "Se non riesci ad accedere, rivolgiti all'amministratore generale del tuo account."
+            : "Se non riesci ad accedere, rivolgiti all'amministratore della tua struttura.";
+    }
+
     private async Task<bool> TutteLeStruttureBloccateAsync(Utente utente, CancellationToken cancellationToken)
     {
         var struttureRaggiungibili = utente.IsClienteAccount

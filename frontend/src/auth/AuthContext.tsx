@@ -11,10 +11,28 @@ import {
   type Sessione,
 } from './tokenStorage'
 
+/**
+ * Il campo "assistenza" delle ProblemDetails restituite da /auth: a chi rivolgersi per rientrare,
+ * scelto dal backend in base al ruolo di chi sta provando ad accedere (vedi
+ * AuthService.IndicazioneAssistenzaAsync). Assente quando l'email non corrisponde a nessun utente.
+ */
+function leggiAssistenza(err: unknown): string | null {
+  if (!(err instanceof ApiError)) {
+    return null
+  }
+  const corpo = err.dettagli
+  if (corpo && typeof corpo === 'object' && 'assistenza' in corpo && typeof corpo.assistenza === 'string') {
+    return corpo.assistenza
+  }
+  return null
+}
+
 interface AuthContextValue {
   sessione: Sessione | null
   loading: boolean
   errore: string | null
+  /** Riga di indicazione mostrata sotto l'errore: a chi rivolgersi, secondo il ruolo dell'utente. */
+  assistenza: string | null
   /** Risolve a true quando manca solo il codice di verifica: la pagina di login passa al secondo passo. */
   accedi: (email: string, password: string) => Promise<boolean>
   /** Secondo passo, valido solo dopo un accedi() che ha chiesto il codice. */
@@ -31,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessione, setSessione] = useState<Sessione | null>(() => leggiSessione())
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState<string | null>(null)
+  const [assistenza, setAssistenza] = useState<string | null>(null)
   // Dura quanto il passaggio dal form password al form codice: vale pochi minuti e non apre nulla
   // da solo, quindi resta in memoria e non in localStorage — chiudendo la pagina si ricomincia.
   const [tokenVerifica2Fa, setTokenVerifica2Fa] = useState<string | null>(null)
@@ -63,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const accedi = async (email: string, password: string): Promise<boolean> => {
     setLoading(true)
     setErrore(null)
+    setAssistenza(null)
     try {
       const risposta = await loginRequest({ email, password, tokenDispositivo: leggiTokenDispositivo() })
 
@@ -77,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false
     } catch (err) {
       setErrore(err instanceof ApiError ? err.message : 'Impossibile contattare il server.')
+      setAssistenza(leggiAssistenza(err))
       throw err
     } finally {
       setLoading(false)
@@ -91,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setLoading(true)
     setErrore(null)
+    setAssistenza(null)
     try {
       const risposta = await verifica2FaRequest({ tokenVerifica2Fa, codice, ricordaDispositivo })
       if (risposta.tokenDispositivo) {
@@ -100,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       apriSessione(risposta.sessione)
     } catch (err) {
       setErrore(err instanceof ApiError ? err.message : 'Impossibile contattare il server.')
+      setAssistenza(leggiAssistenza(err))
       throw err
     } finally {
       setLoading(false)
@@ -109,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const annullaVerifica2Fa = () => {
     setTokenVerifica2Fa(null)
     setErrore(null)
+    setAssistenza(null)
   }
 
   const esci = () => {
@@ -125,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessione,
         loading,
         errore,
+        assistenza,
         accedi,
         completaVerifica2Fa,
         annullaVerifica2Fa,

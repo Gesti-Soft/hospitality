@@ -1,6 +1,62 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-11 (sessione successiva — sicurezza degli accessi: blocco dopo 5 tentativi falliti + rate limit dedicato al login, verifica in due passaggi TOTP con Google Authenticator (facoltativa, con codici di recupero e dispositivo ricordato 7 giorni), pagina "Il mio account" per tutti, strumenti di assistenza Super Admin (sblocca accesso, azzera 2FA), download del database tracciato a log, log del Cliente limitato alla struttura selezionata e nuova vista "Accessi e sicurezza" cross-Cliente; più nazione ISO2 dedotta in fattura con correzione del dato "GBF" del Regno Unito, cassa cumulata fino all'anno selezionato e due rifiniture su prenotazioni/fattura. Deciso di non cifrare backup e dump per ora, vedi punto 479.)
+Ultimo aggiornamento: 2026-09-11 (sessione successiva — pagina di login: tolto il link "Password dimenticata?" (non è mai esistito un recupero automatico) e tolta la riga fissa che mandava chiunque a info@gestisoft.it; al suo posto, dentro il messaggio d'errore, l'indicazione su a chi rivolgersi calcolata sul ruolo di chi sta provando ad accedere — dipendente → amministratore della sua struttura, amministratore → amministratore generale dell'account, titolare e Super Admin → GestiSoft.)
+
+## Fatto — pagina di login: niente recupero password, e ognuno sa a chi rivolgersi
+
+Richiesta dell'utente in due righe ("nel login non deve esserci dimentica password" e la catena di
+chi contatta chi), applicata alla sola pagina di login: la parte di sicurezza vera — blocco dopo 5
+tentativi, 2FA, rate limit — resta quella della sessione precedente, qui cambia solo cosa legge chi
+non riesce a entrare.
+
+486. **Tolto il link "Password dimenticata?".** Non è mai esistito un recupero automatico (nessuna
+     email di reset, nessun token a scadenza): il link era un `href="#"` che non faceva nulla e
+     prometteva una cosa che il gestionale non fa. Le password altrui le reimposta chi amministra
+     l'account, ed è proprio quello che ora l'errore dice all'utente.
+
+487. **L'indicazione su a chi rivolgersi dipende dal ruolo di chi sta provando ad accedere.** Prima
+     in fondo alla pagina c'era una riga fissa — "Problemi di accesso? Scrivi a info@gestisoft.it" —
+     uguale per tutti: mandava a GestiSoft anche il dipendente che ha, nella sua stessa struttura,
+     un amministratore capace di rimetterlo dentro in un minuto. Ora quella riga non c'è più e
+     l'indicazione compare **dentro l'errore**, su misura: dipendente → "rivolgiti all'amministratore
+     della tua struttura", amministratore → "rivolgiti all'amministratore generale del tuo account",
+     titolare (`IsClienteAccount`) e Super Admin → "scrivi a GestiSoft: info@gestisoft.it". Ognuno
+     sale di un gradino nella propria catena, mai oltre.
+
+488. **"Amministratore" è chi ha il permesso `SettingUser`** su almeno una Struttura del proprio
+     Cliente (`IUtenteStrutturaRepository.HaGestioneUtentiClienteAsync`, lo stesso controllo che
+     autorizza il reset della password altrui), non chi ha `RuoloUtente.Administrator` — quello è
+     un'etichetta e non dà alcun potere. Così l'indicazione punta sempre a qualcuno che può davvero
+     fare qualcosa, non a un collega con un titolo.
+
+489. **Meccanica**: nuova proprietà `Assistenza` su `UnauthorizedAppException`, valorizzata da
+     `AuthService.IndicazioneAssistenzaAsync` e messa dal `GlobalExceptionHandler` in un campo a
+     parte delle ProblemDetails (`assistenza`), non dentro `detail`: la pagina di login la mostra
+     come seconda riga dell'Alert, sotto il messaggio. Vale su tutti i fallimenti in cui l'utente è
+     noto — password errata, account bloccato (sia al login sia sul codice), utente disabilitato,
+     Cliente sospeso, licenza scaduta, codice di verifica sbagliato. Per un'**email sconosciuta** non
+     viene detto nulla: il ruolo non si sa, e indicare una catena a caso non aiuterebbe nessuno.
+     Tolte dai messaggi le code fisse "Contatta l'amministrazione." e "Contatta l'assistenza
+     GestiSoft per rinnovarla.", che erano giuste solo per certi ruoli.
+
+490. **Verifiche** contro l'Api reale in Docker, con tre utenti di prova creati per l'occasione
+     (dipendente senza `SettingUser`, amministratore con `SettingUser`, titolare) e poi rimossi:
+     ognuno dei tre riceve la propria indicazione, il Super Admin quella di GestiSoft, l'email
+     sconosciuta nessuna; stessa indicazione anche sul messaggio di account bloccato dopo i 5
+     tentativi. In browser (Playwright) verificato che la pagina di login non contiene più né
+     "Password dimenticata" né "info@gestisoft.it" e che l'indicazione compare dentro l'Alert
+     rosso. Il rate limit di 10 login al minuto per IP ha rallentato le prove, come nella sessione
+     precedente: gli script aspettano la finestra successiva. Nessun utente reale toccato e nessun
+     blocco lasciato in giro (contatori a zero a fine sessione).
+
+491. **Resta fuori, segnalato all'utente**: la schermata `BloccoLicenzaScaduta` dentro l'app dice
+     ancora a chiunque "Contatta l'assistenza GestiSoft per rinnovarla", che per la stessa regola
+     andrebbe detto solo al titolare. Non toccata: la richiesta riguardava il login.
+
+
+---
+
+_Intestazione della sessione precedente:_ 2026-09-11 (sessione successiva — sicurezza degli accessi: blocco dopo 5 tentativi falliti + rate limit dedicato al login, verifica in due passaggi TOTP con Google Authenticator (facoltativa, con codici di recupero e dispositivo ricordato 7 giorni), pagina "Il mio account" per tutti, strumenti di assistenza Super Admin (sblocca accesso, azzera 2FA), download del database tracciato a log, log del Cliente limitato alla struttura selezionata e nuova vista "Accessi e sicurezza" cross-Cliente; più nazione ISO2 dedotta in fattura con correzione del dato "GBF" del Regno Unito, cassa cumulata fino all'anno selezionato e due rifiniture su prenotazioni/fattura. Deciso di non cifrare backup e dump per ora, vedi punto 479.)
 
 ## Fatto — sicurezza degli accessi (blocco tentativi, 2FA con Google Authenticator, log dell'export), log del Cliente limitato alla struttura, nazione ISO2 in fattura, cassa cumulata fino all'anno
 

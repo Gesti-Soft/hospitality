@@ -71,6 +71,14 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
         };
         problemDetails.Extensions["correlationId"] = correlationId;
 
+        // Indicazione su a chi rivolgersi, calcolata sul ruolo di chi sta provando ad accedere: sta
+        // in un campo a parte e non dentro Detail perché la pagina di login la mostra come riga
+        // separata sotto il messaggio d'errore.
+        if (exception is UnauthorizedAppException { Assistenza: { } assistenza })
+        {
+            problemDetails.Extensions["assistenza"] = assistenza;
+        }
+
         httpContext.Response.StatusCode = statusCode;
         await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken: cancellationToken);
 

@@ -17,7 +17,7 @@ import { fontDisplay, tokens } from '../theme'
 import { GestiSoftMark } from '../components/GestiSoftMark'
 
 export function LoginPage() {
-  const { sessione, accedi, completaVerifica2Fa, annullaVerifica2Fa, richiede2Fa, loading, errore } = useAuth()
+  const { sessione, accedi, completaVerifica2Fa, annullaVerifica2Fa, richiede2Fa, loading, errore, assistenza } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordVisibile, setPasswordVisibile] = useState(false)
@@ -106,7 +106,14 @@ export function LoginPage() {
             </Typography>
           </Box>
 
-          {errore && <Alert severity="error">{errore}</Alert>}
+          {errore && (
+            <Alert severity="error">
+              {errore}
+              {assistenza && (
+                <Typography sx={{ fontSize: 13, mt: 0.5 }}>{assistenza}</Typography>
+              )}
+            </Alert>
+          )}
 
           {!richiede2Fa && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.25 }}>
@@ -120,39 +127,32 @@ export function LoginPage() {
               required
               fullWidth
             />
-            <Box>
-              <TextField
-                label="Password"
-                type={passwordVisibile ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-                fullWidth
-                slotProps={{
-                  input: {
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={() => setPasswordVisibile((v) => !v)}
-                          edge="end"
-                          size="small"
-                          tabIndex={-1}
-                          aria-label={passwordVisibile ? 'Nascondi password' : 'Mostra password'}
-                        >
-                          {passwordVisibile ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  },
-                }}
-              />
-              <Box sx={{ textAlign: 'right', mt: 0.75 }}>
-                <Link href="#" underline="hover" sx={{ fontSize: 12.5, fontWeight: 600 }}>
-                  Password dimenticata?
-                </Link>
-              </Box>
-            </Box>
+            <TextField
+              label="Password"
+              type={passwordVisibile ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+              fullWidth
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setPasswordVisibile((v) => !v)}
+                        edge="end"
+                        size="small"
+                        tabIndex={-1}
+                        aria-label={passwordVisibile ? 'Nascondi password' : 'Mostra password'}
+                      >
+                        {passwordVisibile ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
           </Box>
           )}
 
@@ -188,13 +188,6 @@ export function LoginPage() {
               </Link>
             </Box>
           )}
-
-          <Typography sx={{ fontSize: 12, color: tokens.textTertiary, textAlign: 'center' }}>
-            Problemi di accesso? Scrivi a{' '}
-            <Link href="mailto:info@gestisoft.it" underline="hover">
-              info@gestisoft.it
-            </Link>
-          </Typography>
         </Box>
       </Box>
     </Box>
