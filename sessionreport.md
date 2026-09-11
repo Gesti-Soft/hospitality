@@ -1,6 +1,193 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-09 (sessione successiva — raffica di rifiniture UI su richiesta con screenshot del vecchio gestionale (icone KPI Statistiche, fix clic-per-segmento di `CampoData`, cartelle frontend riorganizzate per sezione, icona Impostazioni, select Tipologia/Camera + Descrizione su Spese/Entrate), poi **primo deploy reale in produzione** sulla VPS OVH condivisa `vps-5e0dcc6f` — scoperta che è condivisa con altri progetti e usa Virtualmin/Apache invece del Caddy pianificato (riusato il suo reverse proxy, non introdotto un secondo), due conflitti di porta reali risolti (5432/8081), dati reali migrati e verificati (71 prenotazioni combacianti), sito raggiungibile in HTTPS a fine sessione. Poi ulteriori richieste sul Calendario: bug di navigazione periodo corretto, popover calendario condiviso con `CampoData`, filtro Agenzia con opzioni reali, vista Lista (Arrivi/In corso/Storico, non filtrata per data). Repository Git creata su GitHub (`Gesti-Soft/hospitality`) — **il push resta sempre e solo dell'utente**, mai automatico, per richiesta esplicita dopo un push non richiesto. Vedi sezioni dedicate sotto per il dettaglio completo di ciascun punto.
+Ultimo aggiornamento: 2026-09-11 (sessione successiva — sicurezza degli accessi: blocco dopo 5 tentativi falliti + rate limit dedicato al login, verifica in due passaggi TOTP con Google Authenticator (facoltativa, con codici di recupero e dispositivo ricordato 7 giorni), pagina "Il mio account" per tutti, strumenti di assistenza Super Admin (sblocca accesso, azzera 2FA), download del database tracciato a log, log del Cliente limitato alla struttura selezionata e nuova vista "Accessi e sicurezza" cross-Cliente; più nazione ISO2 dedotta in fattura con correzione del dato "GBF" del Regno Unito, cassa cumulata fino all'anno selezionato e due rifiniture su prenotazioni/fattura. Deciso di non cifrare backup e dump per ora, vedi punto 479.)
+
+## Fatto — sicurezza degli accessi (blocco tentativi, 2FA con Google Authenticator, log dell'export), log del Cliente limitato alla struttura, nazione ISO2 in fattura, cassa cumulata fino all'anno
+
+Sessione partita da tre rifiniture puntuali (prenotazioni, cassa, fattura) e proseguita su una
+lunga discussione di sicurezza con l'utente — "se una persona riesce a bucare?", "il file dump è
+codificato?" — che ha portato a distinguere le misure che **impediscono** un'intrusione da quelle
+che servono solo ad **accorgersene**, e a scegliere di partire dalle prime. Nessun lavoro di
+cifratura: deciso insieme di non farlo ora (vedi punti 479-480).
+
+464. **`PrenotazioneDialog`: "Annulla prenotazione" nascosto quando la prenotazione è In corso**
+     (ospite dentro: si chiude con il check-out, e lasciare lì il pulsante invitava ad azzerare gli
+     importi di un soggiorno reale) e **"Check-in" mostrato solo dal giorno d'arrivo in poi**
+     (`isOggiOPrima(checkIn)`, non `isOggi`: un check-in dimenticato resta possibile il giorno
+     dopo). La pagina Check-in/Check-out non è stata toccata — filtrava già per `isOggi`.
+
+465. **Riepilogo cassa: il cumulato si ferma all'anno selezionato.** La "Cassa attuale" sommava
+     incassi/cauzioni/entrate/spese senza alcun filtro d'anno, quindi guardando il 2025 ci
+     finivano dentro anche gli acconti delle prenotazioni 2026. Nuovi metodi `SommaFinoAdAnnoAsync`
+     su Entrate/Spese/Cauzioni e `SommaImportoPagatoFinoAdAnnoAsync` su Prenotazioni (che sostituisce
+     `SommaImportoPagatoTotaleAsync`): somme fatte in SQL invece di caricare tutte le righe della
+     struttura per sommarle in memoria. Le righe **senza anno** (dati legacy importati) restano
+     sempre incluse, altrimenti sparirebbero dalla cassa per qualsiasi anno. Etichetta cambiata in
+     "Cassa (fino al {anno})".
+
+466. **Fattura: la Nazione (ISO2) si deduce dalla Cittadinanza dell'ospite.** La scheda ospiti
+     registra la Cittadinanza come *descrizione* di una riga della tabella Stati ("REGNO UNITO"),
+     che porta già l'`Acronimo`: `FatturazioneService.RisolviIso2DaCittadinanzaAsync` risale
+     dall'una all'altro (nuovo `IRiferimentiRepository.GetAcronimoStatoPerDescrizioneAsync`, match
+     esatto case-insensitive). Vale sia per l'anteprima di "Genera fattura" sia quando l'operatore
+     salta il form e preme "Crea fattura". Cittadinanza vuota o non in tabella → null: meglio un
+     campo vuoto che un codice inventato su una fattura. Verificato via API sui dati reali: Justine
+     Seymour (REGNO UNITO) → `GB`, Signora Nicastro (ITALIA) → `IT`, cittadinanze sporche (`IT`,
+     `--`) → null, e nessuna riga scritta sul database (l'anteprima continua a non persistere).
+
+467. **Bug reale nei dati di riferimento: il Regno Unito aveva Acronimo "GBF"**, unica riga su 236
+     a non essere un ISO 3166-1 alpha-2 — errore ereditato dal legacy, dove quel campo non veniva
+     mai usato. Da lì finirebbe in `IdPaese` dell'XML SDI, che accetta solo ISO2. Corretto in
+     `stati.csv` (database nuovi) **e** con la migration `CorreggiAcronimoIso2RegnoUnito`, di solo
+     `UPDATE` mirato (`WHERE Codice = 100000219 AND Acronimo = 'GBF'`): il seed di riferimento
+     popola le tabelle solo se vuote, quindi il CSV da solo non basta per i database già avviati.
+
+468. **`DatiClienteDialog`: l'ISO2 si propone anche per i clienti creati prima**, derivandolo
+     dall'elenco Stati con la stessa regola già usata lì per il Codice Fiscale (si aggiorna finché
+     l'operatore non scrive un valore suo, e svuotare il campo di proposito non viene annullato).
+     Effetto collaterale utile: il calcolo automatico del CF ora vede che l'ospite non è italiano e
+     smette di proporlo.
+
+469. **`FatturaDialog`: il campo Divisa veniva tagliato.** Tre campi (Quantità/Prezzo/Divisa) in un
+     dialog `maxWidth="sm"`, i primi due `fullWidth`: la Divisa veniva schiacciata fino a tagliare
+     etichetta e valore. Ora Quantità e Divisa hanno larghezza fissa e `flexShrink: 0`, il Prezzo
+     prende quel che resta (`flex: 1 1 220px`) e `flexWrap` manda la Divisa a capo se non ci sta.
+     Misurato in browser: dialog 600px, Divisa a x=796 larga 120, bordo destro a 940.
+
+470. **Il log di un Cliente ora mostra solo la struttura selezionata.** Il filtro includeva anche
+     le righe senza struttura (`|| StrutturaId == null`): erano sempre del suo stesso Cliente, mai
+     di altri, ma su un Cliente con più strutture l'amministratore finiva per vedere i login di chi
+     lavora solo sull'altra. Nuovo flag `IncludiEventiSenzaStruttura` sul filtro, impostato dal
+     controller in base al ruolo (come già `CategorieVisibili`): true solo per il Super Admin, che
+     di quegli eventi ha bisogno. Tolto "Auth" dalle categorie del Cliente, sia backend sia menu a
+     tendina: quelle righe non hanno struttura, il filtro non avrebbe mai trovato nulla.
+     Verificato con un utente cliente reale creato per la prova: 12 righe, tutte della struttura
+     assegnata; 403 sull'altra struttura dello stesso Cliente, sull'altro Cliente e senza struttura.
+     Prima ne vedeva 74 (62 erano login globali).
+
+471. **Recuperate 24 righe che il Cliente non vedeva**: log di categoria Prenotazione scritti senza
+     `ClienteId`, esclusi dal filtro per Cliente pur essendo delle sue strutture. Ora il filtro per
+     Cliente lascia passare anche le righe senza `ClienteId`, perché a quel punto è la struttura —
+     verificata come sua — a garantirne l'appartenenza. Controllato che nel database non esista
+     **nessuna** riga con un `ClienteId` diverso dal proprietario della struttura: zero incroci.
+
+472. **Blocco dopo 5 tentativi falliti** (`Utente.TentativiLoginFalliti`, `BloccatoFinoUtc`, 15
+     minuti, migration `AggiungiBloccoLoginE2Fa`). Il controllo sta **prima** della verifica della
+     password — è a chi la sta indovinando che non va concessa un'altra prova — e vale anche sul
+     codice 2FA. Il blocco è sempre temporaneo e si scioglie da solo: uno permanente permetterebbe
+     a chiunque conosca l'email di tenere fuori un utente a comando. Al termine il contatore
+     riparte da zero, per non ritrovarsi bloccati al primo errore successivo.
+
+473. **Rate limit dedicato su `/auth/login` e `/auth/2fa/verifica`**: 10 richieste al minuto per
+     IP (`RateLimitPolicies.Login`), contro chi prova molte email diverse dallo stesso posto — che
+     il contatore per account non vedrebbe mai. Il tetto generale dell'Api (200/10s) è tarato
+     sull'uso normale dell'applicazione e lì lasciava passare ~20 tentativi di password al secondo:
+     una lista delle 100.000 password più comuni si esauriva in un'ora e mezza, ora servirebbero
+     ~208 giorni. Il limite ha bloccato anche gli script di prova di questa sessione, che sono stati
+     adattati ad aspettare la finestra successiva.
+
+474. **Verifica in due passaggi (TOTP, compatibile con Google Authenticator)**, pacchetto `Otp.NET`,
+     parametri standard (SHA-1/6 cifre/30s: quelli che l'app si aspetta leggendo un QR), finestra di
+     tolleranza ±1 per gli orologi non sincronizzati. Nuove entità `CodiceRecuperoUtente` e
+     `DispositivoFidato`, campi `TotpSecret`/`TotpAttivo`/`TotpAttivatoAtUtc` su `Utente`. Il
+     segreto viene salvato già all'avvio dell'attivazione ma il 2FA si accende **solo** dopo un
+     primo codice valido: chi apre la schermata e chiude la pagina non resta chiuso fuori.
+
+475. **Login in due passi**: password → codice. Il token intermedio dura 5 minuti ed è emesso con
+     un'**audience dedicata**, quindi la validazione standard degli endpoint protetti lo rifiuta da
+     sola, senza controlli sparsi (verificato: 401). **10 codici di recupero** usa e getta (16
+     caratteri, alfabeto senza 0/O e 1/I perché si trascrivono a mano), mostrati una sola volta e
+     conservati solo in hash — nessuno, Super Admin compreso, può rileggerli. **"Non chiedermelo per
+     7 giorni su questo dispositivo"**: token casuale nel browser, hash sul server; non si cancella
+     al logout (è il browser a essere verificato, non la sessione). Un codice sbagliato pesa quanto
+     una password sbagliata, altrimenti il 2FA sarebbe il punto debole invece che il contrario.
+
+476. **Nuova pagina "Il mio account"** (`/mio-account`), voce di menu sempre visibile (nuovo flag
+     `sempreVisibile` su `NavSection`, che salta tutti i filtri): cambio password + 2FA, senza
+     bisogno di permessi né di una struttura selezionata. Prima vivevano dentro Amministrazione >
+     Utenti, dove non arrivano né un dipendente senza `settingUser` né il Super Admin che non ha
+     ancora scelto una struttura. Raggiungibile anche da chi non ha **nessuna** struttura assegnata
+     (eccezione mirata in `AppGate`), altrimenti un utente appena creato non potrebbe nemmeno
+     cambiare la password iniziale ricevuta. `CambiaPasswordCard` estratta da `UtentiPage` a
+     componente autonomo; la password attuale resta richiesta a chiunque, Super Admin compreso.
+
+477. **Strumenti di assistenza per il Super Admin**, sulla scheda Cliente: **"Sblocca accesso"**
+     (toglie il blocco senza cambiare la password, per chi se la ricorda e si è bloccato per un
+     Caps Lock) e **"Azzera verifica in due passaggi"** (unico modo di rimettere dentro chi ha perso
+     telefono e codici, dato che il segreto sta solo sul suo telefono; disattiva invece di
+     rigenerare, così il Super Admin non entra mai in possesso di un secondo fattore altrui). Il
+     **reset password ora toglie anche il blocco**: era un difetto reale segnalato dall'utente — chi
+     chiede il reset ha appena finito i tentativi, e riceveva una password nuova inutilizzabile per
+     un quarto d'ora. Tutte e tre tracciate nel log come azioni `SuperAdmin`.
+
+478. **Il download manuale del database finisce nel log** (categoria `Backup`, origine `Api`,
+     operatore = email, con la dimensione): è l'unica azione che porta fuori una copia completa del
+     database e prima non lasciava traccia. Compare anche nello storico della pagina Super Admin >
+     Backup, che legge già quella categoria; l'Operatore valorizzato è ciò che la distingue dai
+     backup notturni, scritti dagli script PowerShell via psql.
+
+479. **Deciso di NON cifrare backup e dump, per ora.** Il dump è `pg_dump --format=custom`:
+     compresso gzip, **non cifrato**, leggibile da qualunque `pg_restore` — verificato estraendo
+     dati in chiaro da `deploy.dump` senza alcuna credenziale. Stesso discorso per pgBackRest
+     (`compress-type=zst`, nessun `repo1-cipher-type`). Ragioni della scelta, discusse con l'utente:
+     (a) il rischio più concreto è il login attaccabile da remoto, non il furto dei file; (b) la
+     passphrase da custodire per anni e ritrovare durante un restore d'emergenza è, per una realtà
+     di poche persone, più pericolosa del rischio che copre; (c) rinunciarvi ora è reversibile — si
+     perde solo la cronologia dei backup, perché la cifratura non si aggiunge a un repository
+     pgBackRest esistente. **Da riprendere quando si attiva la copia off-site**: lì i dati escono
+     verso terzi e `repo2-cipher-type=aes-256-cbc` è client-side, quindi il provider non legge nulla.
+     Scartata anche la cifratura del disco: il VPS è OVH, LUKS chiederebbe la passphrase a ogni
+     riavvio (che a volte decide il provider) e chi arriva all'hypervisor legge comunque la memoria.
+
+480. **Nota sul `.env`** (discussione, nessuna modifica): è peggio del database, non un ripiego.
+     Contiene `JWT_SECRET`, con cui si fabbricano token di sessione validi per qualunque utente —
+     password e 2FA aggirati, e **da remoto**, senza tornare sulla macchina. Verificato che non sia
+     tracciato in git (è nel `.gitignore`). Sul VPS va controllato che sia `600`: la macchina è
+     condivisa con altri progetti. Se un giorno si sospetta una compromissione, va ruotato il
+     `JWT_SECRET` (invalida tutte le sessioni, comprese quelle forgiate) prima ancora delle password.
+
+481. **Nuova voce Log nel menu Super Admin** (`/super-admin/log`, "Accessi e sicurezza"): accessi
+     riusciti e falliti, account bloccati, codici di verifica sbagliati, attivazioni 2FA, export del
+     database e azioni dello staff, su **tutti** i Clienti. È la stessa `LogPage` del log di
+     struttura, parametrizzata (props `strutturaId`/`categorie`/`nomeCliente`) invece di duplicata.
+     Due correzioni emerse provandola: (a) limitare le categorie nel menu a tendina non restringeva
+     la query — l'endpoint accetta ora più `categorie`, che possono solo **restringere** quello che
+     il ruolo già consente (per un Cliente vengono intersecate con la sua whitelist); (b) la colonna
+     Cliente mostrava "GestiSoft" per gli eventi senza Cliente, indistinguibile dall'omonimo Cliente
+     reale: ora "—".
+
+482. **2FA obbligatorio per il Super Admin: implementato e poi rimosso su richiesta dell'utente.**
+     Erano stati scritti un claim `deve_configurare_2fa` nel token, un middleware che rifiutava ogni
+     endpoint tranne quelli di configurazione, e una schermata dedicata — tutto verificato
+     funzionante (13/13) prima di smontarlo integralmente su indicazione esplicita ("al super admin
+     non interessa l'obbligo"). **Decisione da non rimettere in discussione senza chiederglielo**:
+     il 2FA resta facoltativo per chiunque, Super Admin compreso, e il promemoria sulla campanella
+     non viene mostrato al Super Admin (solo ai Clienti che non l'hanno attivo).
+
+483. **Verifiche**: 26/26 sul giro completo blocco+2FA (blocco dopo 5 tentativi, password giusta
+     rifiutata, attivazione, login in due passi, dispositivo ricordato, codice di recupero usa e
+     getta, token intermedio che non apre nulla, log dell'export e del blocco); 10/10 sul giro di
+     assistenza (cliente con 2FA e account bloccato → reset → rientra con la sola password, zero
+     codici e dispositivi residui, secondo reset rifiutato, tutto a log); 8/8 su sblocco e reset
+     password. Tutte contro l'Api reale in Docker, con utenti di prova creati e poi rimossi.
+     Interfaccia verificata in browser con Playwright su Super Admin e su un dipendente con soli
+     permessi di lettura camere.
+
+484. **Nota di metodo**: `npx tsc --noEmit` non basta per il frontend — `npm run build` usa `tsc -b`,
+     che è più severo (ha segnalato import rimasti orfani che l'altro lasciava passare, facendo
+     fallire la build dell'immagine Docker). Da qui in avanti verificare con `npm run build`.
+     Attenzione anche a `npm install`: ha rimosso `playwright` da `node_modules` perché non era
+     dichiarato in `package.json` (reinstallato con `--no-save`); se serve stabilmente, va aggiunto
+     a `devDependencies`.
+
+485. **Committato in git** in 5 commit separati per tema (`79012de` prenotazioni, `424ef67` cassa,
+     `76a0cb9` fattura/ISO2, `b1c91e7` log, `def8208` sicurezza accessi). Mai fatto push, come da
+     prassi con l'utente.
+
+
+---
+
+_Intestazione della sessione precedente:_ 2026-09-09 (sessione successiva — raffica di rifiniture UI su richiesta con screenshot del vecchio gestionale (icone KPI Statistiche, fix clic-per-segmento di `CampoData`, cartelle frontend riorganizzate per sezione, icona Impostazioni, select Tipologia/Camera + Descrizione su Spese/Entrate), poi **primo deploy reale in produzione** sulla VPS OVH condivisa `vps-5e0dcc6f` — scoperta che è condivisa con altri progetti e usa Virtualmin/Apache invece del Caddy pianificato (riusato il suo reverse proxy, non introdotto un secondo), due conflitti di porta reali risolti (5432/8081), dati reali migrati e verificati (71 prenotazioni combacianti), sito raggiungibile in HTTPS a fine sessione. Poi ulteriori richieste sul Calendario: bug di navigazione periodo corretto, popover calendario condiviso con `CampoData`, filtro Agenzia con opzioni reali, vista Lista (Arrivi/In corso/Storico, non filtrata per data). Repository Git creata su GitHub (`Gesti-Soft/hospitality`) — **il push resta sempre e solo dell'utente**, mai automatico, per richiesta esplicita dopo un push non richiesto. Vedi sezioni dedicate sotto per il dettaglio completo di ciascun punto.
 
 ## Fatto — Fase 11: backup & gestione DB (pgBackRest + pg_dump), solo parte locale
 
