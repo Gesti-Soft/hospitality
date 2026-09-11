@@ -13,7 +13,7 @@ import Typography from '@mui/material/Typography'
 import { ApiError } from '../api/client'
 import { useCreaDatiCliente, useAggiornaDatiCliente, type DatiClienteDto, type DatiClienteRequest } from '../api/fatturazione'
 import { Sesso } from '../api/ospiti'
-import type { ComuneDto } from '../api/riferimenti'
+import { useStati, type ComuneDto } from '../api/riferimenti'
 import { calcolaCodiceFiscale } from '../lib/codiceFiscale'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
@@ -77,12 +77,34 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
   const crea = useCreaDatiCliente(strutturaId)
   const aggiorna = useAggiornaDatiCliente(strutturaId)
   const inCorso = crea.isPending || aggiorna.isPending
+  const stati = useStati()
+
+  // La Nazione (ISO2) si deduce dalla Cittadinanza: quel campo arriva dalla scheda ospiti, dove è
+  // la descrizione di una riga della tabella Stati, che porta già l'acronimo giusto (REGNO UNITO
+  // -> GB). Il backend lo fa per i clienti nuovi (FatturazioneService.RisolviIso2DaCittadinanzaAsync);
+  // qui serve per quelli creati prima, che hanno la cittadinanza ma non l'ISO2.
+  const ultimoIso2Automatico = useRef<string | null>(null)
 
   // Il Codice Fiscale suggerito si ricalcola in automatico finché l'operatore non lo modifica a
   // mano: confrontando il campo con l'ultimo suggerimento generato (invece di un flag booleano
   // separato) si distingue "non ancora toccato" da "corretto manualmente" senza doverlo resettare
   // esplicitamente quando l'operatore svuota di nuovo il campo.
   const ultimoCfAutomatico = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (cittadinanza.trim() === '') return
+    const stato = (stati.data ?? []).find((x) => x.descrizione.toLowerCase() === cittadinanza.trim().toLowerCase())
+    const suggerito = stato?.acronimo?.trim().toUpperCase()
+    if (!suggerito) return
+
+    // Stessa regola del Codice Fiscale qui sotto: si aggiorna finché l'operatore non scrive un
+    // valore suo (compreso lo svuotare il campo di proposito, che non viene ricompilato a forza).
+    if (iso2.trim() === '' || iso2 === ultimoIso2Automatico.current) {
+      ultimoIso2Automatico.current = suggerito
+      setIso2(suggerito)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cittadinanza, stati.data])
 
   useEffect(() => {
     if (denominazione.trim() !== '') return // il calcolo vale solo per persone fisiche, non aziende

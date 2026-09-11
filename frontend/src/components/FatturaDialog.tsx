@@ -240,8 +240,15 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
 
         <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} disabled={inCorso} />
 
-        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-          <TextField label="Quantità" type="number" value={quantita} onChange={(e) => setQuantita(e.target.value)} fullWidth disabled={inCorso} />
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', flexWrap: 'wrap', gap: 2 }}>
+          <TextField
+            label="Quantità"
+            type="number"
+            value={quantita}
+            onChange={(e) => setQuantita(e.target.value)}
+            sx={{ width: mobile ? '100%' : 120, flexShrink: 0 }}
+            disabled={inCorso}
+          />
           <TextField
             label="Prezzo unitario (€)"
             type="number"
@@ -250,11 +257,19 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
               setPrezzoUnitario(e.target.value)
               setPrezzoUnitarioAuto(false)
             }}
-            fullWidth
-            disabled={inCorso}
-            helperText={!modifica ? "Proposto dall'importo totale della prenotazione, tassa di soggiorno esclusa — modificabile" : ' '}
+            sx={{ flex: mobile ? undefined : '1 1 220px', width: mobile ? '100%' : undefined }}
+            disabled={inCorso}         
           />
-          <TextField label="Divisa" value={divisa} onChange={(e) => setDivisa(e.target.value)} sx={{ width: 100 }} disabled={inCorso} />
+          {/* Quantità e Divisa non si comprimono mai (flexShrink 0, prima la Divisa veniva
+              schiacciata fino a tagliarne label e valore): se il Prezzo scende sotto la sua base
+              il flexWrap manda la Divisa a capo, invece di stringerla. */}
+          <TextField
+            label="Divisa"
+            value={divisa}
+            onChange={(e) => setDivisa(e.target.value)}
+            sx={{ width: mobile ? '100%' : 120, flexShrink: 0 }}
+            disabled={inCorso}
+          />
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>

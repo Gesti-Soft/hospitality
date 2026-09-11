@@ -12,6 +12,15 @@ public class RiferimentiRepository(GestiSoftDbContext db) : IRiferimentiReposito
             .OrderBy(s => s.Descrizione)
             .ToListAsync(cancellationToken);
 
+    public async Task<string?> GetAcronimoStatoPerDescrizioneAsync(string descrizione, CancellationToken cancellationToken)
+    {
+        var normalizzata = descrizione.Trim().ToLowerInvariant();
+        return await db.Stati.AsNoTracking()
+            .Where(s => s.Descrizione.ToLower() == normalizzata)
+            .Select(s => s.Acronimo)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Comune>> CercaComuniAsync(string? ricerca, int limite, CancellationToken cancellationToken)
     {
         var query = db.Comuni.AsNoTracking();

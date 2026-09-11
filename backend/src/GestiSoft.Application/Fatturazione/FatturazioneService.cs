@@ -2,6 +2,7 @@ using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
+using GestiSoft.Application.Riferimenti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -45,6 +46,7 @@ public class FatturazioneService(
     IDatiAziendaliRepository aziende,
     IPrenotazioneRepository prenotazioni,
     IOspiteRepository ospiti,
+    IRiferimentiRepository riferimenti,
     IFatturaDocumentGenerator documentGenerator,
     PermessoStrutturaGuard permessoGuard)
 {
@@ -195,13 +197,14 @@ public class FatturazioneService(
     private static string CostruisciCustomerKey(Ospite capofila) =>
         $"{capofila.NumeroDocumento}-{capofila.Nome}-{capofila.Cognome}-{capofila.DataNascita:yyyyMMdd}";
 
-    private static DatiCliente CostruisciClienteBareBones(Guid strutturaId, Ospite capofila, string customerKey) => new()
+    private async Task<DatiCliente> CostruisciClienteBareBonesAsync(Guid strutturaId, Ospite capofila, string customerKey, CancellationToken cancellationToken) => new()
     {
         StrutturaId = strutturaId,
         Nome = capofila.Nome,
         Cognome = capofila.Cognome,
         LuogoResidenza = capofila.LuogoResidenza,
         Cittadinanza = capofila.Cittadinanza,
+        Iso2 = await RisolviIso2DaCittadinanzaAsync(capofila.Cittadinanza, cancellationToken),
         // Solo per suggerire in automatico il Codice Fiscale nel form "Dati cliente" — la scheda
         // ospiti li ha già raccolti, evita di richiederli una seconda volta all'operatore.
         DataNascita = capofila.DataNascita,
@@ -209,6 +212,25 @@ public class FatturazioneService(
         LuogoNascita = capofila.LuogoNascita,
         CustomerKey = customerKey,
     };
+
+    /// <summary>
+    /// Acronimo ISO2 della nazione del destinatario fattura, dedotto dalla Cittadinanza della scheda
+    /// ospiti: quel campo è la Descrizione di una riga della tabella Stati (es. "REGNO UNITO"), da cui
+    /// si risale all'Acronimo della stessa riga (es. "GB") — serve nell'XML SDI (IdPaese) e decide
+    /// anche se proporre il calcolo del Codice Fiscale, quindi non va lasciato da compilare a mano.
+    /// Cittadinanza vuota, o scritta a mano e non presente in tabella, resta null: meglio un campo
+    /// vuoto che un codice inventato su una fattura.
+    /// </summary>
+    private async Task<string?> RisolviIso2DaCittadinanzaAsync(string? cittadinanza, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(cittadinanza))
+        {
+            return null;
+        }
+
+        var acronimo = await riferimenti.GetAcronimoStatoPerDescrizioneAsync(cittadinanza, cancellationToken);
+        return string.IsNullOrWhiteSpace(acronimo) ? null : acronimo.Trim().ToUpperInvariant();
+    }
 
     /// <summary>
     /// Trova o crea per davvero il Cliente fatturabile per l'ospite capofila — usata SOLO al momento
@@ -228,7 +250,7 @@ public class FatturazioneService(
             return (esistente, false);
         }
 
-        var nuovo = CostruisciClienteBareBones(strutturaId, capofila, customerKey);
+        var nuovo = await CostruisciClienteBareBonesAsync(strutturaId, capofila, customerKey, cancellationToken);
         await clienti.AddAsync(nuovo, cancellationToken);
         return (nuovo, true);
     }
@@ -266,7 +288,7 @@ public class FatturazioneService(
             return (esistente, false);
         }
 
-        return (CostruisciClienteBareBones(strutturaId, capofila, customerKey), true);
+        return (await CostruisciClienteBareBonesAsync(strutturaId, capofila, customerKey, cancellationToken), true);
     }
 
     private async Task<DatiFattura> GetOwnedAsync(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
