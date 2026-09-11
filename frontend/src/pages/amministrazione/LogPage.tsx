@@ -41,13 +41,29 @@ const COLORE_LIVELLO: Record<LivelloLog, string> = {
   [LivelloLog.Error]: tokens.error600,
 }
 
-export function LogPage() {
+interface Props {
+  /**
+   * Struttura di cui mostrare il log. Omesso: quella selezionata in barra (uso normale, un Cliente
+   * vede solo la sua). `null` esplicito: nessun filtro per struttura — vista cross-Cliente del
+   * Super Admin, l'unico a cui il backend la concede.
+   */
+  strutturaId?: string | null
+  /** Categorie offerte nel menu a tendina. Omesso: quelle previste per il ruolo dell'utente. */
+  categorie?: readonly string[]
+  /** Categoria preselezionata all'apertura. */
+  categoriaIniziale?: string
+  /** Colonna con il Cliente di provenienza: ha senso solo nella vista cross-Cliente. */
+  nomeCliente?: (clienteId: string | null) => string
+}
+
+export function LogPage({ strutturaId: strutturaIdProp, categorie, categoriaIniziale, nomeCliente }: Props = {}) {
   const mobile = useMobile()
-  const { strutturaId } = useStruttura()
+  const { strutturaId: strutturaSelezionata } = useStruttura()
   const { sessione } = useAuth()
-  const categorieDisponibili = sessione?.isSuperAdmin ? CATEGORIE_LOG : CATEGORIE_LOG_CLIENTE
+  const strutturaId = strutturaIdProp !== undefined ? strutturaIdProp : strutturaSelezionata
+  const categorieDisponibili = categorie ?? (sessione?.isSuperAdmin ? CATEGORIE_LOG : CATEGORIE_LOG_CLIENTE)
   const [livello, setLivello] = useState<string>('')
-  const [categoria, setCategoria] = useState<string>('')
+  const [categoria, setCategoria] = useState<string>(categoriaIniziale ?? '')
   const [ricerca, setRicerca] = useState('')
   const [ricercaDebounced, setRicercaDebounced] = useState('')
   const [da, setDa] = useState('')
@@ -62,7 +78,18 @@ export function LogPage() {
     return () => clearTimeout(timeout)
   }, [ricerca])
 
-  const logs = useLogs(strutturaId, livello === '' ? null : (Number(livello) as LivelloLog), categoria === '' ? null : categoria, ricercaDebounced, da, a, PAGE_SIZE)
+  // `categorie` non è solo l'elenco del menu a tendina: restringe davvero la ricerca, altrimenti
+  // "Tutte" mostrerebbe anche le categorie che questa vista non vuole (vedi SuperAdminLogPage).
+  const logs = useLogs(
+    strutturaId,
+    livello === '' ? null : (Number(livello) as LivelloLog),
+    categoria === '' ? null : categoria,
+    ricercaDebounced,
+    da,
+    a,
+    PAGE_SIZE,
+    categorie,
+  )
 
   const eventi = logs.data?.pages.flatMap((p) => p.items) ?? []
   const totaleEventi = logs.data?.pages[0]?.totalCount ?? 0
@@ -179,6 +206,7 @@ export function LogPage() {
               <Typography sx={{ fontSize: 12.5 }}>{l.messaggio}</Typography>
               <RigaCardMeta
                 voci={[
+                  ...(nomeCliente ? [{ etichetta: 'Cliente', valore: nomeCliente(l.clienteId) }] : []),
                   { etichetta: 'Operatore', valore: l.operatore ?? '—' },
                   { etichetta: 'Correlation Id', valore: <Box component="span" sx={{ fontFamily: fontMono, fontSize: 11, color: tokens.textTertiary }}>{l.correlationId ?? '—'}</Box> },
                 ]}
@@ -197,6 +225,7 @@ export function LogPage() {
                 <TableCell>Data</TableCell>
                 <TableCell>Livello</TableCell>
                 <TableCell>Categoria</TableCell>
+                {nomeCliente && <TableCell>Cliente</TableCell>}
                 <TableCell>Operatore</TableCell>
                 <TableCell>Messaggio</TableCell>
                 <TableCell>Correlation Id</TableCell>
@@ -205,7 +234,7 @@ export function LogPage() {
             <TableBody>
               {eventi.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                  <TableCell colSpan={nomeCliente ? 7 : 6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                     Nessun evento registrato.
                   </TableCell>
                 </TableRow>
@@ -217,6 +246,7 @@ export function LogPage() {
                     <Chip size="small" label={ETICHETTA_LIVELLO[l.livello]} sx={{ bgcolor: COLORE_LIVELLO[l.livello], color: '#fff', fontWeight: 700 }} />
                   </TableCell>
                   <TableCell sx={{ fontSize: 12.5 }}>{l.categoria ?? l.origine}</TableCell>
+                  {nomeCliente && <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>{nomeCliente(l.clienteId)}</TableCell>}
                   <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>{l.operatore ?? '—'}</TableCell>
                   <TableCell sx={{ fontSize: 12.5 }}>{l.messaggio}</TableCell>
                   <TableCell sx={{ fontFamily: fontMono, fontSize: 11, color: tokens.textTertiary }}>{l.correlationId ?? '—'}</TableCell>
@@ -224,7 +254,7 @@ export function LogPage() {
               ))}
               {logs.hasNextPage && (
                 <TableRow ref={sentinellaRef}>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textTertiary, py: 2, fontSize: 12 }}>
+                  <TableCell colSpan={nomeCliente ? 7 : 6} sx={{ textAlign: 'center', color: tokens.textTertiary, py: 2, fontSize: 12 }}>
                     Caricamento altri eventi...
                   </TableCell>
                 </TableRow>

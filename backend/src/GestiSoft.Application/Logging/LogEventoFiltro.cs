@@ -8,6 +8,9 @@ namespace GestiSoft.Application.Logging;
 /// negato a chi non lo è) è <see cref="LogVisibilita.CategorieVisibiliCliente"/> più "Auth" —
 /// applicata qui a livello di query, non un filtro opzionale scelto dal chiamante: la sicurezza sta
 /// nel controller che la imposta sempre in base al ruolo, mai in base a un parametro arrivato dal client.
+/// <paramref name="IncludiEventiSenzaStruttura"/>: stessa regola — true solo per il Super Admin, che
+/// deve vedere anche gli eventi globali (login, azioni interne, backup). Un Cliente vede
+/// esclusivamente i log della struttura che ha selezionato.
 /// </summary>
 public record LogEventoFiltro(
     Guid? ClienteId,
@@ -20,4 +23,5 @@ public record LogEventoFiltro(
     DateTime? A = null,
     int Page = 1,
     int PageSize = 50,
-    IReadOnlyList<string>? CategorieVisibili = null);
+    IReadOnlyList<string>? CategorieVisibili = null,
+    bool IncludiEventiSenzaStruttura = true);

@@ -74,15 +74,23 @@ public partial class LogEventoRepository(GestiSoftDbContext db) : ILogEventoRepo
 
         if (filtro.ClienteId is { } clienteId)
         {
-            query = query.Where(l => l.ClienteId == clienteId);
+            // Le righe senza ClienteId restano visibili: chi ha un filtro per Cliente è sempre anche
+            // vincolato a una singola struttura sua (vedi LogController e il filtro qui sotto), e un
+            // log scritto su quella struttura le appartiene comunque — senza questo, i log di
+            // Prenotazione salvati senza ClienteId sparivano dalla vista del cliente proprietario.
+            query = query.Where(l => l.ClienteId == clienteId || l.ClienteId == null);
         }
 
         if (filtro.StrutturaId is { } strutturaId)
         {
-            // Include anche le righe non legate a una struttura specifica (es. modifica di un
-            // utente, che può avere accesso a più strutture): altrimenti sparirebbero del tutto
-            // filtrando per la struttura correntemente selezionata in UI.
-            query = query.Where(l => l.StrutturaId == strutturaId || l.StrutturaId == null);
+            // Il Super Admin vede anche le righe non legate ad alcuna struttura (login, azioni
+            // interne, backup): sono il grosso del log e filtrando per struttura sparirebbero.
+            // Un Cliente no: deve vedere esclusivamente i log della struttura che ha selezionato,
+            // mai eventi globali — su un cliente con più strutture finirebbe per vedere anche
+            // l'attività dell'altra.
+            query = filtro.IncludiEventiSenzaStruttura
+                ? query.Where(l => l.StrutturaId == strutturaId || l.StrutturaId == null)
+                : query.Where(l => l.StrutturaId == strutturaId);
         }
 
         if (filtro.Livello is { } livello)

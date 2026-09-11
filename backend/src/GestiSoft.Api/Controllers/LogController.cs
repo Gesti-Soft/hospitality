@@ -20,6 +20,7 @@ public class LogController(ILogEventoService logEventoService, UtenteManagementS
         [FromQuery] Guid? strutturaId,
         [FromQuery] LivelloLog? livello,
         [FromQuery] string? categoria = null,
+        [FromQuery] string[]? categorie = null,
         [FromQuery] string? ricerca = null,
         [FromQuery] DateTime? da = null,
         [FromQuery] DateTime? a = null,
@@ -45,16 +46,31 @@ public class LogController(ILogEventoService logEventoService, UtenteManagementS
         }
 
         // Un Cliente vede solo i propri log, a prescindere da cosa passa in query — solo il
-        // Super Admin può vedere/filtrare su tutti i Clienti. Un Cliente (qui sempre un
-        // amministratore della struttura, vedi controllo sopra) vede inoltre solo un sottoinsieme
-        // delle categorie (vedi LogVisibilita), con "Auth" incluso: da amministratore deve poter
-        // vedere i login di TUTTI i lavoratori della sua struttura, non solo il proprio — errori
-        // generici, sincronizzazioni Wubook e azioni interne del Super Admin restano comunque
-        // sempre riservati.
+        // Super Admin può vedere/filtrare su tutti i Clienti — e solo un sottoinsieme delle
+        // categorie (vedi LogVisibilita): errori generici, sincronizzazioni Wubook, login e azioni
+        // interne del Super Admin restano riservati. "Auth" era stato aggiunto qui per mostrare a
+        // un amministratore i login dei suoi lavoratori, ma quelle righe non hanno una struttura:
+        // da quando il log di un Cliente è limitato alla struttura selezionata (sotto) non
+        // passerebbero comunque il filtro, e lasciarlo nella whitelist darebbe solo una voce di
+        // menu che non trova mai nulla.
         var clienteId = currentUser.IsSuperAdmin ? null : currentUser.ClienteId;
-        IReadOnlyList<string>? categorieVisibili = currentUser.IsSuperAdmin ? null : [.. LogVisibilita.CategorieVisibiliCliente, "Auth"];
+        IReadOnlyList<string>? categorieVisibili = currentUser.IsSuperAdmin ? null : LogVisibilita.CategorieVisibiliCliente;
 
-        var filtro = new LogEventoFiltro(clienteId, strutturaId, livello, categoria, ricerca, da, a, page, pageSize, categorieVisibili);
+        // "categorie" è una restrizione scelta dal chiamante (la pagina Accessi e sicurezza chiede
+        // solo le categorie che la riguardano): può solo restringere quello che il ruolo già
+        // consente, mai allargarlo — per un Cliente si interseca con la whitelist, non la sostituisce.
+        if (categorie is { Length: > 0 })
+        {
+            categorieVisibili = categorieVisibili is null
+                ? categorie
+                : [.. categorieVisibili.Intersect(categorie, StringComparer.OrdinalIgnoreCase)];
+        }
+
+        var filtro = new LogEventoFiltro(
+            clienteId, strutturaId, livello, categoria, ricerca, da, a, page, pageSize, categorieVisibili,
+            // Solo il Super Admin vede anche gli eventi globali (login, azioni interne, backup): a un
+            // Cliente il log mostra esclusivamente la struttura selezionata — richiesta esplicita.
+            IncludiEventiSenzaStruttura: currentUser.IsSuperAdmin);
         var risultato = await logEventoService.CercaAsync(filtro, cancellationToken);
 
         return Ok(new PagedResultDto<LogEventoDto>(risultato.Items.Select(ToDto).ToList(), risultato.TotalCount, risultato.Page, risultato.PageSize));

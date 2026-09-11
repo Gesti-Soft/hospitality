@@ -32,11 +32,10 @@ export const CATEGORIE_LOG = ['Prenotazione', 'Utente', 'Servizi', 'Wubook', 'Al
 
 /**
  * Sottoinsieme visibile a un Cliente — deve restare identico a LogVisibilita.CategorieVisibiliCliente
- * lato backend, con l'aggiunta di "Auth": non è nella whitelist backend (un Cliente non vede login
- * altrui né del Super Admin), ma il backend lascia comunque passare le PROPRIE righe di login — qui
- * serve solo a offrire il filtro nel menu a tendina.
+ * lato backend. Niente "Auth": il log di un Cliente mostra solo la struttura selezionata e le righe
+ * di login non ne hanno una, quindi quel filtro non troverebbe mai nulla.
  */
-export const CATEGORIE_LOG_CLIENTE = ['Prenotazione', 'Utente', 'Servizi', 'AlloggiatiWeb', 'Osservatorio', 'PayTourist', 'Auth'] as const
+export const CATEGORIE_LOG_CLIENTE = ['Prenotazione', 'Utente', 'Servizi', 'AlloggiatiWeb', 'Osservatorio', 'PayTourist'] as const
 
 // Scroll infinito (stesso principio di Ospiti/Arrivi-InCorso-Storico, ma qui la paginazione è
 // server-side, non un semplice slice client-side di dati già tutti caricati): parte da 25 righe,
@@ -49,13 +48,16 @@ export function useLogs(
   da: string,
   a: string,
   pageSize: number,
+  /** Restringe la ricerca a queste categorie (la pagina Accessi e sicurezza usa solo quelle sue). */
+  categorieAmmesse?: readonly string[],
 ) {
   return useInfiniteQuery({
-    queryKey: ['logs', strutturaId, livello, categoria, ricerca, da, a, pageSize],
+    queryKey: ['logs', strutturaId, livello, categoria, ricerca, da, a, pageSize, categorieAmmesse],
     initialPageParam: 1,
     queryFn: ({ pageParam }) => {
       const parametri = new URLSearchParams({ page: String(pageParam), pageSize: String(pageSize) })
       if (strutturaId) parametri.set('strutturaId', strutturaId)
+      categorieAmmesse?.forEach((c) => parametri.append('categorie', c))
       if (livello != null) parametri.set('livello', String(livello))
       if (categoria) parametri.set('categoria', categoria)
       if (ricerca.trim()) parametri.set('ricerca', ricerca.trim())
