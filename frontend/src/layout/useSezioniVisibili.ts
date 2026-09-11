@@ -32,12 +32,12 @@ export function useSezioniVisibili(): SezioniVisibiliRisultato {
   }
 
   const sezioni = navSections
-    .filter((section) => !section.soloSuperAdmin || isSuperAdmin)
+    .filter((section) => section.sempreVisibile || !section.soloSuperAdmin || isSuperAdmin)
     // Per il SuperAdmin, le sezioni operative restano nascoste finché non seleziona
     // esplicitamente una Struttura (nessuna struttura precaricata all'accesso).
-    .filter((section) => section.soloSuperAdmin || !isSuperAdmin || !!strutturaId)
-    .filter((section) => !section.richiedeGestioneUtenti || isSuperAdmin || mioPermesso.data?.settingUser === true)
-    .filter((section) => haPermesso(section.richiedePermesso))
+    .filter((section) => section.sempreVisibile || section.soloSuperAdmin || !isSuperAdmin || !!strutturaId)
+    .filter((section) => section.sempreVisibile || !section.richiedeGestioneUtenti || isSuperAdmin || mioPermesso.data?.settingUser === true)
+    .filter((section) => section.sempreVisibile || haPermesso(section.richiedePermesso))
     .map((section) => ({
       section,
       // Una sezione i cui servizi sono tutti disabilitati (es. "Invii automatici" senza alcun

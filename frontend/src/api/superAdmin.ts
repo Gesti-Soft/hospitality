@@ -108,6 +108,23 @@ export function useResettaPasswordUtente() {
   })
 }
 
+/** Toglie il blocco dopo 5 tentativi falliti, senza cambiare la password a chi se la ricorda. */
+export function useSbloccaAccessoUtente() {
+  return useMutation({
+    mutationFn: ({ utenteId }: { utenteId: string }) => apiPut(`/super-admin/utenti/${utenteId}/sblocca`, {}),
+  })
+}
+
+/**
+ * Spegne il 2FA di un utente rimasto fuori (telefono e codici di recupero persi): è l'unico modo
+ * per rimetterlo dentro, dato che il segreto vive solo sul suo telefono. Da lì riconfigura da capo.
+ */
+export function useResettaDueFattoriUtente() {
+  return useMutation({
+    mutationFn: ({ utenteId }: { utenteId: string }) => apiPut(`/super-admin/utenti/${utenteId}/reset-2fa`, {}),
+  })
+}
+
 export interface AggiornaUtenteRequest {
   email: string
   nome: string | null

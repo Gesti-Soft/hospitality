@@ -74,6 +74,8 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.AddScoped<IUtenteRepository, UtenteRepository>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddSingleton<ITotpService, TotpService>();
+        services.AddScoped<IDueFattoriRepository, DueFattoriRepository>();
         services.AddScoped<ILogEventoRepository, LogEventoRepository>();
         services.AddScoped<IStrutturaRepository, StrutturaRepository>();
         services.AddScoped<IImpostazioniStrutturaRepository, ImpostazioniStrutturaRepository>();

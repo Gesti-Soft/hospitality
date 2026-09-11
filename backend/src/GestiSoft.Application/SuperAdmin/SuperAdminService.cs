@@ -27,6 +27,7 @@ public class SuperAdminService(
     IStrutturaRepository strutture,
     IUtenteRepository utenti,
     IPasswordHasher<Utente> passwordHasher,
+    IDueFattoriRepository dueFattori,
     ILogEventoService logEventi,
     IBackupExporter backupExporter)
 {
@@ -43,8 +44,28 @@ public class SuperAdminService(
     public async Task<byte[]> EsportaBackupAsync(ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         RichiediSuperAdmin(currentUser);
-        return await backupExporter.EsportaAsync(cancellationToken);
+        var dump = await backupExporter.EsportaAsync(cancellationToken);
+
+        // È l'unica operazione che porta fuori dal sistema una copia completa del database: va
+        // sempre tracciata con chi l'ha fatta e quando, anche quando va a buon fine. Categoria
+        // "Backup" come i backup notturni (stessa pagina Super Admin > Backup), ma origine "Api" e
+        // Operatore valorizzato: è quello che distingue a colpo d'occhio un download manuale dal
+        // backup automatico, che di operatore non ne ha.
+        await logEventi.RegistraAsync(
+            LivelloLog.Info,
+            $"Backup del database scaricato manualmente ({FormattaDimensione(dump.LongLength)}).",
+            origine: "Api",
+            categoria: "Backup",
+            operatore: currentUser.Email,
+            cancellationToken: cancellationToken);
+
+        return dump;
     }
+
+    private static string FormattaDimensione(long byteTotali) =>
+        byteTotali >= 1024L * 1024L
+            ? $"{byteTotali / 1024d / 1024d:N1} MB"
+            : $"{byteTotali / 1024d:N0} KB";
 
     public async Task<Cliente> ImpostaAttivoAsync(ICurrentUser currentUser, Guid clienteId, bool attivo, CancellationToken cancellationToken)
     {
@@ -133,8 +154,79 @@ public class SuperAdminService(
             ?? throw new NotFoundException("Utente non trovato.");
 
         utente.PasswordHash = passwordHasher.HashPassword(utente, request.NuovaPassword);
+        // Chi chiede il reset ha quasi sempre appena finito i tentativi sbagliando la password che
+        // non ricordava: lasciargli il blocco addosso vorrebbe dire dargli una password nuova che
+        // non funziona per un quarto d'ora, proprio nel momento in cui ha fretta.
+        utente.TentativiLoginFalliti = 0;
+        utente.BloccatoFinoUtc = null;
         await utenti.UpdateAsync(utente, cancellationToken);
         await LogUtenteAsync(currentUser, utente, $"Password reimpostata per {utente.Email} (supporto Super Admin).", cancellationToken);
+    }
+
+    /// <summary>
+    /// Toglie il blocco per troppi tentativi senza toccare la password — per chi la password se la
+    /// ricorda e si è bloccato per un maiuscolo di troppo: cambiargliela sarebbe una complicazione
+    /// inutile. Non fallisce se l'utente non era bloccato: è un'azione di assistenza, chi la usa
+    /// vuole solo la certezza che quell'account possa entrare adesso.
+    /// </summary>
+    public async Task SbloccaAccessoAsync(ICurrentUser currentUser, Guid utenteId, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        if (utente.TentativiLoginFalliti == 0 && utente.BloccatoFinoUtc is null)
+        {
+            return;
+        }
+
+        utente.TentativiLoginFalliti = 0;
+        utente.BloccatoFinoUtc = null;
+        await utenti.UpdateAsync(utente, cancellationToken);
+        await LogUtenteAsync(currentUser, utente, $"Blocco per tentativi falliti rimosso per {utente.Email} (supporto Super Admin).", cancellationToken);
+    }
+
+    /// <summary>
+    /// Spegne la verifica in due passaggi di un utente che non riesce più ad accedere (telefono
+    /// perso insieme ai codici di recupero) — l'unico modo per rimetterlo dentro, dato che il
+    /// segreto sta solo nel suo telefono e i codici sono conservati in hash: nessuno, Super Admin
+    /// compreso, può rileggerli o rigenerarli al posto suo.
+    ///
+    /// Disattiva invece di rigenerare di proposito: così il Super Admin non entra mai in possesso
+    /// di un secondo fattore altrui. L'utente rientra con la sola password e riconfigura da capo.
+    /// Va da sé che prima di premerlo bisogna essere sicuri di chi sta chiedendo: da qui in avanti,
+    /// per quell'account, la password torna a bastare.
+    /// </summary>
+    public async Task ResettaDueFattoriAsync(ICurrentUser currentUser, Guid utenteId, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        if (!utente.TotpAttivo)
+        {
+            throw new ConflictException("Questo utente non ha la verifica in due passaggi attiva.");
+        }
+
+        utente.TotpAttivo = false;
+        utente.TotpSecret = null;
+        utente.TotpAttivatoAtUtc = null;
+        // Anche i tentativi falliti: chi ha provato e riprovato a entrare senza codice si ritrova
+        // spesso pure l'account bloccato, e sbloccarlo è parte della stessa richiesta di supporto.
+        utente.TentativiLoginFalliti = 0;
+        utente.BloccatoFinoUtc = null;
+        await utenti.UpdateAsync(utente, cancellationToken);
+
+        await dueFattori.SostituisciCodiciAsync(utente.Id, [], cancellationToken);
+        await dueFattori.RimuoviDispositiviAsync(utente.Id, cancellationToken);
+
+        await LogUtenteAsync(
+            currentUser,
+            utente,
+            $"Verifica in due passaggi azzerata per {utente.Email} (supporto Super Admin): l'accesso torna alla sola password.",
+            cancellationToken);
     }
 
     /// <summary>

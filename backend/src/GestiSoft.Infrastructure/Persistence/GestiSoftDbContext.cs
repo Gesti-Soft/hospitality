@@ -49,6 +49,10 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
 
     public DbSet<UtenteStruttura> UtentiStrutture => Set<UtenteStruttura>();
 
+    public DbSet<CodiceRecuperoUtente> CodiciRecuperoUtente => Set<CodiceRecuperoUtente>();
+
+    public DbSet<DispositivoFidato> DispositiviFidati => Set<DispositivoFidato>();
+
     public DbSet<ImpostazioniStruttura> ImpostazioniStruttura => Set<ImpostazioniStruttura>();
 
     public DbSet<LogEvento> LogEventi => Set<LogEvento>();

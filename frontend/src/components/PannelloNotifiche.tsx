@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import Badge from '@mui/material/Badge'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -8,6 +10,8 @@ import Typography from '@mui/material/Typography'
 import { tokens } from '../theme'
 import { IconNotifiche } from '../layout/navIcons'
 import { useContoNotificheNonLette, useNotifiche, useSegnaNotificaLetta, useSegnaTutteNotificheLette, type NotificaDto } from '../api/notifiche'
+import { stato2Fa } from '../api/auth'
+import { useAuth } from '../auth/AuthContext'
 
 // Notifiche mostrate alla volta: si parte con una sola pagina, poi se ne rivela un'altra ogni volta
 // che si scorre fino in fondo all'elenco (stesso principio di usePaginazioneScroll usato altrove,
@@ -20,6 +24,15 @@ const NOTIFICHE_PER_PAGINA = 5
 export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null }) {
   const [ancora, setAncora] = useState<HTMLElement | null>(null)
   const [numeroVisibili, setNumeroVisibili] = useState(NOTIFICHE_PER_PAGINA)
+  const navigate = useNavigate()
+  const { sessione } = useAuth()
+  const { data: statoDueFattori } = useQuery({ queryKey: ['auth', '2fa'], queryFn: stato2Fa })
+
+  // Mai al Super Admin: per lo staff GestiSoft il 2FA resta una scelta e il promemoria è solo
+  // rumore — richiesta esplicita. Per un Cliente invece il consiglio ha senso: la pagina "Il mio
+  // account" dove attivarlo non richiede permessi né una struttura selezionata.
+  const consiglia2Fa = !sessione?.isSuperAdmin && statoDueFattori?.attivo === false
+
   const { data: conteggio } = useContoNotificheNonLette(strutturaId)
   const { data: notifiche } = useNotifiche(strutturaId, false)
   const segnaLetta = useSegnaNotificaLetta(strutturaId)
@@ -47,7 +60,10 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
     return () => observer.disconnect()
   }, [altreDaCaricare])
 
-  if (!strutturaId) {
+  // Senza struttura selezionata non ci sono notifiche da mostrare, ma il promemoria del 2FA sì:
+  // è proprio il Super Admin appena entrato, che di struttura non ne ha ancora scelta una, il primo
+  // che dovrebbe attivarlo.
+  if (!strutturaId && !consiglia2Fa) {
     return null
   }
 
@@ -64,7 +80,9 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
   return (
     <>
       <IconButton size="small" onClick={(e) => apri(e.currentTarget)} sx={{ color: '#7E899A' }}>
-        <Badge badgeContent={conteggio ?? 0} color="error" max={99} sx={{ '& .MuiBadge-badge': { fontSize: 9.5, fontWeight: 700 } }}>
+        {/* Il promemoria conta come una notifica non letta: altrimenti resterebbe invisibile a chi
+            non apre mai il pannello, che è esattamente chi va avvisato. */}
+        <Badge badgeContent={(conteggio ?? 0) + (consiglia2Fa ? 1 : 0)} color="error" max={99} sx={{ '& .MuiBadge-badge': { fontSize: 9.5, fontWeight: 700 } }}>
           <IconNotifiche width={19} height={19} />
         </Badge>
       </IconButton>
@@ -87,8 +105,44 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
         </Box>
 
         <Box ref={contenitoreRef} sx={{ maxHeight: 400, overflowY: 'auto' }}>
+          {consiglia2Fa && (
+            <Box
+              component="button"
+              onClick={() => {
+                setAncora(null)
+                navigate('/mio-account')
+              }}
+              sx={{
+                display: 'flex',
+                gap: 1,
+                width: '100%',
+                textAlign: 'left',
+                px: 2,
+                py: 1.25,
+                border: 'none',
+                borderBottom: `1px solid ${tokens.surfaceBorder}`,
+                bgcolor: 'rgba(214,158,46,0.10)',
+                cursor: 'pointer',
+                '&:hover': { bgcolor: 'rgba(214,158,46,0.18)' },
+              }}
+            >
+              <Box sx={{ flex: '0 0 auto', pt: 0.5 }}>
+                <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: tokens.wait600 }} />
+              </Box>
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Attiva la verifica in due passaggi</Typography>
+                <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary, mt: 0.25 }}>
+                  Oggi per entrare basta la tua password: chi la scopre entra al posto tuo. Servono due minuti e il
+                  telefono.
+                </Typography>
+                <Typography sx={{ fontSize: 11, color: tokens.textTertiary, mt: 0.5 }}>Tocca per attivarla</Typography>
+              </Box>
+            </Box>
+          )}
           {!notifiche || notifiche.length === 0 ? (
+            consiglia2Fa ? null : (
             <Typography sx={{ p: 2.5, fontSize: 13, color: tokens.textSecondary, textAlign: 'center' }}>Nessuna notifica.</Typography>
+            )
           ) : (
             <>
               {notificheVisibili.map((n) => (

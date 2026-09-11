@@ -1,4 +1,5 @@
 using System.Text;
+using GestiSoft.Api;
 using System.Threading.RateLimiting;
 using GestiSoft.Api.Auth;
 using GestiSoft.Api.Middleware;
@@ -79,6 +80,22 @@ builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Il login è l'unico endpoint interrogabile senza essere già autenticati, quindi è l'unico
+    // punto da cui si può provare a indovinare una password dall'esterno: qui il tetto è per
+    // indirizzo IP e molto più stretto di quello generale. Il blocco dell'account dopo 5 tentativi
+    // (AuthService) protegge il singolo utente; questo limita chi prova molte email diverse dallo
+    // stesso posto, che il contatore per account non vedrebbe mai.
+    options.AddPolicy(RateLimitPolicies.Login, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
         var partitionKey = httpContext.User.FindFirst(AppClaimTypes.ClienteId)?.Value

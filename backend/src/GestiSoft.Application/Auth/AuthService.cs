@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using GestiSoft.Application.Clienti;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Logging;
@@ -10,6 +12,19 @@ namespace GestiSoft.Application.Auth;
 
 public record LoginResult(string Token, DateTime ScadeAtUtc, Guid UtenteId, string Email, bool IsSuperAdmin, Guid? ClienteId, bool IsClienteAccount);
 
+/// <summary>
+/// Esito del primo passo del login. O la sessione è già pronta (nessun 2FA, oppure browser già
+/// ricordato), oppure manca solo il codice: in quel caso arriva un <see cref="TokenVerifica2Fa"/>
+/// da restituire al secondo passo. Esattamente uno dei due è valorizzato.
+/// </summary>
+public record EsitoLogin(LoginResult? Sessione, string? TokenVerifica2Fa);
+
+/// <summary>Sessione ottenuta al secondo passo, più il token del browser da ricordare (solo se richiesto).</summary>
+public record EsitoVerifica2Fa(LoginResult Sessione, string? TokenDispositivo, DateTime? DispositivoScadeAtUtc, int CodiciRecuperoRimasti);
+
+/// <summary>Dati mostrati una volta sola all'avvio dell'attivazione: il QR da inquadrare e la stessa chiave da digitare a mano se il QR non si legge.</summary>
+public record Avvio2Fa(string Secret, string UriOtpauth);
+
 public class AuthService(
     IUtenteRepository utenti,
     IClienteRepository clienti,
@@ -17,13 +32,30 @@ public class AuthService(
     IStrutturaRepository strutture,
     IPasswordHasher<Utente> passwordHasher,
     IJwtTokenGenerator tokenGenerator,
+    ITotpService totp,
+    IDueFattoriRepository dueFattori,
     ILogEventoService logEventi)
 {
     // Messaggio generico riservato al rinnovo silenzioso (RefreshAsync) — lì non è mai mostrato in
     // un form, l'utente scopre la sessione scaduta solo al prossimo 401 su un'azione reale.
     private const string CredenzialiNonValideMessage = "Sessione non valida.";
 
-    public async Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken)
+    /// <summary>
+    /// Password sbagliate di fila prima del blocco temporaneo. Cinque è largo per chi sbaglia a
+    /// digitare e strettissimo per chi prova una lista di password: il rate limit generale dell'Api
+    /// da solo ne lascerebbe passare una ventina al secondo.
+    /// </summary>
+    private const int MassimiTentativiLogin = 5;
+
+    /// <summary>Durata del blocco. Si scioglie da solo: vedi Utente.BloccatoFinoUtc per il perché non è mai definitivo.</summary>
+    private const int MinutiBlocco = 15;
+
+    /// <summary>Per quanto un browser resta "ricordato" e non chiede più il codice.</summary>
+    private const int GiorniDispositivoFidato = 7;
+
+    private const int NumeroCodiciRecupero = 10;
+
+    public async Task<EsitoLogin> LoginAsync(string email, string password, string? tokenDispositivo, CancellationToken cancellationToken)
     {
         var emailNormalizzata = email.Trim().ToLowerInvariant();
         var utente = await utenti.GetByEmailAsync(emailNormalizzata, cancellationToken);
@@ -43,9 +75,18 @@ public class AuthService(
         // abilitazione: un account disabilitato con la password sbagliata deve vedere "Password
         // errata", non "Utente disabilitato" — altrimenti chi indovina l'email di un account
         // disabilitato lo scopre senza mai azzeccare la password.
+        // Il blocco per troppi tentativi viene prima della verifica della password: è proprio a chi
+        // la sta indovinando che non va concessa un'altra prova, e a chi la sa costa solo l'attesa.
+        if (BloccoAttivo(utente, out var minutiMancanti))
+        {
+            await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
+            throw new UnauthorizedAppException($"Troppi tentativi falliti: riprova tra {minutiMancanti} minuti.");
+        }
+
         var esito = passwordHasher.VerifyHashedPassword(utente, utente.PasswordHash, password);
         if (esito == PasswordVerificationResult.Failed)
         {
+            await RegistraTentativoFallitoAsync(utente, cancellationToken);
             await LogFallitoAsync(emailNormalizzata, utente.ClienteId, cancellationToken);
             throw new UnauthorizedAppException("Password errata.");
         }
@@ -79,18 +120,93 @@ public class AuthService(
             throw new UnauthorizedAppException("La licenza della tua struttura è scaduta. Contatta l'assistenza GestiSoft per rinnovarla.");
         }
 
-        var token = tokenGenerator.Generate(utente);
+        await AzzeraTentativiAsync(utente, cancellationToken);
 
-        await logEventi.RegistraAsync(
-            LivelloLog.Info,
-            "Login effettuato.",
-            origine: "Auth",
-            clienteId: utente.ClienteId,
-            categoria: "Auth",
-            operatore: utente.Email,
-            cancellationToken: cancellationToken);
+        // Password giusta ma 2FA attivo: la sessione non nasce qui. Fa eccezione il browser già
+        // ricordato, che il codice l'ha comunque dato entro la settimana.
+        if (utente.TotpAttivo && !await DispositivoRicordatoAsync(utente.Id, tokenDispositivo, cancellationToken))
+        {
+            return new EsitoLogin(null, tokenGenerator.GeneraTokenVerifica2Fa(utente).Value);
+        }
 
-        return new LoginResult(token.Value, token.ScadeAtUtc, utente.Id, utente.Email, utente.IsSuperAdmin, utente.ClienteId, utente.IsClienteAccount);
+        return new EsitoLogin(await CreaSessioneAsync(utente, cancellationToken), null);
+    }
+
+    /// <summary>
+    /// Secondo passo del login: il codice a 6 cifre dell'app, oppure uno dei codici di recupero se
+    /// il telefono non c'è più. Un codice sbagliato pesa quanto una password sbagliata — altrimenti
+    /// il 2FA diventerebbe il punto debole invece che il contrario.
+    /// </summary>
+    public async Task<EsitoVerifica2Fa> Verifica2FaAsync(
+        string tokenVerifica, string codice, bool ricordaDispositivo, CancellationToken cancellationToken)
+    {
+        var utenteId = tokenGenerator.LeggiUtenteDaTokenVerifica2Fa(tokenVerifica)
+            ?? throw new UnauthorizedAppException("Verifica scaduta: rifai il login.");
+
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken);
+        if (utente is null || !utente.Attivo || !utente.TotpAttivo || utente.TotpSecret is null)
+        {
+            throw new UnauthorizedAppException(CredenzialiNonValideMessage);
+        }
+
+        if (BloccoAttivo(utente, out var minutiMancanti))
+        {
+            throw new UnauthorizedAppException($"Troppi tentativi falliti: riprova tra {minutiMancanti} minuti.");
+        }
+
+        var codiceRecuperoUsato = false;
+        if (!totp.VerificaCodice(utente.TotpSecret, codice))
+        {
+            var codiceRecupero = await TrovaCodiceRecuperoAsync(utente.Id, codice, cancellationToken);
+            if (codiceRecupero is null)
+            {
+                await RegistraTentativoFallitoAsync(utente, cancellationToken);
+                await logEventi.RegistraAsync(
+                    LivelloLog.Warning,
+                    $"Codice di verifica errato per '{utente.Email}'.",
+                    origine: "Auth",
+                    clienteId: utente.ClienteId,
+                    categoria: "Auth",
+                    cancellationToken: cancellationToken);
+                throw new UnauthorizedAppException("Codice non valido.");
+            }
+
+            await dueFattori.SegnaCodiceUsatoAsync(codiceRecupero, cancellationToken);
+            codiceRecuperoUsato = true;
+        }
+
+        await AzzeraTentativiAsync(utente, cancellationToken);
+
+        string? tokenDispositivo = null;
+        DateTime? dispositivoScadeAtUtc = null;
+        if (ricordaDispositivo)
+        {
+            tokenDispositivo = GeneraTokenCasuale();
+            dispositivoScadeAtUtc = DateTime.UtcNow.AddDays(GiorniDispositivoFidato);
+            await dueFattori.AddDispositivoAsync(
+                new DispositivoFidato { UtenteId = utente.Id, TokenHash = Hash(tokenDispositivo), ScadeAtUtc = dispositivoScadeAtUtc.Value },
+                cancellationToken);
+            await dueFattori.RimuoviDispositiviScadutiAsync(cancellationToken);
+        }
+
+        var sessione = await CreaSessioneAsync(utente, cancellationToken);
+        var codiciRimasti = (await dueFattori.ListCodiciNonUsatiAsync(utente.Id, cancellationToken)).Count;
+
+        if (codiceRecuperoUsato)
+        {
+            // Va segnalato forte: o l'utente ha perso il telefono, o sta entrando qualcuno che non
+            // dovrebbe avere quei codici.
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Accesso con codice di recupero ({codiciRimasti} ancora disponibili).",
+                origine: "Auth",
+                clienteId: utente.ClienteId,
+                categoria: "Auth",
+                operatore: utente.Email,
+                cancellationToken: cancellationToken);
+        }
+
+        return new EsitoVerifica2Fa(sessione, tokenDispositivo, dispositivoScadeAtUtc, codiciRimasti);
     }
 
     /// <summary>
@@ -164,6 +280,289 @@ public class AuthService(
 
         return risultato;
     }
+
+    /// <summary>
+    /// Avvia l'attivazione: genera il segreto e lo salva, ma NON accende il 2FA — quello succede
+    /// solo in <see cref="Attiva2FaAsync"/>, dopo che l'utente ha dimostrato di aver configurato
+    /// l'app. Riavviare l'attivazione genera un segreto nuovo: un QR abbandonato a metà non resta
+    /// valido per sempre.
+    /// </summary>
+    public async Task<Avvio2Fa> Avvia2FaAsync(Guid utenteId, CancellationToken cancellationToken)
+    {
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        if (utente.TotpAttivo)
+        {
+            throw new ConflictException("La verifica in due passaggi è già attiva: disattivala prima di riconfigurarla.");
+        }
+
+        var secret = totp.GeneraSecret();
+        utente.TotpSecret = secret;
+        await utenti.UpdateAsync(utente, cancellationToken);
+
+        return new Avvio2Fa(secret, totp.CostruisciUriOtpauth(secret, utente.Email));
+    }
+
+    /// <summary>
+    /// Conferma l'attivazione con il primo codice e restituisce i codici di recupero in chiaro:
+    /// è l'unico momento in cui esistono in forma leggibile, dopo restano solo i loro hash.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> Attiva2FaAsync(Guid utenteId, string codice, CancellationToken cancellationToken)
+    {
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        if (utente.TotpAttivo)
+        {
+            throw new ConflictException("La verifica in due passaggi è già attiva.");
+        }
+
+        if (utente.TotpSecret is null)
+        {
+            throw new ConflictException("Configurazione non avviata: rileggi il codice QR.");
+        }
+
+        if (!totp.VerificaCodice(utente.TotpSecret, codice))
+        {
+            throw new UnauthorizedAppException("Codice non valido: controlla di aver inquadrato il QR e che l'ora del telefono sia corretta.");
+        }
+
+        utente.TotpAttivo = true;
+        utente.TotpAttivatoAtUtc = DateTime.UtcNow;
+        await utenti.UpdateAsync(utente, cancellationToken);
+
+        var codiciInChiaro = await RigeneraCodiciRecuperoAsync(utente.Id, cancellationToken);
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Info,
+            "Verifica in due passaggi attivata.",
+            origine: "Auth",
+            clienteId: utente.ClienteId,
+            categoria: "Auth",
+            operatore: utente.Email,
+            cancellationToken: cancellationToken);
+
+        return codiciInChiaro;
+    }
+
+    /// <summary>
+    /// Disattivazione: richiede la password corrente, perché una sessione lasciata aperta su un
+    /// computer non deve bastare a togliere la protezione. Porta via anche codici e dispositivi
+    /// ricordati — riattivandola si riparte da zero.
+    /// </summary>
+    public async Task Disattiva2FaAsync(Guid utenteId, string password, CancellationToken cancellationToken)
+    {
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        if (passwordHasher.VerifyHashedPassword(utente, utente.PasswordHash, password) == PasswordVerificationResult.Failed)
+        {
+            throw new UnauthorizedAppException("Password errata.");
+        }
+
+        utente.TotpAttivo = false;
+        utente.TotpSecret = null;
+        utente.TotpAttivatoAtUtc = null;
+        await utenti.UpdateAsync(utente, cancellationToken);
+        await dueFattori.SostituisciCodiciAsync(utente.Id, [], cancellationToken);
+        await dueFattori.RimuoviDispositiviAsync(utente.Id, cancellationToken);
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Warning,
+            "Verifica in due passaggi disattivata.",
+            origine: "Auth",
+            clienteId: utente.ClienteId,
+            categoria: "Auth",
+            operatore: utente.Email,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>Nuovi codici di recupero: invalida i precedenti e i browser ricordati, perché chi li rigenera di solito sospetta di averli persi.</summary>
+    public async Task<IReadOnlyList<string>> RigeneraCodiciAsync(Guid utenteId, string password, CancellationToken cancellationToken)
+    {
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        if (passwordHasher.VerifyHashedPassword(utente, utente.PasswordHash, password) == PasswordVerificationResult.Failed)
+        {
+            throw new UnauthorizedAppException("Password errata.");
+        }
+
+        if (!utente.TotpAttivo)
+        {
+            throw new ConflictException("La verifica in due passaggi non è attiva.");
+        }
+
+        await dueFattori.RimuoviDispositiviAsync(utente.Id, cancellationToken);
+        var codici = await RigeneraCodiciRecuperoAsync(utente.Id, cancellationToken);
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Warning,
+            "Codici di recupero rigenerati: i precedenti non sono più validi.",
+            origine: "Auth",
+            clienteId: utente.ClienteId,
+            categoria: "Auth",
+            operatore: utente.Email,
+            cancellationToken: cancellationToken);
+
+        return codici;
+    }
+
+    public async Task<(bool Attivo, int CodiciRimasti)> Stato2FaAsync(Guid utenteId, CancellationToken cancellationToken)
+    {
+        var utente = await utenti.GetByIdAsync(utenteId, cancellationToken)
+            ?? throw new NotFoundException("Utente non trovato.");
+
+        var rimasti = utente.TotpAttivo ? (await dueFattori.ListCodiciNonUsatiAsync(utenteId, cancellationToken)).Count : 0;
+        return (utente.TotpAttivo, rimasti);
+    }
+
+    private async Task<LoginResult> CreaSessioneAsync(Utente utente, CancellationToken cancellationToken)
+    {
+        var token = tokenGenerator.Generate(utente);
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Info,
+            "Login effettuato.",
+            origine: "Auth",
+            clienteId: utente.ClienteId,
+            categoria: "Auth",
+            operatore: utente.Email,
+            cancellationToken: cancellationToken);
+
+        return new LoginResult(token.Value, token.ScadeAtUtc, utente.Id, utente.Email, utente.IsSuperAdmin, utente.ClienteId, utente.IsClienteAccount);
+    }
+
+    private static bool BloccoAttivo(Utente utente, out int minutiMancanti)
+    {
+        if (utente.BloccatoFinoUtc is { } bloccatoFino && bloccatoFino > DateTime.UtcNow)
+        {
+            // Arrotondato per eccesso e mai sotto 1: "riprova tra 0 minuti" non vuol dire niente.
+            minutiMancanti = Math.Max(1, (int)Math.Ceiling((bloccatoFino - DateTime.UtcNow).TotalMinutes));
+            return true;
+        }
+
+        minutiMancanti = 0;
+        return false;
+    }
+
+    private async Task RegistraTentativoFallitoAsync(Utente utente, CancellationToken cancellationToken)
+    {
+        utente.TentativiLoginFalliti++;
+
+        if (utente.TentativiLoginFalliti >= MassimiTentativiLogin)
+        {
+            utente.BloccatoFinoUtc = DateTime.UtcNow.AddMinutes(MinutiBlocco);
+            // Il contatore riparte da zero: al termine del blocco l'utente ha di nuovo cinque
+            // tentativi, invece di ritrovarsi bloccato al primo errore successivo.
+            utente.TentativiLoginFalliti = 0;
+
+            await utenti.UpdateAsync(utente, cancellationToken);
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Account '{utente.Email}' bloccato per {MinutiBlocco} minuti dopo {MassimiTentativiLogin} tentativi falliti.",
+                origine: "Auth",
+                clienteId: utente.ClienteId,
+                categoria: "Auth",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        await utenti.UpdateAsync(utente, cancellationToken);
+    }
+
+    private async Task AzzeraTentativiAsync(Utente utente, CancellationToken cancellationToken)
+    {
+        if (utente.TentativiLoginFalliti == 0 && utente.BloccatoFinoUtc is null)
+        {
+            return;
+        }
+
+        utente.TentativiLoginFalliti = 0;
+        utente.BloccatoFinoUtc = null;
+        await utenti.UpdateAsync(utente, cancellationToken);
+    }
+
+    private async Task<bool> DispositivoRicordatoAsync(Guid utenteId, string? tokenDispositivo, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tokenDispositivo))
+        {
+            return false;
+        }
+
+        var dispositivo = await dueFattori.GetDispositivoAsync(Hash(tokenDispositivo), cancellationToken);
+        return dispositivo is not null && dispositivo.UtenteId == utenteId && dispositivo.ScadeAtUtc > DateTime.UtcNow;
+    }
+
+    private async Task<CodiceRecuperoUtente?> TrovaCodiceRecuperoAsync(Guid utenteId, string codice, CancellationToken cancellationToken)
+    {
+        var normalizzato = NormalizzaCodiceRecupero(codice);
+        if (normalizzato.Length == 0)
+        {
+            return null;
+        }
+
+        var hash = Hash(normalizzato);
+        var codici = await dueFattori.ListCodiciNonUsatiAsync(utenteId, cancellationToken);
+        return codici.FirstOrDefault(c => CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(c.CodiceHash), Encoding.UTF8.GetBytes(hash)));
+    }
+
+    private async Task<IReadOnlyList<string>> RigeneraCodiciRecuperoAsync(Guid utenteId, CancellationToken cancellationToken)
+    {
+        var inChiaro = new List<string>(NumeroCodiciRecupero);
+        var righe = new List<CodiceRecuperoUtente>(NumeroCodiciRecupero);
+
+        for (var i = 0; i < NumeroCodiciRecupero; i++)
+        {
+            var codice = GeneraCodiceRecupero();
+            inChiaro.Add(codice);
+            righe.Add(new CodiceRecuperoUtente { UtenteId = utenteId, CodiceHash = Hash(NormalizzaCodiceRecupero(codice)) });
+        }
+
+        await dueFattori.SostituisciCodiciAsync(utenteId, righe, cancellationToken);
+        return inChiaro;
+    }
+
+    /// <summary>
+    /// 16 caratteri da un alfabeto senza 0/O e 1/I (si trascrivono a mano da un foglio), divisi in
+    /// gruppi di 4 per leggibilità: circa 80 bit, quindi indovinabili solo per sbaglio del destino.
+    /// </summary>
+    private static string GeneraCodiceRecupero()
+    {
+        const string alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        var caratteri = new char[19];
+        var indice = 0;
+        for (var gruppo = 0; gruppo < 4; gruppo++)
+        {
+            if (gruppo > 0)
+            {
+                caratteri[indice++] = '-';
+            }
+
+            for (var i = 0; i < 4; i++)
+            {
+                caratteri[indice++] = alfabeto[RandomNumberGenerator.GetInt32(alfabeto.Length)];
+            }
+        }
+
+        return new string(caratteri);
+    }
+
+    /// <summary>Trattini, spazi e minuscole non contano: l'utente ricopia da un foglio, non deve azzeccare il formato.</summary>
+    private static string NormalizzaCodiceRecupero(string codice) =>
+        new([.. codice.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant)]);
+
+    private static string GeneraTokenCasuale() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+
+    /// <summary>
+    /// SHA-256 semplice, non un hash da password: qui i valori sono generati a caso con entropia
+    /// piena (token da 256 bit, codici da ~80), quindi non c'è nessun dizionario da provare — il
+    /// rallentamento di un KDF proteggerebbe da un attacco che non esiste.
+    /// </summary>
+    private static string Hash(string valore) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(valore)));
 
     private Task LogFallitoAsync(string emailTentata, Guid? clienteId, CancellationToken cancellationToken) =>
         logEventi.RegistraAsync(

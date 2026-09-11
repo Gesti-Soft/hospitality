@@ -57,6 +57,13 @@ export interface NavSection {
   /** Se true, la sezione compare solo per il Super Admin (staff GestiSoft), mai per un Cliente. */
   soloSuperAdmin?: boolean
   /**
+   * Sezione che sfugge a ogni filtro: nessun permesso richiesto, nessuna struttura da selezionare
+   * prima. Serve per "Il mio account" — la sicurezza del proprio accesso (password e verifica in
+   * due passaggi) deve restare a portata di chiunque sia entrato, anche di un addetto senza alcun
+   * permesso e di un Super Admin che non ha ancora scelto una struttura.
+   */
+  sempreVisibile?: boolean
+  /**
    * Riservata a chi gestisce gli utenti della struttura corrente (permesso SettingUser) — un
    * lavoratore normale (Cliente non amministratore) non deve vedere la sezione. Il Super Admin la
    * vede sempre.
@@ -76,6 +83,7 @@ export const navSections: NavSection[] = [
       { label: 'Dashboard', path: '/super-admin', icon: IconSuperAdmin },
       { label: 'Clienti', path: '/super-admin/clienti', icon: IconUtenti },
       { label: 'Backup', path: '/super-admin/backup', icon: IconBackup },
+      { label: 'Log', path: '/super-admin/log', icon: IconLog },
       { label: 'Impostazioni', path: '/super-admin/impostazioni', icon: IconImpostazioni },
     ],
   },
@@ -114,6 +122,12 @@ export const navSections: NavSection[] = [
       { label: 'PayTourist', path: '/paytourist', icon: IconPayTourist, richiedeServizio: 'payTouristAbilitato', richiedePermesso: 'statePoliceRead' },
       { label: 'Servizi · OTA', path: '/wubook', icon: IconWubook, richiedeServizio: 'wubookAbilitato', richiedePermesso: ['settingRoomRead', 'reservationRead'] },
     ],
+  },
+  {
+    title: 'Il mio account',
+    icon: IconUtenti,
+    sempreVisibile: true,
+    items: [{ label: 'Il mio account', path: '/mio-account', icon: IconUtenti }],
   },
   {
     title: 'Amministrazione',

@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import Skeleton from '@mui/material/Skeleton'
@@ -9,7 +8,6 @@ import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
-import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
@@ -19,7 +17,6 @@ import { ApiError } from '../../api/client'
 import {
   RuoloUtente,
   useAssegnazioniStruttura,
-  useCambiaPasswordPropria,
   useRimuoviAssegnazione,
   useUtentiCliente,
   type AssegnazioneStrutturaDto,
@@ -91,8 +88,6 @@ export function UtentiPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <CambiaPasswordCard />
-
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Utenti con accesso a questa struttura</Typography>
         <Box sx={{ display: 'flex', gap: 1.5 }}>
@@ -206,45 +201,3 @@ export function UtentiPage() {
   )
 }
 
-function CambiaPasswordCard() {
-  const mobile = useMobile()
-  const [passwordAttuale, setPasswordAttuale] = useState('')
-  const [passwordNuova, setPasswordNuova] = useState('')
-  const toast = useToast()
-
-  const cambiaPassword = useCambiaPasswordPropria()
-
-  function salva() {
-    if (passwordAttuale.trim() === '' || passwordNuova.trim() === '') {
-      toast.errore('Compila entrambi i campi.')
-      return
-    }
-    cambiaPassword.mutate(
-      { passwordAttuale, passwordNuova },
-      {
-        onSuccess: () => {
-          toast.successo('Password aggiornata.')
-          setPasswordAttuale('')
-          setPasswordNuova('')
-        },
-        onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
-      },
-    )
-  }
-
-  return (
-    <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 560 }}>
-      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Cambia la tua password</Typography>
-
-      <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-        <TextField label="Password attuale" type="password" value={passwordAttuale} onChange={(e) => setPasswordAttuale(e.target.value)} fullWidth disabled={cambiaPassword.isPending} />
-        <TextField label="Nuova password" type="password" value={passwordNuova} onChange={(e) => setPasswordNuova(e.target.value)} fullWidth disabled={cambiaPassword.isPending} />
-      </Box>
-      <Box>
-        <Button variant="contained" color="primary" onClick={salva} disabled={cambiaPassword.isPending}>
-          Aggiorna password
-        </Button>
-      </Box>
-    </Box>
-  )
-}

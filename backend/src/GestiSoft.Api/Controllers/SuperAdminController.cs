@@ -64,6 +64,22 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
         return NoContent();
     }
 
+    /// <summary>Toglie il blocco per troppi tentativi falliti, senza cambiare la password.</summary>
+    [HttpPut("utenti/{utenteId:guid}/sblocca")]
+    public async Task<IActionResult> SbloccaAccesso(Guid utenteId, CancellationToken cancellationToken)
+    {
+        await service.SbloccaAccessoAsync(currentUser, utenteId, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>Sblocca un utente rimasto fuori dal 2FA (telefono e codici persi) — vedi SuperAdminService.ResettaDueFattoriAsync.</summary>
+    [HttpPut("utenti/{utenteId:guid}/reset-2fa")]
+    public async Task<IActionResult> ResettaDueFattori(Guid utenteId, CancellationToken cancellationToken)
+    {
+        await service.ResettaDueFattoriAsync(currentUser, utenteId, cancellationToken);
+        return NoContent();
+    }
+
     [HttpPut("utenti/{utenteId:guid}")]
     public async Task<IActionResult> AggiornaUtente(Guid utenteId, [FromBody] AggiornaUtenteRequest request, CancellationToken cancellationToken)
     {

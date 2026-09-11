@@ -3,6 +3,8 @@ import { Navigate } from 'react-router-dom'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import Link from '@mui/material/Link'
@@ -15,10 +17,12 @@ import { fontDisplay, tokens } from '../theme'
 import { GestiSoftMark } from '../components/GestiSoftMark'
 
 export function LoginPage() {
-  const { sessione, accedi, loading, errore } = useAuth()
+  const { sessione, accedi, completaVerifica2Fa, annullaVerifica2Fa, richiede2Fa, loading, errore } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordVisibile, setPasswordVisibile] = useState(false)
+  const [codice, setCodice] = useState('')
+  const [ricordaDispositivo, setRicordaDispositivo] = useState(true)
 
   if (sessione) {
     return <Navigate to="/" replace />
@@ -26,9 +30,23 @@ export function LoginPage() {
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
+
+    if (richiede2Fa) {
+      completaVerifica2Fa(codice, ricordaDispositivo).catch(() => {
+        // L'errore è già esposto tramite `errore` dal contesto di autenticazione.
+      })
+      return
+    }
+
     accedi(email, password).catch(() => {
-      // L'errore è già esposto tramite `errore` dal contesto di autenticazione.
+      // Idem: il messaggio arriva dal contesto, qui basta non far esplodere la promise.
     })
+  }
+
+  function tornaAlleCredenziali() {
+    annullaVerifica2Fa()
+    setCodice('')
+    setPassword('')
   }
 
   return (
@@ -79,15 +97,18 @@ export function LoginPage() {
         <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <Box>
             <Typography sx={{ fontFamily: fontDisplay, fontWeight: 800, fontSize: 27, color: tokens.ink900 }}>
-              Accedi
+              {richiede2Fa ? 'Verifica in due passaggi' : 'Accedi'}
             </Typography>
             <Typography sx={{ fontSize: 14, color: tokens.textSecondary, mt: 0.75 }}>
-              Inserisci le credenziali della tua struttura per continuare.
+              {richiede2Fa
+                ? 'Apri Google Authenticator sul telefono e digita il codice che vedi per GestiSoft.'
+                : 'Inserisci le credenziali della tua struttura per continuare.'}
             </Typography>
           </Box>
 
           {errore && <Alert severity="error">{errore}</Alert>}
 
+          {!richiede2Fa && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.25 }}>
             <TextField
               label="Email"
@@ -133,10 +154,40 @@ export function LoginPage() {
               </Box>
             </Box>
           </Box>
+          )}
+
+          {richiede2Fa && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <TextField
+                label="Codice di verifica"
+                value={codice}
+                onChange={(e) => setCodice(e.target.value)}
+                placeholder="000000"
+                autoComplete="one-time-code"
+                autoFocus
+                required
+                fullWidth
+                helperText="Le 6 cifre dell'app Google Authenticator, oppure uno dei codici di recupero."
+              />
+              <FormControlLabel
+                control={<Checkbox checked={ricordaDispositivo} onChange={(e) => setRicordaDispositivo(e.target.checked)} />}
+                label="Non chiedermelo per 7 giorni su questo dispositivo"
+                sx={{ '& .MuiFormControlLabel-label': { fontSize: 13.5 } }}
+              />
+            </Box>
+          )}
 
           <Button type="submit" variant="contained" color="primary" size="large" disabled={loading} fullWidth>
-            {loading ? 'Accesso in corso…' : 'Accedi'}
+            {loading ? 'Accesso in corso…' : richiede2Fa ? 'Verifica e accedi' : 'Accedi'}
           </Button>
+
+          {richiede2Fa && (
+            <Box sx={{ textAlign: 'center', mt: -2.5 }}>
+              <Link component="button" type="button" onClick={tornaAlleCredenziali} underline="hover" sx={{ fontSize: 12.5, fontWeight: 600 }}>
+                Torna a email e password
+              </Link>
+            </Box>
+          )}
 
           <Typography sx={{ fontSize: 12, color: tokens.textTertiary, textAlign: 'center' }}>
             Problemi di accesso? Scrivi a{' '}

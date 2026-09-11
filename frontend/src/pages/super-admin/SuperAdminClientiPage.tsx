@@ -38,6 +38,8 @@ import {
   useEliminaStrutturaDefinitivamente,
   useImpostaAttivoCliente,
   useResettaPasswordUtente,
+  useResettaDueFattoriUtente,
+  useSbloccaAccessoUtente,
   type ClienteAdminDto,
   type StrutturaAdminDto,
   type UtenteAdminDto,
@@ -51,6 +53,7 @@ import { useWubookEventiRicevuti, type WubookEventoRicevutoDto } from '../../api
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { fontDisplay, fontMono, tokens } from '../../theme'
 import { useToast } from '../../toast/ToastContext'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { KpiCard } from '../../components/KpiCard'
 import { CampoData } from '../../components/CampoData'
 import { formatoInputData, isoLocale, parsaInputData } from '../../lib/date'
@@ -1001,6 +1004,9 @@ function ModificaClienteDialog({
   const aggiorna = useAggiornaCliente()
   const aggiornaUtente = useAggiornaUtente()
   const resetPassword = useResettaPasswordUtente()
+  const reset2Fa = useResettaDueFattoriUtente()
+  const sblocca = useSbloccaAccessoUtente()
+  const [confermaReset2Fa, setConfermaReset2Fa] = useState(false)
   const queryClient = useQueryClient()
 
   const inCorso = aggiorna.isPending || aggiornaUtente.isPending
@@ -1050,6 +1056,31 @@ function ModificaClienteDialog({
         onSuccess: () => {
           toast.successo('Password reimpostata.')
           setNuovaPassword('')
+        },
+        onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      },
+    )
+  }
+
+  function sbloccaAccesso() {
+    if (!adminUtente) return
+    sblocca.mutate(
+      { utenteId: adminUtente.id },
+      {
+        onSuccess: () => toast.successo('Accesso sbloccato: può riprovare subito.'),
+        onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      },
+    )
+  }
+
+  function azzeraDueFattori() {
+    if (!adminUtente) return
+    reset2Fa.mutate(
+      { utenteId: adminUtente.id },
+      {
+        onSuccess: () => {
+          setConfermaReset2Fa(false)
+          toast.successo('Verifica in due passaggi azzerata: ora entra con la sola password.')
         },
         onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
       },
@@ -1112,7 +1143,19 @@ function ModificaClienteDialog({
 
             <Divider />
             <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
-              Reimposta la password di questo utente (non serve conoscere quella attuale).
+              Dopo 5 password sbagliate l'accesso si blocca per 15 minuti. Qui lo togli subito, senza cambiargli la
+              password.
+            </Typography>
+            <Box>
+              <Button variant="outlined" onClick={sbloccaAccesso} disabled={sblocca.isPending} sx={{ whiteSpace: 'nowrap' }}>
+                Sblocca accesso
+              </Button>
+            </Box>
+
+            <Divider />
+            <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+              Reimposta la password di questo utente (non serve conoscere quella attuale). Toglie anche l'eventuale
+              blocco per tentativi falliti.
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2, alignItems: mobile ? 'stretch' : 'flex-start' }}>
               <TextField
@@ -1132,11 +1175,39 @@ function ModificaClienteDialog({
                 Reimposta
               </Button>
             </Box>
+
+            <Divider />
+            <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+              Se ha perso il telefono e i codici di recupero, questo è l'unico modo per rimetterlo dentro: il codice non
+              verrà più chiesto e potrà riconfigurarlo da capo. Accertati di sapere con chi stai parlando.
+            </Typography>
+            <Box>
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={() => setConfermaReset2Fa(true)}
+                disabled={reset2Fa.isPending}
+                sx={{ whiteSpace: 'nowrap' }}
+              >
+                Azzera verifica in due passaggi
+              </Button>
+            </Box>
           </>
         ) : (
           <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>Nessun utente amministratore trovato per questo Cliente.</Typography>
         )}
       </DialogContent>
+      {confermaReset2Fa && (
+        <ConfirmDialog
+          titolo="Azzerare la verifica in due passaggi?"
+          messaggio={`${adminUtente?.email ?? 'Questo utente'} tornerà a entrare con la sola password e dovrà riconfigurare l'app da zero. I codici di recupero e i dispositivi ricordati vengono cancellati. Fallo solo se sei sicuro di chi te lo sta chiedendo.`}
+          testoConferma="Azzera"
+          inCorso={reset2Fa.isPending}
+          onConferma={azzeraDueFattori}
+          onAnnulla={() => setConfermaReset2Fa(false)}
+        />
+      )}
+
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
         <Button onClick={onClose} disabled={inCorso}>
           Annulla

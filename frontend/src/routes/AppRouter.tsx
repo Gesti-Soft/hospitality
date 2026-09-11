@@ -25,8 +25,10 @@ import { SuperAdminDashboardPage } from '../pages/super-admin/SuperAdminDashboar
 import { SuperAdminClientiPage } from '../pages/super-admin/SuperAdminClientiPage'
 import { SuperAdminImpostazioniPage } from '../pages/super-admin/SuperAdminImpostazioniPage'
 import { SuperAdminBackupPage } from '../pages/super-admin/SuperAdminBackupPage'
+import { SuperAdminLogPage } from '../pages/super-admin/SuperAdminLogPage'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RouteGuard } from './RouteGuard'
+import { MioAccountPage } from '../pages/MioAccountPage'
 import { useSezioniVisibili } from '../layout/useSezioniVisibili'
 
 /**
@@ -77,6 +79,9 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       { path: '/', element: <RootRoute /> },
+      // Nessun RouteGuard: la sicurezza del proprio accesso deve restare raggiungibile da
+      // chiunque sia entrato, anche senza permessi e senza una struttura selezionata.
+      { path: '/mio-account', element: <MioAccountPage /> },
       { path: '/calendario', element: <RouteGuard path="/calendario"><CalendarioPage /></RouteGuard> },
       { path: '/check-in-out', element: <RouteGuard path="/check-in-out"><CheckInOutPage /></RouteGuard> },
       { path: '/camere', element: <RouteGuard path="/camere"><CamerePage /></RouteGuard> },
@@ -100,6 +105,7 @@ const router = createBrowserRouter([
       { path: '/super-admin', element: <RouteGuard path="/super-admin"><SuperAdminDashboardPage /></RouteGuard> },
       { path: '/super-admin/clienti', element: <RouteGuard path="/super-admin/clienti"><SuperAdminClientiPage /></RouteGuard> },
       { path: '/super-admin/backup', element: <RouteGuard path="/super-admin/backup"><SuperAdminBackupPage /></RouteGuard> },
+      { path: '/super-admin/log', element: <RouteGuard path="/super-admin/log"><SuperAdminLogPage /></RouteGuard> },
       { path: '/super-admin/impostazioni', element: <RouteGuard path="/super-admin/impostazioni"><SuperAdminImpostazioniPage /></RouteGuard> },
     ],
   },

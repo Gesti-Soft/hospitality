@@ -10,6 +10,12 @@ export interface Sessione {
 
 const STORAGE_KEY = 'gestisoft.sessione'
 
+/**
+ * Token del "ricorda questo dispositivo" del 2FA. Vive separato dalla sessione perché deve
+ * sopravvivere al logout: è il browser a essere già stato verificato, non la singola sessione.
+ */
+const CHIAVE_DISPOSITIVO = 'gestisoft.dispositivo2fa'
+
 export function leggiSessione(): Sessione | null {
   const raw = localStorage.getItem(STORAGE_KEY)
   if (!raw) return null
@@ -28,4 +34,16 @@ export function salvaSessione(sessione: Sessione): void {
 
 export function cancellaSessione(): void {
   localStorage.removeItem(STORAGE_KEY)
+}
+
+export function leggiTokenDispositivo(): string | null {
+  return localStorage.getItem(CHIAVE_DISPOSITIVO)
+}
+
+export function salvaTokenDispositivo(token: string): void {
+  localStorage.setItem(CHIAVE_DISPOSITIVO, token)
+}
+
+export function cancellaTokenDispositivo(): void {
+  localStorage.removeItem(CHIAVE_DISPOSITIVO)
 }
