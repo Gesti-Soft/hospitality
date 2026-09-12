@@ -35,6 +35,13 @@ public class NotificaRepository(GestiSoftDbContext db) : INotificaRepository
     public Task<bool> EsistePerPrenotazioneAsync(Guid strutturaId, TipoNotifica tipo, Guid prenotazioneId, CancellationToken cancellationToken) =>
         db.Notifiche.AnyAsync(n => n.StrutturaId == strutturaId && n.Tipo == tipo && n.PrenotazioneId == prenotazioneId, cancellationToken);
 
+    public Task<bool> EsisteArrivoPerPrenotazioneAsync(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken) =>
+        db.Notifiche.AnyAsync(
+            n => n.StrutturaId == strutturaId
+                && n.PrenotazioneId == prenotazioneId
+                && (n.Tipo == TipoNotifica.NuovaPrenotazione || n.Tipo == TipoNotifica.PrenotazioneModificata),
+            cancellationToken);
+
     public async Task<IReadOnlyList<Notifica>> ListCancellazioniPendentiAsync(Guid strutturaId, string canale, CancellationToken cancellationToken) =>
         await db.Notifiche
             .Where(n => n.StrutturaId == strutturaId

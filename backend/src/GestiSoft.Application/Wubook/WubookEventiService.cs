@@ -1,5 +1,8 @@
+using GestiSoft.Application.Auth;
+using GestiSoft.Application.Logging;
 using GestiSoft.Application.Notifiche;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.Wubook;
 
@@ -22,7 +25,9 @@ public class WubookEventiService(
     IWubookEventoRicevutoRepository eventiRicevuti,
     WubookLicenzaService licenzaService,
     WubookPrenotazioniService prenotazioniService,
-    NotificaService notificaService)
+    NotificaService notificaService,
+    IStrutturaRepository strutture,
+    ILogEventoService logEventi)
 {
     public async Task ElaboraEventiAsync(Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -94,5 +99,23 @@ public class WubookEventiService(
         evento.UpdatedAtUtc = DateTime.UtcNow;
 
         await eventiRicevuti.UpsertAsync(evento, cancellationToken);
+
+        // Un evento fallito qui va anche nel log consultabile dall'app: wubook_eventi_ricevuti non è
+        // esposto in nessuna schermata, quindi finora l'unica traccia di una prenotazione arrivata e
+        // non importata restava nello stdout del container — invisibile a chi gestisce la struttura.
+        // La prenotazione può essere già stata salvata prima del punto di fallimento (il salvataggio
+        // avviene a passi separati: prenotazione, poi notifica, poi ospite), quindi il caso "c'è la
+        // prenotazione ma non la notifica" è proprio quello da poter riconoscere a posteriori.
+        if (!riuscita)
+        {
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Prenotazione Wubook rcode={rcode} ricevuta ma non importata: {errore}",
+                origine: "Wubook",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "Wubook",
+                cancellationToken: cancellationToken);
+        }
     }
 }

@@ -36,6 +36,9 @@ public class WubookPrenotazioniService(
 {
     private enum EsitoBooking { Creata, Aggiornata, Annullata, Ignorata }
 
+    /// <summary>Entro quante ore dalla creazione ha ancora senso segnalare come "arrivata" una prenotazione la cui notifica non era mai stata creata (vedi il recupero in ImportaBookingAsync).</summary>
+    private const int OreRecuperoArrivoNonNotificato = 24;
+
     public async Task<RisultatoSincronizzazionePrenotazioni> SincronizzaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationWrite, cancellationToken);
@@ -172,6 +175,17 @@ public class WubookPrenotazioniService(
             StatoPrenotazione = StatoPrenotazione.Incompleta,
         };
 
+        // Stato prima dell'aggiornamento, per riconoscere se un booking già noto (stesso rcode) è
+        // cambiato davvero: Wubook riusa lo stesso rcode quando l'ospite modifica date/importo/
+        // persone da OTA senza passare da cancella+ricrea, e senza questo confronto la modifica
+        // verrebbe scritta sul database in silenzio — nessuna notifica, nessun log (vedi sotto).
+        var primaCheckIn = entity.CheckIn;
+        var primaCheckOut = entity.CheckOut;
+        var primaImporto = entity.ImportoPrenotazione;
+        var primaNumeroOspiti = entity.NumeroOspiti;
+        var primaTipologiaId = entity.TipologiaId;
+        var primaCameraId = entity.CameraId;
+
         // Non riassegnare se la camera già assegnata in precedenza (un aggiornamento di date su un
         // booking esistente) resta compatibile con le nuove date — evita di spostare inutilmente un
         // ospite già assegnato a una camera del pool. Deve però appartenere ancora alla Tipologia
@@ -228,6 +242,19 @@ public class WubookPrenotazioniService(
             entity.PayTourist = struttura is null || !struttura.PayTouristAbilitato;
             await prenotazioni.AddAsync(entity, cancellationToken);
 
+            // L'arrivo di una prenotazione da OTA va sempre a log, non solo quando qualcosa va
+            // storto: prima era l'unico evento Wubook a non lasciare traccia (cancellazione e
+            // fallimenti sì, l'import riuscito no), quindi chi non aveva visto passare la notifica
+            // non aveva più nessun modo di sapere quando e da dove fosse arrivata.
+            await logEventi.RegistraAsync(
+                LivelloLog.Info,
+                $"Nuova prenotazione #{entity.NumeroPrenotazione} da {nomeCanale} (rcode={booking.RCode}): {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}, {entity.NumeroOspiti} ospiti, {booking.Importo:N2} €.",
+                origine: "Wubook",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "Wubook",
+                cancellationToken: cancellationToken);
+
             await notificaService.RegistraNuovaOModificaWubookAsync(
                 strutturaId, entity.Id, nomeCanale,
                 booking.CustomerEmail, booking.CustomerName, booking.CustomerSurname,
@@ -240,6 +267,79 @@ public class WubookPrenotazioniService(
         else
         {
             await prenotazioni.UpdateAsync(entity, cancellationToken);
+
+            // Rete di sicurezza per l'arrivo mai segnalato. I passi dell'import non sono in
+            // transazione (prima la prenotazione, poi la notifica, poi l'ospite, ciascuno con il
+            // proprio salvataggio): se si interrompe in mezzo, la prenotazione resta salvata senza
+            // notifica e l'evento viene ritentato dal polling — ma al secondo giro non risulta più
+            // "nuova" e finisce qui, dove prima non veniva segnalato nulla. Limitato agli arrivi
+            // recenti: su una prenotazione di settimane fa un "Nuova prenotazione" sarebbe fuorviante
+            // (e per le prenotazioni importate prima che il centro notifiche esistesse, sbagliato).
+            var arrivoRecente = entity.CreatedAtUtc >= DateTime.UtcNow.AddHours(-OreRecuperoArrivoNonNotificato);
+            if (arrivoRecente && await notificaService.RecuperaArrivoNonNotificatoAsync(
+                strutturaId, entity.Id, nomeCanale,
+                "Nuova prenotazione",
+                $"Nuova prenotazione da {nomeCanale}: {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}.",
+                cancellationToken))
+            {
+                await logEventi.RegistraAsync(
+                    LivelloLog.Warning,
+                    $"Prenotazione #{entity.NumeroPrenotazione} da {nomeCanale} (rcode={booking.RCode}): arrivo segnalato in ritardo, la notifica non era stata creata al primo import (import interrotto e poi ripetuto).",
+                    origine: "Wubook",
+                    clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                    strutturaId: strutturaId,
+                    categoria: "Wubook",
+                    cancellationToken: cancellationToken);
+                return EsitoBooking.Aggiornata;
+            }
+
+            // Solo le differenze che contano per chi gestisce la struttura: un rcode può ripassare
+            // identico (ri-elaborazione dello stesso evento, re-import manuale) e in quel caso non
+            // c'è nulla da segnalare, altrimenti il centro notifiche si riempirebbe di rumore.
+            var cambiamenti = new List<string>();
+            if (primaCheckIn != entity.CheckIn || primaCheckOut != entity.CheckOut)
+            {
+                cambiamenti.Add($"date da {primaCheckIn:dd/MM/yyyy}–{primaCheckOut:dd/MM/yyyy} a {entity.CheckIn:dd/MM/yyyy}–{entity.CheckOut:dd/MM/yyyy}");
+            }
+
+            if (primaImporto != entity.ImportoPrenotazione)
+            {
+                cambiamenti.Add($"importo da {primaImporto:N2} € a {entity.ImportoPrenotazione:N2} €");
+            }
+
+            if (primaNumeroOspiti != entity.NumeroOspiti)
+            {
+                cambiamenti.Add($"ospiti da {primaNumeroOspiti} a {entity.NumeroOspiti}");
+            }
+
+            if (primaTipologiaId != entity.TipologiaId)
+            {
+                cambiamenti.Add($"tipologia ora '{tipologia.TipologiaCamera}'");
+            }
+
+            if (primaCameraId != entity.CameraId)
+            {
+                cambiamenti.Add(entity.CameraId is null ? "camera assegnata rimossa (serve riassegnazione manuale)" : "camera assegnata cambiata");
+            }
+
+            if (cambiamenti.Count > 0)
+            {
+                var riepilogo = string.Join(", ", cambiamenti);
+                await logEventi.RegistraAsync(
+                    LivelloLog.Info,
+                    $"Prenotazione #{entity.NumeroPrenotazione} da {nomeCanale} (rcode={booking.RCode}) modificata da Wubook: {riepilogo}.",
+                    origine: "Wubook",
+                    clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                    strutturaId: strutturaId,
+                    categoria: "Wubook",
+                    cancellationToken: cancellationToken);
+
+                await notificaService.RegistraModificaWubookAsync(
+                    strutturaId, entity.Id, nomeCanale,
+                    "Prenotazione modificata",
+                    $"Prenotazione #{entity.NumeroPrenotazione} ({nomeCanale}) modificata: {riepilogo}.",
+                    cancellationToken);
+            }
         }
 
         var ospite = await ospiti.GetByPrenotazioneAsync(entity.Id, cancellationToken);

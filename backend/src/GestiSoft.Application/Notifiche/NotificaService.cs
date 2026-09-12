@@ -183,6 +183,52 @@ public class NotificaService(INotificaRepository notifiche, IOspiteRepository os
     }
 
     /// <summary>
+    /// Rete di sicurezza per un arrivo mai segnalato: crea la notifica di nuova prenotazione solo se
+    /// per quella prenotazione non ne esiste già una di arrivo (nuova o modificata). Serve quando un
+    /// import si interrompe dopo aver salvato la prenotazione ma prima della notifica — i passi non
+    /// sono in transazione — e viene poi ritentato: al secondo giro la prenotazione non risulta più
+    /// "nuova", quindi senza questo recupero il suo arrivo non verrebbe segnalato mai più.
+    /// Ritorna true se la notifica è stata effettivamente creata adesso.
+    /// </summary>
+    public async Task<bool> RecuperaArrivoNonNotificatoAsync(Guid strutturaId, Guid prenotazioneId, string canale, string titolo, string messaggio, CancellationToken cancellationToken)
+    {
+        if (await notifiche.EsisteArrivoPerPrenotazioneAsync(strutturaId, prenotazioneId, cancellationToken))
+        {
+            return false;
+        }
+
+        await notifiche.AddAsync(new Notifica
+        {
+            StrutturaId = strutturaId,
+            Tipo = TipoNotifica.NuovaPrenotazione,
+            PrenotazioneId = prenotazioneId,
+            Canale = canale,
+            Titolo = titolo,
+            Messaggio = messaggio,
+        }, cancellationToken);
+        return true;
+    }
+
+    /// <summary>
+    /// Prenotazione Wubook già nota (stesso rcode) i cui dati sono cambiati — caso diverso da
+    /// RegistraNuovaOModificaWubookAsync, che copre la modifica fatta da Wubook come cancella+
+    /// ricrea: qui l'rcode resta lo stesso e non c'è nessuna cancellazione da fondere, quindi
+    /// nessuna finestra di grazia e nessun match sull'ospite. Non deduplicata: ogni modifica reale
+    /// è un evento a sé (chi ha già letto la precedente deve vedere anche la successiva); a filtrare
+    /// le ri-elaborazioni identiche ci pensa il chiamante, che notifica solo a differenze presenti.
+    /// </summary>
+    public Task RegistraModificaWubookAsync(Guid strutturaId, Guid prenotazioneId, string canale, string titolo, string messaggio, CancellationToken cancellationToken) =>
+        notifiche.AddAsync(new Notifica
+        {
+            StrutturaId = strutturaId,
+            Tipo = TipoNotifica.PrenotazioneModificata,
+            PrenotazioneId = prenotazioneId,
+            Canale = canale,
+            Titolo = titolo,
+            Messaggio = messaggio,
+        }, cancellationToken);
+
+    /// <summary>
     /// Da chiamare ad ogni giro del polling eventi Wubook (una volta al minuto per Struttura, vedi
     /// WubookEventiService): promuove a "cancellata" visibile le cancellazioni la cui finestra di
     /// grazia è scaduta senza che sia arrivata una prenotazione corrispondente.

@@ -16,6 +16,9 @@ public interface INotificaRepository
 
     Task<bool> EsistePerPrenotazioneAsync(Guid strutturaId, TipoNotifica tipo, Guid prenotazioneId, CancellationToken cancellationToken);
 
+    /// <summary>Esiste già una notifica che segnala l'arrivo di questa prenotazione (nuova o modificata, in qualsiasi stato)? Serve a non segnalarlo due volte quando un import interrotto viene ritentato.</summary>
+    Task<bool> EsisteArrivoPerPrenotazioneAsync(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken);
+
     /// <summary>Cancellazioni Wubook ancora in finestra di grazia (non scadute) per una Struttura+canale — candidate per essere fuse in una modifica.</summary>
     Task<IReadOnlyList<Notifica>> ListCancellazioniPendentiAsync(Guid strutturaId, string canale, CancellationToken cancellationToken);
 
