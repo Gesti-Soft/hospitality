@@ -343,6 +343,38 @@ export function useInviaArrivoOsservatorioSingolo(strutturaId: string | null) {
   })
 }
 
+export interface StatoAppartamentoOsservatorioDto {
+  appartamentoId: string
+  nome: string | null
+  /** Giornata che l'Osservatorio indica come prossima da chiudere: è quella i cui arrivi sono ancora trasmissibili. */
+  chiusoFinoA: string | null
+  /** Motivo per cui il dato non è stato letto; in quel caso chiusoFinoA è l'ultimo valore noto. */
+  errore: string | null
+}
+
+/**
+ * Giornata da chiudere letta dal servizio Osservatorio, non dalla cache locale (che riflette solo
+ * gli invii partiti da qui, ed è vuota su una struttura mai chiusa da questo gestionale). Ogni
+ * lettura riallinea anche la cache, quindi al termine vanno rilette le schedine: la trasmissibilità
+ * di ciascuna dipende proprio da questa data.
+ */
+export function useStatoOsservatorio(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useQuery({
+    queryKey: ['osservatorio-stato', strutturaId],
+    queryFn: async () => {
+      const stati = await apiGet<StatoAppartamentoOsservatorioDto[]>(`/strutture/${strutturaId}/osservatorio/stato`)
+      await queryClient.invalidateQueries({ queryKey: ['osservatorio-schedine', strutturaId] })
+      return stati
+    },
+    enabled: !!strutturaId,
+    // Una lettura per visita: sono un login e una chiamata verso il servizio esterno per ogni
+    // appartamento, non qualcosa da ripetere a intervalli.
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  })
+}
+
 /** Elenco di tutta la Struttura: ogni riga porta con sé l'appartamento in cui va dichiarata, dedotto dalla tipologia della camera. */
 export function useSchedineOsservatorio(strutturaId: string | null, anno: number) {
   return useQuery({

@@ -20,6 +20,7 @@ import {
   useInviaOsservatorioOra,
   useOsservatorioAppartamenti,
   useSchedineOsservatorio,
+  useStatoOsservatorio,
 } from '../../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../../theme'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
@@ -34,6 +35,9 @@ export function OsservatorioPage() {
   const { strutturaId } = useStruttura()
   const puoInviare = usePuoScrivere('statePoliceWrite')
   const appartamenti = useOsservatorioAppartamenti(strutturaId)
+  // La giornata da chiudere viene letta dal servizio Osservatorio, non dalla nostra cache: è l'unico
+  // dato che dice davvero cosa è ancora trasmissibile.
+  const stato = useStatoOsservatorio(strutturaId)
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const anniDisponibili = useAnniOsservatorio(strutturaId)
   const anniSelezionabili = anniConAnnoCorrente(anniDisponibili.data)
@@ -97,22 +101,24 @@ export function OsservatorioPage() {
           {/* Il giorno di chiusura è l'informazione che decide tutto qui dentro: gli arrivi
               trasmissibili sono solo quelli della giornata ancora da chiudere, quindi va letto a
               colpo d'occhio per ogni appartamento. */}
-          {(appartamenti.data ?? []).map((a) => (
-            <Chip
-              key={a.id}
-              size="small"
-              label={
-                a.credenzialiConfigurate
-                  ? `${a.nome}: ${a.cursoreDataAtUtc ? `da chiudere il ${formattatoreData.format(new Date(a.cursoreDataAtUtc))}` : 'mai chiuso'}`
-                  : `${a.nome}: credenziali non configurate`
-              }
-              sx={{
-                bgcolor: a.credenzialiConfigurate ? tokens.blue100 : tokens.textTertiary,
-                color: a.credenzialiConfigurate ? tokens.blue700 : '#fff',
-                fontWeight: 700,
-              }}
-            />
-          ))}
+          {stato.isLoading && <Skeleton variant="rounded" width={260} height={24} />}
+          {!stato.isLoading &&
+            (stato.data ?? []).map((a) => (
+              <Chip
+                key={a.appartamentoId}
+                size="small"
+                label={
+                  a.chiusoFinoA
+                    ? `${a.nome}: da chiudere il ${formattatoreData.format(new Date(a.chiusoFinoA))}`
+                    : `${a.nome}: ${a.errore ?? 'stato non disponibile'}`
+                }
+                sx={{
+                  bgcolor: a.chiusoFinoA ? tokens.blue100 : tokens.textTertiary,
+                  color: a.chiusoFinoA ? tokens.blue700 : '#fff',
+                  fontWeight: 700,
+                }}
+              />
+            ))}
 
           {puoInviare && (
             <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending}>
@@ -121,6 +127,14 @@ export function OsservatorioPage() {
           )}
         </Box>
       )}
+
+      {(stato.data ?? [])
+        .filter((a) => a.errore && a.chiusoFinoA)
+        .map((a) => (
+          <Alert key={a.appartamentoId} severity="warning">
+            {a.nome}: {a.errore} — mostrata l'ultima data nota.
+          </Alert>
+        ))}
 
       {(appartamenti.data ?? [])
         .filter((a) => a.ultimoErrore)

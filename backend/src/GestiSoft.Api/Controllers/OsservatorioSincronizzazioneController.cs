@@ -48,6 +48,17 @@ public class OsservatorioSincronizzazioneController(OsservatorioInvioService inv
     }
 
     /// <summary>
+    /// Giornata da chiudere letta dal servizio Osservatorio per ogni appartamento — non dalla cache
+    /// locale, che riflette solo gli invii partiti da qui. Sola lettura: non trasmette nulla.
+    /// </summary>
+    [HttpGet("~/strutture/{strutturaId:guid}/osservatorio/stato")]
+    public async Task<IActionResult> Stato(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var stati = await invioService.LeggiStatoRemotoAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(stati.Select(s => new StatoAppartamentoOsservatorioDto(s.AppartamentoId, s.Nome, s.ChiusoFinoA, s.Errore)));
+    }
+
+    /// <summary>
     /// Invio manuale per tutti gli appartamenti della Struttura: la schermata non fa più scegliere
     /// un appartamento, quindi il pulsante "Invia ora" li processa tutti. Gli esiti dei singoli
     /// appartamenti sono sommati in uno solo, con i messaggi accorpati.

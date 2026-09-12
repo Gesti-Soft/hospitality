@@ -156,7 +156,20 @@ tipologia, applicare anche qui una regola di scadenza, e non inviare ciò che è
      chiudere il gg/mm/aaaa" o "mai chiuso"), su richiesta dell'utente: è l'informazione che decide
      cosa si può inviare, prima non era visibile da nessuna parte.
 
-516. **Verifiche**: `dotnet build` e `npm run build` puliti, **38/38 + 19/19 test** (5 nuovi in
+516. **"Mai chiuso" era un dato falso: ora la giornata si legge dall'Osservatorio.** Segnalato
+     dall'utente subito dopo il punto 515: il cursore mostrato era quello **locale**, che è solo una
+     cache degli invii partiti da questo gestionale — vuoto su una struttura mai chiusa da qui,
+     mentre lato Osservatorio una data di chiusura esiste comunque (anche da installazioni
+     precedenti, come già osservato per Villa Chifeci Scopello, vedi punto sul cursore autorevole).
+     Nuovo `LeggiStatoRemotoAsync` + `GET /osservatorio/stato`: per ogni appartamento fa login,
+     `GetCurrentStatusDate` e logout — **sola lettura, non trasmette nulla e non chiude giornate** —
+     mostra la data vera e **riallinea la cache locale**, così anche la trasmissibilità delle
+     schedine in elenco si basa subito sul dato autorevole. Un appartamento che non risponde mostra
+     il motivo al posto della data senza rompere la schermata per gli altri. Lato pagina, **una sola
+     lettura per visita** (niente polling né refetch al rientro sulla finestra): sono N login verso
+     il servizio esterno, per un dato che cambia una volta al giorno.
+
+517. **Verifiche**: `dotnet build` e `npm run build` puliti, **38/38 + 19/19 test** (5 nuovi in
      `TerminiInvioAltriServiziTests`, compreso l'esempio 08/08 vs 09/08 dato dall'utente). Nessuna
      schedina inviata a nessuno dei tre servizi, come da istruzione dell'utente (vedi punto 507).
 

@@ -28,6 +28,10 @@ public record SchedinaOsservatorio(
     Guid? AppartamentoId,
     string? AppartamentoNome);
 
+/// <param name="ChiusoFinoA">Giornata che il servizio Osservatorio indica come prossima da chiudere: è quella i cui arrivi sono ancora trasmissibili.</param>
+/// <param name="Errore">Motivo per cui il dato non è stato letto; quando valorizzato, ChiusoFinoA è l'ultimo valore noto in locale (o null).</param>
+public record StatoAppartamentoOsservatorio(Guid AppartamentoId, string? Nome, DateTime? ChiusoFinoA, string? Errore);
+
 /// <summary>
 /// L'Osservatorio si invia una giornata alla volta: il cursore indica il **prossimo giorno da
 /// chiudere**, ed è l'unico giorno i cui arrivi sono ancora trasmissibili. Tutto ciò che lo precede
@@ -99,6 +103,78 @@ public class OsservatorioInvioService(
             ?? throw new NotFoundException("Appartamento Osservatorio Turistico non trovato.");
 
         return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken);
+    }
+
+    /// <summary>
+    /// Legge dal servizio Osservatorio, appartamento per appartamento, la giornata che risulta da
+    /// chiudere lato loro — l'unico dato che conta davvero per sapere cosa è ancora trasmissibile.
+    /// Il cursore salvato in locale è solo una cache di ciò che abbiamo inviato noi: su una
+    /// struttura mai chiusa da questo gestionale è vuoto, e mostrare "mai chiuso" sarebbe falso,
+    /// perché lato Osservatorio una data di chiusura esiste comunque (anche da installazioni
+    /// precedenti). Ogni lettura riallinea la cache locale, così anche l'elenco schedine si basa
+    /// subito sul dato vero.
+    /// È una sola lettura (login + GetCurrentStatusDate + logout): non invia niente e non chiude
+    /// nessuna giornata.
+    /// </summary>
+    public async Task<IReadOnlyList<StatoAppartamentoOsservatorio>> LeggiStatoRemotoAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+
+        var lista = await appartamenti.ListByStrutturaAsync(strutturaId, cancellationToken);
+        var stati = new List<StatoAppartamentoOsservatorio>();
+
+        foreach (var appartamento in lista)
+        {
+            if (string.IsNullOrWhiteSpace(appartamento.EntityCode) || string.IsNullOrWhiteSpace(appartamento.Password) || string.IsNullOrWhiteSpace(appartamento.HotelCode))
+            {
+                stati.Add(new StatoAppartamentoOsservatorio(appartamento.Id, appartamento.Nome, null, "Credenziali non configurate."));
+                continue;
+            }
+
+            try
+            {
+                var client = clientResolver.Risolvi(appartamento.Provider);
+                var login = await client.LoginAsync(appartamento.EntityCode, appartamento.Password, cancellationToken);
+                if (!login.Ok || login.Token is null)
+                {
+                    stati.Add(new StatoAppartamentoOsservatorio(appartamento.Id, appartamento.Nome, appartamento.CursoreDataAtUtc, login.Errore ?? "Login non riuscito."));
+                    continue;
+                }
+
+                DateTime? statoRemoto;
+                try
+                {
+                    statoRemoto = await client.GetCurrentStatusDateAsync(login.Token, appartamento.HotelCode!, cancellationToken);
+                }
+                finally
+                {
+                    // Logout sempre, anche se la lettura fallisce: senza questo una chiamata andata
+                    // male lascerebbe la sessione aperta sul servizio esterno (stesso try/finally di
+                    // OsservatorioConfigService.VerificaConnessioneAsync e di ProcessaAppartamentoAsync).
+                    await client.LogoutAsync(login.Token, cancellationToken);
+                }
+
+                if (statoRemoto is { } daChiudere)
+                {
+                    appartamento.CursoreDataAtUtc = daChiudere.Date;
+                    await appartamenti.UpdateAsync(appartamento, cancellationToken);
+                }
+
+                stati.Add(new StatoAppartamentoOsservatorio(
+                    appartamento.Id,
+                    appartamento.Nome,
+                    statoRemoto?.Date ?? appartamento.CursoreDataAtUtc,
+                    statoRemoto is null ? "Stato corrente non disponibile." : null));
+            }
+            catch (Exception ex)
+            {
+                // Una lettura fallita non deve rompere la schermata: si mostra l'ultimo valore noto
+                // insieme al motivo, e restano leggibili gli altri appartamenti.
+                stati.Add(new StatoAppartamentoOsservatorio(appartamento.Id, appartamento.Nome, appartamento.CursoreDataAtUtc, ex.Message));
+            }
+        }
+
+        return stati;
     }
 
     /// <summary>
