@@ -56,3 +56,18 @@ export function isOggiOPrima(iso: string | null): boolean {
   if (!iso) return false
   return inizioGiornoLocale(new Date(iso)) <= inizioGiornoLocale(new Date())
 }
+
+/**
+ * Da istante ISO (UTC, come lo restituisce l'API) al formato richiesto da un input
+ * `datetime-local`, che lavora sempre in ora locale: `YYYY-MM-DDTHH:mm`, senza fuso e senza secondi.
+ * Serve per i campi in cui conta l'ora e non solo il giorno, come l'arrivo effettivo dell'ospite.
+ */
+export function perCampoDataOra(isoUtc: string): string {
+  const d = new Date(isoUtc)
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`
+}

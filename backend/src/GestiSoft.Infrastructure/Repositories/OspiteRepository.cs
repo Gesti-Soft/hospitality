@@ -11,6 +11,13 @@ public class OspiteRepository(GestiSoftDbContext db) : IOspiteRepository
     public Task<Ospite?> GetByPrenotazioneAsync(Guid prenotazioneId, CancellationToken cancellationToken) =>
         db.Ospiti.Include(o => o.Membri).FirstOrDefaultAsync(o => o.PrenotazioneId == prenotazioneId, cancellationToken);
 
+    public Task<Ospite?> GetConPrenotazioneAsync(Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken) =>
+        db.Ospiti.AsNoTracking()
+            .Include(o => o.Membri)
+            .Include(o => o.Prenotazione).ThenInclude(p => p!.Camera)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(o => o.Id == ospiteId && o.StrutturaId == strutturaId, cancellationToken);
+
     public async Task<IReadOnlyList<Ospite>> ListDaInviareAlloggiatiWebAsync(Guid strutturaId, CancellationToken cancellationToken)
     {
         var oggi = DateTime.UtcNow.Date;
@@ -45,7 +52,7 @@ public class OspiteRepository(GestiSoftDbContext db) : IOspiteRepository
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<Ospite>> ListArriviOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime data, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Ospite>> ListArriviOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid>? tipologieIds, DateTime data, CancellationToken cancellationToken)
     {
         var giorno = data.Date;
 
@@ -58,14 +65,15 @@ public class OspiteRepository(GestiSoftDbContext db) : IOspiteRepository
                 && !o.Prenotazione.PMS
                 && o.Prenotazione.CheckIn != null
                 && o.Prenotazione.CheckIn.Value.Date == giorno
-                && o.Prenotazione.Camera != null
-                && o.Prenotazione.Camera.TipologiaId != null
-                && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))
+                && (tipologieIds == null
+                    || (o.Prenotazione.Camera != null
+                        && o.Prenotazione.Camera.TipologiaId != null
+                        && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))))
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Ospite>> ListCheckoutOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime data, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Ospite>> ListCheckoutOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid>? tipologieIds, DateTime data, CancellationToken cancellationToken)
     {
         var giorno = data.Date;
 
@@ -77,14 +85,15 @@ public class OspiteRepository(GestiSoftDbContext db) : IOspiteRepository
                 && o.Prenotazione.PMS
                 && o.Prenotazione.CheckOut != null
                 && o.Prenotazione.CheckOut.Value.Date == giorno
-                && o.Prenotazione.Camera != null
-                && o.Prenotazione.Camera.TipologiaId != null
-                && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))
+                && (tipologieIds == null
+                    || (o.Prenotazione.Camera != null
+                        && o.Prenotazione.Camera.TipologiaId != null
+                        && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))))
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Ospite>> ListRecentiOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, int anno, CancellationToken cancellationToken) =>
+    public async Task<IReadOnlyList<Ospite>> ListRecentiOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid>? tipologieIds, int anno, CancellationToken cancellationToken) =>
         await db.Ospiti.AsNoTracking()
             .Include(o => o.Membri)
             .Include(o => o.Prenotazione).ThenInclude(p => p!.Camera)
@@ -95,14 +104,15 @@ public class OspiteRepository(GestiSoftDbContext db) : IOspiteRepository
                 // dall'utente, un check-in mai avvenuto compariva come "arrivo da inviare".
                 && (o.Prenotazione.StatoPrenotazione == StatoPrenotazione.InCorso || o.Prenotazione.StatoPrenotazione == StatoPrenotazione.Completata)
                 && o.Prenotazione.Anno == anno
-                && o.Prenotazione.Camera != null
-                && o.Prenotazione.Camera.TipologiaId != null
-                && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))
+                && (tipologieIds == null
+                    || (o.Prenotazione.Camera != null
+                        && o.Prenotazione.Camera.TipologiaId != null
+                        && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))))
             .OrderByDescending(o => o.Prenotazione!.CheckIn)
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<Ospite>> ListDaInviarePayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Ospite>> ListDaInviarePayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid>? tipologieIds, CancellationToken cancellationToken)
     {
         var settegiorniFa = DateTime.UtcNow.Date.AddDays(-7);
 
@@ -115,15 +125,16 @@ public class OspiteRepository(GestiSoftDbContext db) : IOspiteRepository
                 && !o.Prenotazione.PayTourist
                 && o.Prenotazione.CheckOut != null
                 && o.Prenotazione.CheckOut.Value.Date >= settegiorniFa
-                && o.Prenotazione.Camera != null
-                && o.Prenotazione.Camera.TipologiaId != null
-                && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))
+                && (tipologieIds == null
+                    || (o.Prenotazione.Camera != null
+                        && o.Prenotazione.Camera.TipologiaId != null
+                        && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))))
             .OrderByDescending(o => o.Prenotazione!.CheckOut)
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Ospite>> ListRecentiPayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, int anno, CancellationToken cancellationToken) =>
+    public async Task<IReadOnlyList<Ospite>> ListRecentiPayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid>? tipologieIds, int anno, CancellationToken cancellationToken) =>
         await db.Ospiti.AsNoTracking()
             .Include(o => o.Membri)
             .Include(o => o.Prenotazione).ThenInclude(p => p!.Camera)
@@ -131,9 +142,10 @@ public class OspiteRepository(GestiSoftDbContext db) : IOspiteRepository
                 && o.Prenotazione != null
                 && o.Prenotazione.StatoPrenotazione == StatoPrenotazione.Completata
                 && o.Prenotazione.Anno == anno
-                && o.Prenotazione.Camera != null
-                && o.Prenotazione.Camera.TipologiaId != null
-                && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))
+                && (tipologieIds == null
+                    || (o.Prenotazione.Camera != null
+                        && o.Prenotazione.Camera.TipologiaId != null
+                        && tipologieIds.Contains(o.Prenotazione.Camera.TipologiaId.Value))))
             .OrderByDescending(o => o.Prenotazione!.CheckOut)
             .AsSplitQuery()
             .ToListAsync(cancellationToken);

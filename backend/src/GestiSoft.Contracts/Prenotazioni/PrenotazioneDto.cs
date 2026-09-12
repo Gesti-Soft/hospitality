@@ -16,6 +16,8 @@ public record PrenotazioneDto(
     decimal? ImportoTotale,
     DateTime? CheckIn,
     DateTime? CheckOut,
+    /// <summary>Orario reale dell'arrivo (null se il check-in non è stato fatto, o è anteriore a questo campo): da qui decorrono i termini della schedina alloggiati.</summary>
+    DateTime? CheckInEffettuatoAtUtc,
     int? NumeroOspiti,
     bool StatePolice,
     bool PMS,

@@ -44,6 +44,17 @@ public class Prenotazione : TenantEntity
 
     public DateTime? CheckOut { get; set; }
 
+    /// <summary>
+    /// Momento reale dell'arrivo dell'ospite, valorizzato da PrenotazioniService.CheckInAsync (e
+    /// correggibile a mano quando il check-in viene registrato in ritardo rispetto all'arrivo
+    /// vero). Distinto da <see cref="CheckIn"/>, che è la sola data prevista senza orario: i
+    /// termini di legge per l'invio delle schedine alla Polizia di Stato — 24 ore dall'arrivo, 6
+    /// ore per i soggiorni sotto le 24 ore — si contano da qui (vedi TerminiSchedina). Null sulle
+    /// prenotazioni registrate prima di questo campo: in quel caso si ripiega sulla data di
+    /// CheckIn a mezzanotte, l'ipotesi più prudente possibile.
+    /// </summary>
+    public DateTime? CheckInEffettuatoAtUtc { get; set; }
+
     public int? NumeroOspiti { get; set; }
 
     public bool StatePolice { get; set; }

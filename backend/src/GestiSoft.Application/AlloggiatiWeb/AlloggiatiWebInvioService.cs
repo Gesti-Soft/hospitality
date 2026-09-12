@@ -1,6 +1,7 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Domain.Entities;
@@ -10,7 +11,20 @@ namespace GestiSoft.Application.AlloggiatiWeb;
 
 public record RisultatoInvioAlloggiatiWeb(int Inviate, int TotaleSchedine, int Errori, string? Messaggio);
 
-public record SchedinaAlloggiatiWeb(Guid OspiteId, Guid? PrenotazioneId, string NomeOspite, string? Camera, DateTime? CheckIn, DateTime? CheckOut, bool Inviata);
+/// <param name="ScadenzaInvioUtc">Termine di legge per la trasmissione (vedi TerminiSchedina); null se manca la data di arrivo.</param>
+/// <param name="SoggiornoBreve">Soggiorno sotto le 24 ore: termine ridotto a 6 ore.</param>
+/// <param name="InTermine">Ancora trasmissibile adesso. A false l'interfaccia non deve offrire l'invio: il portale lo rifiuterebbe.</param>
+public record SchedinaAlloggiatiWeb(
+    Guid OspiteId,
+    Guid? PrenotazioneId,
+    string NomeOspite,
+    string? Camera,
+    DateTime? CheckIn,
+    DateTime? CheckOut,
+    bool Inviata,
+    DateTime? ScadenzaInvioUtc,
+    bool SoggiornoBreve,
+    bool InTermine);
 
 /// <summary>
 /// Invio giornaliero delle schedine Alloggiati Web — porta il ramo remoto di
@@ -30,7 +44,8 @@ public class AlloggiatiWebInvioService(
     IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard,
     ConcessioneServiziGuard concessioneGuard,
-    ILogEventoService logEventi)
+    ILogEventoService logEventi,
+    NotificaService notificaService)
 {
     public async Task<RisultatoInvioAlloggiatiWeb> InviaOraAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -51,7 +66,22 @@ public class AlloggiatiWebInvioService(
             return await SalvaEsitoAsync(integrazione, 0, 0, "Credenziali Alloggiati Web non configurate.", cancellationToken);
         }
 
-        var daInviare = await ospiti.ListDaInviareAlloggiatiWebAsync(strutturaId, cancellationToken);
+        var candidate = await ospiti.ListDaInviareAlloggiatiWebAsync(strutturaId, cancellationToken);
+
+        // I termini di legge (24 ore dall'arrivo, 6 per i soggiorni brevi — vedi TerminiSchedina)
+        // sono perentori: passati quelli il portale rifiuta la trasmissione, quindi continuare a
+        // ritentarle produce solo errori a ripetizione. Vengono tolte dall'invio e segnalate una
+        // volta sola per prenotazione: restano un obbligo di legge da assolvere a mano sul portale,
+        // e sparire in silenzio sarebbe la cosa peggiore.
+        var adesso = DateTime.UtcNow;
+        var daInviare = candidate.Where(o => o.Prenotazione is null || TerminiSchedina.IsInTermine(o.Prenotazione, adesso)).ToList();
+        var fuoriTermine = candidate.Where(o => o.Prenotazione is not null && !TerminiSchedina.IsInTermine(o.Prenotazione, adesso)).ToList();
+
+        foreach (var scaduta in fuoriTermine)
+        {
+            await SegnalaFuoriTermineAsync(strutturaId, scaduta, cancellationToken);
+        }
+
         if (daInviare.Count == 0)
         {
             return await SalvaEsitoAsync(integrazione, 0, 0, null, cancellationToken);
@@ -96,12 +126,106 @@ public class AlloggiatiWebInvioService(
         return await SalvaEsitoAsync(integrazione, inviate, daInviare.Count, messaggio, cancellationToken);
     }
 
+    /// <summary>
+    /// Invio di una singola schedina, su richiesta esplicita dell'operatore: dal pulsante sulla riga
+    /// della schermata Polizia di Stato e dalla conferma che compare al check-in di un soggiorno
+    /// breve (termine di 6 ore, che il batch giornaliero non riuscirebbe a rispettare).
+    /// Rifiuta l'invio fuori termine invece di tentarlo: il portale lo respingerebbe comunque, e un
+    /// errore chiaro è più utile di un rifiuto tecnico.
+    /// </summary>
+    public async Task<RisultatoInvioAlloggiatiWeb> InviaSingolaAsync(ICurrentUser currentUser, Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceWrite, cancellationToken);
+        await concessioneGuard.EnsureAlloggiatiWebAsync(strutturaId, cancellationToken);
+
+        var ospite = await ospiti.GetConPrenotazioneAsync(strutturaId, ospiteId, cancellationToken)
+            ?? throw new NotFoundException("Ospite non trovato.");
+
+        if (ospite.Prenotazione is not { } prenotazione)
+        {
+            throw new ConflictException("La scheda non è collegata a nessuna prenotazione.");
+        }
+
+        if (prenotazione.StatePolice)
+        {
+            throw new ConflictException("Questa schedina risulta già inviata.");
+        }
+
+        if (!TerminiSchedina.IsInTermine(prenotazione, DateTime.UtcNow))
+        {
+            var ore = TerminiSchedina.IsSoggiornoBreve(prenotazione) ? 6 : 24;
+            throw new ConflictException(
+                $"Termine scaduto: la schedina andava trasmessa entro {ore} ore dall'arrivo. Va registrata a mano sul portale della Polizia di Stato.");
+        }
+
+        var integrazione = await integrazioni.GetByStrutturaIdAsync(strutturaId, cancellationToken)
+            ?? new AlloggiatiWebIntegrazione { StrutturaId = strutturaId };
+
+        if (string.IsNullOrWhiteSpace(integrazione.Utente) || string.IsNullOrWhiteSpace(integrazione.Password) || string.IsNullOrWhiteSpace(integrazione.WsKey))
+        {
+            throw new ConflictException("Credenziali Alloggiati Web non configurate.");
+        }
+
+        var tokenRisultato = await client.GenerateTokenAsync(integrazione.Utente, integrazione.Password, integrazione.WsKey, cancellationToken);
+        if (!tokenRisultato.Ok || tokenRisultato.Token is null)
+        {
+            return await SalvaEsitoAsync(integrazione, 0, 1, tokenRisultato.Errore ?? "Token non ottenuto.", cancellationToken);
+        }
+
+        var builder = await CreaBuilderAsync(cancellationToken);
+        var esito = await client.SendAsync(integrazione.Utente, tokenRisultato.Token, builder.Costruisci(ospite), cancellationToken);
+
+        if (!esito.Ok)
+        {
+            return await SalvaEsitoAsync(integrazione, 0, 1, esito.ErroreDescrizione ?? esito.ErroreCodice ?? "Invio rifiutato.", cancellationToken);
+        }
+
+        await MarcaInviataAsync(prenotazione.Id, cancellationToken);
+        return await SalvaEsitoAsync(integrazione, 1, 1, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Notifica e log, una volta sola per prenotazione, di una schedina che ha superato il termine
+    /// senza essere trasmessa — l'invio automatico non la prenderà più.
+    /// </summary>
+    private async Task SegnalaFuoriTermineAsync(Guid strutturaId, Ospite ospite, CancellationToken cancellationToken)
+    {
+        if (ospite.Prenotazione is not { } prenotazione)
+        {
+            return;
+        }
+
+        var ore = TerminiSchedina.IsSoggiornoBreve(prenotazione) ? 6 : 24;
+        var nome = $"{ospite.Cognome} {ospite.Nome}".Trim();
+        var creata = await notificaService.CreaPerPrenotazioneSeNonEsisteAsync(
+            strutturaId, TipoNotifica.SchedinaFuoriTermine, prenotazione.Id,
+            "Schedina fuori termine",
+            $"La schedina di {nome} non è stata trasmessa entro {ore} ore dall'arrivo: va registrata a mano sul portale della Polizia di Stato.",
+            cancellationToken);
+
+        if (!creata)
+        {
+            return;
+        }
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Warning,
+            $"Schedina di {nome} fuori termine ({ore} ore dall'arrivo): esclusa dall'invio automatico, da registrare a mano sul portale.",
+            origine: "AlloggiatiWeb",
+            clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+            strutturaId: strutturaId,
+            categoria: "AlloggiatiWeb",
+            cancellationToken: cancellationToken);
+    }
+
     /// <summary>Elenco schedine dell'anno indicato per la schermata operativa — da inviare e già inviate, non solo quelle in coda.</summary>
     public async Task<IReadOnlyList<SchedinaAlloggiatiWeb>> ListSchedineAsync(ICurrentUser currentUser, Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
 
         var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, anno, cancellationToken);
+
+        var adesso = DateTime.UtcNow;
 
         return recenti.Select(o => new SchedinaAlloggiatiWeb(
             o.Id,
@@ -110,7 +234,10 @@ public class AlloggiatiWebInvioService(
             o.Prenotazione?.Camera?.Nome,
             o.Prenotazione?.CheckIn,
             o.Prenotazione?.CheckOut,
-            o.Prenotazione?.StatePolice ?? false)).ToList();
+            o.Prenotazione?.StatePolice ?? false,
+            o.Prenotazione is null ? null : TerminiSchedina.ScadenzaUtc(o.Prenotazione),
+            o.Prenotazione is not null && TerminiSchedina.IsSoggiornoBreve(o.Prenotazione),
+            o.Prenotazione is not null && TerminiSchedina.IsInTermine(o.Prenotazione, adesso))).ToList();
     }
 
     /// <summary>Anni con almeno una prenotazione per il selettore Anno della schermata operativa — su richiesta esplicita, non deve proporre anni sicuramente vuoti.</summary>

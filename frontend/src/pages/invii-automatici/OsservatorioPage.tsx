@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -14,12 +14,18 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { ApiError } from '../../api/client'
-import { useAnniOsservatorio, useInviaOsservatorioOra, useOsservatorioAppartamenti, useSchedineOsservatorio } from '../../api/integrazioni'
+import {
+  useAnniOsservatorio,
+  useInviaArrivoOsservatorioSingolo,
+  useInviaOsservatorioOra,
+  useOsservatorioAppartamenti,
+  useSchedineOsservatorio,
+} from '../../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../../theme'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
 import { useMobile } from '../../lib/useMobile'
-import { CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
+import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
@@ -28,37 +34,45 @@ export function OsservatorioPage() {
   const { strutturaId } = useStruttura()
   const puoInviare = usePuoScrivere('statePoliceWrite')
   const appartamenti = useOsservatorioAppartamenti(strutturaId)
-  const [appartamentoId, setAppartamentoId] = useState<string | null>(null)
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const anniDisponibili = useAnniOsservatorio(strutturaId)
   const anniSelezionabili = anniConAnnoCorrente(anniDisponibili.data)
   const [errore, setErrore] = useState<string | null>(null)
   const [risultato, setRisultato] = useState<string | null>(null)
 
-  useEffect(() => {
-    const lista = appartamenti.data ?? []
-    if (lista.length > 0 && (appartamentoId === null || !lista.some((a) => a.id === appartamentoId))) {
-      setAppartamentoId(lista[0].id)
-    }
-    if (lista.length === 0 && appartamentoId !== null) {
-      setAppartamentoId(null)
-    }
-  }, [appartamenti.data, appartamentoId])
-
-  const schedine = useSchedineOsservatorio(strutturaId, appartamentoId, anno)
+  const schedine = useSchedineOsservatorio(strutturaId, anno)
   const invia = useInviaOsservatorioOra(strutturaId)
+  const inviaSingolo = useInviaArrivoOsservatorioSingolo(strutturaId)
 
-  function inviaOra() {
-    if (!appartamentoId) return
+  function inviaUnArrivo(ospiteId: string, nomeOspite: string) {
     setErrore(null)
     setRisultato(null)
-    invia.mutate(appartamentoId, {
+    // L'appartamento non si passa: lo deduce il server dalla tipologia della camera dell'ospite,
+    // così la schedina finisce sempre dov'è giusto anche se nel selettore qui sopra ce n'è un altro.
+    inviaSingolo.mutate(
+      ospiteId,
+      {
+        // Stesso schema dell'invio dell'intero appartamento, qui sopra: esito e messaggi restano
+        // negli Alert in cima alla pagina, dove l'operatore può leggerli con calma (un invio può
+        // riuscire a metà o essere bloccato dalle giornate non ancora chiuse).
+        onSuccess: (r) =>
+          r.arriviInviati > 0
+            ? setRisultato(`Arrivo di ${nomeOspite} inviato.`)
+            : setErrore(r.messaggio ?? "Invio non riuscito: l'arrivo resta da trasmettere."),
+        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      },
+    )
+  }
+
+  function inviaOra() {
+    setErrore(null)
+    setRisultato(null)
+    invia.mutate(undefined, {
       onSuccess: (r) => setRisultato(`${r.arriviInviati} arrivi, ${r.checkoutInviati} check-out, ${r.giorniChiusi} giorni chiusi.${r.messaggio ? ` ${r.messaggio}` : ''}`),
       onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
     })
   }
 
-  const appartamentoSelezionato = (appartamenti.data ?? []).find((a) => a.id === appartamentoId) ?? null
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -76,46 +90,45 @@ export function OsservatorioPage() {
       )}
 
       {!appartamenti.isLoading && (appartamenti.data ?? []).length > 0 && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <TextField
-            select
-            size="small"
-            label="Appartamento"
-            value={appartamentoId ?? ''}
-            onChange={(e) => setAppartamentoId(e.target.value)}
-            sx={{ minWidth: 240 }}
-          >
-            {(appartamenti.data ?? []).map((a) => (
-              <MenuItem key={a.id} value={a.id}>
-                {a.nome}
-              </MenuItem>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          {/* Niente più scelta dell'appartamento: ogni schedina sa già dove va dichiarata, e "Invia
+              ora" li processa tutti. Restano visibili solo gli appartamenti configurati male, che
+              sono l'unica cosa su cui l'operatore debba intervenire. */}
+          {(appartamenti.data ?? [])
+            .filter((a) => !a.credenzialiConfigurate)
+            .map((a) => (
+              <Chip
+                key={a.id}
+                size="small"
+                label={`${a.nome}: credenziali non configurate`}
+                sx={{ bgcolor: tokens.textTertiary, color: '#fff', fontWeight: 700 }}
+              />
             ))}
-          </TextField>
-
-          {appartamentoSelezionato && (
-            <Chip
-              size="small"
-              label={appartamentoSelezionato.credenzialiConfigurate ? 'Credenziali configurate' : 'Credenziali non configurate'}
-              sx={{ bgcolor: appartamentoSelezionato.credenzialiConfigurate ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }}
-            />
-          )}
 
           {puoInviare && (
-            <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending || !appartamentoId}>
+            <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending}>
               Invia ora
             </Button>
           )}
         </Box>
       )}
 
-      {appartamentoSelezionato?.ultimoErrore && <Alert severity="warning">{appartamentoSelezionato.ultimoErrore}</Alert>}
+      {(appartamenti.data ?? [])
+        .filter((a) => a.ultimoErrore)
+        .map((a) => (
+          <Alert key={a.id} severity="warning">
+            {a.nome}: {a.ultimoErrore}
+          </Alert>
+        ))}
       {risultato && (
         <Alert severity="info" onClose={() => setRisultato(null)}>
           {risultato}
         </Alert>
       )}
 
-      {appartamentoId && (
+      {/* Elenco di tutta la Struttura: non dipende più dall'appartamento scelto qui sopra (che serve
+          solo all'invio giornaliero e alle credenziali) — ogni riga dice da sé dove va dichiarata. */}
+      {(
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
             <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Arrivi/partenze</Typography>
@@ -138,7 +151,11 @@ export function OsservatorioPage() {
                     titolo={s.nomeOspite}
                     azioneDestra={
                       <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <Chip size="small" label={s.arrivoInviato ? 'Arrivo inviato' : 'Arrivo da inviare'} sx={{ bgcolor: s.arrivoInviato ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                        <Chip
+                          size="small"
+                          label={s.arrivoInviato ? 'Arrivo inviato' : s.inTermine ? 'Arrivo da inviare' : 'Giornata chiusa'}
+                          sx={{ bgcolor: s.arrivoInviato ? tokens.ok600 : s.inTermine ? tokens.wait600 : tokens.error600, color: '#fff', fontWeight: 700 }}
+                        />
                         {s.partenzaInviata !== null && (
                           <Chip size="small" label={s.partenzaInviata ? 'Partenza inviata' : 'Partenza da inviare'} sx={{ bgcolor: s.partenzaInviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
                         )}
@@ -148,10 +165,18 @@ export function OsservatorioPage() {
                   <RigaCardMeta
                     voci={[
                       { etichetta: 'Camera', valore: s.camera ?? '—' },
+                      { etichetta: 'Appartamento', valore: s.appartamentoNome ?? 'Nessuno: tipologia non associata' },
                       { etichetta: 'Check-in', valore: s.checkIn ? formattatoreData.format(new Date(s.checkIn)) : '—' },
                       { etichetta: 'Check-out', valore: s.checkOut ? formattatoreData.format(new Date(s.checkOut)) : '—' },
                     ]}
                   />
+                  {!s.arrivoInviato && puoInviare && s.inTermine && (
+                    <AzioniCardElenco>
+                      <Button size="small" variant="contained" disabled={inviaSingolo.isPending} onClick={() => inviaUnArrivo(s.ospiteId, s.nomeOspite)}>
+                        Invia
+                      </Button>
+                    </AzioniCardElenco>
+                  )}
                 </CardElenco>
               ))}
             </Box>
@@ -164,16 +189,18 @@ export function OsservatorioPage() {
                   <TableRow>
                     <TableCell>Ospite</TableCell>
                     <TableCell>Camera</TableCell>
+                    <TableCell>Appartamento</TableCell>
                     <TableCell>Check-in</TableCell>
                     <TableCell>Check-out</TableCell>
                     <TableCell>Arrivo</TableCell>
                     <TableCell>Partenza</TableCell>
+                    <TableCell align="right">Azioni</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {(schedine.data ?? []).length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                      <TableCell colSpan={8} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                         Nessun arrivo/partenza per l'anno selezionato.
                       </TableCell>
                     </TableRow>
@@ -182,16 +209,35 @@ export function OsservatorioPage() {
                     <TableRow key={s.ospiteId} hover>
                       <TableCell sx={{ fontWeight: 700 }}>{s.nomeOspite}</TableCell>
                       <TableCell>{s.camera ?? '—'}</TableCell>
+                      <TableCell sx={{ fontSize: 12.5, color: s.appartamentoNome ? tokens.textSecondary : tokens.error600 }}>
+                        {s.appartamentoNome ?? 'Nessuno: tipologia non associata'}
+                      </TableCell>
                       <TableCell sx={{ fontFamily: fontMono }}>{s.checkIn ? formattatoreData.format(new Date(s.checkIn)) : '—'}</TableCell>
                       <TableCell sx={{ fontFamily: fontMono }}>{s.checkOut ? formattatoreData.format(new Date(s.checkOut)) : '—'}</TableCell>
                       <TableCell>
-                        <Chip size="small" label={s.arrivoInviato ? 'Inviato' : 'Da inviare'} sx={{ bgcolor: s.arrivoInviato ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                        <Chip
+                          size="small"
+                          label={s.arrivoInviato ? 'Inviato' : s.inTermine ? 'Da inviare' : 'Giornata chiusa'}
+                          sx={{ bgcolor: s.arrivoInviato ? tokens.ok600 : s.inTermine ? tokens.wait600 : tokens.error600, color: '#fff', fontWeight: 700 }}
+                        />
                       </TableCell>
                       <TableCell>
                         {s.partenzaInviata === null ? (
                           '—'
                         ) : (
                           <Chip size="small" label={s.partenzaInviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: s.partenzaInviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        {!s.arrivoInviato && s.inTermine && puoInviare && (
+                          <Button size="small" variant="contained" disabled={inviaSingolo.isPending} onClick={() => inviaUnArrivo(s.ospiteId, s.nomeOspite)}>
+                            Invia
+                          </Button>
+                        )}
+                        {!s.arrivoInviato && !s.inTermine && (
+                          <Typography sx={{ fontSize: 11.5, color: tokens.error600, fontWeight: 700 }}>
+                            Giornata chiusa
+                          </Typography>
                         )}
                       </TableCell>
                     </TableRow>

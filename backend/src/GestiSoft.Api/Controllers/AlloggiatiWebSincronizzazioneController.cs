@@ -18,7 +18,9 @@ public class AlloggiatiWebSincronizzazioneController(AlloggiatiWebInvioService i
     public async Task<IActionResult> Lista(Guid strutturaId, [FromQuery] int? anno, CancellationToken cancellationToken)
     {
         var schedine = await invioService.ListSchedineAsync(currentUser, strutturaId, anno ?? DateTime.UtcNow.Year, cancellationToken);
-        return Ok(schedine.Select(s => new SchedinaAlloggiatiWebDto(s.OspiteId, s.PrenotazioneId, s.NomeOspite, s.Camera, s.CheckIn, s.CheckOut, s.Inviata)));
+        return Ok(schedine.Select(s => new SchedinaAlloggiatiWebDto(
+            s.OspiteId, s.PrenotazioneId, s.NomeOspite, s.Camera, s.CheckIn, s.CheckOut, s.Inviata,
+            s.ScadenzaInvioUtc, s.SoggiornoBreve, s.InTermine)));
     }
 
     /// <summary>Anni con almeno una prenotazione — per non proporre nel selettore Anno anni sicuramente vuoti.</summary>
@@ -33,6 +35,14 @@ public class AlloggiatiWebSincronizzazioneController(AlloggiatiWebInvioService i
     public async Task<IActionResult> InviaOra(Guid strutturaId, CancellationToken cancellationToken)
     {
         var risultato = await invioService.InviaOraAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(new RisultatoInvioAlloggiatiWebDto(risultato.Inviate, risultato.TotaleSchedine, risultato.Errori, risultato.Messaggio));
+    }
+
+    /// <summary>Invio di UNA sola schedina su richiesta dell'operatore (pulsante sulla riga, o conferma al check-in di un soggiorno breve). Rifiutato se il termine di legge è scaduto.</summary>
+    [HttpPost("schedine/{ospiteId:guid}/invia")]
+    public async Task<IActionResult> InviaSingola(Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken)
+    {
+        var risultato = await invioService.InviaSingolaAsync(currentUser, strutturaId, ospiteId, cancellationToken);
         return Ok(new RisultatoInvioAlloggiatiWebDto(risultato.Inviate, risultato.TotaleSchedine, risultato.Errori, risultato.Messaggio));
     }
 

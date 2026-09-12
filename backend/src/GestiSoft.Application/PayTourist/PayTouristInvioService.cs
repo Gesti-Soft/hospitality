@@ -13,7 +13,38 @@ namespace GestiSoft.Application.PayTourist;
 
 public record RisultatoInvioPayTourist(int Inviate, int TotalePrenotazioni, int Errori, string? Messaggio);
 
-public record PrenotazionePayTourist(Guid OspiteId, Guid? PrenotazioneId, string NomeOspite, string? Camera, DateTime? CheckIn, DateTime? CheckOut, bool Inviata);
+/// <param name="ScadenzaInvioUtc">Ultimo giorno utile per la trasmissione: 7 giorni dal check-out.</param>
+/// <param name="InTermine">Ancora trasmissibile: a false l'interfaccia non deve offrire l'invio.</param>
+public record PrenotazionePayTourist(
+    Guid OspiteId,
+    Guid? PrenotazioneId,
+    string NomeOspite,
+    string? Camera,
+    DateTime? CheckIn,
+    DateTime? CheckOut,
+    bool Inviata,
+    DateTime? ScadenzaInvioUtc,
+    bool InTermine,
+    /// <summary>Struttura PayTourist in cui la prenotazione va dichiarata, dedotta dalla tipologia della camera. Null = tipologia non associata: non trasmissibile finché non viene collegata.</summary>
+    Guid? PayTouristStrutturaId,
+    string? PayTouristStrutturaNome);
+
+/// <summary>
+/// Si trasmettono solo i soggiorni conclusi da non più di 7 giorni: oltre quella finestra la
+/// schedina va esclusa e non più ritentata (la stessa finestra mobile che
+/// IOspiteRepository.ListDaInviarePayTouristAsync applica da sempre alla selezione — qui è resa
+/// esplicita per poterla mostrare anche in elenco, invece di far sparire le righe senza spiegazione).
+/// </summary>
+public static class TerminiPayTourist
+{
+    public static readonly int GiorniDalCheckOut = 7;
+
+    public static DateTime? ScadenzaUtc(DateTime? checkOut) =>
+        checkOut is { } uscita ? DateTime.SpecifyKind(uscita.Date.AddDays(GiorniDalCheckOut), DateTimeKind.Utc) : null;
+
+    public static bool IsInTermine(DateTime? checkOut, DateTime adessoUtc) =>
+        ScadenzaUtc(checkOut) is { } scadenza && adessoUtc.Date <= scadenza.Date;
+}
 
 /// <summary>
 /// Invio a PayTourist — porta StatePoliceLogic.SendSchedinePayTourist del legacy: per ogni
@@ -181,10 +212,36 @@ public class PayTouristInvioService(
     /// nella lista "da inviare" di UNA struttura PayTourist specifica. Rilancia le stesse eccezioni
     /// (ConflictException/NotFoundException) delle altre azioni PayTourist per coerenza di risposta HTTP.
     /// </summary>
-    public async Task InviaSingolaAsync(ICurrentUser currentUser, Guid strutturaId, Guid payTouristStrutturaId, Guid ospiteId, CancellationToken cancellationToken)
+    /// <summary>Mappa TipologiaId → struttura PayTourist che la dichiara: l'associazione è univoca, quindi la destinazione non è mai ambigua.</summary>
+    private async Task<Dictionary<Guid, PayTouristStruttura>> RisolviStrutturePerTipologiaAsync(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var lista = await payTouristStrutture.ListByStrutturaAsync(strutturaId, cancellationToken);
+
+        return lista
+            .SelectMany(p => p.Tipologie.Select(t => (t.TipologiaId, Struttura: p)))
+            .GroupBy(x => x.TipologiaId)
+            .ToDictionary(g => g.Key, g => g.First().Struttura);
+    }
+
+    /// <summary>
+    /// Invio della singola prenotazione. La struttura PayTourist non va indicata: si deduce dalla
+    /// tipologia della camera dell'ospite, che è ciò che stabilisce dove va dichiarata — così una
+    /// prenotazione non può finire nella struttura sbagliata per una selezione distratta.
+    /// </summary>
+    public async Task InviaSingolaAsync(ICurrentUser currentUser, Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceWrite, cancellationToken);
         await concessioneGuard.EnsurePayTouristAsync(strutturaId, cancellationToken);
+
+        var ospiteRichiesto = await ospiti.GetConPrenotazioneAsync(strutturaId, ospiteId, cancellationToken)
+            ?? throw new NotFoundException("Ospite non trovato.");
+
+        var perTipologia = await RisolviStrutturePerTipologiaAsync(strutturaId, cancellationToken);
+        var destinazione = ospiteRichiesto.Prenotazione?.Camera?.TipologiaId is { } tipologiaRichiesta && perTipologia.TryGetValue(tipologiaRichiesta, out var trovata)
+            ? trovata
+            : throw new ConflictException("Nessuna struttura PayTourist associata alla tipologia di questa camera: collegala a una struttura in Impostazioni prima di trasmettere.");
+
+        var payTouristStrutturaId = destinazione.Id;
 
         string? nomeStruttura = null;
         try
@@ -209,8 +266,22 @@ public class PayTouristInvioService(
 
             var tipologieIds = payTouristStruttura.Tipologie.Select(t => t.TipologiaId).ToHashSet();
             var daInviare = await ospiti.ListDaInviarePayTouristAsync(strutturaId, tipologieIds, cancellationToken);
-            var ospite = daInviare.FirstOrDefault(o => o.Id == ospiteId)
-                ?? throw new NotFoundException("Ospite non trovato tra quelli da inviare per questa struttura PayTourist.");
+            var ospite = daInviare.FirstOrDefault(o => o.Id == ospiteId);
+
+            if (ospite is null)
+            {
+                // La selezione esclude già i soggiorni conclusi da più di 7 giorni: senza questo
+                // controllo l'operatore leggerebbe "ospite non trovato", vero ma fuorviante — la
+                // riga è lì davanti a lui, solo fuori termine.
+                var richiesto = await ospiti.GetConPrenotazioneAsync(strutturaId, ospiteId, cancellationToken);
+                if (richiesto?.Prenotazione is { } prenotazioneRichiesta && !TerminiPayTourist.IsInTermine(prenotazioneRichiesta.CheckOut, DateTime.UtcNow))
+                {
+                    throw new ConflictException(
+                        $"Termine scaduto: la trasmissione a PayTourist è possibile entro {TerminiPayTourist.GiorniDalCheckOut} giorni dal check-out (era il {prenotazioneRichiesta.CheckOut:dd/MM/yyyy}).");
+                }
+
+                throw new NotFoundException("Ospite non trovato tra quelli da inviare per questa struttura PayTourist.");
+            }
 
             var anagraficaDati = await CaricaAnagraficaAsync(strutturaId, cancellationToken);
 
@@ -280,24 +351,44 @@ public class PayTouristInvioService(
             cancellationToken: cancellationToken);
 
     /// <summary>Elenco prenotazioni dell'anno indicato (sul check-out) di una struttura PayTourist per la schermata operativa — da inviare e già inviate.</summary>
-    public async Task<IReadOnlyList<PrenotazionePayTourist>> ListPrenotazioniAsync(ICurrentUser currentUser, Guid strutturaId, Guid payTouristStrutturaId, int anno, CancellationToken cancellationToken)
+    /// <summary>
+    /// Elenco delle prenotazioni concluse dell'anno per l'intera Struttura, non per singola struttura
+    /// PayTourist: ogni riga porta con sé quella in cui va dichiarata, dedotta dalla tipologia della
+    /// camera (associazione univoca). L'operatore le vede tutte in un elenco solo e le riconosce
+    /// dalla colonna Camera.
+    /// </summary>
+    public async Task<IReadOnlyList<PrenotazionePayTourist>> ListPrenotazioniAsync(ICurrentUser currentUser, Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
 
-        var payTouristStruttura = await payTouristStrutture.GetAsync(strutturaId, payTouristStrutturaId, cancellationToken)
-            ?? throw new NotFoundException("Struttura PayTourist non trovata.");
+        var perTipologia = await RisolviStrutturePerTipologiaAsync(strutturaId, cancellationToken);
+        var recenti = await ospiti.ListRecentiPayTouristAsync(strutturaId, tipologieIds: null, anno, cancellationToken);
 
-        var tipologieIds = payTouristStruttura.Tipologie.Select(t => t.TipologiaId).ToHashSet();
-        var recenti = await ospiti.ListRecentiPayTouristAsync(strutturaId, tipologieIds, anno, cancellationToken);
+        var adesso = DateTime.UtcNow;
 
-        return recenti.Select(o => new PrenotazionePayTourist(
-            o.Id,
-            o.PrenotazioneId,
-            $"{o.Cognome} {o.Nome}".Trim(),
-            o.Prenotazione?.Camera?.Nome,
-            o.Prenotazione?.CheckIn,
-            o.Prenotazione?.CheckOut,
-            o.Prenotazione?.PayTourist ?? false)).ToList();
+        return recenti
+            // Senza struttura PayTourist associata non c'è dove dichiararla: la riga non compare
+            // affatto (scelta esplicita dell'utente — le tipologie non assegnate sono tali apposta).
+            .Where(o => o.Prenotazione?.Camera?.TipologiaId is { } t && perTipologia.ContainsKey(t))
+            .Select(o =>
+        {
+            var destinazione = o.Prenotazione?.Camera?.TipologiaId is { } tipologiaId && perTipologia.TryGetValue(tipologiaId, out var trovata) ? trovata : null;
+
+            return new PrenotazionePayTourist(
+                o.Id,
+                o.PrenotazioneId,
+                $"{o.Cognome} {o.Nome}".Trim(),
+                o.Prenotazione?.Camera?.Nome,
+                o.Prenotazione?.CheckIn,
+                o.Prenotazione?.CheckOut,
+                o.Prenotazione?.PayTourist ?? false,
+                TerminiPayTourist.ScadenzaUtc(o.Prenotazione?.CheckOut),
+                // Senza struttura PayTourist associata non c'è dove dichiararla: non trasmissibile
+                // finché la tipologia non viene collegata in Impostazioni.
+                destinazione is not null && TerminiPayTourist.IsInTermine(o.Prenotazione?.CheckOut, adesso),
+                destinazione?.Id,
+                destinazione?.Nome);
+        }).ToList();
     }
 
     /// <summary>Anni con almeno una prenotazione per il selettore Anno della schermata operativa — su richiesta esplicita, non deve proporre anni sicuramente vuoti.</summary>

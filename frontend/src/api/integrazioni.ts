@@ -27,6 +27,12 @@ export interface SchedinaAlloggiatiWebDto {
   checkIn: string | null
   checkOut: string | null
   inviata: boolean
+  /** Termine di legge per la trasmissione: 24 ore dall'arrivo, 6 se il soggiorno dura meno di 24 ore. */
+  scadenzaInvioUtc: string | null
+  /** Soggiorno sotto le 24 ore: termine ridotto a 6 ore. */
+  soggiornoBreve: boolean
+  /** Ancora trasmissibile: a false l'invio non va offerto, il portale lo rifiuterebbe. */
+  inTermine: boolean
 }
 
 export interface SchedinaOsservatorioDto {
@@ -38,6 +44,13 @@ export interface SchedinaOsservatorioDto {
   checkOut: string | null
   arrivoInviato: boolean
   partenzaInviata: boolean | null
+  /** Giornata fino a cui l'appartamento risulta chiuso: gli arrivi anteriori non sono più trasmissibili. */
+  chiusoFinoA: string | null
+  /** Arrivo ancora trasmissibile: a false l'invio non va offerto. */
+  inTermine: boolean
+  /** Appartamento in cui va dichiarata, dedotto dalla tipologia della camera. Null = tipologia non associata a nessun appartamento. */
+  appartamentoId: string | null
+  appartamentoNome: string | null
 }
 
 export interface PrenotazionePayTouristDto {
@@ -48,6 +61,13 @@ export interface PrenotazionePayTouristDto {
   checkIn: string | null
   checkOut: string | null
   inviata: boolean
+  /** Ultimo giorno utile per la trasmissione: 7 giorni dal check-out. */
+  scadenzaInvioUtc: string | null
+  /** Ancora trasmissibile: a false l'invio non va offerto. */
+  inTermine: boolean
+  /** Struttura PayTourist in cui va dichiarata, dedotta dalla tipologia della camera. Null = tipologia non associata. */
+  payTouristStrutturaId: string | null
+  payTouristStrutturaNome: string | null
 }
 
 export interface OsservatorioAppartamentoDto {
@@ -209,6 +229,18 @@ export function useInviaAlloggiatiWebOra(strutturaId: string | null) {
   })
 }
 
+export function useInviaSchedinaAlloggiatiWebSingola(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ospiteId: string) =>
+      apiPost<RisultatoInvioAlloggiatiWebDto>(`/strutture/${strutturaId}/alloggiati-web/schedine/${ospiteId}/invia`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alloggiati-web-schedine', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['alloggiati-web-config', strutturaId] })
+    },
+  })
+}
+
 export function esportaSchedineAlloggiatiWeb(strutturaId: string, anno: number) {
   return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/schedine/export?anno=${anno}`, `schedine-alloggiati-web-${anno}.txt`)
 }
@@ -292,18 +324,31 @@ export function useEliminaOsservatorioAppartamento(strutturaId: string | null) {
 export function useInviaOsservatorioOra(strutturaId: string | null) {
   const invalida = useInvalidaOsservatorio(strutturaId)
   return useMutation({
-    mutationFn: (appartamentoId: string) =>
-      apiPost<RisultatoInvioOsservatorioDto>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}/invia`),
+    // Tutti gli appartamenti in un colpo: la schermata non ne fa più scegliere uno.
+    mutationFn: () => apiPost<RisultatoInvioOsservatorioDto>(`/strutture/${strutturaId}/osservatorio/invia`),
     onSuccess: invalida,
   })
 }
 
 /** Su richiesta esplicita, filtrato per anno selezionato (non più una finestra mobile di 30 giorni). */
-export function useSchedineOsservatorio(strutturaId: string | null, appartamentoId: string | null, anno: number) {
+export function useInviaArrivoOsservatorioSingolo(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ospiteId: string) =>
+      apiPost<RisultatoInvioOsservatorioDto>(`/strutture/${strutturaId}/osservatorio/schedine/${ospiteId}/invia`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['osservatorio-schedine', strutturaId] })
+      queryClient.invalidateQueries({ queryKey: ['osservatorio-appartamenti', strutturaId] })
+    },
+  })
+}
+
+/** Elenco di tutta la Struttura: ogni riga porta con sé l'appartamento in cui va dichiarata, dedotto dalla tipologia della camera. */
+export function useSchedineOsservatorio(strutturaId: string | null, anno: number) {
   return useQuery({
-    queryKey: ['osservatorio-schedine', strutturaId, appartamentoId, anno],
-    queryFn: () => apiGet<SchedinaOsservatorioDto[]>(`/strutture/${strutturaId}/osservatorio/appartamenti/${appartamentoId}/schedine?anno=${anno}`),
-    enabled: !!strutturaId && !!appartamentoId,
+    queryKey: ['osservatorio-schedine', strutturaId, anno],
+    queryFn: () => apiGet<SchedinaOsservatorioDto[]>(`/strutture/${strutturaId}/osservatorio/schedine?anno=${anno}`),
+    enabled: !!strutturaId,
   })
 }
 
@@ -393,8 +438,8 @@ export function useInviaPayTouristOra(strutturaId: string | null) {
 export function useInviaPayTouristSingola(strutturaId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ payTouristStrutturaId, ospiteId }: { payTouristStrutturaId: string; ospiteId: string }) =>
-      apiPost<void>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/prenotazioni/${ospiteId}/invia`),
+    mutationFn: (ospiteId: string) =>
+      apiPost<void>(`/strutture/${strutturaId}/paytourist/prenotazioni/${ospiteId}/invia`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['paytourist-prenotazioni', strutturaId] })
       queryClient.invalidateQueries({ queryKey: ['paytourist-strutture', strutturaId] })
@@ -407,11 +452,12 @@ export function esportaPayTourist(strutturaId: string, payTouristStrutturaId: st
 }
 
 /** Su richiesta esplicita, filtrato per anno selezionato (non più una finestra mobile di 30 giorni). */
-export function usePrenotazioniPayTourist(strutturaId: string | null, payTouristStrutturaId: string | null, anno: number) {
+/** Elenco di tutta la Struttura: ogni riga porta con sé la struttura PayTourist in cui va dichiarata, dedotta dalla tipologia della camera. */
+export function usePrenotazioniPayTourist(strutturaId: string | null, anno: number) {
   return useQuery({
-    queryKey: ['paytourist-prenotazioni', strutturaId, payTouristStrutturaId, anno],
-    queryFn: () => apiGet<PrenotazionePayTouristDto[]>(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/prenotazioni?anno=${anno}`),
-    enabled: !!strutturaId && !!payTouristStrutturaId,
+    queryKey: ['paytourist-prenotazioni', strutturaId, anno],
+    queryFn: () => apiGet<PrenotazionePayTouristDto[]>(`/strutture/${strutturaId}/paytourist/prenotazioni?anno=${anno}`),
+    enabled: !!strutturaId,
   })
 }
 

@@ -20,6 +20,8 @@ export interface PrenotazioneDto {
   importoTotale: number | null
   checkIn: string | null
   checkOut: string | null
+  /** Orario reale dell'arrivo: da qui decorrono i termini della schedina alloggiati. Null se il check-in non è ancora stato fatto. */
+  checkInEffettuatoAtUtc: string | null
   numeroOspiti: number | null
   statePolice: boolean
   pms: boolean
@@ -56,6 +58,8 @@ export interface PrenotazioneRequest {
   spesePuliziaAttiva: boolean
   animaliAttiva: boolean
   cauzioneAttiva: boolean
+  /** Correzione dell'orario reale di arrivo (solo su soggiorni già iniziati). Omesso o null: resta quello registrato al check-in. */
+  checkInEffettuatoAtUtc?: string | null
 }
 
 export interface PreventivoDto {

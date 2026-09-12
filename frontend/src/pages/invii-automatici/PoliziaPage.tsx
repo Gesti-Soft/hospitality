@@ -20,7 +20,9 @@ import {
   useAlloggiatiWebConfig,
   useAnniAlloggiatiWeb,
   useInviaAlloggiatiWebOra,
+  useInviaSchedinaAlloggiatiWebSingola,
   useSchedineAlloggiatiWeb,
+  type SchedinaAlloggiatiWebDto,
 } from '../../api/integrazioni'
 import { fontDisplay, fontMono, tokens } from '../../theme'
 import { useToast } from '../../toast/ToastContext'
@@ -31,6 +33,25 @@ import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, Testa
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+/**
+ * Tre stati, non due: una schedina non ancora inviata può essere ancora trasmissibile oppure aver
+ * superato il termine di legge (24 ore dall'arrivo, 6 per i soggiorni sotto le 24 ore). Nel secondo
+ * caso il portale della Polizia la rifiuterebbe, quindi l'invio non va nemmeno offerto — va
+ * registrata a mano sul portale, e l'etichetta deve dirlo invece di lasciarla indistinguibile dalle
+ * altre in attesa.
+ */
+function statoSchedina(s: SchedinaAlloggiatiWebDto) {
+  if (s.inviata) return { etichetta: 'Inviata', colore: tokens.ok600 }
+  if (!s.inTermine) return { etichetta: 'Fuori termine', colore: tokens.error600 }
+  return { etichetta: 'Da inviare', colore: tokens.wait600 }
+}
+
+function terminePerSchedina(s: SchedinaAlloggiatiWebDto) {
+  if (s.inviata || !s.scadenzaInvioUtc) return '—'
+  const scadenza = formattatoreDataOra.format(new Date(s.scadenzaInvioUtc))
+  return s.inTermine ? `entro ${scadenza}` : `scaduto il ${scadenza}`
+}
 
 export function PoliziaPage() {
   const mobile = useMobile()
@@ -45,6 +66,17 @@ export function PoliziaPage() {
   const toast = useToast()
 
   const invia = useInviaAlloggiatiWebOra(strutturaId)
+  const inviaSingola = useInviaSchedinaAlloggiatiWebSingola(strutturaId)
+
+  function inviaUnaSchedina(ospiteId: string, nomeOspite: string) {
+    inviaSingola.mutate(ospiteId, {
+      onSuccess: (r) =>
+        r.inviate > 0
+          ? toast.successo(`Schedina di ${nomeOspite} inviata.`)
+          : toast.errore(r.messaggio ?? 'Invio non riuscito.'),
+      onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Invio non riuscito.'),
+    })
+  }
 
   function inviaOra() {
     setRisultatoInvio(null)
@@ -140,7 +172,7 @@ export function PoliziaPage() {
                 <TestataCardElenco
                   titolo={s.nomeOspite}
                   azioneDestra={
-                    <Chip size="small" label={s.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: s.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                    <Chip size="small" label={statoSchedina(s).etichetta} sx={{ bgcolor: statoSchedina(s).colore, color: '#fff', fontWeight: 700 }} />
                   }
                 />
                 <RigaCardMeta
@@ -148,10 +180,21 @@ export function PoliziaPage() {
                     { etichetta: 'Camera', valore: s.camera ?? '—' },
                     { etichetta: 'Check-in', valore: s.checkIn ? formattatoreData.format(new Date(s.checkIn)) : '—' },
                     { etichetta: 'Check-out', valore: s.checkOut ? formattatoreData.format(new Date(s.checkOut)) : '—' },
+                    { etichetta: s.soggiornoBreve ? 'Termine (6 ore)' : 'Termine', valore: terminePerSchedina(s) },
                   ]}
                 />
                 {!s.inviata && (
                   <AzioniCardElenco>
+                    {s.inTermine && puoInviare && (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disabled={inviaSingola.isPending}
+                        onClick={() => inviaUnaSchedina(s.ospiteId, s.nomeOspite)}
+                      >
+                        Invia
+                      </Button>
+                    )}
                     <Button size="small" variant="outlined" onClick={() => esportaSingola(s.ospiteId)}>
                       Scarica
                     </Button>
@@ -171,6 +214,7 @@ export function PoliziaPage() {
                   <TableCell>Camera</TableCell>
                   <TableCell>Check-in</TableCell>
                   <TableCell>Check-out</TableCell>
+                  <TableCell>Termine invio</TableCell>
                   <TableCell>Stato</TableCell>
                   <TableCell align="right">Azioni</TableCell>
                 </TableRow>
@@ -178,7 +222,7 @@ export function PoliziaPage() {
               <TableBody>
                 {(schedine.data ?? []).length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                    <TableCell colSpan={7} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                       Nessuna schedina per l'anno selezionato.
                     </TableCell>
                   </TableRow>
@@ -189,14 +233,32 @@ export function PoliziaPage() {
                     <TableCell>{s.camera ?? '—'}</TableCell>
                     <TableCell sx={{ fontFamily: fontMono }}>{s.checkIn ? formattatoreData.format(new Date(s.checkIn)) : '—'}</TableCell>
                     <TableCell sx={{ fontFamily: fontMono }}>{s.checkOut ? formattatoreData.format(new Date(s.checkOut)) : '—'}</TableCell>
+                    <TableCell sx={{ fontFamily: fontMono, fontSize: 12.5, color: s.inviata || s.inTermine ? tokens.textSecondary : tokens.error600 }}>
+                      {terminePerSchedina(s)}
+                      {s.soggiornoBreve && !s.inviata && (
+                        <Chip size="small" label="6 ore" sx={{ ml: 0.75, height: 18, fontSize: 10.5, fontWeight: 700, bgcolor: tokens.orange100, color: tokens.orange700 }} />
+                      )}
+                    </TableCell>
                     <TableCell>
-                      <Chip size="small" label={s.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: s.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                      <Chip size="small" label={statoSchedina(s).etichetta} sx={{ bgcolor: statoSchedina(s).colore, color: '#fff', fontWeight: 700 }} />
                     </TableCell>
                     <TableCell align="right">
                       {!s.inviata && (
-                        <Button size="small" variant="outlined" onClick={() => esportaSingola(s.ospiteId)}>
-                          Scarica
-                        </Button>
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                          {s.inTermine && puoInviare && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              disabled={inviaSingola.isPending}
+                              onClick={() => inviaUnaSchedina(s.ospiteId, s.nomeOspite)}
+                            >
+                              Invia
+                            </Button>
+                          )}
+                          <Button size="small" variant="outlined" onClick={() => esportaSingola(s.ospiteId)}>
+                            Scarica
+                          </Button>
+                        </Box>
                       )}
                     </TableCell>
                   </TableRow>

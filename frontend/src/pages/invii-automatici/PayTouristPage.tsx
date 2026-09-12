@@ -53,17 +53,18 @@ export function PayTouristPage() {
     }
   }, [strutture.data, payTouristStrutturaId])
 
-  const prenotazioni = usePrenotazioniPayTourist(strutturaId, payTouristStrutturaId, anno)
+  const prenotazioni = usePrenotazioniPayTourist(strutturaId, anno)
   const invia = useInviaPayTouristOra(strutturaId)
   const inviaSingola = useInviaPayTouristSingola(strutturaId)
   const [invioSingoloInCorso, setInvioSingoloInCorso] = useState<string | null>(null)
 
   function eseguiInviaSingola(ospiteId: string) {
-    if (!payTouristStrutturaId) return
     setErrore(null)
     setInvioSingoloInCorso(ospiteId)
+    // La struttura PayTourist non si passa: la deduce il server dalla tipologia della camera
+    // dell'ospite, così la prenotazione finisce sempre dove va dichiarata.
     inviaSingola.mutate(
-      { payTouristStrutturaId, ospiteId },
+      ospiteId,
       {
         onSuccess: () => setInvioSingoloInCorso(null),
         onError: (err) => {
@@ -92,7 +93,6 @@ export function PayTouristPage() {
     }
   }
 
-  const strutturaSelezionata = (strutture.data ?? []).find((s) => s.id === payTouristStrutturaId) ?? null
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -110,26 +110,31 @@ export function PayTouristPage() {
       )}
 
       {!strutture.isLoading && (strutture.data ?? []).length > 0 && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <TextField
-            select
-            size="small"
-            label="Struttura PayTourist"
-            value={payTouristStrutturaId ?? ''}
-            onChange={(e) => setPayTouristStrutturaId(e.target.value)}
-            sx={{ minWidth: 240 }}
-          >
-            {(strutture.data ?? []).map((s) => (
-              <MenuItem key={s.id} value={s.id}>
-                {s.nome}
-              </MenuItem>
-            ))}
-          </TextField>
-
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          {/* Niente più scelta della struttura PayTourist: ogni prenotazione sa già dove va
+              dichiarata, e "Invia ora tutte" le processa tutte. Il menu qui resta solo per scegliere
+              cosa esportare, e compare unicamente quando le strutture sono più di una. */}
           {puoInviare && (
             <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending}>
               Invia ora tutte
             </Button>
+          )}
+
+          {(strutture.data ?? []).length > 1 && (
+            <TextField
+              select
+              size="small"
+              label="Esporta"
+              value={payTouristStrutturaId ?? ''}
+              onChange={(e) => setPayTouristStrutturaId(e.target.value)}
+              sx={{ minWidth: 220 }}
+            >
+              {(strutture.data ?? []).map((s) => (
+                <MenuItem key={s.id} value={s.id}>
+                  {s.nome}
+                </MenuItem>
+              ))}
+            </TextField>
           )}
           <Button variant="outlined" size="small" onClick={esporta} disabled={!payTouristStrutturaId || (prenotazioni.data ?? []).length === 0}>
             Esporta JSON
@@ -137,21 +142,34 @@ export function PayTouristPage() {
         </Box>
       )}
 
-      {strutturaSelezionata && (
-        <Box sx={{ display: 'flex', gap: 4 }}>
-          <Campo etichetta="Ultimo invio" valore={strutturaSelezionata.ultimoInvioAtUtc ? formattatoreDataOra.format(new Date(strutturaSelezionata.ultimoInvioAtUtc)) : 'mai eseguito'} />
-          <Campo etichetta="Inviate nell'ultimo invio" valore={String(strutturaSelezionata.ultimeInviate ?? '—')} />
+      {/* Stato dell'ultimo invio per ciascuna struttura configurata, non più solo di quella scelta. */}
+      {(strutture.data ?? []).length > 0 && (
+        <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {(strutture.data ?? []).map((s) => (
+            <Campo
+              key={s.id}
+              etichetta={s.nome ?? 'Struttura PayTourist'}
+              valore={s.ultimoInvioAtUtc ? `${formattatoreDataOra.format(new Date(s.ultimoInvioAtUtc))} — ${s.ultimeInviate ?? 0} inviate` : 'mai eseguito'}
+            />
+          ))}
         </Box>
       )}
 
-      {strutturaSelezionata?.ultimoErrore && <Alert severity="warning">{strutturaSelezionata.ultimoErrore}</Alert>}
+      {(strutture.data ?? [])
+        .filter((s) => s.ultimoErrore)
+        .map((s) => (
+          <Alert key={s.id} severity="warning">
+            {s.nome}: {s.ultimoErrore}
+          </Alert>
+        ))}
       {risultatoInvio && (
         <Alert severity="info" onClose={() => setRisultatoInvio(null)}>
           {risultatoInvio}
         </Alert>
       )}
 
-      {payTouristStrutturaId && (
+      {/* Elenco di tutta la Struttura: non dipende più dalla struttura PayTourist scelta qui sopra. */}
+      {(
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
             <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Prenotazioni</Typography>
@@ -173,17 +191,22 @@ export function PayTouristPage() {
                   <TestataCardElenco
                     titolo={p.nomeOspite}
                     azioneDestra={
-                      <Chip size="small" label={p.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: p.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                      <Chip
+                        size="small"
+                        label={p.inviata ? 'Inviata' : p.inTermine ? 'Da inviare' : 'Fuori termine'}
+                        sx={{ bgcolor: p.inviata ? tokens.ok600 : p.inTermine ? tokens.wait600 : tokens.error600, color: '#fff', fontWeight: 700 }}
+                      />
                     }
                   />
                   <RigaCardMeta
                     voci={[
                       { etichetta: 'Camera', valore: p.camera ?? '—' },
+                      { etichetta: 'Struttura PayTourist', valore: p.payTouristStrutturaNome ?? 'Nessuna: tipologia non associata' },
                       { etichetta: 'Check-in', valore: p.checkIn ? formattatoreData.format(new Date(p.checkIn)) : '—' },
                       { etichetta: 'Check-out', valore: p.checkOut ? formattatoreData.format(new Date(p.checkOut)) : '—' },
                     ]}
                   />
-                  {!p.inviata && puoInviare && (
+                  {!p.inviata && p.inTermine && puoInviare && (
                     <AzioniCardElenco>
                       <Button
                         size="small"
@@ -207,8 +230,10 @@ export function PayTouristPage() {
                   <TableRow>
                     <TableCell>Ospite</TableCell>
                     <TableCell>Camera</TableCell>
+                    <TableCell>Struttura PayTourist</TableCell>
                     <TableCell>Check-in</TableCell>
                     <TableCell>Check-out</TableCell>
+                    <TableCell>Termine invio</TableCell>
                     <TableCell>Stato</TableCell>
                     <TableCell align="right">Azioni</TableCell>
                   </TableRow>
@@ -216,7 +241,7 @@ export function PayTouristPage() {
                 <TableBody>
                   {(prenotazioni.data ?? []).length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                      <TableCell colSpan={8} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                         Nessuna prenotazione per l'anno selezionato.
                       </TableCell>
                     </TableRow>
@@ -225,13 +250,25 @@ export function PayTouristPage() {
                     <TableRow key={p.ospiteId} hover>
                       <TableCell sx={{ fontWeight: 700 }}>{p.nomeOspite}</TableCell>
                       <TableCell>{p.camera ?? '—'}</TableCell>
+                      <TableCell sx={{ fontSize: 12.5, color: p.payTouristStrutturaNome ? tokens.textSecondary : tokens.error600 }}>
+                        {p.payTouristStrutturaNome ?? 'Nessuna: tipologia non associata'}
+                      </TableCell>
                       <TableCell sx={{ fontFamily: fontMono }}>{p.checkIn ? formattatoreData.format(new Date(p.checkIn)) : '—'}</TableCell>
                       <TableCell sx={{ fontFamily: fontMono }}>{p.checkOut ? formattatoreData.format(new Date(p.checkOut)) : '—'}</TableCell>
+                      <TableCell sx={{ fontFamily: fontMono, fontSize: 12.5, color: p.inviata || p.inTermine ? tokens.textSecondary : tokens.error600 }}>
+                        {p.inviata || !p.scadenzaInvioUtc
+                          ? '—'
+                          : `${p.inTermine ? 'entro' : 'scaduto il'} ${formattatoreData.format(new Date(p.scadenzaInvioUtc))}`}
+                      </TableCell>
                       <TableCell>
-                        <Chip size="small" label={p.inviata ? 'Inviata' : 'Da inviare'} sx={{ bgcolor: p.inviata ? tokens.ok600 : tokens.wait600, color: '#fff', fontWeight: 700 }} />
+                        <Chip
+                          size="small"
+                          label={p.inviata ? 'Inviata' : p.inTermine ? 'Da inviare' : 'Fuori termine'}
+                          sx={{ bgcolor: p.inviata ? tokens.ok600 : p.inTermine ? tokens.wait600 : tokens.error600, color: '#fff', fontWeight: 700 }}
+                        />
                       </TableCell>
                       <TableCell align="right">
-                        {!p.inviata && puoInviare && (
+                        {!p.inviata && p.inTermine && puoInviare && (
                           <Button
                             size="small"
                             variant="outlined"

@@ -11,7 +11,36 @@ namespace GestiSoft.Application.Osservatorio;
 
 public record RisultatoInvioOsservatorio(int ArriviInviati, int CheckoutInviati, int GiorniChiusi, string? Messaggio);
 
-public record SchedinaOsservatorio(Guid OspiteId, Guid? PrenotazioneId, string NomeOspite, string? Camera, DateTime? CheckIn, DateTime? CheckOut, bool ArrivoInviato, bool? PartenzaInviata);
+/// <param name="ChiusoFinoA">Giornata fino a cui l'appartamento risulta chiuso lato Osservatorio: gli arrivi anteriori non sono più trasmissibili.</param>
+/// <param name="InTermine">Arrivo ancora trasmissibile: a false l'interfaccia non deve offrire l'invio (la giornata è già stata chiusa).</param>
+/// <param name="AppartamentoId">Appartamento a cui la schedina appartiene, dedotto dalla tipologia della sua camera. Null se quella tipologia non è associata a nessun appartamento: in quel caso la schedina non è trasmissibile e va configurata l'associazione.</param>
+public record SchedinaOsservatorio(
+    Guid OspiteId,
+    Guid? PrenotazioneId,
+    string NomeOspite,
+    string? Camera,
+    DateTime? CheckIn,
+    DateTime? CheckOut,
+    bool ArrivoInviato,
+    bool? PartenzaInviata,
+    DateTime? ChiusoFinoA,
+    bool InTermine,
+    Guid? AppartamentoId,
+    string? AppartamentoNome);
+
+/// <summary>
+/// Un arrivo si può ancora trasmettere solo se la sua giornata non è già stata chiusa
+/// sull'Osservatorio: il cursore indica il prossimo giorno da chiudere, quindi un arrivo con data
+/// anteriore appartiene a una giornata già chiusa e verrebbe rifiutato ("Invalid Date"). Esempio
+/// dato dall'utente: schedina dell'08/08, chiusura al 09/08 → non va inviata.
+/// Cursore non ancora valorizzato (appartamento mai chiuso) = nessuna giornata chiusa, tutto
+/// trasmissibile.
+/// </summary>
+public static class TerminiOsservatorio
+{
+    public static bool IsInTermine(DateTime? checkIn, DateTime? cursore) =>
+        checkIn is { } arrivo && (cursore is not { } chiuso || arrivo.Date >= chiuso.Date);
+}
 
 /// <summary>
 /// Invio giornaliero all'Osservatorio Turistico — porta SendSchedinaOseervatorio/CloseDay di
@@ -58,6 +87,60 @@ public class OsservatorioInvioService(
         return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken);
     }
 
+    /// <summary>
+    /// Invio manuale per tutti gli appartamenti della Struttura, uno alla volta — stessa cosa che fa
+    /// il job giornaliero, richiamabile a mano senza dover scegliere un appartamento (la schermata
+    /// non ne fa più scegliere uno: ogni schedina sa già dove va dichiarata).
+    /// </summary>
+    public async Task<IReadOnlyList<RisultatoInvioOsservatorio>> InviaOraTuttiAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceWrite, cancellationToken);
+        return await InviaSistemaAsync(strutturaId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Invio del solo arrivo indicato, su richiesta dell'operatore dal pulsante sulla riga. Stesse
+    /// regole dell'invio manuale di tutto l'appartamento (mai chiusura di giornata, che resta
+    /// prerogativa del job automatico): cambia solo che parte una schedina sola invece di tutte
+    /// quelle del giorno.
+    /// </summary>
+    public async Task<RisultatoInvioOsservatorio> InviaSingoloArrivoAsync(ICurrentUser currentUser, Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceWrite, cancellationToken);
+
+        var ospite = await ospiti.GetConPrenotazioneAsync(strutturaId, ospiteId, cancellationToken)
+            ?? throw new NotFoundException("Ospite non trovato.");
+
+        if (ospite.Prenotazione is not { } prenotazione)
+        {
+            throw new ConflictException("La scheda non è collegata a nessuna prenotazione.");
+        }
+
+        // L'appartamento non lo sceglie l'operatore: si deduce dalla tipologia della camera, che è
+        // proprio ciò che stabilisce dove quell'ospite va dichiarato. Così una schedina non può
+        // finire nell'appartamento sbagliato per una selezione distratta.
+        var perTipologia = await RisolviAppartamentiPerTipologiaAsync(strutturaId, cancellationToken);
+        var appartamento = prenotazione.Camera?.TipologiaId is { } tipologiaId && perTipologia.TryGetValue(tipologiaId, out var trovato) ? trovato : null;
+
+        if (appartamento is null)
+        {
+            throw new ConflictException(
+                "Nessun appartamento Osservatorio Turistico associato alla tipologia di questa camera: collegala a un appartamento in Impostazioni prima di trasmettere.");
+        }
+
+        // Giornata già chiusa lato Osservatorio: l'arrivo non è più trasmissibile e il servizio lo
+        // rifiuterebbe. Si dice esplicitamente perché, senza questo controllo, la ricerca più sotto
+        // (che guarda solo gli arrivi di quel giorno) risponderebbe "ospite non trovato" — vero ma
+        // fuorviante, visto che l'ospite esiste e il problema è la data.
+        if (!TerminiOsservatorio.IsInTermine(prenotazione.CheckIn, appartamento.CursoreDataAtUtc))
+        {
+            throw new ConflictException(
+                $"Giornata già chiusa sull'Osservatorio Turistico (chiuso fino al {appartamento.CursoreDataAtUtc:dd/MM/yyyy}): l'arrivo del {prenotazione.CheckIn:dd/MM/yyyy} non è più trasmissibile.");
+        }
+
+        return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken, soloOspiteId: ospiteId, giornoArrivo: prenotazione.CheckIn);
+    }
+
     /// <summary>Usato dal job Quartz schedulato (Worker) — nessun ICurrentUser, un appartamento alla volta: un fallimento su uno non blocca gli altri.</summary>
     public async Task<IReadOnlyList<RisultatoInvioOsservatorio>> InviaSistemaAsync(Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -99,26 +182,63 @@ public class OsservatorioInvioService(
     /// giornata dell'appartamento ha già superato la data di check-out (nessun flag dedicato per
     /// singola prenotazione: il checkout viene chiuso per giorno, non per ospite).
     /// </summary>
-    public async Task<IReadOnlyList<SchedinaOsservatorio>> ListSchedineAsync(ICurrentUser currentUser, Guid strutturaId, Guid appartamentoId, int anno, CancellationToken cancellationToken)
+    /// <summary>
+    /// Elenco arrivi/partenze dell'anno per l'intera Struttura, non per singolo appartamento:
+    /// l'appartamento di ogni riga viene dedotto dalla tipologia della sua camera (associazione
+    /// univoca, vedi RisolviAppartamentiPerTipologiaAsync), così l'operatore vede tutte le schedine
+    /// in un elenco solo — riconoscendole dalla colonna Camera — invece di doverle cercare
+    /// appartamento per appartamento. Le date di chiusura e la trasmissibilità sono quelle
+    /// dell'appartamento di ciascuna riga, non di uno selezionato a parte.
+    /// </summary>
+    public async Task<IReadOnlyList<SchedinaOsservatorio>> ListSchedineAsync(ICurrentUser currentUser, Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
 
-        var appartamento = await appartamenti.GetAsync(strutturaId, appartamentoId, cancellationToken)
-            ?? throw new NotFoundException("Appartamento Osservatorio Turistico non trovato.");
+        var perTipologia = await RisolviAppartamentiPerTipologiaAsync(strutturaId, cancellationToken);
+        var recenti = await ospiti.ListRecentiOsservatorioAsync(strutturaId, tipologieIds: null, anno, cancellationToken);
 
-        var tipologieIds = appartamento.Tipologie.Select(t => t.TipologiaId).ToHashSet();
-        var recenti = await ospiti.ListRecentiOsservatorioAsync(strutturaId, tipologieIds, anno, cancellationToken);
+        return recenti
+            // Chi non ha un appartamento associato non va dichiarato da nessuna parte: la riga non
+            // compare affatto, invece di restare in elenco come promemoria di qualcosa da fare
+            // (scelta esplicita dell'utente: le tipologie non assegnate sono tali per volontà).
+            .Where(o => AppartamentoDi(o, perTipologia) is not null)
+            .Select(o =>
+        {
+            var appartamento = AppartamentoDi(o, perTipologia);
 
-        return recenti.Select(o => new SchedinaOsservatorio(
-            o.Id,
-            o.PrenotazioneId,
-            $"{o.Cognome} {o.Nome}".Trim(),
-            o.Prenotazione?.Camera?.Nome,
-            o.Prenotazione?.CheckIn,
-            o.Prenotazione?.CheckOut,
-            o.Prenotazione?.PMS ?? false,
-            o.Prenotazione?.CheckOut is { } checkOut ? appartamento.CursoreDataAtUtc?.Date > checkOut.Date : null)).ToList();
+            return new SchedinaOsservatorio(
+                o.Id,
+                o.PrenotazioneId,
+                $"{o.Cognome} {o.Nome}".Trim(),
+                o.Prenotazione?.Camera?.Nome,
+                o.Prenotazione?.CheckIn,
+                o.Prenotazione?.CheckOut,
+                o.Prenotazione?.PMS ?? false,
+                o.Prenotazione?.CheckOut is { } checkOut ? appartamento?.CursoreDataAtUtc?.Date > checkOut.Date : null,
+                appartamento?.CursoreDataAtUtc,
+                // Senza appartamento associato non c'è nessun posto dove dichiararla: non trasmissibile
+                // finché qualcuno non collega quella tipologia a un appartamento in Impostazioni.
+                appartamento is not null && TerminiOsservatorio.IsInTermine(o.Prenotazione?.CheckIn, appartamento.CursoreDataAtUtc),
+                appartamento?.Id,
+                appartamento?.Nome);
+        }).ToList();
     }
+
+    /// <summary>Mappa TipologiaId → appartamento che la dichiara. L'associazione è univoca (una tipologia appartiene a un solo appartamento), quindi la scelta non è mai ambigua.</summary>
+    private async Task<Dictionary<Guid, OsservatorioAppartamento>> RisolviAppartamentiPerTipologiaAsync(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var lista = await appartamenti.ListByStrutturaAsync(strutturaId, cancellationToken);
+
+        return lista
+            .SelectMany(a => a.Tipologie.Select(t => (t.TipologiaId, Appartamento: a)))
+            .GroupBy(x => x.TipologiaId)
+            .ToDictionary(g => g.Key, g => g.First().Appartamento);
+    }
+
+    private static OsservatorioAppartamento? AppartamentoDi(Ospite ospite, Dictionary<Guid, OsservatorioAppartamento> perTipologia) =>
+        ospite.Prenotazione?.Camera?.TipologiaId is { } tipologiaId && perTipologia.TryGetValue(tipologiaId, out var appartamento)
+            ? appartamento
+            : null;
 
     /// <summary>Anni con almeno una prenotazione per il selettore Anno della schermata operativa — su richiesta esplicita, non deve proporre anni sicuramente vuoti.</summary>
     public async Task<IReadOnlyList<int>> ListaAnniAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
@@ -127,7 +247,7 @@ public class OsservatorioInvioService(
         return await prenotazioni.ListaAnniConPrenotazioniAsync(strutturaId, cancellationToken);
     }
 
-    private async Task<RisultatoInvioOsservatorio> ProcessaAppartamentoAsync(Guid strutturaId, OsservatorioAppartamento appartamento, bool automatico, CancellationToken cancellationToken)
+    private async Task<RisultatoInvioOsservatorio> ProcessaAppartamentoAsync(Guid strutturaId, OsservatorioAppartamento appartamento, bool automatico, CancellationToken cancellationToken, Guid? soloOspiteId = null, DateTime? giornoArrivo = null)
     {
         await concessioneGuard.EnsureOsservatorioAsync(strutturaId, cancellationToken);
 
@@ -195,7 +315,7 @@ public class OsservatorioInvioService(
                         $"Ci sono giornate non ancora chiuse (da {cursore:dd/MM/yyyy}) — la chiusura avviene solo automaticamente all'orario configurato, non con l'invio manuale.");
                 }
 
-                arriviInviati = await InviaArriviAsync(client, strutturaId, appartamento, login.Token, oggi, tipologieIds, cancellationToken);
+                arriviInviati = await InviaArriviAsync(client, strutturaId, appartamento, login.Token, (giornoArrivo ?? oggi).Date, tipologieIds, cancellationToken, soloOspiteId);
 
                 appartamento.UltimoInvioAtUtc = DateTime.UtcNow;
                 appartamento.UltimeSchedineInviate = arriviInviati;
@@ -204,7 +324,7 @@ public class OsservatorioInvioService(
 
                 await logEventi.RegistraAsync(
                     LivelloLog.Info,
-                    $"Invio manuale Osservatorio Turistico ({appartamento.Nome}): {arriviInviati} arrivi inviati — nessuna chiusura giornata (solo il job automatico chiude).",
+                    $"Invio manuale Osservatorio Turistico ({appartamento.Nome}): {arriviInviati} arriv{(arriviInviati == 1 ? "o" : "i")} inviat{(arriviInviati == 1 ? "o" : "i")}{(soloOspiteId is null ? string.Empty : " (invio singolo)")} — nessuna chiusura giornata (solo il job automatico chiude).",
                     origine: "Osservatorio",
                     clienteId: await strutture.GetClienteIdAsync(appartamento.StrutturaId, cancellationToken),
                     strutturaId: appartamento.StrutturaId,
@@ -271,9 +391,22 @@ public class OsservatorioInvioService(
         }
     }
 
-    private async Task<int> InviaArriviAsync(IOsservatorioClient client, Guid strutturaId, OsservatorioAppartamento appartamento, string token, DateTime giorno, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken)
+    private async Task<int> InviaArriviAsync(IOsservatorioClient client, Guid strutturaId, OsservatorioAppartamento appartamento, string token, DateTime giorno, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken, Guid? soloOspiteId = null)
     {
         var arrivi = await ospiti.ListArriviOsservatorioAsync(strutturaId, tipologieIds, giorno, cancellationToken);
+
+        // Invio della singola schedina: si riusa esattamente la stessa costruzione dello stay usata
+        // per il giorno intero (stayId progressivo, guestId, righe salvate), filtrando l'elenco a un
+        // solo ospite — così una riga inviata a mano è indistinguibile da una inviata dal batch.
+        if (soloOspiteId is { } ospiteId)
+        {
+            arrivi = arrivi.Where(o => o.Id == ospiteId).ToList();
+            if (arrivi.Count == 0)
+            {
+                throw new NotFoundException("Ospite non trovato tra gli arrivi di oggi ancora da inviare per questo appartamento.");
+            }
+        }
+
         if (arrivi.Count == 0)
         {
             return 0;

@@ -43,7 +43,11 @@ public record AggiornaPrenotazioneRequest(
     bool TassaSoggiornoAttiva = true,
     bool SpesePuliziaAttiva = true,
     bool AnimaliAttiva = false,
-    bool CauzioneAttiva = true);
+    bool CauzioneAttiva = true,
+    // Orario reale dell'arrivo, correggibile quando il check-in è stato registrato in ritardo: da
+    // qui decorrono i termini della schedina alloggiati (vedi TerminiSchedina). Null = lascia
+    // quello già registrato, così un salvataggio qualsiasi non lo azzera.
+    DateTime? CheckInEffettuatoAtUtc = null);
 
 public record CheckOutRequest(bool RestituisciCauzione, decimal? ImportoCauzioneTrattenuta);
 
@@ -263,6 +267,15 @@ public class PrenotazioniService(
         // cui il soggiorno si è effettivamente svolto — imposti a livello di servizio, non solo di
         // UI, per non fidarsi ciecamente di un client che aggirasse i campi disabilitati.
         var completata = entity.StatoPrenotazione == StatoPrenotazione.Completata;
+
+        // L'orario reale dell'arrivo si corregge anche su un soggiorno già concluso (a differenza di
+        // camera/date/toggle): serve a rimettere a posto i termini della schedina alloggiati quando
+        // il check-in è stato registrato in ritardo rispetto all'arrivo vero, e ha senso solo su una
+        // prenotazione in cui l'ospite è effettivamente arrivato.
+        if (request.CheckInEffettuatoAtUtc is { } arrivoCorretto && entity.StatoPrenotazione is StatoPrenotazione.InCorso or StatoPrenotazione.Completata)
+        {
+            entity.CheckInEffettuatoAtUtc = DateTime.SpecifyKind(arrivoCorretto, DateTimeKind.Utc);
+        }
 
         // Snapshot "prima" dei soli campi con un impatto economico diretto — servono a registrare
         // nel log un vecchio→nuovo esplicito (non solo "modificata"), perché un operatore potrebbe
@@ -498,6 +511,11 @@ public class PrenotazioniService(
         camera.StateRoom = StatoCamera.Occupata;
         camera.UpdatedAtUtc = DateTime.UtcNow;
         prenotazione.StatoPrenotazione = StatoPrenotazione.InCorso;
+
+        // Da qui decorrono i termini di legge per la schedina alloggiati (vedi TerminiSchedina):
+        // registrato solo al primo check-in, così un check-in ripetuto per errore non fa ripartire
+        // un termine che nella realtà era già iniziato.
+        prenotazione.CheckInEffettuatoAtUtc ??= DateTime.UtcNow;
         prenotazione.UpdatedAtUtc = DateTime.UtcNow;
 
         await camere.UpdateAsync(camera, cancellationToken);

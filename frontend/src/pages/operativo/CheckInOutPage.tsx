@@ -16,6 +16,7 @@ import LoginIcon from '@mui/icons-material/LoginOutlined'
 import LogoutIcon from '@mui/icons-material/LogoutOutlined'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { useArriviInCorso, useArriviProssimi, useCheckIn, useCheckOut, type PrenotazioneDto } from '../../api/prenotazioni'
+import { ConfermaSchedinaSoggiornoBreve, isSoggiornoBreve } from '../../components/ConfermaSchedinaSoggiornoBreve'
 import { useCamere } from '../../api/camere'
 import { useTipologie } from '../../api/tipologie'
 import { ApiError } from '../../api/client'
@@ -41,6 +42,9 @@ export function CheckInOutPage() {
   // ma il check-in vero e proprio scatta solo al salvataggio della scheda, mai chiudendo il dialog
   // senza salvare (altrimenti risulterebbe fatto anche annullando).
   const [ospiteDaCompilare, setOspiteDaCompilare] = useState<PrenotazioneDto | null>(null)
+  // Soggiorno sotto le 24 ore appena messo in corso: la schedina ha 6 ore di tempo, non 24, quindi
+  // si chiede subito se trasmetterla invece di lasciarla al batch giornaliero (vedi il dialog).
+  const [schedinaBreveDaInviare, setSchedinaBreveDaInviare] = useState<PrenotazioneDto | null>(null)
   const toast = useToast()
 
   const arriviOggi = (arriviProssimi.data ?? []).filter((p) => isOggi(p.checkIn))
@@ -52,7 +56,14 @@ export function CheckInOutPage() {
   }
 
   function confermaCheckIn(p: PrenotazioneDto) {
-    checkIn.mutate(p.id, { onError: gestisciErrore })
+    checkIn.mutate(p.id, {
+      onError: gestisciErrore,
+      onSuccess: () => {
+        if (isSoggiornoBreve(p.checkIn, p.checkOut)) {
+          setSchedinaBreveDaInviare(p)
+        }
+      },
+    })
   }
 
   // La cauzione va chiesta solo se è davvero prevista su questa prenotazione (tipologia della
@@ -117,6 +128,15 @@ export function CheckInOutPage() {
           inCorso={checkOut.isPending}
           onConferma={(restituisci, importo) => eseguiCheckOut(checkOutDaConfermare, restituisci, importo)}
           onAnnulla={() => setCheckOutDaConfermare(null)}
+        />
+      )}
+
+      {schedinaBreveDaInviare && (
+        <ConfermaSchedinaSoggiornoBreve
+          strutturaId={strutturaId}
+          prenotazioneId={schedinaBreveDaInviare.id}
+          riferimento={[schedinaBreveDaInviare.ospiteCognome, schedinaBreveDaInviare.ospiteNome].filter(Boolean).join(' ') || schedinaBreveDaInviare.numeroPrenotazione}
+          onChiudi={() => setSchedinaBreveDaInviare(null)}
         />
       )}
 

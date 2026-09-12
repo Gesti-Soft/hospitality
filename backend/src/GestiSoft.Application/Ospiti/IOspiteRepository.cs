@@ -2,10 +2,19 @@ using GestiSoft.Domain.Entities;
 
 namespace GestiSoft.Application.Ospiti;
 
+/// <remarks>
+/// Nei metodi degli invii, <c>tipologieIds</c> null significa "nessun filtro": serve alle schermate
+/// operative, che mostrano tutte le schedine della Struttura lasciando all'operatore il compito di
+/// riconoscerle dalla colonna Camera. L'invio automatico passa sempre l'elenco vero, perché lì la
+/// tipologia decide in quale appartamento/struttura l'ospite viene dichiarato.
+/// </remarks>
 public interface IOspiteRepository
 {
     /// <summary>Testata Ospite con i Membri inclusi e tracciati, per una data Prenotazione.</summary>
     Task<Ospite?> GetByPrenotazioneAsync(Guid prenotazioneId, CancellationToken cancellationToken);
+
+    /// <summary>Scheda completa di un Ospite (membri + prenotazione) dentro la Struttura indicata — usata dall'invio della singola schedina, che deve poterne leggere i termini di legge oltre ai dati.</summary>
+    Task<Ospite?> GetConPrenotazioneAsync(Guid strutturaId, Guid ospiteId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Ospiti con soggiorno in corso, non ancora inviati ad Alloggiati Web, con check-in oggi o
@@ -29,7 +38,7 @@ public interface IOspiteRepository
     /// (l'appartamento a cui instradarli) — porta OspitiLogic.GetPms del legacy, filtrato per
     /// appartamento invece che letto per intero.
     /// </summary>
-    Task<IReadOnlyList<Ospite>> ListArriviOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, DateTime data, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Ospite>> ListArriviOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid>? tipologieIds, DateTime data, CancellationToken cancellationToken);
 
     /// <summary>
     /// Ospiti con partenza (check-out) in una data, già inviati come arrivo (Prenotazione.PMS==true),
@@ -46,7 +55,7 @@ public interface IOspiteRepository
     /// sia gli arrivi/partenze da inviare sia quelli già inviati. Su richiesta esplicita dell'utente,
     /// filtrato per anno selezionato (non più una finestra mobile di 30 giorni).
     /// </summary>
-    Task<IReadOnlyList<Ospite>> ListRecentiOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, int anno, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Ospite>> ListRecentiOsservatorioAsync(Guid strutturaId, IReadOnlyCollection<Guid>? tipologieIds, int anno, CancellationToken cancellationToken);
 
     /// <summary>
     /// Ospiti di prenotazioni già completate (check-out effettuato, <c>StatoPrenotazione.Completata</c>)
@@ -56,7 +65,7 @@ public interface IOspiteRepository
     /// giorni inclusa (nessun meccanismo di recupero oltre quella finestra, fedele al legacy — vedi
     /// PayTouristInvioService).
     /// </summary>
-    Task<IReadOnlyList<Ospite>> ListDaInviarePayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Ospite>> ListDaInviarePayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid>? tipologieIds, CancellationToken cancellationToken);
 
     /// <summary>
     /// Ospiti di prenotazioni completate con check-out nell'anno indicato (indipendentemente dal
@@ -65,7 +74,7 @@ public interface IOspiteRepository
     /// inviate, non solo quelle ancora in coda. Su richiesta esplicita dell'utente, filtrato per anno
     /// selezionato (non più una finestra mobile di 30 giorni).
     /// </summary>
-    Task<IReadOnlyList<Ospite>> ListRecentiPayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid> tipologieIds, int anno, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Ospite>> ListRecentiPayTouristAsync(Guid strutturaId, IReadOnlyCollection<Guid>? tipologieIds, int anno, CancellationToken cancellationToken);
 
     void Add(Ospite entity);
 

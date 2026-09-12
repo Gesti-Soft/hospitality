@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ConfermaSchedinaSoggiornoBreve, isSoggiornoBreve } from './ConfermaSchedinaSoggiornoBreve'
 import Alert from '@mui/material/Alert'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
@@ -32,7 +33,7 @@ import {
   type PrenotazioneRequest,
 } from '../api/prenotazioni'
 import { ApiError } from '../api/client'
-import { aggiungiGiorni, formatoInputData, inizioGiornoLocale, isOggiOPrima, isoLocale, parsaInputData } from '../lib/date'
+import { aggiungiGiorni, formatoInputData, inizioGiornoLocale, isOggiOPrima, isoLocale, parsaInputData, perCampoDataOra } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 import { tokens } from '../theme'
@@ -128,6 +129,13 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const aggiorna = useAggiornaPrenotazione(strutturaId)
   const annulla = useAnnullaPrenotazione(strutturaId)
   const checkInMutation = useCheckIn(strutturaId)
+  const [schedinaBreveDaInviare, setSchedinaBreveDaInviare] = useState(false)
+  // Orario reale dell'arrivo: si corregge solo su un soggiorno già iniziato, e serve a rimettere a
+  // posto i termini della schedina alloggiati quando il check-in è stato registrato in ritardo.
+  // Il campo datetime-local lavora in ora locale, il backend in UTC: conversione in entrambi i sensi.
+  const [arrivoEffettivo, setArrivoEffettivo] = useState(
+    modifica?.checkInEffettuatoAtUtc ? perCampoDataOra(modifica.checkInEffettuatoAtUtc) : '',
+  )
   const checkOutMutation = useCheckOut(strutturaId)
 
   const cameraSelezionata = camere.find((c) => c.id === cameraId)
@@ -304,6 +312,9 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       spesePuliziaAttiva,
       animaliAttiva: animaliPrevisti && animaliAttiva,
       cauzioneAttiva: cauzionePrevista && cauzioneAttiva,
+      // Solo se valorizzato: null lascia intatto l'orario registrato al check-in, così un
+      // salvataggio qualunque non lo cancella.
+      checkInEffettuatoAtUtc: arrivoEffettivo ? new Date(arrivoEffettivo).toISOString() : null,
     }
 
     if (modifica) {
@@ -336,7 +347,19 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
 
   function eseguiCheckIn() {
     if (!modifica) return
-    checkInMutation.mutate(modifica.id, { onSuccess: onClose, onError: gestisciErrore })
+    checkInMutation.mutate(modifica.id, {
+      // Per un soggiorno sotto le 24 ore la schedina ha 6 ore di tempo: si chiede subito se
+      // trasmetterla, e il dialog si chiude solo dopo la risposta (altrimenti la domanda sparirebbe
+      // insieme alla schermata).
+      onSuccess: () => {
+        if (isSoggiornoBreve(modifica.checkIn, modifica.checkOut)) {
+          setSchedinaBreveDaInviare(true)
+          return
+        }
+        onClose()
+      },
+      onError: gestisciErrore,
+    })
   }
 
   function eseguiCheckOut() {
@@ -519,6 +542,23 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           </Tooltip>
         </Box>
 
+        {modifica && (modifica.statoPrenotazione === StatoPrenotazione.InCorso || modifica.statoPrenotazione === StatoPrenotazione.Completata) && (
+          <>
+            <Divider />
+            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.textSecondary }}>Arrivo effettivo</Typography>
+            <TextField
+              type="datetime-local"
+              size="small"
+              label="Ora di arrivo dell'ospite"
+              value={arrivoEffettivo}
+              onChange={(e) => setArrivoEffettivo(e.target.value)}
+              disabled={inCorso}
+              slotProps={{ inputLabel: { shrink: true } }}
+              helperText="Registrata in automatico al check-in. Correggila se l'ospite è arrivato a un orario diverso: da qui decorrono i termini per la schedina alla Polizia di Stato (24 ore, 6 se il soggiorno dura meno di un giorno)."
+            />
+          </>
+        )}
+
         {modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && cauzionePrevista && cauzioneAttiva && (
           <>
             <Divider />
@@ -618,6 +658,18 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           pericoloso={false}
           onConferma={confermaAggiornaImporto}
           onAnnulla={annullaAggiornaImporto}
+        />
+      )}
+
+      {schedinaBreveDaInviare && modifica && (
+        <ConfermaSchedinaSoggiornoBreve
+          strutturaId={strutturaId}
+          prenotazioneId={modifica.id}
+          riferimento={[modifica.ospiteCognome, modifica.ospiteNome].filter(Boolean).join(' ') || modifica.numeroPrenotazione}
+          onChiudi={() => {
+            setSchedinaBreveDaInviare(false)
+            onClose()
+          }}
         />
       )}
     </Dialog>
