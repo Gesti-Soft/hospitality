@@ -226,8 +226,8 @@ public class OsservatorioInvioService(
         if (!TerminiOsservatorio.IsInTermine(prenotazione.CheckIn, appartamento.CursoreDataAtUtc, oggi))
         {
             throw new ConflictException(TerminiOsservatorio.GiornoTrasmissibile(appartamento.CursoreDataAtUtc, oggi) is { } giorno
-                ? $"Si possono trasmettere solo gli arrivi del {giorno:dd/MM/yyyy} (giornata da chiudere su {appartamento.Nome}): l'arrivo del {prenotazione.CheckIn:dd/MM/yyyy} non è trasmissibile."
-                : $"Ci sono giornate arretrate non ancora chiuse su {appartamento.Nome} (ferme al {appartamento.CursoreDataAtUtc:dd/MM/yyyy}): la chiusura avviene solo con l'invio automatico.");
+                ? $"{appartamento.Nome} è fermo al {giorno:dd/MM/yyyy}: si possono trasmettere solo gli arrivi di quel giorno, non quello del {prenotazione.CheckIn:dd/MM/yyyy}."
+                : $"{appartamento.Nome} è fermo al {appartamento.CursoreDataAtUtc:dd/MM/yyyy} e ha giornate arretrate da recuperare: la chiusura avviene solo con l'invio automatico.");
         }
 
         return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken, soloOspiteId: ospiteId, giornoArrivo: prenotazione.CheckIn);

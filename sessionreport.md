@@ -168,6 +168,12 @@ tipologia, applicare anche qui una regola di scadenza, e non inviare ciò che è
      il motivo al posto della data senza rompere la schermata per gli altri. Lato pagina, **una sola
      lettura per visita** (niente polling né refetch al rientro sulla finestra): sono N login verso
      il servizio esterno, per un dato che cambia una volta al giorno.
+     **Rifiniture successive**: l'etichetta dice **"fermo al gg/mm/aaaa"** invece di "da chiudere il"
+     — formulazione chiesta dall'utente, perché quello che serve sapere è a che giornata
+     l'appartamento è rimasto indietro; stesso linguaggio nei due messaggi che spiegano un invio
+     rifiutato. Aggiunto anche il `try/finally` sul logout, che mancava: se la lettura falliva, la
+     sessione restava aperta sul servizio esterno (stesso pattern già usato in
+     `OsservatorioConfigService.VerificaConnessioneAsync` e in `ProcessaAppartamentoAsync`).
 
 517. **Verifiche**: `dotnet build` e `npm run build` puliti, **38/38 + 19/19 test** (5 nuovi in
      `TerminiInvioAltriServiziTests`, compreso l'esempio 08/08 vs 09/08 dato dall'utente). Nessuna

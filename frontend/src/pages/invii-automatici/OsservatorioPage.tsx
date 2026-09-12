@@ -109,7 +109,7 @@ export function OsservatorioPage() {
                 size="small"
                 label={
                   a.chiusoFinoA
-                    ? `${a.nome}: da chiudere il ${formattatoreData.format(new Date(a.chiusoFinoA))}`
+                    ? `${a.nome}: fermo al ${formattatoreData.format(new Date(a.chiusoFinoA))}`
                     : `${a.nome}: ${a.errore ?? 'stato non disponibile'}`
                 }
                 sx={{
