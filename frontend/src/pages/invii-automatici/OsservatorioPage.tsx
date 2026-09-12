@@ -94,16 +94,25 @@ export function OsservatorioPage() {
           {/* Niente più scelta dell'appartamento: ogni schedina sa già dove va dichiarata, e "Invia
               ora" li processa tutti. Restano visibili solo gli appartamenti configurati male, che
               sono l'unica cosa su cui l'operatore debba intervenire. */}
-          {(appartamenti.data ?? [])
-            .filter((a) => !a.credenzialiConfigurate)
-            .map((a) => (
-              <Chip
-                key={a.id}
-                size="small"
-                label={`${a.nome}: credenziali non configurate`}
-                sx={{ bgcolor: tokens.textTertiary, color: '#fff', fontWeight: 700 }}
-              />
-            ))}
+          {/* Il giorno di chiusura è l'informazione che decide tutto qui dentro: gli arrivi
+              trasmissibili sono solo quelli della giornata ancora da chiudere, quindi va letto a
+              colpo d'occhio per ogni appartamento. */}
+          {(appartamenti.data ?? []).map((a) => (
+            <Chip
+              key={a.id}
+              size="small"
+              label={
+                a.credenzialiConfigurate
+                  ? `${a.nome}: ${a.cursoreDataAtUtc ? `da chiudere il ${formattatoreData.format(new Date(a.cursoreDataAtUtc))}` : 'mai chiuso'}`
+                  : `${a.nome}: credenziali non configurate`
+              }
+              sx={{
+                bgcolor: a.credenzialiConfigurate ? tokens.blue100 : tokens.textTertiary,
+                color: a.credenzialiConfigurate ? tokens.blue700 : '#fff',
+                fontWeight: 700,
+              }}
+            />
+          ))}
 
           {puoInviare && (
             <Button variant="contained" color="primary" size="small" onClick={inviaOra} disabled={invia.isPending}>

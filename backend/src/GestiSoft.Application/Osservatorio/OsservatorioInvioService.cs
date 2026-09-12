@@ -29,17 +29,31 @@ public record SchedinaOsservatorio(
     string? AppartamentoNome);
 
 /// <summary>
-/// Un arrivo si può ancora trasmettere solo se la sua giornata non è già stata chiusa
-/// sull'Osservatorio: il cursore indica il prossimo giorno da chiudere, quindi un arrivo con data
-/// anteriore appartiene a una giornata già chiusa e verrebbe rifiutato ("Invalid Date"). Esempio
-/// dato dall'utente: schedina dell'08/08, chiusura al 09/08 → non va inviata.
-/// Cursore non ancora valorizzato (appartamento mai chiuso) = nessuna giornata chiusa, tutto
-/// trasmissibile.
+/// L'Osservatorio si invia una giornata alla volta: il cursore indica il **prossimo giorno da
+/// chiudere**, ed è l'unico giorno i cui arrivi sono ancora trasmissibili. Tutto ciò che lo precede
+/// appartiene a una giornata già chiusa e verrebbe rifiutato ("Invalid Date") — esempio dato
+/// dall'utente: schedina dell'08/08 con chiusura al 09/08, da non inviare.
+///
+/// Casi limite, tutti risolti verso il "non trasmissibile" perché un pulsante che non c'è è meglio
+/// di un invio che il servizio respinge:
+/// - cursore non valorizzato (appartamento mai chiuso): si assume oggi, quindi valgono solo gli
+///   arrivi odierni — prima si consideravano trasmissibili gli arrivi di qualsiasi giorno passato,
+///   ed è il motivo per cui il pulsante "Invia" compariva anche su schedine vecchie;
+/// - arretrato da recuperare (cursore indietro rispetto a oggi): niente è trasmissibile a mano, le
+///   giornate arretrate le chiude solo il job automatico (vedi ProcessaAppartamentoAsync);
+/// - giornata odierna già chiusa (cursore a domani): non c'è più niente da inviare per oggi.
 /// </summary>
 public static class TerminiOsservatorio
 {
-    public static bool IsInTermine(DateTime? checkIn, DateTime? cursore) =>
-        checkIn is { } arrivo && (cursore is not { } chiuso || arrivo.Date >= chiuso.Date);
+    /// <summary>Giorno i cui arrivi sono trasmissibili adesso, o null se in questo momento non lo è nessuno.</summary>
+    public static DateTime? GiornoTrasmissibile(DateTime? cursore, DateTime oggi)
+    {
+        var prossimoDaChiudere = cursore?.Date ?? oggi.Date;
+        return prossimoDaChiudere < oggi.Date ? null : prossimoDaChiudere;
+    }
+
+    public static bool IsInTermine(DateTime? checkIn, DateTime? cursore, DateTime oggi) =>
+        checkIn is { } arrivo && GiornoTrasmissibile(cursore, oggi) is { } giorno && arrivo.Date == giorno;
 }
 
 /// <summary>
@@ -132,10 +146,12 @@ public class OsservatorioInvioService(
         // rifiuterebbe. Si dice esplicitamente perché, senza questo controllo, la ricerca più sotto
         // (che guarda solo gli arrivi di quel giorno) risponderebbe "ospite non trovato" — vero ma
         // fuorviante, visto che l'ospite esiste e il problema è la data.
-        if (!TerminiOsservatorio.IsInTermine(prenotazione.CheckIn, appartamento.CursoreDataAtUtc))
+        var oggi = DateTime.UtcNow.Date;
+        if (!TerminiOsservatorio.IsInTermine(prenotazione.CheckIn, appartamento.CursoreDataAtUtc, oggi))
         {
-            throw new ConflictException(
-                $"Giornata già chiusa sull'Osservatorio Turistico (chiuso fino al {appartamento.CursoreDataAtUtc:dd/MM/yyyy}): l'arrivo del {prenotazione.CheckIn:dd/MM/yyyy} non è più trasmissibile.");
+            throw new ConflictException(TerminiOsservatorio.GiornoTrasmissibile(appartamento.CursoreDataAtUtc, oggi) is { } giorno
+                ? $"Si possono trasmettere solo gli arrivi del {giorno:dd/MM/yyyy} (giornata da chiudere su {appartamento.Nome}): l'arrivo del {prenotazione.CheckIn:dd/MM/yyyy} non è trasmissibile."
+                : $"Ci sono giornate arretrate non ancora chiuse su {appartamento.Nome} (ferme al {appartamento.CursoreDataAtUtc:dd/MM/yyyy}): la chiusura avviene solo con l'invio automatico.");
         }
 
         return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken, soloOspiteId: ospiteId, giornoArrivo: prenotazione.CheckIn);
@@ -196,6 +212,7 @@ public class OsservatorioInvioService(
 
         var perTipologia = await RisolviAppartamentiPerTipologiaAsync(strutturaId, cancellationToken);
         var recenti = await ospiti.ListRecentiOsservatorioAsync(strutturaId, tipologieIds: null, anno, cancellationToken);
+        var oggi = DateTime.UtcNow.Date;
 
         return recenti
             // Chi non ha un appartamento associato non va dichiarato da nessuna parte: la riga non
@@ -218,7 +235,7 @@ public class OsservatorioInvioService(
                 appartamento?.CursoreDataAtUtc,
                 // Senza appartamento associato non c'è nessun posto dove dichiararla: non trasmissibile
                 // finché qualcuno non collega quella tipologia a un appartamento in Impostazioni.
-                appartamento is not null && TerminiOsservatorio.IsInTermine(o.Prenotazione?.CheckIn, appartamento.CursoreDataAtUtc),
+                appartamento is not null && TerminiOsservatorio.IsInTermine(o.Prenotazione?.CheckIn, appartamento.CursoreDataAtUtc, oggi),
                 appartamento?.Id,
                 appartamento?.Nome);
         }).ToList();

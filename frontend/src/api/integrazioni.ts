@@ -447,9 +447,11 @@ export function useInviaPayTouristSingola(strutturaId: string | null) {
   })
 }
 
-export function esportaPayTourist(strutturaId: string, payTouristStrutturaId: string) {
-  return apiScaricaFile(`/strutture/${strutturaId}/paytourist/strutture/${payTouristStrutturaId}/export`, `paytourist-export.json`)
+/** Esporta in un solo file tutte le strutture PayTourist configurate: la schermata non ne fa più scegliere una. */
+export function esportaPayTourist(strutturaId: string) {
+  return apiScaricaFile(`/strutture/${strutturaId}/paytourist/export`, `paytourist-${new Date().toISOString().slice(0, 10)}.json`)
 }
+
 
 /** Su richiesta esplicita, filtrato per anno selezionato (non più una finestra mobile di 30 giorni). */
 /** Elenco di tutta la Struttura: ogni riga porta con sé la struttura PayTourist in cui va dichiarata, dedotta dalla tipologia della camera. */

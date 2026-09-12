@@ -61,4 +61,12 @@ public class PayTouristSincronizzazioneController(PayTouristInvioService invioSe
         var testo = await invioService.EsportaAsync(currentUser, strutturaId, payTouristStrutturaId, cancellationToken);
         return File(Encoding.UTF8.GetBytes(testo), "application/json", $"paytourist-{DateTime.UtcNow:yyyyMMdd}.json");
     }
+
+    /// <summary>Esporta in un solo file le prenotazioni pronte di tutte le strutture PayTourist configurate — la schermata non ne fa più scegliere una.</summary>
+    [HttpGet("export")]
+    public async Task<IActionResult> EsportaTutte(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var testo = await invioService.EsportaTutteAsync(currentUser, strutturaId, cancellationToken);
+        return File(Encoding.UTF8.GetBytes(testo), "application/json", $"paytourist-{DateTime.UtcNow:yyyyMMdd}.json");
+    }
 }

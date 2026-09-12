@@ -206,12 +206,26 @@ public class PayTouristInvioService(
     }
 
     /// <summary>
-    /// Invio di UNA sola prenotazione (per Ospite), su richiesta esplicita dell'operatore dalla
-    /// schermata operativa — a differenza di InviaSistemaAsync/ProcessaStrutturaAsync (bulk, per
-    /// tutte le strutture PayTourist configurate insieme), qui si opera su un singolo Ospite già
-    /// nella lista "da inviare" di UNA struttura PayTourist specifica. Rilancia le stesse eccezioni
-    /// (ConflictException/NotFoundException) delle altre azioni PayTourist per coerenza di risposta HTTP.
+    /// Esportazione di tutte le strutture PayTourist configurate in un unico file: la schermata non
+    /// fa più scegliere una struttura, quindi il pulsante esporta l'insieme. Ogni blocco è preceduto
+    /// dal nome della struttura, così resta chiaro a quale appartiene ciascuna riga.
     /// </summary>
+    public async Task<string> EsportaTutteAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+
+        var lista = await payTouristStrutture.ListByStrutturaAsync(strutturaId, cancellationToken);
+        var blocchi = new List<string>();
+
+        foreach (var payTouristStruttura in lista)
+        {
+            var righe = await EsportaAsync(currentUser, strutturaId, payTouristStruttura.Id, cancellationToken);
+            blocchi.Add($"// === {payTouristStruttura.Nome} ==={Environment.NewLine}{righe}");
+        }
+
+        return string.Join($"{Environment.NewLine}{Environment.NewLine}", blocchi);
+    }
+
     /// <summary>Mappa TipologiaId → struttura PayTourist che la dichiara: l'associazione è univoca, quindi la destinazione non è mai ambigua.</summary>
     private async Task<Dictionary<Guid, PayTouristStruttura>> RisolviStrutturePerTipologiaAsync(Guid strutturaId, CancellationToken cancellationToken)
     {

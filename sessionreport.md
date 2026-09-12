@@ -141,7 +141,22 @@ tipologia, applicare anche qui una regola di scadenza, e non inviare ciò che è
      come promemoria): sono tali per scelta, non per dimenticanza — l'esempio dell'utente è
      "Onda Azzurra", che non è assegnato e così deve restare.
 
-515. **Verifiche**: `dotnet build` e `npm run build` puliti, **36/36 + 19/19 test** (5 nuovi in
+515. **Tre correzioni dopo la prova dell'utente in pagina.** (a) Il menu di PayTourist era ancora
+     lì, sopravvissuto per l'export: tolto del tutto, e l'export ora produce **un solo file con
+     tutte** le strutture configurate (nuovo `EsportaTutteAsync` + `GET /paytourist/export`, ogni
+     blocco preceduto dal nome della struttura). (b) Su Osservatorio il pulsante "Invia" compariva
+     anche su schedine di giorni passati: la regola era troppo permissiva — con il cursore **non
+     valorizzato** (appartamento mai chiuso, il caso di 3 appartamenti su 4) considerava
+     trasmissibile qualsiasi arrivo passato. Corretta: si trasmette **solo la giornata che sta per
+     essere chiusa** (cursore, o oggi se il cursore è vuoto), mai quelle precedenti né le successive;
+     con arretrato da recuperare non è trasmissibile nulla a mano, perché le giornate arretrate le
+     chiude solo il job automatico. Aggiunto `GiornoTrasmissibile` e riscritti i test (5 casi:
+     esempio 08/08 vs 09/08, solo-il-giorno-da-chiudere, cursore assente, arretrato, oggi già
+     chiuso). (c) Il **giorno di chiusura di ogni appartamento** è ora mostrato in pagina ("da
+     chiudere il gg/mm/aaaa" o "mai chiuso"), su richiesta dell'utente: è l'informazione che decide
+     cosa si può inviare, prima non era visibile da nessuna parte.
+
+516. **Verifiche**: `dotnet build` e `npm run build` puliti, **38/38 + 19/19 test** (5 nuovi in
      `TerminiInvioAltriServiziTests`, compreso l'esempio 08/08 vs 09/08 dato dall'utente). Nessuna
      schedina inviata a nessuno dei tre servizi, come da istruzione dell'utente (vedi punto 507).
 

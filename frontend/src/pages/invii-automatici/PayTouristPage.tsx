@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -36,22 +36,11 @@ export function PayTouristPage() {
   const { strutturaId } = useStruttura()
   const puoInviare = usePuoScrivere('statePoliceWrite')
   const strutture = usePayTouristStrutture(strutturaId)
-  const [payTouristStrutturaId, setPayTouristStrutturaId] = useState<string | null>(null)
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const anniDisponibili = useAnniPayTourist(strutturaId)
   const anniSelezionabili = anniConAnnoCorrente(anniDisponibili.data)
   const [errore, setErrore] = useState<string | null>(null)
   const [risultatoInvio, setRisultatoInvio] = useState<string | null>(null)
-
-  useEffect(() => {
-    const lista = strutture.data ?? []
-    if (lista.length > 0 && (payTouristStrutturaId === null || !lista.some((s) => s.id === payTouristStrutturaId))) {
-      setPayTouristStrutturaId(lista[0].id)
-    }
-    if (lista.length === 0 && payTouristStrutturaId !== null) {
-      setPayTouristStrutturaId(null)
-    }
-  }, [strutture.data, payTouristStrutturaId])
 
   const prenotazioni = usePrenotazioniPayTourist(strutturaId, anno)
   const invia = useInviaPayTouristOra(strutturaId)
@@ -85,9 +74,9 @@ export function PayTouristPage() {
   }
 
   async function esporta() {
-    if (!strutturaId || !payTouristStrutturaId) return
+    if (!strutturaId) return
     try {
-      await esportaPayTourist(strutturaId, payTouristStrutturaId)
+      await esportaPayTourist(strutturaId)
     } catch (err) {
       setErrore(err instanceof ApiError ? err.message : 'Download non riuscito.')
     }
@@ -120,23 +109,7 @@ export function PayTouristPage() {
             </Button>
           )}
 
-          {(strutture.data ?? []).length > 1 && (
-            <TextField
-              select
-              size="small"
-              label="Esporta"
-              value={payTouristStrutturaId ?? ''}
-              onChange={(e) => setPayTouristStrutturaId(e.target.value)}
-              sx={{ minWidth: 220 }}
-            >
-              {(strutture.data ?? []).map((s) => (
-                <MenuItem key={s.id} value={s.id}>
-                  {s.nome}
-                </MenuItem>
-              ))}
-            </TextField>
-          )}
-          <Button variant="outlined" size="small" onClick={esporta} disabled={!payTouristStrutturaId || (prenotazioni.data ?? []).length === 0}>
+          <Button variant="outlined" size="small" onClick={esporta} disabled={(prenotazioni.data ?? []).length === 0}>
             Esporta JSON
           </Button>
         </Box>
