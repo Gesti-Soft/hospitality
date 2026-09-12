@@ -1,6 +1,264 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-11 (sessione successiva — pagina di login: tolto il link "Password dimenticata?" (non è mai esistito un recupero automatico) e tolta la riga fissa che mandava chiunque a info@gestisoft.it; al suo posto, dentro il messaggio d'errore, l'indicazione su a chi rivolgersi calcolata sul ruolo di chi sta provando ad accedere — dipendente → amministratore della sua struttura, amministratore → amministratore generale dell'account, titolare e Super Admin → GestiSoft.)
+Ultimo aggiornamento: 2026-09-12 (sessione successiva — invii alle PA: schedine Polizia di Stato con i termini di legge veri (24 ore, 6 per i soggiorni brevi) e orario reale dell'arrivo finalmente registrato; Osservatorio e PayTourist con elenco unico per Struttura, appartamento/struttura di destinazione dedotti dalla camera invece che scelti a mano, e le rispettive finestre di invio rispettate. Nella prima parte della sessione: prenotazioni OTA, tracciabilità di arrivi/modifiche/errori.)
+
+## Fatto — schedine Polizia di Stato: termini di legge rispettati, e invio della singola schedina
+
+Richiesta dell'utente, con le regole di legge date da lui: schedina entro **24 ore dall'arrivo**,
+ridotte a **6 ore** per i soggiorni sotto le 24 ore; le schedine oltre il termine non vanno più
+prese (il portale le rifiuta e l'invio va in errore); più la possibilità di **inviare una singola
+schedina a mano** su Polizia di Stato, Osservatorio e PayTourist.
+
+500. **Ostacolo trovato prima di scrivere codice: il sistema non sapeva a che ora fosse arrivato
+     l'ospite.** `Prenotazione.CheckIn` è una data senza orario (nei dati reali sempre `00:00:00`) e
+     `CheckInAsync` non registrava il momento del check-in — c'era solo `UpdatedAtUtc`, sovrascritto
+     dalla prima modifica successiva. Senza quel dato nessuno dei due termini è calcolabile: per una
+     schedina di ieri non c'è modo di sapere se è ancora valida (arrivo alle 20:00 → scade stasera;
+     arrivo alle 00:30 → scaduta da ieri). Aggiunto `Prenotazione.CheckInEffettuatoAtUtc` (migration
+     `AggiungiCheckInEffettuato`, solo `AddColumn` nullable), valorizzato da `CheckInAsync` **solo al
+     primo check-in** (`??=`), così un check-in ripetuto per errore non fa ripartire un termine già
+     iniziato.
+
+501. **Calcolo dei termini in un punto solo** (`TerminiSchedina`, nel Domain): soggiorno breve =
+     check-out nello stesso giorno del check-in (l'unico caso certamente sotto le 24 ore, viste le
+     date senza orario) → 6 ore, altrimenti 24. Si parte sempre dall'arrivo reale; se manca
+     (prenotazioni anteriori al nuovo campo) si usa la **mezzanotte** del giorno di check-in, che
+     anticipa la scadenza invece di posticiparla — meglio considerare fuori termine una schedina
+     forse ancora valida che tentare un invio che il portale rifiuterebbe. Senza data di arrivo →
+     mai in termine. Punto unico perché una divergenza tra "cosa invia il job" e "cosa la pagina
+     mostra come inviabile" sarebbe invisibile e produrrebbe proprio gli errori da evitare.
+     5 test dedicati (`TerminiSchedinaTests`).
+
+502. **L'invio automatico non prende più le scadute, ma non le fa sparire.** `InviaSistemaAsync`
+     separa i candidati in "in termine" e "fuori termine": i primi si inviano, i secondi generano
+     **una volta sola per prenotazione** (`CreaPerPrenotazioneSeNonEsisteAsync`) una notifica
+     `SchedinaFuoriTermine` (nuovo tipo, = 8) e un log Warning che dice di registrarla a mano sul
+     portale. Resta un obbligo di legge non assolto: sparire in silenzio sarebbe la cosa peggiore.
+
+503. **Invio della singola schedina.** Polizia di Stato: nuovo `InviaSingolaAsync` +
+     `POST /alloggiati-web/schedine/{ospiteId}/invia`, che rifiuta l'invio fuori termine con un
+     messaggio esplicito invece di tentarlo (nuovo `IOspiteRepository.GetConPrenotazioneAsync`).
+     Osservatorio: nuovo `InviaSingoloArrivoAsync` + `POST .../schedine/{ospiteId}/invia` — riusa la
+     stessa costruzione dello stay dell'invio di giornata (stayId progressivo, guestId, righe
+     salvate) filtrando a un solo ospite, così una riga inviata a mano è indistinguibile da una
+     inviata dal batch, e mantiene il divieto di chiudere la giornata (prerogativa del solo job
+     automatico). PayTourist lo aveva già.
+
+504. **Interfaccia.** Pagina Polizia di Stato: nuova colonna "Termine invio" (`entro …` / `scaduto
+     il …`, con etichetta "6 ore" sui soggiorni brevi), stato passato da due a **tre** valori
+     (Inviata / Da inviare / **Fuori termine** in rosso) e pulsante **Invia** per riga, che —
+     come chiesto — **non compare affatto se il termine è scaduto**, né per le 6 ore né per le 24.
+     Pagina Osservatorio: pulsante Invia per riga. Entrambe anche nella vista mobile a card.
+
+505. **Conferma al check-in di un soggiorno breve**, come chiesto dall'utente: appena il check-in va
+     a buon fine, se check-in e check-out cadono nello stesso giorno compare un dialog ("il soggiorno
+     dura meno di 24 ore, la schedina va trasmessa entro 6 ore, vuoi inviarla adesso?") con Invia
+     adesso / Annulla — se si annulla, la si manda a mano dopo. Nuovo componente
+     `ConfermaSchedinaSoggiornoBreve`, usato da **entrambi** i punti da cui parte un check-in
+     (`CheckInOutPage` e `PrenotazioneDialog`); nel dialog prenotazione la chiusura è rimandata alla
+     risposta, altrimenti la domanda sparirebbe insieme alla schermata. Usa `ConfirmDialog` come
+     ogni altra conferma dell'app, mai `window.confirm`.
+
+506. **Correzione a mano dell'orario di arrivo**, parte della scelta fatta con l'utente: nuovo campo
+     "Arrivo effettivo" nel dialog prenotazione, visibile solo su un soggiorno **già iniziato**
+     (In corso o Completato — su una prenotazione futura non avrebbe senso), precompilato con
+     l'orario registrato al check-in. Serve quando il check-in viene registrato in ritardo rispetto
+     all'arrivo vero, che altrimenti accorcerebbe il termine disponibile. Passa da
+     `AggiornaPrenotazioneRequest.CheckInEffettuatoAtUtc`, applicato solo se valorizzato: un
+     salvataggio qualunque non azzera l'orario già registrato. Nuova utility `perCampoDataOra` per
+     il campo `datetime-local`, che lavora in ora locale mentre il backend ragiona in UTC.
+
+507. **Nessun invio reale eseguito, per scelta**, ribadita poi dall'utente come regola: le schedine
+     sono trasmissioni ufficiali a pubbliche amministrazioni con dati veri, e l'ambiente di sviluppo
+     ha le credenziali di produzione configurate — un invio "di prova" da qui arriverebbe davvero a
+     destinazione. Verificato apposta, dopo il riavvio dei container, che il job locale non potesse
+     farne partire uno da solo: `PoliziaStatoAttiva` è **false** su entrambe le Strutture, quindi il
+     job non seleziona nulla.
+
+508. **Verifiche**: `dotnet build` pulito, `dotnet test` 31/31 Application + 19/19 Api, `npm run
+     build` (con `tsc -b`) pulito. Confermata di nuovo la nota del punto 484: `npx tsc --noEmit` è
+     passato su un file che `tsc -b` ha invece bocciato (un `toast` inesistente in
+     `OsservatorioPage`) — per il frontend fa fede solo `npm run build`.
+
+
+## Fatto — Osservatorio e PayTourist: elenco unico per Struttura, destinazione dedotta dalla camera, finestre di invio rispettate
+
+Tre richieste dell'utente nella stessa direzione: vedere **tutte** le schedine senza filtro per
+tipologia, applicare anche qui una regola di scadenza, e non inviare ciò che è ormai fuori tempo.
+
+509. **Il filtro per tipologia non è stato semplicemente rimosso — sarebbe stato pericoloso.** I dati
+     reali dicono che Cala Azzurra ha **tre** appartamenti Osservatorio e **tre** strutture
+     PayTourist, ciascuno associato a **una** tipologia: quel filtro non è un vezzo, è ciò che
+     stabilisce in quale appartamento un ospite viene dichiarato alla PA. Toglierlo avrebbe fatto
+     comparire (e inviare) ogni ospite in tutti e tre. Segnalato all'utente, che ha proposto la
+     soluzione giusta: **"non se lo può prendere in automatico l'appartamento assegnato?"**.
+
+510. **Destinazione dedotta dalla camera, non più scelta a mano.** Verificato prima sui dati che
+     l'associazione tipologia→appartamento è **univoca** (nessuna tipologia in più appartamenti, né
+     in più strutture PayTourist), quindi la deduzione non è mai ambigua. Ora l'elenco è **di
+     Struttura** (niente filtro per tipologia: `tipologieIds` è diventato nullable, null = nessun
+     filtro) e ogni riga porta con sé l'appartamento / la struttura PayTourist in cui va dichiarata,
+     mostrata in una colonna dedicata. L'invio della singola schedina **non accetta più**
+     l'appartamento come parametro: lo ricava dalla tipologia della camera dell'ospite — una
+     schedina non può più finire nel posto sbagliato per una selezione distratta. Rotte diventate di
+     Struttura: `GET /osservatorio/schedine`, `POST /osservatorio/schedine/{ospiteId}/invia`,
+     `GET /paytourist/prenotazioni`, `POST /paytourist/prenotazioni/{ospiteId}/invia`.
+     **L'invio automatico continua a filtrare per tipologia**: lì la destinazione non la sceglie
+     nessuno, e senza filtro ogni appartamento dichiarerebbe anche gli ospiti degli altri.
+
+511. **Tipologie orfane, problema emerso dai dati**: 7 tipologie su 11 non sono associate a nessun
+     appartamento Osservatorio né a nessuna struttura PayTourist — le loro schedine non comparivano
+     da nessuna parte e non venivano mai trasmesse, in silenzio. Ora compaiono nell'elenco con
+     scritto **"Nessuno: tipologia non associata"** in rosso e non sono trasmissibili finché
+     qualcuno non le collega in Impostazioni: il problema si vede, invece di restare invisibile.
+
+512. **Osservatorio — niente invii su giornate già chiuse** (`TerminiOsservatorio`): il cursore
+     indica il prossimo giorno da chiudere, quindi un arrivo con data anteriore appartiene a una
+     giornata già chiusa e verrebbe rifiutato. Esempio dell'utente: schedina dell'08/08 con chiusura
+     al 09/08 → esclusa. In elenco lo stato diventa **"Giornata chiusa"** e il pulsante Invia non
+     compare; l'invio singolo risponde con la data fino a cui risulta chiuso, invece del generico
+     "ospite non trovato" che si sarebbe letto prima. L'invio manuale usa ora il **giorno dell'arrivo
+     richiesto** e non sempre "oggi", così una schedina di ieri resta trasmissibile finché la sua
+     giornata non è stata chiusa.
+
+513. **PayTourist — 7 giorni dal check-out** (`TerminiPayTourist`): la finestra mobile **esisteva già**
+     nella selezione (`ListDaInviarePayTouristAsync`), ma spariva senza spiegazione dall'elenco.
+     Ora è esplicita: colonna "Termine invio" (`entro …` / `scaduto il …`), stato **"Fuori termine"**,
+     pulsante Invia nascosto e messaggio chiaro se si tenta comunque ("la trasmissione è possibile
+     entro 7 giorni dal check-out").
+
+514. **Selettori rimossi dalle due schermate e righe non assegnate escluse**, su indicazione
+     dell'utente ("il filtro ancora si vede, non serve" / "quelli non assegnati escludili pure, non
+     mi interessano"). Una volta che ogni riga sa da sé dove va dichiarata, il menu a tendina
+     dell'appartamento non filtrava più niente ed era solo rumore: via. Di conseguenza **"Invia ora"
+     dell'Osservatorio processa ora tutti gli appartamenti** della Struttura (nuovo
+     `InviaOraTuttiAsync` + `POST /osservatorio/invia`, esiti sommati e messaggi accorpati), e le
+     informazioni che prima riguardavano il solo appartamento selezionato — credenziali mancanti,
+     ultimo errore, ultimo invio — sono ora mostrate **per ciascun** appartamento/struttura, e solo
+     quando c'è qualcosa da segnalare. In PayTourist il menu sopravvive **solo** per scegliere cosa
+     esportare, e compare unicamente se le strutture configurate sono più di una. Le schedine la cui
+     tipologia non è associata a nulla **non compaiono più in elenco** (prima erano mostrate in rosso
+     come promemoria): sono tali per scelta, non per dimenticanza — l'esempio dell'utente è
+     "Onda Azzurra", che non è assegnato e così deve restare.
+
+515. **Verifiche**: `dotnet build` e `npm run build` puliti, **36/36 + 19/19 test** (5 nuovi in
+     `TerminiInvioAltriServiziTests`, compreso l'esempio 08/08 vs 09/08 dato dall'utente). Nessuna
+     schedina inviata a nessuno dei tre servizi, come da istruzione dell'utente (vedi punto 507).
+
+
+## Fatto — prenotazioni OTA: arrivi, modifiche ed errori ora lasciano traccia
+
+Segnalazione dell'utente: "mi è arrivata una prenotazione ma la notifica non mi è arrivata... lato
+server è arrivata correttamente ma né notifica né log". Invece di indagare solo a lettura di codice,
+su richiesta dell'utente la cosa è stata **riprodotta dal vivo in locale**: un piccolo simulatore
+usa e getta (fuori dal repo, nella cartella temporanea di sessione) che risolve i servizi reali dal
+container DI e chiama lo stesso metodo del polling Wubook — `WubookPrenotazioniService.ImportaBookingRicevutoAsync`
+— con un booking costruito a mano, senza nessuna chiamata di rete verso `wired.wubook.net` o
+gestisoft.it. Scoperto così che il buco non era uno solo.
+
+492. **Una prenotazione OTA modificata sullo stesso codice non segnalava niente — il bug vero.**
+     L'OTA riusa lo stesso `rcode` quando l'ospite cambia date, importo o numero di persone senza
+     passare da cancella+ricrea (il caso cancella+ricrea era già coperto dalla finestra di grazia,
+     punto 125). In quel caso `ImportaBookingAsync` finiva nel ramo `else`, che si limitava a
+     `UpdateAsync`: date e importi venivano riscritti sul database **senza notifica e senza log**.
+     Riprodotto in simulazione (check-in spostato da 22/10 a 01/11: database aggiornato, zero
+     tracce). Ora lo stato precedente della prenotazione viene fotografato prima
+     dell'aggiornamento e confrontato campo per campo — date, importo, numero ospiti, tipologia,
+     camera assegnata: se qualcosa è cambiato partono una notifica `PrenotazioneModificata` (nuovo
+     `NotificaService.RegistraModificaWubookAsync`, senza finestra di grazia e senza match
+     sull'ospite: qui non c'è nessuna cancellazione da fondere) e un log che dice **cosa** è
+     cambiato ("date da 22/10/2026–25/10/2026 a 01/11/2026–04/11/2026"). Se invece lo stesso
+     booking ripassa identico — ri-elaborazione dello stesso evento, re-import manuale — non
+     succede nulla: niente notifica, niente log, altrimenti il centro notifiche si riempirebbe di
+     rumore. Verificati in simulazione tutti e tre i casi.
+
+493. **L'arrivo di una nuova prenotazione OTA non finiva nei log.** Era l'unico evento Wubook senza
+     traccia: la cancellazione scriveva un log Info, il fallimento di import un Warning, la "nessuna
+     camera libera nel pool" un Warning — l'import riuscito niente. Chi non aveva visto passare la
+     notifica (che si legge dalla campanella e sparisce dalla vista una volta letta) non aveva più
+     alcun modo di sapere quando e da quale canale fosse arrivata una prenotazione. Ora ogni
+     creazione scrive un log Info con numero, canale, rcode, date, ospiti e importo.
+
+494. **Un evento ricevuto ma non importato era invisibile dall'app.** Nel polling eventi
+     (`WubookEventiService`) il fallimento di un singolo booking veniva registrato **solo** in
+     `wubook_eventi_ricevuti` — tabella che non è esposta in nessuna schermata — e nello stdout del
+     container: in pratica, non consultabile. Ora `RegistraEventoAsync` scrive anche un `LogEvento`
+     di livello Warning col motivo. Non è un dettaglio: i salvataggi dell'import avvengono a passi
+     separati e non in transazione (prima la prenotazione, poi la notifica, poi l'ospite, ciascuno
+     con il proprio `SaveChanges`), quindi un errore a metà lascia la prenotazione salvata **senza**
+     notifica — esattamente il sintomo segnalato dall'utente. Con questo log quel caso diventa
+     riconoscibile a posteriori invece di restare un mistero.
+
+495. **Rete di sicurezza per la notifica persa dopo un import interrotto.** Poiché i salvataggi
+     non sono in transazione (`AddAsync` fa il proprio `SaveChanges` da solo), esiste una sequenza
+     che perde la notifica per sempre: il polling salva la prenotazione, qualcosa fallisce prima
+     della notifica, l'evento **non** viene marcato letto su gestisoft.it e viene ritentato un
+     minuto dopo — ma al secondo giro la prenotazione esiste già, quindi non è più "nuova" e finisce
+     nel ramo aggiornamento, che non segnalava nulla; il secondo tentativo riesce e sovrascrive
+     `MessaggioErrore` a null, cancellando anche l'ultima traccia del fallimento. Chiuso con una
+     **rete di sicurezza idempotente**: nel ramo aggiornamento, se la prenotazione è stata creata da
+     meno di 24 ore e non ha **nessuna** notifica di arrivo (nuova o modificata — nuovo
+     `INotificaRepository.EsisteArrivoPerPrenotazioneAsync`), l'arrivo viene segnalato adesso
+     (`NotificaService.RecuperaArrivoNonNotificatoAsync`) insieme a un log Warning che dice
+     esplicitamente che è una segnalazione in ritardo. Il limite delle 24 ore evita di far comparire
+     un "Nuova prenotazione" su un soggiorno di settimane prima, e di resuscitare le prenotazioni
+     importate prima che il centro notifiche esistesse. **Nota**: questa protezione era stata
+     scritta ipotizzando che fosse *il* caso capitato all'utente; i dati di produzione (punto 496)
+     hanno poi dimostrato che non lo era. Resta comunque valida come protezione di un caso reale e
+     possibile, ma non è la spiegazione della segnalazione.
+
+496. **La causa reale della segnalazione: non era un bug del gestionale.** L'utente ha esportato il
+     database di produzione e lo si è ripristinato in un database **separato** del Postgres locale
+     (`prod_check`, mai sopra quello di sviluppo, eliminato a fine analisi). I dati hanno smontato
+     tutte le ipotesi fatte a lettura di codice: (a) la prenotazione indicata dall'utente
+     (`HMPA9TMC9J`, Airbnb) **non era mai arrivata dall'OTA** — creata il 02/09 alle 15:22:14
+     insieme ad **altre 56 nello stesso secondo** (importazione in blocco dello storico; nessuna
+     delle 57 ha un `IdPrenotazioneWubook`), e il 12/09 era stata solo *aggiornata* alle 11:40 dal
+     check-in fatto a mano; (b) in produzione l'ultima prenotazione davvero importata dall'OTA
+     risaliva al **3 settembre**, `wubook_eventi_ricevuti` era **vuota da sempre** e non esisteva
+     **nessun** log di origine Wubook: il canale eventi non consegnava più niente da nove giorni.
+     **Causa individuata dall'utente a valle di questa analisi**: su gestisoft.it quegli eventi
+     risultavano già marcati come letti (`iread = 1`); rimesso `iread = 0`, la prenotazione è
+     arrivata in produzione nel giro di un minuto — e il Worker di produzione ha così dimostrato di
+     girare e funzionare. Il centro notifiche non aveva mai sbagliato: non gli era mai arrivato
+     niente da notificare.
+
+497. **Il buco strutturale che ha reso possibile tutto questo** (discusso con l'utente, **non
+     chiuso**): la consegna dipende interamente dal flag "letto" su gestisoft.it, ed è distruttiva —
+     `fetch_new_bookings` è invocata con `mark=1` e il polling chiama `MarkReadAsync`, quindi **chi
+     legge per primo consuma**. Se un evento viene marcato letto da chiunque, la prenotazione non
+     viene più consegnata e non resta traccia da nessuna parte. Aggravante trovata nei dati:
+     sviluppo e produzione hanno **gli stessi identici token** (hash dei `GestisoftToken`
+     confrontati, coincidono su entrambe le Strutture), quindi il Worker sul PC di sviluppo — acceso
+     e che interroga gestisoft.it ogni minuto — è in gara con quello del server su ogni
+     prenotazione. Proposta una riconciliazione periodica non distruttiva (Wubook espone
+     `fetch_bookings` per intervallo di date, che non marca nulla; il client oggi ha solo il fetch
+     della singola prenotazione e quello distruttivo): **rimandata dall'utente a novembre 2026**,
+     quando le prenotazioni arriveranno direttamente al gestionale senza passare da gestisoft.it e
+     il problema si estinguerà da sé. Rimedio immediato nel frattempo: credenziali separate per lo
+     sviluppo, o Worker locale spento mentre si sviluppa.
+
+498. **Resta aperto**: l'import non è atomico — renderlo tale richiederebbe una transazione
+     condivisa tra i repository (oggi ognuno fa il proprio `SaveChanges`), e con
+     `EnableRetryOnFailure` attivo servirebbe passare da `CreateExecutionStrategy`; il punto 495 ne
+     cura l'effetto, non la causa.
+
+499. **Verifiche**: `dotnet build` e `dotnet test` puliti (26/26 Application + 19/19 Api); simulazioni
+     sul Postgres locale reale per ogni caso — nuova → notifica + log; modifica → notifica + log col
+     dettaglio di cosa è cambiato; ri-elaborazione identica → silenzio; cancellazione → notifica in
+     attesa + log (comportamento invariato); e il giro completo del punto 495: prenotazione nuova →
+     notifica e log rimossi a mano per simulare l'interruzione → retry dello stesso rcode con dati
+     identici → arrivo recuperato con il Warning "segnalato in ritardo" → quarto giro identico →
+     nessuna duplicazione → modifica vera → notifica di modifica. **Tutti i dati creati dalle
+     simulazioni sono stati rimossi uno per uno per Id** (prenotazioni, ospiti, notifiche, log,
+     canale di vendita creato dall'import): database locale riportato ai conteggi esatti di
+     partenza — 2 notifiche, 2 prenotazioni OTA, 886 log. Nessun dato preesistente toccato, nessuna
+     chiamata verso i sistemi esterni reali.
+
+
+---
+
+_Intestazione della sessione precedente:_ 2026-09-11 (sessione successiva — pagina di login: tolto il link "Password dimenticata?" (non è mai esistito un recupero automatico) e tolta la riga fissa che mandava chiunque a info@gestisoft.it; al suo posto, dentro il messaggio d'errore, l'indicazione su a chi rivolgersi calcolata sul ruolo di chi sta provando ad accedere — dipendente → amministratore della sua struttura, amministratore → amministratore generale dell'account, titolare e Super Admin → GestiSoft.)
 
 ## Fatto — pagina di login: niente recupero password, e ognuno sa a chi rivolgersi
 
