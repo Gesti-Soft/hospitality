@@ -6,6 +6,7 @@ using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
+using GestiSoft.Application.Notifiche;
 
 namespace GestiSoft.Application.Osservatorio;
 
@@ -87,7 +88,8 @@ public class OsservatorioInvioService(
     IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard,
     ConcessioneServiziGuard concessioneGuard,
-    ILogEventoService logEventi)
+    ILogEventoService logEventi,
+    NotificaService notificaService)
 {
     /// <summary>
     /// Invio manuale su richiesta esplicita dell'operatore — a differenza del job automatico, NON
@@ -102,7 +104,7 @@ public class OsservatorioInvioService(
         var appartamento = await appartamenti.GetAsync(strutturaId, appartamentoId, cancellationToken)
             ?? throw new NotFoundException("Appartamento Osservatorio Turistico non trovato.");
 
-        return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken);
+        return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken, contaTentativi: false);
     }
 
     /// <summary>
@@ -185,7 +187,7 @@ public class OsservatorioInvioService(
     public async Task<IReadOnlyList<RisultatoInvioOsservatorio>> InviaOraTuttiAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceWrite, cancellationToken);
-        return await InviaSistemaAsync(strutturaId, cancellationToken);
+        return await InviaSistemaAsync(strutturaId, cancellationToken, contaTentativi: false);
     }
 
     /// <summary>
@@ -230,11 +232,11 @@ public class OsservatorioInvioService(
                 : $"{appartamento.Nome} è fermo al {appartamento.CursoreDataAtUtc:dd/MM/yyyy} e ha giornate arretrate da recuperare: la chiusura avviene solo con l'invio automatico.");
         }
 
-        return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken, soloOspiteId: ospiteId, giornoArrivo: prenotazione.CheckIn);
+        return await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: false, cancellationToken, soloOspiteId: ospiteId, giornoArrivo: prenotazione.CheckIn, contaTentativi: false);
     }
 
     /// <summary>Usato dal job Quartz schedulato (Worker) — nessun ICurrentUser, un appartamento alla volta: un fallimento su uno non blocca gli altri.</summary>
-    public async Task<IReadOnlyList<RisultatoInvioOsservatorio>> InviaSistemaAsync(Guid strutturaId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<RisultatoInvioOsservatorio>> InviaSistemaAsync(Guid strutturaId, CancellationToken cancellationToken, bool contaTentativi = true)
     {
         var lista = await appartamenti.ListByStrutturaAsync(strutturaId, cancellationToken);
         if (lista.Count == 0)
@@ -256,11 +258,11 @@ public class OsservatorioInvioService(
         {
             try
             {
-                risultati.Add(await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: true, cancellationToken));
+                risultati.Add(await ProcessaAppartamentoAsync(strutturaId, appartamento, automatico: true, cancellationToken, contaTentativi: contaTentativi));
             }
             catch (Exception ex)
             {
-                await SalvaErroreAsync(appartamento, ex.Message, cancellationToken);
+                await SalvaErroreAsync(appartamento, ex.Message, contaTentativi ? EsitoTentativo.ErroreRitentabile : null, cancellationToken);
                 risultati.Add(new RisultatoInvioOsservatorio(0, 0, 0, ex.Message));
             }
         }
@@ -340,23 +342,43 @@ public class OsservatorioInvioService(
         return await prenotazioni.ListaAnniConPrenotazioniAsync(strutturaId, cancellationToken);
     }
 
-    private async Task<RisultatoInvioOsservatorio> ProcessaAppartamentoAsync(Guid strutturaId, OsservatorioAppartamento appartamento, bool automatico, CancellationToken cancellationToken, Guid? soloOspiteId = null, DateTime? giornoArrivo = null)
+    // contaTentativi è separato da automatico di proposito: "Invia ora" passa dal percorso automatico
+    // (deve poter chiudere la giornata come il job), ma non deve consumare i tentativi serali —
+    // altrimenti un paio di tentativi a mano andati male zittirebbero il job di quella sera.
+    private async Task<RisultatoInvioOsservatorio> ProcessaAppartamentoAsync(Guid strutturaId, OsservatorioAppartamento appartamento, bool automatico, CancellationToken cancellationToken, Guid? soloOspiteId = null, DateTime? giornoArrivo = null, bool contaTentativi = true)
     {
         await concessioneGuard.EnsureOsservatorioAsync(strutturaId, cancellationToken);
 
+        var adesso = DateTime.UtcNow;
+        var oggi = adesso.Date;
+
+        // null quando l'invio è partito a mano: i tentativi contano solo per il job serale, un
+        // tentativo manuale andato male non deve zittirlo.
+        EsitoTentativo? Tentativo(EsitoTentativo esito) => contaTentativi ? esito : null;
+
+        // Tentativi della giornata esauriti, o attesa dopo l'ultimo fallimento non ancora trascorsa:
+        // si riprende domani all'orario configurato. Vale solo per il job — un invio chiesto a mano
+        // dall'operatore parte comunque, ed è il suo modo di riprovare senza aspettare.
+        //
+        // Va **prima** dei controlli di configurazione qui sotto, non dopo: sono loro il caso che si
+        // ripete identico ad ogni giro (un appartamento senza credenziali resta senza credenziali),
+        // e lasciarli davanti al limite significherebbe continuare a scriverne l'esito ogni minuto.
+        if (contaTentativi && !PoliticaTentativi.PuoTentare(appartamento, adesso))
+        {
+            return new RisultatoInvioOsservatorio(0, 0, 0, null);
+        }
+
         if (string.IsNullOrWhiteSpace(appartamento.EntityCode) || string.IsNullOrWhiteSpace(appartamento.Password) || string.IsNullOrWhiteSpace(appartamento.HotelCode))
         {
-            await SalvaErroreAsync(appartamento, "Credenziali Osservatorio Turistico non configurate.", cancellationToken);
+            await SalvaErroreAsync(appartamento, "Credenziali Osservatorio Turistico non configurate.", Tentativo(EsitoTentativo.ErroreDefinitivo), cancellationToken);
             return new RisultatoInvioOsservatorio(0, 0, 0, "Credenziali non configurate.");
         }
 
         if (appartamento.Tipologie.Count == 0)
         {
-            await SalvaErroreAsync(appartamento, "Nessuna tipologia camera associata a questo appartamento.", cancellationToken);
+            await SalvaErroreAsync(appartamento, "Nessuna tipologia camera associata a questo appartamento.", Tentativo(EsitoTentativo.ErroreDefinitivo), cancellationToken);
             return new RisultatoInvioOsservatorio(0, 0, 0, "Nessuna tipologia camera associata.");
         }
-
-        var oggi = DateTime.UtcNow.Date;
 
         // Giornata di oggi già chiusa con successo (cursore già avanzato a domani): niente da fare,
         // evita un login/logout inutile verso il servizio esterno ad ogni giro del job (ogni minuto).
@@ -369,7 +391,7 @@ public class OsservatorioInvioService(
         var login = await client.LoginAsync(appartamento.EntityCode, appartamento.Password, cancellationToken);
         if (!login.Ok || login.Token is null)
         {
-            await SalvaErroreAsync(appartamento, login.Errore ?? "Login non riuscito.", cancellationToken);
+            await SalvaErroreAsync(appartamento, login.Errore ?? "Login non riuscito.", Tentativo(EsitoTentativo.ErroreRitentabile), cancellationToken);
             return new RisultatoInvioOsservatorio(0, 0, 0, login.Errore);
         }
 
@@ -385,12 +407,26 @@ public class OsservatorioInvioService(
         var statoRemoto = await client.GetCurrentStatusDateAsync(login.Token, appartamento.HotelCode!, cancellationToken);
         if (statoRemoto is null)
         {
-            await SalvaErroreAsync(appartamento, "Impossibile leggere lo stato corrente (GetCurrentStatusDate) dall'Osservatorio Turistico.", cancellationToken);
+            await SalvaErroreAsync(appartamento, "Impossibile leggere lo stato corrente (GetCurrentStatusDate) dall'Osservatorio Turistico.", Tentativo(EsitoTentativo.ErroreRitentabile), cancellationToken);
             return new RisultatoInvioOsservatorio(0, 0, 0, "Stato remoto non disponibile.");
         }
 
         var tipologieIds = appartamento.Tipologie.Select(t => t.TipologiaId).ToHashSet();
         var cursore = statoRemoto.Value.Date;
+
+        // Allinea subito la cache locale a quello che dice il servizio, anche quando non ci sarà
+        // nulla da inviare. Senza questo, un appartamento la cui giornata risulta già chiusa lato
+        // Osservatorio (cursore remoto oltre oggi) restava indietro col cursore locale, il gate qui
+        // sopra non scattava mai e il job rifaceva login, lettura stato e log **ogni minuto** per
+        // tutta l'ora tra l'orario di invio e la mezzanotte — centinaia di righe di log identiche
+        // a sera e altrettante chiamate inutili al servizio della PA. Va allineata anche
+        // all'indietro: se il portale è fermo a una data precedente, il nostro "chiuso fino al"
+        // mostrato in pagina sarebbe altrimenti una data falsa.
+        if (appartamento.CursoreDataAtUtc?.Date != cursore)
+        {
+            appartamento.CursoreDataAtUtc = cursore;
+            await appartamenti.UpdateAsync(appartamento, cancellationToken);
+        }
 
         int arriviInviati = 0, checkoutInviati = 0, giorniChiusi = 0;
 
@@ -449,15 +485,26 @@ public class OsservatorioInvioService(
             appartamento.UltimoInvioAtUtc = DateTime.UtcNow;
             appartamento.UltimeSchedineInviate = arriviInviati;
             appartamento.UltimoErrore = null;
+            if (contaTentativi)
+            {
+                PoliticaTentativi.RegistraEsito(appartamento, EsitoTentativo.Riuscito, adesso);
+            }
+
             await appartamenti.UpdateAsync(appartamento, cancellationToken);
 
             // Niente denominatore "X/Y" qui a differenza di Alloggiati Web/PayTourist: un invio
             // arrivi/checkout è tutto-o-niente (un rifiuto del server fa fallire l'intera chiamata,
             // vedi InviaArriviAsync/ChiudiGiornataAsync), non c'è un conteggio di "scartati" per
-            // singolo ospite. Log ad ogni giornata effettivamente processata, anche "0 e 0" (nessun
-            // arrivo/partenza oggi), con la data fino a cui risulta chiuso — l'utente deve poter
-            // verificare dalla pagina Log che il job gira regolarmente, non solo quando c'è stato
-            // un movimento reale.
+            // singolo ospite. Si logga ogni giornata **effettivamente processata**, anche quando
+            // chiude con "0 e 0" (nessun arrivo/partenza quel giorno): serve a verificare dalla
+            // pagina Log che il job gira. Non si logga invece il giro in cui non c'era proprio
+            // nulla da chiudere: ripetuto ogni minuto fino a mezzanotte, era solo rumore che
+            // copriva le righe vere.
+            if (giorniChiusi == 0)
+            {
+                return new RisultatoInvioOsservatorio(arriviInviati, checkoutInviati, giorniChiusi, null);
+            }
+
             await logEventi.RegistraAsync(
                 LivelloLog.Info,
                 $"Invio Osservatorio Turistico ({appartamento.Nome}): {arriviInviati} arrivi e {checkoutInviati} partenze inviati — chiuso fino al {appartamento.CursoreDataAtUtc:dd/MM/yyyy}.",
@@ -475,7 +522,7 @@ public class OsservatorioInvioService(
             // salvato incrementalmente ad ogni giorno di arretrato e solo a fine giornata corrente):
             // un fallimento su un giorno non lo fa mai avanzare oltre, cosa che il legacy invece
             // faceva (vedi doc della classe) — il prossimo giro ritenta lo stesso giorno.
-            await SalvaErroreAsync(appartamento, ex.Message, cancellationToken);
+            await SalvaErroreAsync(appartamento, ex.Message, Tentativo(EsitoTentativo.ErroreRitentabile), cancellationToken);
             return new RisultatoInvioOsservatorio(arriviInviati, checkoutInviati, giorniChiusi, ex.Message);
         }
         finally
@@ -619,19 +666,59 @@ public class OsservatorioInvioService(
         await anagrafica.ListLuoghiAsync(cancellationToken),
         await anagrafica.ListTipiAlloggiatoAsync(cancellationToken));
 
-    private async Task SalvaErroreAsync(OsservatorioAppartamento appartamento, string errore, CancellationToken cancellationToken)
+    private async Task SalvaErroreAsync(
+        OsservatorioAppartamento appartamento,
+        string errore,
+        // null = invio partito a mano: non consuma i tentativi del job e va sempre a log.
+        EsitoTentativo? esitoTentativo,
+        CancellationToken cancellationToken)
     {
+        var adesso = DateTime.UtcNow;
+        var tentativiEsauriti = esitoTentativo is { } esito && PoliticaTentativi.RegistraEsito(appartamento, esito, adesso);
+
         appartamento.UltimoErrore = errore;
-        appartamento.UltimoInvioAtUtc = DateTime.UtcNow;
+        appartamento.UltimoInvioAtUtc = adesso;
         await appartamenti.UpdateAsync(appartamento, cancellationToken);
+
+        // Un errore si annota **all'ultimo tentativo utile**, non ad ogni giro: il job riprova ogni
+        // minuto fino a mezzanotte, e una riga per tentativo è esattamente il rumore che il limite
+        // serve a togliere. Chi legge il Log trova una riga sola, che dice quanti tentativi sono
+        // stati spesi e che si riprende domani.
+        if (esitoTentativo is { } e && e != EsitoTentativo.Riuscito && !tentativiEsauriti)
+        {
+            return;
+        }
+
+        var resa = esitoTentativo is null
+            ? string.Empty
+            : $" ({(appartamento.TentativiFallitiOggi == 1 ? "1 tentativo" : $"{appartamento.TentativiFallitiOggi} tentativi falliti")}; nuovo tentativo domani all'orario configurato)";
+
+        if (tentativiEsauriti)
+        {
+            await SegnalaResaAsync(appartamento.StrutturaId, "Osservatorio Turistico", appartamento.Nome, errore, cancellationToken);
+        }
 
         await logEventi.RegistraAsync(
             LivelloLog.Warning,
-            $"Invio Osservatorio Turistico ({appartamento.Nome}): {errore}",
+            $"Invio Osservatorio Turistico ({appartamento.Nome}): {errore}{resa}.",
             origine: "Osservatorio",
             clienteId: await strutture.GetClienteIdAsync(appartamento.StrutturaId, cancellationToken),
             strutturaId: appartamento.StrutturaId,
             categoria: "Osservatorio",
             cancellationToken: cancellationToken);
     }
+
+    /// <summary>
+    /// Una notifica al giorno per elemento quando l'invio automatico si arrende: il Log da solo non
+    /// basta, perché nessuno lo apre finché non sospetta già un problema — e una configurazione
+    /// mancante resterebbe tale per giorni senza che nessuno se ne accorga.
+    /// </summary>
+    private Task SegnalaResaAsync(Guid strutturaId, string servizio, string? nomeElemento, string errore, CancellationToken cancellationToken) =>
+        notificaService.CreaSeNonEsisteAsync(
+            strutturaId,
+            TipoNotifica.InvioSchedineNonRiuscito,
+            $"invio-non-riuscito:{servizio}:{nomeElemento}:{DateTime.UtcNow:yyyyMMdd}",
+            $"{servizio}: invio non riuscito",
+            $"{(string.IsNullOrWhiteSpace(nomeElemento) ? servizio : nomeElemento)}: {errore} Nuovo tentativo domani all'orario configurato.",
+            cancellationToken);
 }

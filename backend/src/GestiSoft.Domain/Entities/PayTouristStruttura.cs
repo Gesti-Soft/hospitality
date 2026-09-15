@@ -15,7 +15,7 @@ namespace GestiSoft.Domain.Entities;
 /// (vedi PayTouristInvioService.EsportaAsync) riusa la stessa costruzione dati dell'invio via API,
 /// non un tracciato a colonne fisse separato.
 /// </summary>
-public class PayTouristStruttura : TenantEntity
+public class PayTouristStruttura : TenantEntity, IStatoTentativi
 {
     /// <summary>Etichetta libera per distinguere più strutture PayTourist nella UI (il legacy le identificava solo per Id numerico).</summary>
     public string? Nome { get; set; }
@@ -28,6 +28,21 @@ public class PayTouristStruttura : TenantEntity
     public int? UltimeInviate { get; set; }
 
     public string? UltimoErrore { get; set; }
+
+    /// <summary>
+    /// Tentativi di invio già falliti nella giornata indicata da <see cref="TentativiGiornoAtUtc"/>,
+    /// con il momento in cui è lecito riprovare: insieme limitano i giri a vuoto del job, che gira
+    /// ogni minuto fino a mezzanotte (vedi <see cref="PoliticaTentativi"/>). Azzerati da un invio
+    /// riuscito e, da soli, dal cambio di giorno.
+    /// </summary>
+    public int TentativiFallitiOggi { get; set; }
+
+    public DateTime? TentativiGiornoAtUtc { get; set; }
+
+    public DateTime? ProssimoTentativoAtUtc { get; set; }
+
+    /// <summary>Vero se l'ultimo fallimento era di configurazione (credenziali, associazioni): vale un solo tentativo al giorno, ritentarlo stasera non può riuscire.</summary>
+    public bool UltimoErroreDefinitivo { get; set; }
 
     /// <summary>
     /// Ultimo test di connessione (GetRiduzioniAsync, nessuna prenotazione inviata) riuscito,

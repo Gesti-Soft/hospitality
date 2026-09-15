@@ -12,8 +12,9 @@ namespace GestiSoft.WorkerSchedine.Jobs;
 /// coincideva con quella configurata). Qui gira ogni minuto per tutte le Strutture con
 /// ImpostazioniStruttura.PoliziaStatoAttiva attivo, confrontando l'ora locale con
 /// OraInvioGiornaliero (">=" invece di uguaglianza esatta, per non perdere la finestra se un giro
-/// del job viene saltato) e usando AlloggiatiWebIntegrazione.UltimoInvioAtUtc — persistito su DB
-/// invece che in memoria come il legacy — per non rieseguire il batch più volte nello stesso giorno.
+/// del job viene saltato). Il batch non si ripete una volta riuscito, e in caso di errore si
+/// ritenta un numero limitato di volte con attesa crescente invece che ad ogni giro: vedi
+/// <see cref="Domain.Entities.PoliticaTentativi"/>, condivisa con Osservatorio e PayTourist.
 /// </summary>
 [DisallowConcurrentExecution]
 public class AlloggiatiWebInvioGiornalieroJob(
@@ -27,7 +28,8 @@ public class AlloggiatiWebInvioGiornalieroJob(
     {
         var strutture = await impostazioni.ListAttivePerPoliziaAsync(context.CancellationToken);
         var oraCorrente = TimeOnly.FromDateTime(DateTime.Now);
-        var oggi = DateTime.UtcNow.Date;
+        var adesso = DateTime.UtcNow;
+        var oggi = adesso.Date;
 
         foreach (var struttura in strutture)
         {
@@ -37,7 +39,7 @@ public class AlloggiatiWebInvioGiornalieroJob(
             }
 
             var integrazione = await integrazioni.GetByStrutturaIdAsync(struttura.StrutturaId, context.CancellationToken);
-            if (integrazione?.UltimoInvioAtUtc?.Date == oggi)
+            if (integrazione is not null && !DaProcessare(integrazione, adesso, oggi))
             {
                 continue;
             }
@@ -65,5 +67,27 @@ public class AlloggiatiWebInvioGiornalieroJob(
                 logger.LogError(ex, "Invio Alloggiati Web: eccezione per struttura {strutturaId}", struttura.StrutturaId);
             }
         }
+    }
+
+    /// <summary>
+    /// Se questo giro deve occuparsi della struttura. Si salta quando l'invio di oggi è già andato
+    /// a buon fine, e quando i tentativi della giornata sono esauriti o l'attesa dopo l'ultimo
+    /// fallimento non è ancora trascorsa. Il controllo su <c>UltimoInvioAtUtc</c> senza errore copre
+    /// le integrazioni che hanno già inviato **prima** che i contatori esistessero: senza, il giorno
+    /// del rilascio il batch ripartirebbe una volta a vuoto.
+    /// </summary>
+    private static bool DaProcessare(Domain.Entities.AlloggiatiWebIntegrazione integrazione, DateTime adesso, DateTime oggi)
+    {
+        if (Domain.Entities.PoliticaTentativi.GiaRiuscitoOggi(integrazione, adesso))
+        {
+            return false;
+        }
+
+        if (integrazione.UltimoErrore is null && integrazione.UltimoInvioAtUtc?.Date == oggi)
+        {
+            return false;
+        }
+
+        return Domain.Entities.PoliticaTentativi.PuoTentare(integrazione, adesso);
     }
 }

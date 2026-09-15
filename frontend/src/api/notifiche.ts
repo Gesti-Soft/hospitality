@@ -9,6 +9,8 @@ export const TipoNotifica = {
   LicenzaScaduta: 5,
   SchedineInviate: 6,
   CheckOutDimenticato: 7,
+  SchedinaFuoriTermine: 8,
+  InvioSchedineNonRiuscito: 9,
 } as const
 export type TipoNotifica = (typeof TipoNotifica)[keyof typeof TipoNotifica]
 

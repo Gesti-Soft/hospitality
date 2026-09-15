@@ -12,4 +12,11 @@ public enum TipoNotifica
 
     /// <summary>Schedina alloggiati non trasmessa entro il termine di legge: l'invio automatico non la prende più, va registrata a mano sul portale della Polizia di Stato (vedi TerminiSchedina).</summary>
     SchedinaFuoriTermine = 8,
+
+    /// <summary>
+    /// L'invio automatico verso una PA non è riuscito e i tentativi della giornata sono finiti
+    /// (vedi PoliticaTentativi): si riprova domani, ma se la causa è una configurazione mancante
+    /// nessuno se ne accorgerebbe — il Log lo direbbe, il campanello lo mette davanti agli occhi.
+    /// </summary>
+    InvioSchedineNonRiuscito = 9,
 }

@@ -63,7 +63,7 @@ public class AlloggiatiWebInvioService(
 
         if (string.IsNullOrWhiteSpace(integrazione.Utente) || string.IsNullOrWhiteSpace(integrazione.Password) || string.IsNullOrWhiteSpace(integrazione.WsKey))
         {
-            return await SalvaEsitoAsync(integrazione, 0, 0, "Credenziali Alloggiati Web non configurate.", cancellationToken);
+            return await SalvaEsitoAsync(integrazione, 0, 0, "Credenziali Alloggiati Web non configurate.", esitoTentativo: EsitoTentativo.ErroreDefinitivo, cancellationToken);
         }
 
         var candidate = await ospiti.ListDaInviareAlloggiatiWebAsync(strutturaId, cancellationToken);
@@ -84,13 +84,13 @@ public class AlloggiatiWebInvioService(
 
         if (daInviare.Count == 0)
         {
-            return await SalvaEsitoAsync(integrazione, 0, 0, null, cancellationToken);
+            return await SalvaEsitoAsync(integrazione, 0, 0, null, esitoTentativo: EsitoTentativo.Riuscito, cancellationToken);
         }
 
         var tokenRisultato = await client.GenerateTokenAsync(integrazione.Utente, integrazione.Password, integrazione.WsKey, cancellationToken);
         if (!tokenRisultato.Ok || tokenRisultato.Token is null)
         {
-            return await SalvaEsitoAsync(integrazione, 0, daInviare.Count, tokenRisultato.Errore ?? "Token non ottenuto.", cancellationToken);
+            return await SalvaEsitoAsync(integrazione, 0, daInviare.Count, tokenRisultato.Errore ?? "Token non ottenuto.", esitoTentativo: EsitoTentativo.ErroreRitentabile, cancellationToken);
         }
 
         var builder = await CreaBuilderAsync(cancellationToken);
@@ -123,7 +123,13 @@ public class AlloggiatiWebInvioService(
         }
 
         var messaggio = errori == 0 ? null : $"{errori} schedina/e non inviata/e: {ultimoErrore}";
-        return await SalvaEsitoAsync(integrazione, inviate, daInviare.Count, messaggio, cancellationToken);
+        // Un rifiuto per singola schedina (dato non valido, doppione) non si risolve ritentando
+        // l'intero batch, ma se almeno una è passata il portale risponde: si riprova solo quando
+        // non ne è passata nessuna, il caso che somiglia a un problema del servizio.
+        var esitoBatch = errori == 0
+            ? EsitoTentativo.Riuscito
+            : inviate > 0 ? EsitoTentativo.ErroreDefinitivo : EsitoTentativo.ErroreRitentabile;
+        return await SalvaEsitoAsync(integrazione, inviate, daInviare.Count, messaggio, esitoBatch, cancellationToken);
     }
 
     /// <summary>
@@ -169,7 +175,7 @@ public class AlloggiatiWebInvioService(
         var tokenRisultato = await client.GenerateTokenAsync(integrazione.Utente, integrazione.Password, integrazione.WsKey, cancellationToken);
         if (!tokenRisultato.Ok || tokenRisultato.Token is null)
         {
-            return await SalvaEsitoAsync(integrazione, 0, 1, tokenRisultato.Errore ?? "Token non ottenuto.", cancellationToken);
+            return await SalvaEsitoAsync(integrazione, 0, 1, tokenRisultato.Errore ?? "Token non ottenuto.", esitoTentativo: null, cancellationToken);
         }
 
         var builder = await CreaBuilderAsync(cancellationToken);
@@ -177,11 +183,11 @@ public class AlloggiatiWebInvioService(
 
         if (!esito.Ok)
         {
-            return await SalvaEsitoAsync(integrazione, 0, 1, esito.ErroreDescrizione ?? esito.ErroreCodice ?? "Invio rifiutato.", cancellationToken);
+            return await SalvaEsitoAsync(integrazione, 0, 1, esito.ErroreDescrizione ?? esito.ErroreCodice ?? "Invio rifiutato.", esitoTentativo: null, cancellationToken);
         }
 
         await MarcaInviataAsync(prenotazione.Id, cancellationToken);
-        return await SalvaEsitoAsync(integrazione, 1, 1, null, cancellationToken);
+        return await SalvaEsitoAsync(integrazione, 1, 1, null, esitoTentativo: null, cancellationToken);
     }
 
     /// <summary>
@@ -306,19 +312,51 @@ public class AlloggiatiWebInvioService(
         await prenotazioni.UpdateAsync(prenotazione, cancellationToken);
     }
 
-    private async Task<RisultatoInvioAlloggiatiWeb> SalvaEsitoAsync(AlloggiatiWebIntegrazione integrazione, int inviate, int totale, string? errore, CancellationToken cancellationToken)
+    private async Task<RisultatoInvioAlloggiatiWeb> SalvaEsitoAsync(
+        AlloggiatiWebIntegrazione integrazione,
+        int inviate,
+        int totale,
+        string? errore,
+        // null = invio singolo fatto a mano dall'operatore: non consuma i tentativi del job
+        // automatico (non è lui ad aver fallito) e il suo esito va sempre a log, perché è la
+        // risposta a un'azione appena compiuta da qualcuno che la sta guardando.
+        EsitoTentativo? esitoTentativo,
+        CancellationToken cancellationToken)
     {
-        integrazione.UltimoInvioAtUtc = DateTime.UtcNow;
+        var adesso = DateTime.UtcNow;
+        var tentativiEsauriti = esitoTentativo is { } esito && PoliticaTentativi.RegistraEsito(integrazione, esito, adesso);
+
+        integrazione.UltimoInvioAtUtc = adesso;
         integrazione.UltimeSchedineInviate = inviate;
         integrazione.UltimoErrore = errore;
         await integrazioni.UpsertAsync(integrazione, cancellationToken);
 
-        // Un log ad ogni invio, anche "0/0 schedine" (nessuna da inviare oggi) — l'utente deve poter
-        // verificare dalla pagina Log che il job gira regolarmente per questa struttura, non solo
-        // quando c'è stato un errore o un invio reale.
+        // Un log all'invio riuscito, anche "0/0 schedine" (nessuna da inviare oggi): l'utente deve
+        // poter verificare dalla pagina Log che il job gira per questa struttura. I fallimenti
+        // invece si annotano **solo all'ultimo tentativo utile**, con il conto di quelli spesi —
+        // una riga per ogni ritentativo sarebbe lo stesso rumore che il limite serve a togliere.
+        if (esitoTentativo is { } e && e != EsitoTentativo.Riuscito && !tentativiEsauriti)
+        {
+            return new RisultatoInvioAlloggiatiWeb(inviate, totale, totale - inviate, errore);
+        }
+
+        var resa = esitoTentativo is null
+            ? string.Empty
+            : $" ({DescriviTentativi(integrazione)}; nuovo tentativo domani all'orario configurato)";
+
+        if (tentativiEsauriti && errore is not null)
+        {
+            await notificaService.CreaSeNonEsisteAsync(
+                integrazione.StrutturaId,
+                TipoNotifica.InvioSchedineNonRiuscito,
+                $"invio-non-riuscito:AlloggiatiWeb:{integrazione.StrutturaId}:{adesso:yyyyMMdd}",
+                "Polizia di Stato: invio non riuscito",
+                $"{errore} Nuovo tentativo domani all'orario configurato — attenzione al termine di 24 ore dall'arrivo.",
+                cancellationToken);
+        }
         var messaggio = errore is null
             ? $"Invio Alloggiati Web (Polizia di Stato): {inviate}/{totale} schedine inviate."
-            : $"Invio Alloggiati Web (Polizia di Stato): {inviate}/{totale} schedine inviate — {errore}";
+            : $"Invio Alloggiati Web (Polizia di Stato): {inviate}/{totale} schedine inviate — {errore}{resa}.";
 
         await logEventi.RegistraAsync(
             errore is null ? LivelloLog.Info : LivelloLog.Warning,
@@ -331,4 +369,10 @@ public class AlloggiatiWebInvioService(
 
         return new RisultatoInvioAlloggiatiWeb(inviate, totale, totale - inviate, errore);
     }
+
+    /// <summary>Quanti tentativi sono stati spesi, per la riga di riepilogo: "1 tentativo" quando l'errore è di configurazione e non aveva senso ritentare.</summary>
+    private static string DescriviTentativi(AlloggiatiWebIntegrazione integrazione) =>
+        integrazione.TentativiFallitiOggi == 1
+            ? "1 tentativo"
+            : $"{integrazione.TentativiFallitiOggi} tentativi falliti";
 }

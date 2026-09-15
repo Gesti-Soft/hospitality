@@ -18,7 +18,7 @@ namespace GestiSoft.Domain.Entities;
 ///    many-to-many (<see cref="Tipologie"/>), coerente con la rimozione di campi testo libero
 ///    ridondanti già fatta per altre entità in Fase 1.
 /// </summary>
-public class OsservatorioAppartamento : TenantEntity
+public class OsservatorioAppartamento : TenantEntity, IStatoTentativi
 {
     /// <summary>Etichetta libera per distinguere più appartamenti nella UI (il legacy non ne aveva una, identificava gli appartamenti solo per Id numerico).</summary>
     public string? Nome { get; set; }
@@ -43,6 +43,21 @@ public class OsservatorioAppartamento : TenantEntity
     public int? UltimeSchedineInviate { get; set; }
 
     public string? UltimoErrore { get; set; }
+
+    /// <summary>
+    /// Tentativi di invio già falliti nella giornata indicata da <see cref="TentativiGiornoAtUtc"/>,
+    /// con il momento in cui è lecito riprovare: insieme limitano i giri a vuoto del job, che gira
+    /// ogni minuto fino a mezzanotte (vedi <see cref="PoliticaTentativi"/>). Azzerati da un invio
+    /// riuscito e, da soli, dal cambio di giorno.
+    /// </summary>
+    public int TentativiFallitiOggi { get; set; }
+
+    public DateTime? TentativiGiornoAtUtc { get; set; }
+
+    public DateTime? ProssimoTentativoAtUtc { get; set; }
+
+    /// <summary>Vero se l'ultimo fallimento era di configurazione (credenziali, associazioni): vale un solo tentativo al giorno, ritentarlo stasera non può riuscire.</summary>
+    public bool UltimoErroreDefinitivo { get; set; }
 
     /// <summary>
     /// Ultimo test di connessione (Login + GetCurrentStatusDate, nessuna Stay inviata) riuscito,

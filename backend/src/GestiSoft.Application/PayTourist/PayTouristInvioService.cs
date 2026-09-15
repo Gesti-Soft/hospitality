@@ -8,6 +8,7 @@ using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
+using GestiSoft.Application.Notifiche;
 
 namespace GestiSoft.Application.PayTourist;
 
@@ -75,7 +76,8 @@ public class PayTouristInvioService(
     WubookLicenzaService wubookLicenzaService,
     PermessoStrutturaGuard permessoGuard,
     ConcessioneServiziGuard concessioneGuard,
-    ILogEventoService logEventi)
+    ILogEventoService logEventi,
+    NotificaService notificaService)
 {
     private record AnagraficaPayTourist(
         IReadOnlyList<VoceAnagrafica> Luoghi,
@@ -86,11 +88,13 @@ public class PayTouristInvioService(
     public async Task<RisultatoInvioPayTourist> InviaOraAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceWrite, cancellationToken);
-        return await InviaSistemaAsync(strutturaId, cancellationToken);
+        // automatico: false — un "Invia ora" premuto dall'operatore non deve consumare i tentativi
+        // della giornata, altrimenti qualche tentativo a mano andato male zittirebbe il job serale.
+        return await InviaSistemaAsync(strutturaId, cancellationToken, automatico: false);
     }
 
     /// <summary>Usato dal job Quartz schedulato (Worker) — nessun ICurrentUser, gira per conto del sistema.</summary>
-    public async Task<RisultatoInvioPayTourist> InviaSistemaAsync(Guid strutturaId, CancellationToken cancellationToken)
+    public async Task<RisultatoInvioPayTourist> InviaSistemaAsync(Guid strutturaId, CancellationToken cancellationToken, bool automatico = true)
     {
         await concessioneGuard.EnsurePayTouristAsync(strutturaId, cancellationToken);
 
@@ -112,7 +116,7 @@ public class PayTouristInvioService(
             ?? new PayTouristIntegrazione { StrutturaId = strutturaId };
         if (string.IsNullOrWhiteSpace(integrazione.Token))
         {
-            return await SegnalaErroreGlobaleAsync(lista, "Token PayTourist non configurato.", cancellationToken);
+            return await SegnalaErroreGlobaleAsync(lista, "Token PayTourist non configurato.", EsitoTentativo.ErroreDefinitivo, automatico, cancellationToken);
         }
 
         int idSoftware;
@@ -122,7 +126,7 @@ public class PayTouristInvioService(
         }
         catch (ConflictException ex)
         {
-            return await SegnalaErroreGlobaleAsync(lista, ex.Message, cancellationToken);
+            return await SegnalaErroreGlobaleAsync(lista, ex.Message, EsitoTentativo.ErroreDefinitivo, automatico, cancellationToken);
         }
 
         var anagraficaDati = await CaricaAnagraficaAsync(strutturaId, cancellationToken);
@@ -130,10 +134,19 @@ public class PayTouristInvioService(
         int totaleInviate = 0, totalePrenotazioni = 0, totaleErrori = 0;
         var messaggiErrore = new List<string>();
 
+        var adesso = DateTime.UtcNow;
+
         foreach (var payTouristStruttura in lista)
         {
+            // Ogni struttura PayTourist ha i suoi tentativi: una con le credenziali a posto non
+            // deve fermarsi perché un'altra della stessa Struttura è mal configurata.
+            if (automatico && !PoliticaTentativi.PuoTentare(payTouristStruttura, adesso))
+            {
+                continue;
+            }
+
             var (inviate, trovate, erroriStruttura, messaggi) = await ProcessaStrutturaAsync(
-                strutturaId, payTouristStruttura, integrazione.Token, idSoftware, integrazione.PortaleOnlineAttivo, anagraficaDati, cancellationToken);
+                strutturaId, payTouristStruttura, integrazione.Token, idSoftware, integrazione.PortaleOnlineAttivo, anagraficaDati, automatico, cancellationToken);
 
             totaleInviate += inviate;
             totalePrenotazioni += trovate;
@@ -419,17 +432,20 @@ public class PayTouristInvioService(
         int idSoftware,
         bool portaleOnlineAttivo,
         AnagraficaPayTourist anagraficaDati,
+        bool automatico,
         CancellationToken cancellationToken)
     {
+        // null quando l'invio è partito a mano: i tentativi contano solo per il job serale.
+        EsitoTentativo? Tentativo(EsitoTentativo esito) => automatico ? esito : null;
         if (payTouristStruttura.IdStrutturaPaytourist is not { } idStruttura)
         {
-            await SalvaEsitoAsync(payTouristStruttura, 0, 0, "Id struttura PayTourist non configurato.", cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, 0, "Id struttura PayTourist non configurato.", Tentativo(EsitoTentativo.ErroreDefinitivo), cancellationToken);
             return (0, 0, 0, []);
         }
 
         if (payTouristStruttura.Tipologie.Count == 0)
         {
-            await SalvaEsitoAsync(payTouristStruttura, 0, 0, "Nessuna tipologia camera associata a questa struttura PayTourist.", cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, 0, "Nessuna tipologia camera associata a questa struttura PayTourist.", Tentativo(EsitoTentativo.ErroreDefinitivo), cancellationToken);
             return (0, 0, 0, []);
         }
 
@@ -437,7 +453,7 @@ public class PayTouristInvioService(
         var daInviare = await ospiti.ListDaInviarePayTouristAsync(strutturaId, tipologieIds, cancellationToken);
         if (daInviare.Count == 0)
         {
-            await SalvaEsitoAsync(payTouristStruttura, 0, 0, null, cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, 0, null, Tentativo(EsitoTentativo.Riuscito), cancellationToken);
             return (0, 0, 0, []);
         }
 
@@ -445,7 +461,7 @@ public class PayTouristInvioService(
         if (!riduzioniOk)
         {
             var errore = riduzioniErrore ?? "Impossibile recuperare le riduzioni PayTourist.";
-            await SalvaEsitoAsync(payTouristStruttura, 0, daInviare.Count, errore, cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, daInviare.Count, errore, Tentativo(EsitoTentativo.ErroreRitentabile), cancellationToken);
             return (0, daInviare.Count, daInviare.Count, [errore]);
         }
 
@@ -456,7 +472,7 @@ public class PayTouristInvioService(
             if (!portaliOk)
             {
                 var errore = portaliErrore ?? "Impossibile recuperare i portali online PayTourist.";
-                await SalvaEsitoAsync(payTouristStruttura, 0, daInviare.Count, errore, cancellationToken);
+                await SalvaEsitoAsync(payTouristStruttura, 0, daInviare.Count, errore, Tentativo(EsitoTentativo.ErroreRitentabile), cancellationToken);
                 return (0, daInviare.Count, daInviare.Count, [errore]);
             }
 
@@ -499,7 +515,12 @@ public class PayTouristInvioService(
             }
         }
 
-        await SalvaEsitoAsync(payTouristStruttura, inviate, daInviare.Count, ultimoErrore, cancellationToken);
+        // Come per Alloggiati Web: se almeno una è passata il servizio risponde, e gli scarti sono
+        // dei singoli dati — ritentare l'intero lotto non li correggerebbe.
+        var esitoLotto = ultimoErrore is null
+            ? EsitoTentativo.Riuscito
+            : inviate > 0 ? EsitoTentativo.ErroreDefinitivo : EsitoTentativo.ErroreRitentabile;
+        await SalvaEsitoAsync(payTouristStruttura, inviate, daInviare.Count, ultimoErrore, Tentativo(esitoLotto), cancellationToken);
         return (inviate, daInviare.Count, daInviare.Count - inviate, messaggi);
     }
 
@@ -509,11 +530,16 @@ public class PayTouristInvioService(
         await anagrafica.ListTipiAlloggiatoAsync(cancellationToken),
         (await impostazioniStruttura.GetByStrutturaIdAsync(strutturaId, cancellationToken))?.ComuneAttivita);
 
-    private async Task<RisultatoInvioPayTourist> SegnalaErroreGlobaleAsync(IReadOnlyList<PayTouristStruttura> lista, string errore, CancellationToken cancellationToken)
+    private async Task<RisultatoInvioPayTourist> SegnalaErroreGlobaleAsync(
+        IReadOnlyList<PayTouristStruttura> lista,
+        string errore,
+        EsitoTentativo esito,
+        bool automatico,
+        CancellationToken cancellationToken)
     {
         foreach (var payTouristStruttura in lista)
         {
-            await SalvaEsitoAsync(payTouristStruttura, 0, 0, errore, cancellationToken);
+            await SalvaEsitoAsync(payTouristStruttura, 0, 0, errore, automatico ? esito : null, cancellationToken);
         }
 
         return new RisultatoInvioPayTourist(0, 0, 0, errore);
@@ -537,19 +563,49 @@ public class PayTouristInvioService(
         await prenotazioni.UpdateAsync(prenotazione, cancellationToken);
     }
 
-    private async Task SalvaEsitoAsync(PayTouristStruttura entity, int inviate, int totale, string? errore, CancellationToken cancellationToken)
+    private async Task SalvaEsitoAsync(
+        PayTouristStruttura entity,
+        int inviate,
+        int totale,
+        string? errore,
+        // null = invio partito a mano (Invia ora / invio singolo): non consuma i tentativi del job
+        // e va sempre a log, perché è la risposta a un'azione appena compiuta dall'operatore.
+        EsitoTentativo? esitoTentativo,
+        CancellationToken cancellationToken)
     {
-        entity.UltimoInvioAtUtc = DateTime.UtcNow;
+        var adesso = DateTime.UtcNow;
+        var tentativiEsauriti = esitoTentativo is { } esito && PoliticaTentativi.RegistraEsito(entity, esito, adesso);
+
+        entity.UltimoInvioAtUtc = adesso;
         entity.UltimeInviate = inviate;
         entity.UltimoErrore = errore;
         await payTouristStrutture.UpdateAsync(entity, cancellationToken);
 
-        // Un log ad ogni invio, anche "0/0 prenotazioni" (nessuna da inviare oggi) — l'utente deve
-        // poter verificare dalla pagina Log che il job gira regolarmente per questa struttura, non
-        // solo quando c'è stato un errore o un invio reale.
+        // Un log all'invio riuscito, anche "0/0 prenotazioni" (nessuna da inviare oggi): serve a
+        // vedere dalla pagina Log che il job gira per questa struttura. I fallimenti si annotano
+        // invece solo all'ultimo tentativo utile, con il conto di quelli spesi.
+        if (esitoTentativo is { } e && e != EsitoTentativo.Riuscito && !tentativiEsauriti)
+        {
+            return;
+        }
+
+        var resa = esitoTentativo is null
+            ? string.Empty
+            : $" ({(entity.TentativiFallitiOggi == 1 ? "1 tentativo" : $"{entity.TentativiFallitiOggi} tentativi falliti")}; nuovo tentativo domani all'orario configurato)";
+
+        if (tentativiEsauriti && errore is not null)
+        {
+            await notificaService.CreaSeNonEsisteAsync(
+                entity.StrutturaId,
+                TipoNotifica.InvioSchedineNonRiuscito,
+                $"invio-non-riuscito:PayTourist:{entity.Nome}:{adesso:yyyyMMdd}",
+                "PayTourist: invio non riuscito",
+                $"{entity.Nome}: {errore} Nuovo tentativo domani all'orario configurato.",
+                cancellationToken);
+        }
         var messaggio = errore is null
             ? $"Invio PayTourist ({entity.Nome}): {inviate}/{totale} prenotazioni inviate."
-            : $"Invio PayTourist ({entity.Nome}): {inviate}/{totale} prenotazioni inviate — {errore}";
+            : $"Invio PayTourist ({entity.Nome}): {inviate}/{totale} prenotazioni inviate — {errore}{resa}.";
 
         await logEventi.RegistraAsync(
             errore is null ? LivelloLog.Info : LivelloLog.Warning,
