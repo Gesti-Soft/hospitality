@@ -98,7 +98,9 @@ const router = createBrowserRouter([
       { path: '/polizia-di-stato', element: <RouteGuard path="/polizia-di-stato"><PoliziaPage /></RouteGuard> },
       { path: '/osservatorio', element: <RouteGuard path="/osservatorio"><OsservatorioPage /></RouteGuard> },
       { path: '/paytourist', element: <RouteGuard path="/paytourist"><PayTouristPage /></RouteGuard> },
-      { path: '/wubook', element: <RouteGuard path="/wubook"><WubookPage /></RouteGuard> },
+      { path: '/ota', element: <RouteGuard path="/ota"><WubookPage /></RouteGuard> },
+      // Vecchio indirizzo della stessa pagina: chi ha il link salvato non trova un 404.
+      { path: '/wubook', element: <Navigate to="/ota" replace /> },
       { path: '/utenti', element: <RouteGuard path="/utenti"><UtentiPage /></RouteGuard> },
       { path: '/impostazioni', element: <RouteGuard path="/impostazioni"><ImpostazioniPage /></RouteGuard> },
       { path: '/log', element: <RouteGuard path="/log"><LogPage /></RouteGuard> },
