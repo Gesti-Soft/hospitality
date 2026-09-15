@@ -767,6 +767,19 @@ export interface PianoPrezzoDto {
   tipoVariazione: number | null
 }
 
+/**
+ * Convenzione dell'OTA per il tipo di variazione di un piano virtuale: 1 = percentuale,
+ * 2 = importo fisso. Le etichette erano invertite e chi sceglieva "19 €" si ritrovava i prezzi
+ * alzati del 19%; verificato sui piani reali prima di correggere. Definita qui una volta sola
+ * perché il numero da solo non dice nulla e l'inversione è invisibile finché non arriva sui
+ * prezzi pubblicati.
+ */
+export const TIPO_VARIAZIONE_PERCENTUALE = 1
+export const TIPO_VARIAZIONE_IMPORTO = 2
+
+export const simboloVariazione = (tipoVariazione: number | null) =>
+  tipoVariazione === TIPO_VARIAZIONE_IMPORTO ? '€' : '%'
+
 export interface CreaPianoPrezzoRequest {
   nome: string
   parentId: number

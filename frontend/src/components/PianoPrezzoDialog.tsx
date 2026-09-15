@@ -9,7 +9,13 @@ import DialogTitle from '@mui/material/DialogTitle'
 import MenuItem from '@mui/material/MenuItem'
 import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
-import { useAggiornaPianoPrezzo, useCreaPianoPrezzo, type PianoPrezzoDto } from '../api/integrazioni'
+import {
+  TIPO_VARIAZIONE_IMPORTO,
+  TIPO_VARIAZIONE_PERCENTUALE,
+  useAggiornaPianoPrezzo,
+  useCreaPianoPrezzo,
+  type PianoPrezzoDto,
+} from '../api/integrazioni'
 import { useMobile } from '../lib/useMobile'
 
 interface Props {
@@ -23,7 +29,9 @@ export function PianoPrezzoDialog({ strutturaId, piano, piani, onClose }: Props)
   const mobile = useMobile()
   const [nome, setNome] = useState(piano?.nome ?? '')
   const [parentId, setParentId] = useState(piano?.parentId != null ? String(piano.parentId) : '0')
-  const [tipoVariazione, setTipoVariazione] = useState(piano?.tipoVariazione != null ? String(piano.tipoVariazione) : '1')
+  const [tipoVariazione, setTipoVariazione] = useState(
+    piano?.tipoVariazione != null ? String(piano.tipoVariazione) : String(TIPO_VARIAZIONE_PERCENTUALE),
+  )
   const [variazione, setVariazione] = useState(piano?.variazione != null ? String(piano.variazione) : '')
   const [errore, setErrore] = useState<string | null>(null)
 
@@ -76,8 +84,8 @@ export function PianoPrezzoDialog({ strutturaId, piano, piani, onClose }: Props)
         )}
 
         <TextField select label="Tipo variazione" value={tipoVariazione} onChange={(e) => setTipoVariazione(e.target.value)} disabled={inCorso}>
-          <MenuItem value="1">Importo fisso (€)</MenuItem>
-          <MenuItem value="2">Percentuale (%)</MenuItem>
+          <MenuItem value={String(TIPO_VARIAZIONE_PERCENTUALE)}>Percentuale (%)</MenuItem>
+          <MenuItem value={String(TIPO_VARIAZIONE_IMPORTO)}>Importo fisso (€)</MenuItem>
         </TextField>
 
         <TextField

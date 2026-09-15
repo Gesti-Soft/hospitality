@@ -37,6 +37,7 @@ import { useAggiornaTipologia, useTipologie, type TipologiaCameraDto, type Tipol
 import { useCamere, type CameraDto } from '../../api/camere'
 import { ApiError } from '../../api/client'
 import {
+  simboloVariazione,
   useAssociaTipologiaWubook,
   useTipologiePerAssociazione,
   useCamereRemoteWubook,
@@ -784,8 +785,7 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-        Piani prezzo nominati/virtuali (es. "Non rimborsabile -10%"), derivati dal piano di partenza con una variazione fissa o
-        percentuale. La mappatura piano→canale si fa nel pannello dell'OTA.
+        Possibilità di aumentare i prezzi nel canale OTA interessato senza modificare i prezzi locali. I piani prezzo virtuali si basano su un piano prezzo reale esistente.
       </Typography>
 
       {puoScrivere && (
@@ -805,7 +805,7 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
               <RigaCardMeta
                 voci={[
                   { etichetta: 'Id', valore: p.id },
-                  { etichetta: 'Variazione', valore: p.variazione != null ? `${p.variazione} (${p.tipoVariazione === 2 ? '%' : '€'})` : '—' },
+                  { etichetta: 'Variazione', valore: p.variazione != null ? `${p.variazione} (${simboloVariazione(p.tipoVariazione)})` : '—' },
                 ]}
               />
               {p.isVirtual && puoScrivere && (
@@ -852,7 +852,7 @@ function TabPianiPrezzo({ strutturaId }: { strutturaId: string }) {
                   <TableCell sx={{ fontFamily: fontMono }}>{p.id}</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{p.nome}</TableCell>
                   <TableCell>{p.isVirtual ? `Virtuale (da ${p.parentId})` : 'Base'}</TableCell>
-                  <TableCell>{p.variazione != null ? `${p.variazione} (${p.tipoVariazione === 2 ? '%' : '€'})` : '—'}</TableCell>
+                  <TableCell>{p.variazione != null ? `${p.variazione} (${simboloVariazione(p.tipoVariazione)})` : '—'}</TableCell>
                   <TableCell align="right">
                     {p.isVirtual && puoScrivere && (
                       <>
