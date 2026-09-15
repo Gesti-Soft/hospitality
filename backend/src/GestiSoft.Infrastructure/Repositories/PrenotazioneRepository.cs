@@ -69,8 +69,11 @@ public class PrenotazioneRepository(GestiSoftDbContext db) : IPrenotazioneReposi
             cancellationToken);
     }
 
-    public Task<int> ContaDireteAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken) =>
-        db.Prenotazioni.CountAsync(p => p.StrutturaId == strutturaId && p.Anno == anno && p.Agenzia == "Diretta", cancellationToken);
+    public async Task<IReadOnlyList<string?>> ListaNumeriDiretteAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken) =>
+        await db.Prenotazioni
+            .Where(p => p.StrutturaId == strutturaId && p.Anno == anno && p.Agenzia == "Diretta")
+            .Select(p => p.NumeroPrenotazione)
+            .ToListAsync(cancellationToken);
 
     public Task<decimal> SommaImportoPagatoAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken) =>
         db.Prenotazioni

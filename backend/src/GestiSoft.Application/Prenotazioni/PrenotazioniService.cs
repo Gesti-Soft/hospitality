@@ -106,19 +106,53 @@ public class PrenotazioniService(
         }
     }
     /// <summary>
-    /// Se il numero non è stato scritto a mano e l'agenzia è "Diretta", genera il progressivo
-    /// annuale (conteggio prenotazioni dirette dell'anno + 1) — sia alla creazione sia quando una
-    /// prenotazione esistente viene modificata per diventare Diretta con il numero lasciato vuoto.
+    /// Il prossimo progressivo annuale delle prenotazioni dirette: il massimo di quelli già
+    /// assegnati, più uno. Deliberatamente non il <em>conteggio</em> più uno, che era la
+    /// versione precedente e dava lo stesso numero a prenotazioni diverse ogni volta che le due
+    /// cose divergevano (una diretta passata a un altro canale, un numero scritto a mano fuori
+    /// sequenza): i numeri assegnati sono l'unica fonte attendibile di quale sia l'ultimo.
+    /// I valori non numerici vengono ignorati, non fanno testo per la sequenza.
     /// </summary>
-    private async Task<string?> NumeroPrenotazioneOAutoIncrementoAsync(Guid strutturaId, string? agenzia, string? numeroPrenotazione, int anno, CancellationToken cancellationToken)
+    public static string ProssimoNumeroDiretta(IEnumerable<string?> numeriGiaAssegnati) =>
+        (numeriGiaAssegnati
+            .Select(n => int.TryParse(n, out var valore) ? valore : 0)
+            .DefaultIfEmpty(0)
+            .Max() + 1)
+        .ToString();
+
+    /// <summary>
+    /// Sceglie il numero prenotazione. Nell'ordine: quello scritto a mano se c'è; altrimenti quello
+    /// già assegnato alla prenotazione, che <b>non si tocca mai</b> — è il riferimento con cui
+    /// l'ospite, le fatture e i log la conoscono già, rigenerarlo a ogni salvataggio era il bug che
+    /// ha dato lo stesso numero a due prenotazioni diverse; infine, solo per una "Diretta" ancora
+    /// senza numero (creazione, o passaggio a Diretta di una prenotazione che non ne aveva), il
+    /// progressivo generato.
+    /// </summary>
+    private async Task<string?> NumeroPrenotazioneOAutoIncrementoAsync(
+        Guid strutturaId,
+        string? agenzia,
+        string? numeroRichiesto,
+        string? numeroGiaAssegnato,
+        int anno,
+        CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(numeroPrenotazione) || !string.Equals(agenzia, "Diretta", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(numeroRichiesto))
         {
-            return numeroPrenotazione;
+            return numeroRichiesto;
         }
 
-        var conteggio = await prenotazioni.ContaDireteAnnoAsync(strutturaId, anno, cancellationToken);
-        return (conteggio + 1).ToString();
+        if (!string.IsNullOrWhiteSpace(numeroGiaAssegnato))
+        {
+            return numeroGiaAssegnato;
+        }
+
+        if (!string.Equals(agenzia, "Diretta", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var numeri = await prenotazioni.ListaNumeriDiretteAnnoAsync(strutturaId, anno, cancellationToken);
+        return ProssimoNumeroDiretta(numeri);
     }
 
     private Task LogPrenotazioneAsync(ICurrentUser currentUser, Guid strutturaId, string messaggio, CancellationToken cancellationToken) =>
@@ -211,7 +245,7 @@ public class PrenotazioniService(
         await ValidaCameraECheckInOutAsync(strutturaId, cameraId, request.CheckIn, request.CheckOut, cancellationToken);
         await EnsureNessunaSovrapposizioneAsync(strutturaId, cameraId, request.CheckIn, request.CheckOut, escludiPrenotazioneId: null, cancellationToken);
 
-        var numeroPrenotazione = await NumeroPrenotazioneOAutoIncrementoAsync(strutturaId, request.Agenzia, request.NumeroPrenotazione, request.CheckIn.Year, cancellationToken);
+        var numeroPrenotazione = await NumeroPrenotazioneOAutoIncrementoAsync(strutturaId, request.Agenzia, request.NumeroPrenotazione, numeroGiaAssegnato: null, request.CheckIn.Year, cancellationToken);
 
         var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)
             ?? throw new NotFoundException("Struttura non trovata.");
@@ -337,7 +371,7 @@ public class PrenotazioniService(
             entity.CameraId = cameraId;
             entity.TipologiaId = request.TipologiaId;
             entity.Agenzia = request.Agenzia;
-            entity.NumeroPrenotazione = await NumeroPrenotazioneOAutoIncrementoAsync(strutturaId, request.Agenzia, request.NumeroPrenotazione, request.CheckIn.Year, cancellationToken);
+            entity.NumeroPrenotazione = await NumeroPrenotazioneOAutoIncrementoAsync(strutturaId, request.Agenzia, request.NumeroPrenotazione, entity.NumeroPrenotazione, request.CheckIn.Year, cancellationToken);
             entity.CheckIn = request.CheckIn;
             entity.CheckOut = request.CheckOut;
             entity.NumeroOspiti = request.NumeroOspiti;

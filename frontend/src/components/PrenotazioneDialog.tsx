@@ -260,14 +260,17 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   )
   const conflitto = disponibilita.data && !disponibilita.data.disponibile ? disponibilita.data : null
 
-  // Per "Diretta" il numero è sempre auto-generato dal backend al salvataggio: il campo si nasconde
-  // e si azzera per non lasciare in giro un valore digitato prima di passare a Diretta, che
-  // altrimenti verrebbe inviato come se fosse stato scelto a mano.
+  // Per "Diretta" il numero lo assegna il sistema: in creazione non c'è ancora nulla da mostrare
+  // e il campo resta nascosto, mentre su una prenotazione già salvata si vede in sola lettura —
+  // è il riferimento che si detta all'ospite, e prima andava cercato altrove. Una volta assegnato
+  // non cambia più (nemmeno il backend lo rigenera); un valore digitato prima di scegliere Diretta
+  // viene invece scartato, per non spacciarlo per scelto a mano.
+  const numeroAssegnato = modifica?.numeroPrenotazione ?? ''
   useEffect(() => {
-    if (agenzia === 'Diretta' && numeroPrenotazione !== '') {
-      setNumeroPrenotazione('')
+    if (agenzia === 'Diretta' && numeroPrenotazione !== numeroAssegnato) {
+      setNumeroPrenotazione(numeroAssegnato)
     }
-  }, [agenzia, numeroPrenotazione])
+  }, [agenzia, numeroPrenotazione, numeroAssegnato])
 
   const inCorso = crea.isPending || aggiorna.isPending || annulla.isPending || checkInMutation.isPending || checkOutMutation.isPending
   // Un soggiorno Completato è chiuso: resta modificabile solo il saldo (Importo totale/Importo
@@ -486,12 +489,14 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           />
         </Box>
 
-        {agenzia !== 'Diretta' && (
+        {(agenzia !== 'Diretta' || numeroAssegnato !== '') && (
           <TextField
             label="Numero prenotazione"
             value={numeroPrenotazione}
             onChange={(e) => setNumeroPrenotazione(e.target.value)}
             disabled={inCorso || soloImporti}
+            slotProps={{ input: { readOnly: agenzia === 'Diretta' } }}
+            helperText={agenzia === 'Diretta' ? 'Assegnato automaticamente dal sistema' : undefined}
           />
         )}
 

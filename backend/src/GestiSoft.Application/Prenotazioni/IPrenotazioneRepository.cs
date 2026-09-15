@@ -30,8 +30,13 @@ public interface IPrenotazioneRepository
         Guid? escludiPrenotazioneId,
         CancellationToken cancellationToken);
 
-    /// <summary>Conteggio prenotazioni dirette (Agenzia == "Diretta") dell'anno, per il numero prenotazione suggerito.</summary>
-    Task<int> ContaDireteAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
+    /// <summary>
+    /// Numeri prenotazione già assegnati alle dirette (Agenzia == "Diretta") dell'anno: il prossimo
+    /// progressivo si ricava dal massimo di questi, non dal loro conteggio — contare dava lo stesso
+    /// numero a due prenotazioni diverse ogni volta che il totale non coincideva con l'ultimo
+    /// progressivo assegnato (bug reale, vedi NumeroPrenotazioneOAutoIncrementoAsync).
+    /// </summary>
+    Task<IReadOnlyList<string?>> ListaNumeriDiretteAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
 
     /// <summary>Somma ImportoPagato delle prenotazioni non annullate dell'anno — usata dal riepilogo cassa di Fase 4.</summary>
     Task<decimal> SommaImportoPagatoAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
