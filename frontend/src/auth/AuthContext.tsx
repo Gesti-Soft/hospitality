@@ -10,6 +10,7 @@ import {
   salvaTokenDispositivo,
   type Sessione,
 } from './tokenStorage'
+import { dimenticaSelezioneSuperAdmin } from '../struttura/selezioneSalvata'
 
 /**
  * Il campo "assistenza" delle ProblemDetails restituite da /auth: a chi rivolgersi per rientrare,
@@ -76,6 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isClienteAccount: risposta.isClienteAccount,
     }
     salvaSessione(nuovaSessione)
+    // Un accesso è sempre un punto di partenza pulito: la selezione ricordata serve a superare un
+    // ricaricamento, non a riportare dentro il contesto di una sessione finita (o scaduta, con il
+    // rilogin che segue).
+    dimenticaSelezioneSuperAdmin()
     setSessione(nuovaSessione)
   }
 
@@ -139,6 +144,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Il token del dispositivo NON si cancella: è il browser a essere già stato verificato, e
     // cancellarlo obbligherebbe a rifare il codice a ogni uscita, svuotando di senso i 7 giorni.
     cancellaSessione()
+    // Cliente e Struttura su cui stava lavorando il Super Admin sopravvivono al ricaricamento della
+    // pagina, ma non all'uscita: chi entra dopo sullo stesso browser non deve ereditare il contesto
+    // di lavoro di qualcun altro.
+    dimenticaSelezioneSuperAdmin()
     setTokenVerifica2Fa(null)
     setSessione(null)
   }
