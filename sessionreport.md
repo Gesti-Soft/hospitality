@@ -2,6 +2,38 @@
 
 Ultimo aggiornamento: 2026-09-15 (sessione successiva — bug segnalati dall'utente: numero prenotazione rigenerato a ogni salvataggio, percentuale/euro invertiti nei piani prezzo OTA, la scelta di Struttura del Super Admin persa a ogni ricaricamento, centinaia di log identici a sera dal job Osservatorio; da quest'ultimo, una politica di tentativi condivisa dai tre invii alle PA.)
 
+## Fatto — il nome del fornitore OTA sparisce da tutto ciò che si legge a schermo
+
+Segnalazione dell'utente da un dettaglio evento nella pagina Log: «Servizio Wubook attivato per
+questa struttura». Regola già stabilita — a schermo si legge sempre "OTA" — qui applicata ovunque
+fosse rimasta indietro.
+
+556. **Messaggi di log e di errore del backend**: il messaggio dello screenshot nasceva dall'elenco
+     dei servizi in `SuperAdminService` ("Wubook" come nome del servizio), che finisce in un log
+     **visibile al Cliente**. Corretti anche gli errori che arrivano in interfaccia: credenziali e
+     integrazione non configurate, licenza, "nessuna tipologia sincronizzata", import prenotazioni,
+     cancellazioni segnalate dal canale, e tutte le risposte rifiutate dal client XML-RPC
+     ("L'OTA ha rifiutato …" al posto di "Wubook ha rifiutato …").
+
+557. **La categoria del Log tradotta invece che rinominata.** La colonna Categoria mostra il valore
+     con cui la riga è salvata: cambiarlo a database avrebbe spezzato in due lo storico — le righe
+     vecchie "Wubook" e le nuove "OTA" nello stesso elenco, con due voci diverse nel filtro. Nuova
+     `etichettaCategoria` lato frontend: l'identificatore resta, a schermo si legge "OTA", e anche
+     le righe già scritte risultano corrette. Applicata sia all'elenco che al menu del filtro.
+
+558. **Interfaccia Super Admin**: etichetta e stato del servizio nell'elenco Strutture, KPI "Errori
+     OTA", box credenziali ("OTA", "Salva OTA", "Configurazione OTA salvata"), dialog delle
+     prenotazioni ricevute, campo "Token OTA" e relativi testi di aiuto in Impostazioni globali.
+
+559. **Lasciati invariati, di proposito**: nomi di classi, file, proprietà, colonne e rotte API
+     (identificatori interni, come da regola) e i quattro `logger.Log*` dei Worker — finiscono nel
+     log del container, che non è una schermata dell'applicazione e dove il nome reale del
+     fornitore è proprio l'informazione utile per fare diagnosi.
+
+560. **Verifiche**: `dotnet build` e `npm run build` puliti, 95 test invariati. Ricerca finale su
+     tutto il codice delle stringhe di testo naturale contenenti il nome: restano solo i quattro log
+     del Worker di cui sopra.
+
 ## Fatto — schedine controllate prima di spedirle, non dopo il rifiuto
 
 Domanda dell'utente: conviene controllare le schedine prima dell'invio? Esempio suo, uno spazio in
