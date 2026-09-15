@@ -1,4 +1,4 @@
-using GestiSoft.Domain.Common;
+﻿using GestiSoft.Domain.Common;
 
 namespace GestiSoft.Domain.Entities;
 
@@ -9,7 +9,7 @@ namespace GestiSoft.Domain.Entities;
 /// su istruzione esplicita dell'utente, l'Id Software PayTourist (<c>software_id</c> nelle chiamate
 /// API) non va mai configurato manualmente — viene sempre letto al volo da gestisoft.it tramite la
 /// stessa chiamata di rinnovo licenza già usata per Wubook (vedi
-/// <see cref="WubookIntegrazione.IdPaytouristCache"/>/WubookLicenzaService.GetIdPaytouristAsync).
+/// <c>WubookLicenzaService.GetIdPaytouristAsync</c>).
 /// Anche il campo <c>Utente</c> del legacy (<c>PayTouristUser.Utente</c>) non è portato: letto nel
 /// codice legacy, risulta dichiarato ma mai inviato in nessuna chiamata verso l'API PayTourist —
 /// campo morto, non riportato qui.

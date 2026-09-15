@@ -6,4 +6,25 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- Pacchetto condiviso col gestionale desktop (GestiSoftGestionaleLocale): le entita' di
+       dominio devono avere la stessa forma sui due lati, altrimenti la sincronizzazione scambia
+       dati che l'altro non sa leggere. Vedi docs/architettura.md §1 del repo desktop.
+       Finche' la CI non pubblica su GitHub Packages, si pubblica con `dotnet pack` su un feed a
+       cartella locale; la meccanica e' identica, cambia solo dove stanno i file.
+       PackageVersion va alzata a ogni cambiamento di forma delle entita': e' il numero su cui
+       l'handshake di sincronizzazione rifiutera' un desktop troppo vecchio. -->
+  <PropertyGroup>
+    <PackageId>GestiSoft.Domain</PackageId>
+    <PackageVersion>1.0.0</PackageVersion>
+    <Authors>GestiSoft</Authors>
+    <Company>GestiSoft</Company>
+    <Description>Entita' di dominio GestiSoft condivise tra il gestionale web e il gestionale desktop locale.</Description>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- I commenti XML delle entita' spiegano la provenienza legacy di ogni campo: senza questo
+         warning spento, GenerateDocumentationFile ne chiederebbe uno su ogni membro pubblico. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
 </Project>
