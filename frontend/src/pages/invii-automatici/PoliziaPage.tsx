@@ -35,17 +35,23 @@ const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', mont
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 /**
- * Tre stati, non due: una schedina non ancora inviata può essere ancora trasmissibile oppure aver
- * superato il termine di legge (24 ore dall'arrivo, 6 per i soggiorni sotto le 24 ore). Nel secondo
- * caso il portale della Polizia la rifiuterebbe, quindi l'invio non va nemmeno offerto — va
- * registrata a mano sul portale, e l'etichetta deve dirlo invece di lasciarla indistinguibile dalle
- * altre in attesa.
+ * Quattro stati, non due. Una schedina non ancora inviata può aver superato il termine di legge
+ * (24 ore dall'arrivo, 6 per i soggiorni sotto le 24 ore), e allora il portale la rifiuterebbe: va
+ * registrata a mano, e l'etichetta deve dirlo invece di lasciarla indistinguibile dalle altre in
+ * attesa. Oppure può avere dati incompleti o non riconosciuti dall'anagrafica della PA: anche
+ * quella verrebbe rifiutata, ma qui c'è ancora tempo per correggerla — ed è il motivo per cui si
+ * mostra adesso, con l'elenco di cosa manca, invece di lasciarla scoprire dal rifiuto del portale
+ * quando il termine è ormai passato.
  */
 function statoSchedina(s: SchedinaAlloggiatiWebDto) {
   if (s.inviata) return { etichetta: 'Inviata', colore: tokens.ok600 }
   if (!s.inTermine) return { etichetta: 'Fuori termine', colore: tokens.error600 }
+  if (s.motiviNonInviabile.length > 0) return { etichetta: 'Da correggere', colore: tokens.orange700 }
   return { etichetta: 'Da inviare', colore: tokens.wait600 }
 }
+
+/// Inviabile davvero: in termine e senza dati da correggere.
+const inviabile = (s: SchedinaAlloggiatiWebDto) => s.inTermine && s.motiviNonInviabile.length === 0
 
 function terminePerSchedina(s: SchedinaAlloggiatiWebDto) {
   if (s.inviata || !s.scadenzaInvioUtc) return '—'
@@ -183,9 +189,12 @@ export function PoliziaPage() {
                     { etichetta: s.soggiornoBreve ? 'Termine (6 ore)' : 'Termine', valore: terminePerSchedina(s) },
                   ]}
                 />
+                {!s.inviata && s.motiviNonInviabile.length > 0 && (
+                  <Box sx={{ fontSize: 12, color: tokens.orange700, mt: 0.5 }}>{s.motiviNonInviabile.join('; ')}</Box>
+                )}
                 {!s.inviata && (
                   <AzioniCardElenco>
-                    {s.inTermine && puoInviare && (
+                    {inviabile(s) && puoInviare && (
                       <Button
                         size="small"
                         variant="contained"
@@ -241,11 +250,18 @@ export function PoliziaPage() {
                     </TableCell>
                     <TableCell>
                       <Chip size="small" label={statoSchedina(s).etichetta} sx={{ bgcolor: statoSchedina(s).colore, color: '#fff', fontWeight: 700 }} />
+                      {!s.inviata && s.motiviNonInviabile.length > 0 && (
+                        // Per esteso, non in un tooltip: è la lista di cosa andare a correggere, e
+                        // un'informazione che si deve poter leggere senza cercarla.
+                        <Box sx={{ mt: 0.75, fontSize: 12, color: tokens.orange700, maxWidth: 360 }}>
+                          {s.motiviNonInviabile.join('; ')}
+                        </Box>
+                      )}
                     </TableCell>
                     <TableCell align="right">
                       {!s.inviata && (
                         <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                          {s.inTermine && puoInviare && (
+                          {inviabile(s) && puoInviare && (
                             <Button
                               size="small"
                               variant="contained"

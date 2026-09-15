@@ -24,7 +24,9 @@ public record SchedinaAlloggiatiWeb(
     bool Inviata,
     DateTime? ScadenzaInvioUtc,
     bool SoggiornoBreve,
-    bool InTermine);
+    bool InTermine,
+    /// <summary>Cosa impedisce di trasmettere questa schedina, vuoto se è a posto: si mostra in elenco per farla correggere prima che scada il termine, invece di scoprirlo dal rifiuto del portale.</summary>
+    IReadOnlyList<string> MotiviNonInviabile);
 
 /// <summary>
 /// Invio giornaliero delle schedine Alloggiati Web — porta il ramo remoto di
@@ -82,23 +84,50 @@ public class AlloggiatiWebInvioService(
             await SegnalaFuoriTermineAsync(strutturaId, scaduta, cancellationToken);
         }
 
-        if (daInviare.Count == 0)
+        // Schedine con dati incompleti o non riconosciuti dall'anagrafica: il portale le
+        // rifiuterebbe, e il rifiuto arriverebbe senza dire quale campo fosse il problema. Si
+        // tengono fuori dall'invio e si segnalano una volta sola per prenotazione, con l'elenco di
+        // cosa correggere — c'è il termine di legge che corre, e la correzione la può fare solo
+        // una persona.
+        var builder = await CreaBuilderAsync(cancellationToken);
+        var valide = new List<Ospite>();
+        var scartate = 0;
+
+        foreach (var candidata in daInviare)
         {
-            return await SalvaEsitoAsync(integrazione, 0, 0, null, esitoTentativo: EsitoTentativo.Riuscito, cancellationToken);
+            var motivi = builder.Valida(candidata);
+            if (motivi.Count == 0)
+            {
+                valide.Add(candidata);
+                continue;
+            }
+
+            scartate++;
+            await SegnalaDatiIncompletiAsync(strutturaId, candidata, motivi, cancellationToken);
+        }
+
+        var nota = scartate == 0
+            ? null
+            : $"{scartate} schedina/e non inviata/e: dati da correggere (vedi notifiche).";
+
+        if (valide.Count == 0)
+        {
+            // Niente da trasmettere non è un fallimento del job: le schedine scartate hanno già la
+            // loro segnalazione, e ritentare l'invio stasera non cambierebbe i dati sbagliati.
+            return await SalvaEsitoAsync(integrazione, 0, 0, nota, esitoTentativo: EsitoTentativo.Riuscito, cancellationToken);
         }
 
         var tokenRisultato = await client.GenerateTokenAsync(integrazione.Utente, integrazione.Password, integrazione.WsKey, cancellationToken);
         if (!tokenRisultato.Ok || tokenRisultato.Token is null)
         {
-            return await SalvaEsitoAsync(integrazione, 0, daInviare.Count, tokenRisultato.Errore ?? "Token non ottenuto.", esitoTentativo: EsitoTentativo.ErroreRitentabile, cancellationToken);
+            return await SalvaEsitoAsync(integrazione, 0, valide.Count, tokenRisultato.Errore ?? "Token non ottenuto.", esitoTentativo: EsitoTentativo.ErroreRitentabile, cancellationToken);
         }
 
-        var builder = await CreaBuilderAsync(cancellationToken);
 
         int inviate = 0, errori = 0;
         string? ultimoErrore = null;
 
-        foreach (var ospite in daInviare)
+        foreach (var ospite in valide)
         {
             try
             {
@@ -122,14 +151,20 @@ public class AlloggiatiWebInvioService(
             }
         }
 
-        var messaggio = errori == 0 ? null : $"{errori} schedina/e non inviata/e: {ultimoErrore}";
+        var messaggio = (errori, nota) switch
+        {
+            (0, null) => null,
+            (0, _) => nota,
+            (_, null) => $"{errori} schedina/e non inviata/e: {ultimoErrore}",
+            _ => $"{errori} schedina/e non inviata/e: {ultimoErrore} {nota}",
+        };
         // Un rifiuto per singola schedina (dato non valido, doppione) non si risolve ritentando
         // l'intero batch, ma se almeno una è passata il portale risponde: si riprova solo quando
         // non ne è passata nessuna, il caso che somiglia a un problema del servizio.
         var esitoBatch = errori == 0
             ? EsitoTentativo.Riuscito
             : inviate > 0 ? EsitoTentativo.ErroreDefinitivo : EsitoTentativo.ErroreRitentabile;
-        return await SalvaEsitoAsync(integrazione, inviate, daInviare.Count, messaggio, esitoBatch, cancellationToken);
+        return await SalvaEsitoAsync(integrazione, inviate, valide.Count, messaggio, esitoBatch, cancellationToken);
     }
 
     /// <summary>
@@ -172,13 +207,21 @@ public class AlloggiatiWebInvioService(
             throw new ConflictException("Credenziali Alloggiati Web non configurate.");
         }
 
+        // Stesso controllo dell'invio automatico, prima di chiamare il portale: un rifiuto dice
+        // solo che la riga non va bene, mentre qui si può dire esattamente quale campo correggere.
+        var builder = await CreaBuilderAsync(cancellationToken);
+        var motivi = builder.Valida(ospite);
+        if (motivi.Count > 0)
+        {
+            throw new ConflictException($"Questa schedina non può essere trasmessa: {string.Join("; ", motivi)}.");
+        }
+
         var tokenRisultato = await client.GenerateTokenAsync(integrazione.Utente, integrazione.Password, integrazione.WsKey, cancellationToken);
         if (!tokenRisultato.Ok || tokenRisultato.Token is null)
         {
             return await SalvaEsitoAsync(integrazione, 0, 1, tokenRisultato.Errore ?? "Token non ottenuto.", esitoTentativo: null, cancellationToken);
         }
 
-        var builder = await CreaBuilderAsync(cancellationToken);
         var esito = await client.SendAsync(integrazione.Utente, tokenRisultato.Token, builder.Costruisci(ospite), cancellationToken);
 
         if (!esito.Ok)
@@ -188,6 +231,48 @@ public class AlloggiatiWebInvioService(
 
         await MarcaInviataAsync(prenotazione.Id, cancellationToken);
         return await SalvaEsitoAsync(integrazione, 1, 1, null, esitoTentativo: null, cancellationToken);
+    }
+
+    /// <summary>Vale la pena dire cosa manca solo su una schedina che si può ancora trasmettere: non inviata e non scaduta.</summary>
+    private static bool SchedinaDaCorreggere(Ospite ospite, DateTime adessoUtc) =>
+        ospite.Prenotazione is { } prenotazione
+        && !prenotazione.StatePolice
+        && TerminiSchedina.IsInTermine(prenotazione, adessoUtc);
+
+    /// <summary>
+    /// Notifica e log, una volta sola per prenotazione, di una schedina che il portale
+    /// rifiuterebbe: manca un dato obbligatorio, oppure un comune/documento non corrisponde a
+    /// nessuna voce dell'anagrafica ufficiale. Il messaggio elenca cosa correggere, perché il
+    /// rifiuto del portale non lo direbbe — e va corretto entro il termine di legge.
+    /// </summary>
+    private async Task SegnalaDatiIncompletiAsync(Guid strutturaId, Ospite ospite, IReadOnlyList<string> motivi, CancellationToken cancellationToken)
+    {
+        if (ospite.Prenotazione is not { } prenotazione)
+        {
+            return;
+        }
+
+        var nome = $"{ospite.Cognome} {ospite.Nome}".Trim();
+        var elenco = string.Join("; ", motivi);
+        var creata = await notificaService.CreaPerPrenotazioneSeNonEsisteAsync(
+            strutturaId, TipoNotifica.SchedinaDatiIncompleti, prenotazione.Id,
+            "Schedina da correggere",
+            $"La schedina di {nome} non può essere trasmessa: {elenco}.",
+            cancellationToken);
+
+        if (!creata)
+        {
+            return;
+        }
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Warning,
+            $"Schedina di {nome} esclusa dall'invio automatico: {elenco}.",
+            origine: "AlloggiatiWeb",
+            clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+            strutturaId: strutturaId,
+            categoria: "AlloggiatiWeb",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -232,6 +317,10 @@ public class AlloggiatiWebInvioService(
         var recenti = await ospiti.ListRecentiAlloggiatiWebAsync(strutturaId, anno, cancellationToken);
 
         var adesso = DateTime.UtcNow;
+        // Stesso controllo che fa l'invio automatico, sulle stesse anagrafiche: la pagina deve
+        // mostrare esattamente le schedine che partiranno, altrimenti l'operatore vede "da inviare"
+        // qualcosa che il job scarterà in silenzio.
+        var builder = await CreaBuilderAsync(cancellationToken);
 
         return recenti.Select(o => new SchedinaAlloggiatiWeb(
             o.Id,
@@ -243,7 +332,11 @@ public class AlloggiatiWebInvioService(
             o.Prenotazione?.StatePolice ?? false,
             o.Prenotazione is null ? null : TerminiSchedina.ScadenzaUtc(o.Prenotazione),
             o.Prenotazione is not null && TerminiSchedina.IsSoggiornoBreve(o.Prenotazione),
-            o.Prenotazione is not null && TerminiSchedina.IsInTermine(o.Prenotazione, adesso))).ToList();
+            o.Prenotazione is not null && TerminiSchedina.IsInTermine(o.Prenotazione, adesso),
+            // Solo dove serve ancora a qualcosa: su una schedina già partita il dato è trasmesso, e
+            // su una fuori termine non si interviene più comunque — va registrata a mano sul
+            // portale, e sapere quale campo mancava sarebbe solo rumore sopra l'unica cosa da fare.
+            SchedinaDaCorreggere(o, adesso) ? builder.Valida(o) : [])).ToList();
     }
 
     /// <summary>Anni con almeno una prenotazione per il selettore Anno della schermata operativa — su richiesta esplicita, non deve proporre anni sicuramente vuoti.</summary>

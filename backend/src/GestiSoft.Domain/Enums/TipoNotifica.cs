@@ -19,4 +19,11 @@ public enum TipoNotifica
     /// nessuno se ne accorgerebbe — il Log lo direbbe, il campanello lo mette davanti agli occhi.
     /// </summary>
     InvioSchedineNonRiuscito = 9,
+
+    /// <summary>
+    /// Schedina con dati incompleti o non riconosciuti dall'anagrafica della PA: verrebbe rifiutata,
+    /// quindi l'invio automatico non la prende. Va corretta, e il tempo per farlo è quello del
+    /// termine di legge (vedi TerminiSchedina) — per questo si segnala subito, non a scadenza.
+    /// </summary>
+    SchedinaDatiIncompleti = 10,
 }

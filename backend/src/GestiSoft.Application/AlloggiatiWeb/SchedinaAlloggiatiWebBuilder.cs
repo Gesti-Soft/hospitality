@@ -29,6 +29,143 @@ public class SchedinaAlloggiatiWebBuilder
         _tipiAlloggiato = tipiAlloggiato.ToLookup(v => v.Descrizione, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>Larghezze delle colonne che contengono testo libero, per non scriverci dentro più di quanto ci stia.</summary>
+    public const int LarghezzaCognome = 50;
+    public const int LarghezzaNome = 30;
+    public const int LarghezzaNumeroDocumento = 20;
+
+    /// <summary>
+    /// Motivi per cui questa schedina non è spedibile, vuoto se è a posto. Controlla le stesse cose
+    /// che <see cref="Costruisci"/> andrebbe a scrivere, con gli stessi elenchi di anagrafica: un
+    /// campo obbligatorio che qui non si risolve finirebbe nel tracciato come una colonna di spazi,
+    /// e il portale rifiuterebbe la riga senza dire quale dato mancava.
+    ///
+    /// Si segnala solo ciò che è **certamente** sbagliato — dato assente, codice non trovato in
+    /// anagrafica, testo più lungo della colonna. Nel dubbio si lascia passare: bloccare una
+    /// schedina che il portale avrebbe accettato significa non assolvere un obbligo di legge, che è
+    /// peggio di un invio rifiutato.
+    /// </summary>
+    public IReadOnlyList<string> Valida(Ospite ospite)
+    {
+        var motivi = new List<string>();
+        var chi = NomeLeggibile(ospite.Cognome, ospite.Nome);
+
+        if (ospite.Prenotazione?.CheckIn is null)
+        {
+            motivi.Add("manca la data di arrivo sulla prenotazione");
+        }
+
+        if ((ospite.Permanenza ?? 0) < 1)
+        {
+            motivi.Add("giorni di permanenza non indicati");
+        }
+
+        var codiceTipoAlloggiato = CodiceTipoAlloggiato(ospite.TipoOspite).Trim();
+        if (codiceTipoAlloggiato.Length == 0)
+        {
+            motivi.Add($"{chi}: tipo alloggiato mancante o non riconosciuto{Valore(ospite.TipoOspite)}");
+        }
+
+        motivi.AddRange(ValidaPersona(chi, ospite.Cognome, ospite.Nome, ospite.Sesso, ospite.DataNascita, ospite.StatoNascita, ospite.LuogoNascita, ospite.Cittadinanza));
+
+        // I familiari e i membri di un gruppo non portano documento (tipi 19 e 20): per tutti gli
+        // altri è obbligatorio, ed è il blocco di campi che più spesso resta da compilare.
+        if (codiceTipoAlloggiato.Length > 0 && codiceTipoAlloggiato is not ("19" or "20"))
+        {
+            if (_documenti[ospite.Documento ?? string.Empty].FirstOrDefault() is null)
+            {
+                motivi.Add($"{chi}: tipo documento mancante o non riconosciuto{Valore(ospite.Documento)}");
+            }
+
+            if (string.IsNullOrWhiteSpace(ospite.NumeroDocumento))
+            {
+                motivi.Add($"{chi}: manca il numero del documento");
+            }
+            else if (TestoTracciato.EccedeLarghezza(ospite.NumeroDocumento, LarghezzaNumeroDocumento))
+            {
+                motivi.Add($"{chi}: numero documento oltre {LarghezzaNumeroDocumento} caratteri");
+            }
+
+            if (_luoghi[ExtractCity(ospite.RilascioDocumento) ?? string.Empty].FirstOrDefault() is null)
+            {
+                motivi.Add($"{chi}: luogo di rilascio del documento mancante o non riconosciuto{Valore(ospite.RilascioDocumento)}");
+            }
+        }
+
+        foreach (var membro in ospite.Membri)
+        {
+            motivi.AddRange(ValidaPersona(
+                NomeLeggibile(membro.Cognome, membro.Nome),
+                membro.Cognome, membro.Nome, membro.Sesso, membro.DataNascita, membro.StatoNascita, membro.LuogoNascita, membro.Cittadinanza));
+        }
+
+        return motivi;
+    }
+
+    /// <summary>Campi richiesti a chiunque compaia nella schedina, capofamiglia o membro che sia.</summary>
+    private List<string> ValidaPersona(
+        string chi, string? cognome, string? nome, Sesso? sesso, DateTime? dataNascita,
+        string? statoNascita, string? luogoNascita, string? cittadinanza)
+    {
+        var motivi = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(cognome))
+        {
+            motivi.Add($"{chi}: manca il cognome");
+        }
+        else if (TestoTracciato.EccedeLarghezza(cognome, LarghezzaCognome))
+        {
+            motivi.Add($"{chi}: cognome oltre {LarghezzaCognome} caratteri");
+        }
+
+        if (string.IsNullOrWhiteSpace(nome))
+        {
+            motivi.Add($"{chi}: manca il nome");
+        }
+        else if (TestoTracciato.EccedeLarghezza(nome, LarghezzaNome))
+        {
+            motivi.Add($"{chi}: nome oltre {LarghezzaNome} caratteri");
+        }
+
+        if (sesso is null)
+        {
+            motivi.Add($"{chi}: manca il sesso");
+        }
+
+        if (dataNascita is null)
+        {
+            motivi.Add($"{chi}: manca la data di nascita");
+        }
+
+        if (_luoghi[statoNascita ?? string.Empty].FirstOrDefault() is null)
+        {
+            motivi.Add($"{chi}: stato di nascita mancante o non riconosciuto{Valore(statoNascita)}");
+        }
+        else if (string.Equals(statoNascita, "ITALIA", StringComparison.OrdinalIgnoreCase)
+                 && _luoghi[ExtractCity(luogoNascita) ?? string.Empty].FirstOrDefault() is null)
+        {
+            // Solo per chi è nato in Italia: per gli altri il comune non si trasmette affatto.
+            motivi.Add($"{chi}: comune di nascita mancante o non riconosciuto{Valore(luogoNascita)}");
+        }
+
+        if (_luoghi[cittadinanza ?? string.Empty].FirstOrDefault() is null)
+        {
+            motivi.Add($"{chi}: cittadinanza mancante o non riconosciuta{Valore(cittadinanza)}");
+        }
+
+        return motivi;
+    }
+
+    private static string NomeLeggibile(string? cognome, string? nome)
+    {
+        var completo = $"{cognome} {nome}".Trim();
+        return completo.Length == 0 ? "Ospite senza nome" : completo;
+    }
+
+    /// <summary>Il valore rifiutato, tra virgolette, per far capire subito cosa correggere — niente se il campo è proprio vuoto.</summary>
+    private static string Valore(string? valore) =>
+        string.IsNullOrWhiteSpace(valore) ? string.Empty : $" (\"{valore.Trim()}\")";
+
     /// <summary>Una riga per il capofamiglia/ospite singolo, una per ciascun Membro.</summary>
     public IReadOnlyList<string> Costruisci(Ospite ospite)
     {
@@ -137,9 +274,20 @@ public class SchedinaAlloggiatiWebBuilder
 
     private static string CodiceSesso(Sesso? sesso) => sesso.HasValue ? ((int)sesso.Value).ToString() : "0";
 
-    private static string Pad(string? value, int width) => (value ?? string.Empty).PadRight(width);
+    /// <summary>
+    /// Scrive un testo libero nella sua colonna, ripulito (vedi <see cref="TestoTracciato"/>) e
+    /// tagliato se eccede. Il taglio è l'ultima rete di sicurezza, non il comportamento previsto:
+    /// <see cref="Valida"/> intercetta prima le schedine troppo lunghe e le tiene fuori dall'invio,
+    /// perché un cognome mozzato è comunque un dato sbagliato trasmesso a una PA. Ma se qualcosa
+    /// sfugge, meglio un campo tagliato che una riga disallineata: nel tracciato a posizioni fisse
+    /// un carattere di troppo sposta tutti i campi successivi e fa rifiutare l'intero record.
+    /// </summary>
+    private static string Pad(string? value, int width) => Tronca(TestoTracciato.Normalizza(value), width).PadRight(width);
 
-    private static string PadCode(string? code, int width) => (code ?? string.Empty).PadRight(width);
+    /// <summary>Come sopra per i codici presi dall'anagrafica, che non vanno ripuliti: sono già codici.</summary>
+    private static string PadCode(string? code, int width) => Tronca(code ?? string.Empty, width).PadRight(width);
+
+    private static string Tronca(string valore, int width) => valore.Length > width ? valore[..width] : valore;
 
     /// <summary>
     /// Porta ExtractCity del legacy: i campi luogo sono salvati come "COMUNE (PROVINCIA)", qui si

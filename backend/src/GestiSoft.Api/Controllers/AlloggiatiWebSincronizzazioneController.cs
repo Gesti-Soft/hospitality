@@ -20,7 +20,7 @@ public class AlloggiatiWebSincronizzazioneController(AlloggiatiWebInvioService i
         var schedine = await invioService.ListSchedineAsync(currentUser, strutturaId, anno ?? DateTime.UtcNow.Year, cancellationToken);
         return Ok(schedine.Select(s => new SchedinaAlloggiatiWebDto(
             s.OspiteId, s.PrenotazioneId, s.NomeOspite, s.Camera, s.CheckIn, s.CheckOut, s.Inviata,
-            s.ScadenzaInvioUtc, s.SoggiornoBreve, s.InTermine)));
+            s.ScadenzaInvioUtc, s.SoggiornoBreve, s.InTermine, s.MotiviNonInviabile)));
     }
 
     /// <summary>Anni con almeno una prenotazione — per non proporre nel selettore Anno anni sicuramente vuoti.</summary>

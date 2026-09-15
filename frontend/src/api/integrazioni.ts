@@ -33,6 +33,8 @@ export interface SchedinaAlloggiatiWebDto {
   soggiornoBreve: boolean
   /** Ancora trasmissibile: a false l'invio non va offerto, il portale lo rifiuterebbe. */
   inTermine: boolean
+  /** Dati mancanti o non riconosciuti dall'anagrafica della PA: se non è vuoto la schedina verrebbe rifiutata, quindi l'invio automatico la salta. */
+  motiviNonInviabile: string[]
 }
 
 export interface SchedinaOsservatorioDto {
