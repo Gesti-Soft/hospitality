@@ -107,7 +107,8 @@ public class SuperAdminService(
         // perché un'integrazione smette/inizia a funzionare per la sua struttura.
         var cambi = new (string Nome, bool Prima, bool Dopo)[]
         {
-            ("Wubook", struttura.WubookAbilitato, request.WubookAbilitato),
+            // "OTA" e non il nome del fornitore: è testo che legge il Cliente nella pagina Log.
+            ("OTA", struttura.WubookAbilitato, request.WubookAbilitato),
             ("Alloggiati Web", struttura.AlloggiatiWebAbilitato, request.AlloggiatiWebAbilitato),
             ("Osservatorio Turistico", struttura.OsservatorioAbilitato, request.OsservatorioAbilitato),
             ("PayTourist", struttura.PayTouristAbilitato, request.PayTouristAbilitato),

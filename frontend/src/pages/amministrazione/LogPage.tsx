@@ -20,7 +20,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { useAuth } from '../../auth/AuthContext'
 import { ApiError } from '../../api/client'
-import { CATEGORIE_LOG, CATEGORIE_LOG_CLIENTE, LivelloLog, useLogs, type LogEventoDto } from '../../api/log'
+import { CATEGORIE_LOG, CATEGORIE_LOG_CLIENTE, etichettaCategoria, LivelloLog, useLogs, type LogEventoDto } from '../../api/log'
 import { fontMono, tokens } from '../../theme'
 import { useMobile } from '../../lib/useMobile'
 import { CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../../components/CardElenco'
@@ -172,7 +172,7 @@ export function LogPage({ strutturaId: strutturaIdProp, categorie, categoriaIniz
             <MenuItem value="">Tutte</MenuItem>
             {categorieDisponibili.map((c) => (
               <MenuItem key={c} value={c}>
-                {c}
+                {etichettaCategoria(c)}
               </MenuItem>
             ))}
           </TextField>
@@ -199,7 +199,7 @@ export function LogPage({ strutturaId: strutturaIdProp, categorie, categoriaIniz
           {eventi.map((l) => (
             <CardElenco key={l.id} onClick={l.dettaglio ? () => setDettaglio(l) : undefined}>
               <TestataCardElenco
-                titolo={l.categoria ?? l.origine}
+                titolo={etichettaCategoria(l.categoria) || l.origine}
                 sottotitolo={formattatoreDataOra.format(new Date(l.createdAtUtc))}
                 azioneDestra={<Chip size="small" label={ETICHETTA_LIVELLO[l.livello]} sx={{ bgcolor: COLORE_LIVELLO[l.livello], color: '#fff', fontWeight: 700 }} />}
               />
@@ -245,7 +245,7 @@ export function LogPage({ strutturaId: strutturaIdProp, categorie, categoriaIniz
                   <TableCell>
                     <Chip size="small" label={ETICHETTA_LIVELLO[l.livello]} sx={{ bgcolor: COLORE_LIVELLO[l.livello], color: '#fff', fontWeight: 700 }} />
                   </TableCell>
-                  <TableCell sx={{ fontSize: 12.5 }}>{l.categoria ?? l.origine}</TableCell>
+                  <TableCell sx={{ fontSize: 12.5 }}>{etichettaCategoria(l.categoria) || l.origine}</TableCell>
                   {nomeCliente && <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>{nomeCliente(l.clienteId)}</TableCell>}
                   <TableCell sx={{ fontSize: 12.5, color: tokens.textSecondary }}>{l.operatore ?? '—'}</TableCell>
                   <TableCell sx={{ fontSize: 12.5 }}>{l.messaggio}</TableCell>

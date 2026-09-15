@@ -38,7 +38,7 @@ public class WubookPrezziService(
 
         if (tipologieSincronizzate.Count == 0)
         {
-            throw new ConflictException("Nessuna tipologia sincronizzata con Wubook: sincronizza prima le camere.");
+            throw new ConflictException("Nessuna tipologia sincronizzata con l'OTA: sincronizza prima le camere.");
         }
 
         var giorni = (dataFine.Date - dataInizio.Date).Days + 1;

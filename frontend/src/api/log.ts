@@ -37,6 +37,17 @@ export const CATEGORIE_LOG = ['Prenotazione', 'Utente', 'Servizi', 'Wubook', 'Al
  */
 export const CATEGORIE_LOG_CLIENTE = ['Prenotazione', 'Utente', 'Servizi', 'AlloggiatiWeb', 'Osservatorio', 'PayTourist'] as const
 
+/**
+ * Come mostrare una categoria all'utente. La categoria è l'identificatore con cui la riga è salvata
+ * — quello non si tocca, altrimenti le righe già scritte non sarebbero più filtrabili insieme alle
+ * nuove — ma il nome del fornitore del channel manager non deve comparire a schermo: si legge
+ * "OTA". Tradurre qui invece di rinominare a database sistema anche tutto lo storico.
+ */
+const ETICHETTE_CATEGORIA: Record<string, string> = { Wubook: 'OTA' }
+
+export const etichettaCategoria = (categoria: string | null | undefined): string =>
+  categoria == null ? '' : (ETICHETTE_CATEGORIA[categoria] ?? categoria)
+
 // Scroll infinito (stesso principio di Ospiti/Arrivi-InCorso-Storico, ma qui la paginazione è
 // server-side, non un semplice slice client-side di dati già tutti caricati): parte da 25 righe,
 // ne carica altre 25 via fetchNextPage quando la sentinella in fondo alla tabella entra in vista.

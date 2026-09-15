@@ -86,11 +86,11 @@ public class WubookLicenzaService(
         await concessioneGuard.EnsureWubookAsync(strutturaId, cancellationToken);
 
         var integrazione = await repository.GetByStrutturaIdAsync(strutturaId, cancellationToken)
-            ?? throw new ConflictException("Integrazione Wubook non configurata per questa struttura.");
+            ?? throw new ConflictException("Integrazione OTA non configurata per questa struttura.");
 
         if (!integrazione.Attivo)
         {
-            throw new ConflictException("Integrazione Wubook non attiva per questa struttura.");
+            throw new ConflictException("Integrazione OTA non attiva per questa struttura.");
         }
 
         // La scadenza qui sotto è la licenza software GestiSoft della Struttura (non un problema di
@@ -108,7 +108,7 @@ public class WubookLicenzaService(
         var tokenWubook = await impostazioniGlobali.GetTokenWubookAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(tokenWubook) || string.IsNullOrWhiteSpace(integrazione.CodiceStruttura))
         {
-            var messaggio = "Credenziali Wubook non configurate per questa struttura. Contatta l'assistenza GestiSoft.";
+            var messaggio = "Credenziali OTA non configurate per questa struttura. Contatta l'assistenza GestiSoft.";
             await SegnalaErroreAsync(integrazione, messaggio, cancellationToken);
             throw new ConflictException(messaggio);
         }
@@ -187,7 +187,7 @@ public class WubookLicenzaService(
     {
         if (!currentUser.IsSuperAdmin)
         {
-            throw new ForbiddenException("Solo il Super Admin può gestire la licenza Wubook.");
+            throw new ForbiddenException("Solo il Super Admin può gestire la licenza OTA.");
         }
     }
 }

@@ -98,7 +98,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         var id = dati?.Element("int")?.Value ?? dati?.Descendants("int").FirstOrDefault()?.Value;
         if (!int.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var idCamera) || idCamera <= 0)
         {
-            throw new InvalidOperationException("Wubook non ha restituito un id camera valido.");
+            throw new InvalidOperationException("L'OTA non ha restituito un id camera valido.");
         }
 
         return idCamera;
@@ -279,7 +279,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         var (codice, dati, fault) = await InvocaAsync(
             "add_vplan", cancellationToken, token, LcodeInt(lcode), nome, parentId, tipoVariazione, (double)variazione);
         VerificaEsito(codice, fault, "la creazione del piano prezzo");
-        return PrimoIntero(dati) ?? throw new InvalidOperationException("Wubook non ha restituito un id piano prezzo valido.");
+        return PrimoIntero(dati) ?? throw new InvalidOperationException("L'OTA non ha restituito un id piano prezzo valido.");
     }
 
     public async Task ModVirtualPlanAsync(string token, string lcode, int pianoId, int tipoVariazione, decimal variazione, CancellationToken cancellationToken)
@@ -339,7 +339,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
     {
         var (codice, dati, fault) = await InvocaAsync("rplan_add_rplan", cancellationToken, token, LcodeInt(lcode), nome, 1);
         VerificaEsito(codice, fault, "la creazione del piano restrizione");
-        return PrimoIntero(dati) ?? throw new InvalidOperationException("Wubook non ha restituito un id piano restrizione valido.");
+        return PrimoIntero(dati) ?? throw new InvalidOperationException("L'OTA non ha restituito un id piano restrizione valido.");
     }
 
     public async Task RenameRestrictionPlanAsync(string token, string lcode, int pianoId, string nome, CancellationToken cancellationToken)
@@ -410,13 +410,13 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         {
             var faultStruct = fault.Descendants("struct").FirstOrDefault();
             var messaggio = faultStruct is null ? null : MembroStringa(faultStruct, "faultString");
-            return (-1, null, messaggio ?? "Errore Wubook sconosciuto");
+            return (-1, null, messaggio ?? "Errore OTA sconosciuto");
         }
 
         var valoriTopLevel = documento.Descendants("data").FirstOrDefault()?.Elements("value").ToList();
         if (valoriTopLevel is null || valoriTopLevel.Count == 0)
         {
-            return (-1, null, $"Risposta Wubook non valida per '{metodo}'.");
+            return (-1, null, $"Risposta OTA non valida per '{metodo}'.");
         }
 
         var codiceTesto = valoriTopLevel[0].Element("int")?.Value ?? valoriTopLevel[0].Element("i4")?.Value ?? valoriTopLevel[0].Value;
@@ -446,7 +446,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         {
             var faultStruct = fault.Descendants("struct").FirstOrDefault();
             var messaggio = faultStruct is null ? null : MembroStringa(faultStruct, "faultString");
-            throw new ConflictException($"Wubook ha rifiutato {operazione}: {messaggio ?? "errore sconosciuto"}.");
+            throw new ConflictException($"L'OTA ha rifiutato {operazione}: {messaggio ?? "errore sconosciuto"}.");
         }
 
         return documento.Descendants("param").FirstOrDefault()?.Element("value")?.Element("struct");
@@ -460,7 +460,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"Risposta Wubook non è XML valido per '{metodo}'.", ex);
+            throw new InvalidOperationException($"Risposta OTA non è XML valido per '{metodo}'.", ex);
         }
     }
 
@@ -468,7 +468,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
     {
         if (codice != 0)
         {
-            throw new ConflictException($"Wubook ha rifiutato {operazione} (codice {codice}): {fault ?? "nessun dettaglio"}.");
+            throw new ConflictException($"L'OTA ha rifiutato {operazione} (codice {codice}): {fault ?? "nessun dettaglio"}.");
         }
     }
 

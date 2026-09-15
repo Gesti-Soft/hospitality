@@ -71,7 +71,7 @@ public class WubookPrenotazioniService(
                 errori++;
                 await logEventi.RegistraAsync(
                     LivelloLog.Warning,
-                    $"Import prenotazione Wubook rcode={booking.RCode}: {ex.Message}",
+                    $"Import prenotazione OTA rcode={booking.RCode}: {ex.Message}",
                     origine: "Wubook",
                     clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                     strutturaId: strutturaId,
@@ -91,11 +91,11 @@ public class WubookPrenotazioniService(
     {
         if (!int.TryParse(booking.CameraIdWubookRaw, out var idCameraWubook))
         {
-            throw new InvalidOperationException($"Id camera Wubook non numerico: '{booking.CameraIdWubookRaw}'.");
+            throw new InvalidOperationException($"Id camera OTA non numerico: '{booking.CameraIdWubookRaw}'.");
         }
 
         var tipologia = await tipologie.GetByIdWubookAsync(strutturaId, idCameraWubook, cancellationToken)
-            ?? throw new InvalidOperationException($"Nessuna tipologia locale associata a IdCameraWubook={idCameraWubook}.");
+            ?? throw new InvalidOperationException($"Nessuna tipologia locale associata alla camera OTA {idCameraWubook}.");
 
         var esistente = await prenotazioni.GetByIdPrenotazioneWubookAsync(strutturaId, booking.RCode, cancellationToken);
 
@@ -116,7 +116,7 @@ public class WubookPrenotazioniService(
                 var numeroVisualizzatoInCorso = esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8];
                 await logEventi.RegistraAsync(
                     LivelloLog.Warning,
-                    $"Wubook segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso} (rcode={booking.RCode}), ma risulta già In corso (check-in effettuato): nessuna modifica automatica, verificare manualmente.",
+                    $"L'OTA segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso} (rcode={booking.RCode}), ma risulta già In corso (check-in effettuato): nessuna modifica automatica, verificare manualmente.",
                     origine: "Wubook",
                     clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                     strutturaId: strutturaId,
@@ -125,7 +125,7 @@ public class WubookPrenotazioniService(
                 await notificaService.CreaPerPrenotazioneSeNonEsisteAsync(
                     strutturaId, TipoNotifica.PrenotazioneAnnullata, esistente.Id,
                     "Cancellazione da verificare",
-                    $"Wubook segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso}, ma l'ospite ha già fatto check-in: verificare manualmente.",
+                    $"L'OTA segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso}, ma l'ospite ha già fatto check-in: verificare manualmente.",
                     cancellationToken);
                 return EsitoBooking.Ignorata;
             }
@@ -146,7 +146,7 @@ public class WubookPrenotazioniService(
 
             await logEventi.RegistraAsync(
                 LivelloLog.Info,
-                $"Prenotazione #{numeroVisualizzato} annullata da Wubook (rcode={booking.RCode}).",
+                $"Prenotazione #{numeroVisualizzato} annullata dall'OTA (rcode={booking.RCode}).",
                 origine: "Wubook",
                 clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                 strutturaId: strutturaId,
@@ -161,7 +161,7 @@ public class WubookPrenotazioniService(
             await notificaService.RegistraCancellazioneWubookAsync(
                 strutturaId, esistente.Id, canaleCancellata,
                 "Prenotazione cancellata",
-                $"Prenotazione #{numeroVisualizzato} ({canaleCancellata}) cancellata da Wubook.",
+                $"Prenotazione #{numeroVisualizzato} ({canaleCancellata}) cancellata dall'OTA.",
                 cancellationToken);
 
             return EsitoBooking.Annullata;
@@ -327,7 +327,7 @@ public class WubookPrenotazioniService(
                 var riepilogo = string.Join(", ", cambiamenti);
                 await logEventi.RegistraAsync(
                     LivelloLog.Info,
-                    $"Prenotazione #{entity.NumeroPrenotazione} da {nomeCanale} (rcode={booking.RCode}) modificata da Wubook: {riepilogo}.",
+                    $"Prenotazione #{entity.NumeroPrenotazione} da {nomeCanale} (rcode={booking.RCode}) modificata dall'OTA: {riepilogo}.",
                     origine: "Wubook",
                     clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                     strutturaId: strutturaId,

@@ -46,7 +46,7 @@ export function SuperAdminImpostazioniPage() {
       <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 720 }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Globali</Typography>
         <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-          Valori unici per tutta l'applicazione, non per Cliente/Struttura. Il Codice struttura Wubook e la scadenza della licenza restano
+          Valori unici per tutta l'applicazione, non per Cliente/Struttura. Il Codice struttura OTA e la scadenza della licenza restano
           per Struttura — si assegnano dalla Dashboard Super Admin, sul pulsante "Strutture" di ogni Cliente.
         </Typography>
 
@@ -54,12 +54,12 @@ export function SuperAdminImpostazioniPage() {
         {!impostazioni.isLoading && (
           <>
             <TextField
-              label="Token Wubook"
+              label="Token OTA"
               value={tokenWubook}
               onChange={(e) => setTokenWubook(e.target.value)}
               disabled={aggiorna.isPending}
               fullWidth
-              helperText="Uguale per tutte le Strutture — l'unico account partner Wubook di GestiSoft, non un dato per Struttura."
+              helperText="Uguale per tutte le Strutture — l'unico account partner OTA di GestiSoft, non un dato per Struttura."
             />
             <TextField
               label="Id Software PayTourist"

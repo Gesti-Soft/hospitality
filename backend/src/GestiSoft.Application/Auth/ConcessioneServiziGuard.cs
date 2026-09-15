@@ -17,7 +17,7 @@ namespace GestiSoft.Application.Auth;
 public class ConcessioneServiziGuard(IStrutturaRepository strutture)
 {
     public Task EnsureWubookAsync(Guid strutturaId, CancellationToken cancellationToken) =>
-        EnsureAsync(strutturaId, s => s.WubookAbilitato, "Wubook", cancellationToken);
+        EnsureAsync(strutturaId, s => s.WubookAbilitato, "OTA", cancellationToken);
 
     public Task EnsureAlloggiatiWebAsync(Guid strutturaId, CancellationToken cancellationToken) =>
         EnsureAsync(strutturaId, s => s.AlloggiatiWebAbilitato, "Alloggiati Web", cancellationToken);

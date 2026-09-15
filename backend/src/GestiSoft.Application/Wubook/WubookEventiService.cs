@@ -63,7 +63,7 @@ public class WubookEventiService(
             var booking = await wubookClient.FetchBookingAsync(token, lcode, rcode, cancellationToken);
             if (booking is null)
             {
-                await RegistraEventoAsync(strutturaId, lcode, rcode, riuscita: false, errore: "Impossibile recuperare la prenotazione da Wubook (fetch_booking).", cancellationToken);
+                await RegistraEventoAsync(strutturaId, lcode, rcode, riuscita: false, errore: "Impossibile recuperare la prenotazione dall'OTA (fetch_booking).", cancellationToken);
                 continue;
             }
 
@@ -110,7 +110,7 @@ public class WubookEventiService(
         {
             await logEventi.RegistraAsync(
                 LivelloLog.Warning,
-                $"Prenotazione Wubook rcode={rcode} ricevuta ma non importata: {errore}",
+                $"Prenotazione OTA rcode={rcode} ricevuta ma non importata: {errore}",
                 origine: "Wubook",
                 clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                 strutturaId: strutturaId,

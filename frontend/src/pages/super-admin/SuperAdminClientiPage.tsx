@@ -83,8 +83,8 @@ const SERVIZI: {
 }[] = [
   {
     chiave: 'wubookAbilitato',
-    etichetta: 'Wubook',
-    statoNome: 'Wubook',
+    etichetta: 'OTA',
+    statoNome: 'OTA',
     stato: (s) => ({ attivo: s.wubookAttivo, errore: s.wubookUltimoErrore }),
   },
   { chiave: 'alloggiatiWebAbilitato', etichetta: 'Alloggiati Web', statoNome: 'Polizia di Stato', stato: (s) => ({ attivo: s.poliziaStatoAttiva }) },
@@ -158,7 +158,7 @@ export function SuperAdminClientiPage() {
         <KpiCard etichetta="Clienti" valore={String(clienti.length)} dettaglio={`${clientiAttivi} attivi`} />
         <KpiCard etichetta="Strutture" valore={String(struttureTotali)} />
         <KpiCard
-          etichetta="Errori Wubook"
+          etichetta="Errori OTA"
           valore={String(struttureConErroreLicenza)}
           dettaglio="strutture da controllare"
           accento={struttureConErroreLicenza > 0}
@@ -544,7 +544,7 @@ function ConfigWubookRiga({ strutturaId }: { strutturaId: string }) {
       {
         onSuccess: (dati) => {
           caricaDati(dati)
-          toast.successo('Configurazione Wubook salvata.')
+          toast.successo('Configurazione OTA salvata.')
         },
         onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
       },
@@ -558,7 +558,7 @@ function ConfigWubookRiga({ strutturaId }: { strutturaId: string }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, pt: 1, borderTop: `1px solid ${tokens.surfaceBorder}` }}>
       <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em' }}>
-        Wubook
+        OTA
       </Typography>
 
       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
@@ -596,7 +596,7 @@ function ConfigWubookRiga({ strutturaId }: { strutturaId: string }) {
 
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button size="small" variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
-          Salva Wubook
+          Salva OTA
         </Button>
         <Button size="small" variant="outlined" onClick={() => setPrenotazioniRicevuteAperto(true)}>
           Prenotazioni ricevute
@@ -690,11 +690,11 @@ function PrenotazioniRicevuteDialog({ strutturaId, onClose }: { strutturaId: str
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
-      <DialogTitle>Prenotazioni Wubook ricevute</DialogTitle>
+      <DialogTitle>Prenotazioni OTA ricevute</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
         <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
-          Ogni prenotazione Wubook intercettata (tramite gestisoft.it) — "Non letta" vuol dire che l'importazione non è ancora riuscita e
-          verrà ritentata: in caso di problemi, Lcode e Rcode bastano per recuperarla a mano da Wubook. Ultime{' '}
+          Ogni prenotazione OTA intercettata (tramite gestisoft.it) — "Non letta" vuol dire che l'importazione non è ancora riuscita e
+          verrà ritentata: in caso di problemi, Lcode e Rcode bastano per recuperarla a mano dal pannello dell'OTA. Ultime{' '}
           {Math.min(eventi.data?.length ?? 0, 200)} al massimo, più recenti prima.
         </Typography>
 
