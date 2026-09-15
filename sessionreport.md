@@ -2,6 +2,72 @@
 
 Ultimo aggiornamento: 2026-09-15 (sessione successiva — bug segnalati dall'utente: numero prenotazione rigenerato a ogni salvataggio, percentuale/euro invertiti nei piani prezzo OTA, la scelta di Struttura del Super Admin persa a ogni ricaricamento, centinaia di log identici a sera dal job Osservatorio; da quest'ultimo, una politica di tentativi condivisa dai tre invii alle PA.)
 
+## Fatto — schedine controllate prima di spedirle, non dopo il rifiuto
+
+Domanda dell'utente: conviene controllare le schedine prima dell'invio? Esempio suo, uno spazio in
+fondo al nome.
+
+548. **Il caso citato non era il problema, ma cercandolo ne sono emersi di peggiori.** Su Alloggiati
+     Web il tracciato è a **posizioni fisse**: `Pad(nome, 30)` riempie di spazi fino a 30 caratteri,
+     quindi "tommaso " e "tommaso" producono la stessa identica riga — lo spazio finale sparisce nel
+     riempimento. Quello che rompe davvero è altro: `PadRight` **allunga ma non taglia**, quindi un
+     cognome di 60 caratteri faceva slittare tutti i campi successivi e rifiutare l'intero record;
+     un comune non riconosciuto dall'anagrafica partiva come nove spazi in un campo obbligatorio;
+     un "a capo" dentro un campo spezzava il record in due, visto che le righe sono unite con `
+`.
+
+549. **`TestoTracciato`**: ripulisce i campi liberi — spazi ai bordi e doppi, caratteri di controllo
+     (un "a capo" diventa uno spazio, non sparisce), accenti latini ridotti alla lettera base
+     (PERÙ → PERU), che il tracciato non prevede. **Non** tocca gli alfabeti non latini: senza la
+     certezza che il portale li rifiuti, cancellarli renderebbe illeggibile il nome di un ospite
+     straniero, che è peggio del problema da evitare. `Pad` ora tronca alla larghezza della colonna:
+     rete di sicurezza, non comportamento previsto — meglio un campo tagliato che una riga
+     disallineata.
+
+550. **`SchedinaAlloggiatiWebBuilder.Valida`**: controlla le stesse cose che la costruzione andrebbe
+     a scrivere, con gli stessi elenchi di anagrafica. Campi obbligatori (cognome, nome, sesso, data
+     di nascita, stato di nascita, cittadinanza, comune se nato in Italia, documento completo per
+     chi lo deve portare), lunghezze, data di arrivo e permanenza. Principio dichiarato: si segnala
+     **solo ciò che è certamente sbagliato**, nel dubbio si lascia passare — bloccare una schedina
+     che il portale avrebbe accettato significa non assolvere un obbligo di legge, che è peggio di
+     un invio rifiutato. Per questo i familiari (tipo 19/20) non devono avere documento proprio e
+     chi è nato all'estero non deve avere il comune: richiederli bloccherebbe schedine valide.
+
+551. **Le non valide escono dall'invio automatico** con una notifica e un log per prenotazione, una
+     volta sola, che elencano **cosa** correggere — il rifiuto del portale non lo direbbe. Il giro
+     resta "riuscito": ritentare stasera non cambierebbe dati sbagliati, e le schedine hanno già la
+     loro segnalazione. L'invio singolo a mano risponde con l'elenco invece di tentare.
+
+552. **In pagina un quarto stato, "Da correggere"** (prima erano Inviata / Da inviare / Fuori
+     termine), con l'elenco dei motivi **per esteso** sotto lo stato, non in un tooltip: è la lista
+     di cosa andare a sistemare. Il pulsante Invia non compare. La pagina usa lo stesso controllo
+     del job, quindi mostra esattamente le schedine che partiranno davvero.
+
+     **Corretto su rilievo dell'utente** subito dopo la prima versione: i motivi si mostrano solo
+     dove servono ancora a qualcosa, cioè su una schedina non inviata e **ancora in termine**. Su
+     una fuori termine non si interviene più comunque — va registrata a mano sul portale — e
+     l'elenco dei campi mancanti sarebbe solo rumore sopra l'unica cosa da fare.
+
+553. **Verificato sui dati reali, ed è la prova che contava.** Il rischio principale della modifica
+     era un controllo troppo severo, che avrebbe bloccato invii legittimi. Sulle 45 schedine vere il
+     validatore ne segnala **2**, entrambe con un problema genuino confermato a database (una senza
+     tipo e numero documento, una senza luogo di rilascio): sono le uniche due mai inviate di quella
+     struttura, e il job a tentarle avrebbe incassato due rifiuti. Nessun falso positivo: comuni e
+     stati esteri ("SALERNO", "PAESI BASSI") vengono riconosciuti e non segnalati.
+     Dopo la correzione del punto precedente quelle due risultano **fuori termine**, quindi in
+     pagina non mostrano più alcun elenco: il riepilogo sui dati reali è 40 inviate + 2 fuori
+     termine, nessuna "da correggere" — il che è il comportamento voluto, visto che su quelle due
+     non c'è più niente da correggere in tempo utile.
+
+554. **17 test nuovi** (`SchedinaAlloggiatiWebValidazioneTests`), tra cui il caso del titolo (gli
+     spazi in più non devono bloccare nulla), la riga che deve restare di **168 caratteri esatti**
+     anche con un valore troppo lungo o con un "a capo" dentro, i familiari senza documento e i nati
+     all'estero senza comune. `dotnet build`/`npm run build` puliti, 93/93 + 19/19 test.
+
+555. **Restano scoperti Osservatorio e PayTourist**, che hanno formati e builder propri: PayTourist
+     ha già uno scarto con motivo al momento dell'invio, ma nessuno dei due mostra il problema in
+     pagina **prima** che il termine scada. Segnalato all'utente come lavoro successivo.
+
 ## Fatto — invii alle PA: tentativi limitati, con attesa crescente
 
 Deciso con l'utente partendo dalla sua osservazione: «immagina tante strutture che per un'ora
