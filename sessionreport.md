@@ -1,6 +1,232 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-12 (sessione successiva — invii alle PA: schedine Polizia di Stato con i termini di legge veri (24 ore, 6 per i soggiorni brevi) e orario reale dell'arrivo finalmente registrato; Osservatorio e PayTourist con elenco unico per Struttura, appartamento/struttura di destinazione dedotti dalla camera invece che scelti a mano, e le rispettive finestre di invio rispettate. Nella prima parte della sessione: prenotazioni OTA, tracciabilità di arrivi/modifiche/errori.)
+Ultimo aggiornamento: 2026-09-15 (sessione successiva — bug segnalati dall'utente: numero prenotazione rigenerato a ogni salvataggio, percentuale/euro invertiti nei piani prezzo OTA, la scelta di Struttura del Super Admin persa a ogni ricaricamento, centinaia di log identici a sera dal job Osservatorio; da quest'ultimo, una politica di tentativi condivisa dai tre invii alle PA.)
+
+## Fatto — invii alle PA: tentativi limitati, con attesa crescente
+
+Deciso con l'utente partendo dalla sua osservazione: «immagina tante strutture che per un'ora
+inviano comunicazioni verso Osservatorio, diventano tante — non possiamo fare un numero di
+tentativi? se falliscono tutti riprova domani e me lo dice nei log».
+
+539. **Proposta discussa prima di scrivere codice**, con tre correzioni alla forma iniziale, tutte
+     accettate: (a) l'unità che moltiplica non è la Struttura ma l'**appartamento** (l'Osservatorio
+     fa login+stato+logout per appartamento: 50 strutture da 3 appartamenti = ~9.000 chiamate in
+     un'ora); (b) meglio un **backoff** che N tentativi al minuto — 10 tentativi consecutivi
+     coprirebbero solo i primi 10 minuti, inutili contro una manutenzione serale del portale;
+     (c) il guadagno maggiore non è il numero ma la **distinzione tra errori**: quelli di
+     configurazione non si risolvono ritentando.
+
+540. **`PoliticaTentativi`** (Domain, statica e testata, 14 test): 6 tentativi con ritardo 1-2-4-8-16-32
+     minuti — un'ora coperta con 6 chiamate invece di 60 — e **1 solo** tentativo al giorno per gli
+     errori di configurazione. Il contatore vale per una giornata sola: cambiato il giorno riparte,
+     quindi il recupero dell'indomani è sempre garantito. `EsauritiDopo` dice quando è il momento di
+     scrivere la riga di riepilogo, così la segnalazione esce **una volta sola** invece che ad ogni
+     tentativo.
+
+541. **`IStatoTentativi`**, implementata dalle tre entità (`OsservatorioAppartamento`,
+     `AlloggiatiWebIntegrazione`, `PayTouristStruttura`): la regola vive in un punto solo. Tre job
+     con tre politiche leggermente diverse divergerebbero in silenzio, e la differenza si noterebbe
+     solo il giorno in cui un portale è giù. Migration `AggiungiTentativiInvioSchedine`: 4 colonne
+     per entità, tutte `AddColumn` con default, applicata e verificata sul database locale.
+
+542. **Classificazione per posizione nel codice, non per testo del messaggio** (che cambierebbe
+     senza preavviso). *Definitivi*: credenziali non configurate, nessuna tipologia associata, id
+     struttura PayTourist mancante, token non configurato. *Ritentabili*: login fallito, stato
+     remoto non leggibile, riduzioni/portali non recuperabili, eccezioni. Caso a sé, uguale nei tre
+     servizi: se **almeno una** schedina del lotto è passata, il portale risponde e gli scarti sono
+     dei singoli dati — ritentare l'intero lotto non li correggerebbe, quindi non si ritenta.
+
+543. **Ordine dei controlli, errore trovato e corretto durante il lavoro**: nell'Osservatorio i due
+     controlli di configurazione stavano **prima** del limite. Sono proprio loro il caso che si
+     ripete identico ad ogni giro, e con un errore definitivo la condizione di riepilogo è sempre
+     vera: sarebbe tornata una riga di log al minuto, esattamente il problema da risolvere. Il gate
+     è stato spostato davanti. Negli altri due il limite era già a monte (nel job o prima del ciclo).
+
+544. **Invii manuali separati dai tentativi del job**: "Invia ora" e l'invio della singola schedina
+     non consumano i tentativi della giornata (un paio di tentativi a mano andati male zittirebbero
+     il job serale) e il loro esito va **sempre** a log, perché è la risposta a un'azione appena
+     compiuta da qualcuno che la sta guardando. Per l'Osservatorio è servito un flag distinto da
+     `automatico`: "Invia ora" passa dal percorso automatico perché deve poter chiudere la giornata,
+     quindi i due concetti non coincidono.
+
+545. **Asimmetria sanata.** Polizia di Stato e PayTourist, al contrario dell'Osservatorio, **non
+     ritentavano affatto**: marcavano "fatto per oggi" anche quando l'invio falliva, e le schedine
+     rimaste indietro potevano uscire dal termine di 24 ore. Ora hanno la stessa politica: al
+     limite l'Osservatorio ci perde tentativi, loro ci guadagnano un recupero in giornata.
+
+546. **Notifica `InvioSchedineNonRiuscito`** (tipo 9) alla resa, una al giorno per elemento: il Log
+     da solo non basta, nessuno lo apre finché non sospetta già un problema — e una configurazione
+     mancante resterebbe tale per giorni. Su Polizia di Stato il messaggio ricorda il termine di 24
+     ore. Aggiunta anche all'elenco dei tipi lato frontend, dov'era rimasto indietro pure il tipo 8.
+
+547. **Verifiche**: `dotnet build` e `npm run build` puliti, **57/57 + 19/19 test** (14 nuovi),
+     `has-pending-model-changes` negativo, migration applicata all'avvio dell'API ricostruita e
+     colonne verificate a database. Il comportamento a regime si osserva sul server alla prossima
+     finestra di invio: in locale un invio di prova è escluso dalla regola sulle trasmissioni alle PA.
+
+## Fatto — Osservatorio: basta centinaia di log identici ogni sera
+
+Segnalazione dell'utente dalla pagina Log del **server**: decine di righe identiche «Invio
+Osservatorio Turistico (PMS …): 0 arrivi e 0 partenze inviati — chiuso fino al 14/09/2026», una al
+minuto per ciascuno dei tre appartamenti, dalle 23:00 a mezzanotte. «Una volta devi mandarle».
+
+534. **Il job è fatto apposta per ritentare ogni minuto** (trigger Quartz a 1 minuto) dall'orario
+     configurato in poi, finché la giornata non risulta chiusa: è la rete di sicurezza per un
+     portale irraggiungibile alle 23:00. Esiste già un gate che salta l'appartamento **prima del
+     login** quando il cursore locale è oltre oggi, proprio per non ripetere il giro a vuoto.
+
+535. **Il gate però non scattava mai in questo caso.** Il cursore autorevole è quello del servizio
+     (`GetCurrentStatusDate`), e il locale veniva riscritto **solo** quando si chiudeva davvero una
+     giornata. Per un appartamento già a posto lato Osservatorio (cursore remoto oltre oggi) non
+     c'era niente da chiudere, quindi il locale restava indietro per sempre e ogni minuto si
+     rifacevano login, lettura stato, logout e log — con la data **stantia** del cursore locale,
+     ed è il motivo per cui le righe dicevano tutte "chiuso fino al 14/09" invece del 15.
+
+536. **Due correzioni.** (a) La cache locale viene allineata al cursore del servizio appena lo si
+     legge, anche quando non c'è nulla da inviare — anche all'indietro, perché un "chiuso fino al"
+     mostrato in pagina più avanti del vero sarebbe una data falsa; dal giro successivo il gate
+     scatta e l'appartamento non viene nemmeno contattato. (b) Il log finale si scrive **solo se una
+     giornata è stata effettivamente processata**: una chiusura con "0 arrivi e 0 partenze" resta
+     tracciata (serve a vedere che il job gira), il giro in cui non c'era proprio nulla da chiudere
+     no.
+
+537. **Effetto**: da ~180 righe di log e altrettante chiamate al servizio della PA a sera, a una
+     riga per appartamento per giornata chiusa. Nessuna modifica a **cosa** viene trasmesso: il
+     ritentativo al minuto resta per il caso in cui l'invio non riesca.
+
+538. **Verifiche**: `dotnet build` pulito, 43/43 + 19/19 test. Il comportamento si osserva sul
+     server alla prossima finestra di invio (dal locale non è riproducibile: l'unico log
+     Osservatorio presente è del 2 settembre, e un invio di prova è escluso per la regola sulle
+     trasmissioni alle PA).
+
+## Fatto — la scelta del Super Admin sopravvive al ricaricamento
+
+Partito da una domanda dell'utente: da Super Admin, digitando `/statistiche` nella barra degli
+indirizzi, finiva sulla dashboard Super Admin — e succedeva **anche con la Struttura già
+selezionata**, cosa che la prima spiegazione data non copriva.
+
+529. **Causa**: la Struttura scelta dal Super Admin viveva solo in memoria (`localStorage` era
+     riservato al Cliente/Operatore, per scelta esplicita del codice). Digitare un indirizzo è un
+     ricaricamento completo: lo stato React riparte da zero, `strutturaId` torna `null` e il filtro
+     di `useSezioniVisibili` nasconde tutte le sezioni operative al Super Admin senza Struttura —
+     da cui il rimbalzo di `RouteGuard` sulla prima voce disponibile, che per lui è `/super-admin`.
+     Concorreva anche `caricamento`, che per il Super Admin è sempre `false`: la decisione veniva
+     presa al primo render, senza attendere nulla.
+
+530. **Cliente e Struttura ora si ricordano**, su richiesta dell'utente (restare sulla struttura
+     **e** sulla pagina). Entrambi, non solo la Struttura: la lista Strutture si carica per Cliente,
+     quindi senza il Cliente la Struttura salvata non sarebbe nemmeno risolvibile. Letti nello stato
+     iniziale, quindi già presenti **al primo render** — è ciò che evita il rimbalzo, senza dover
+     introdurre un'attesa.
+
+531. **Un modulo solo per la persistenza** (`struttura/selezioneSalvata.ts`): prima le scritture su
+     `localStorage` erano sparse in quattro punti del provider, e ogni nuovo modo di cambiare la
+     selezione era un'occasione per dimenticarne una. Ora il Super Admin ha un `useEffect` che
+     rispecchia la scelta corrente qualunque sia il motivo del cambio, e le chiavi dell'Operatore
+     passano dalle stesse funzioni.
+
+532. **Ricaricare sì, sopravvivere alla sessione no.** Precisato dall'utente subito dopo la prima
+     versione: «appena faccio logout o chiudo il browser deve aprirmi la dashboard». La prima
+     stesura usava `localStorage`, che sarebbe sopravvissuto alla chiusura del browser; la selezione
+     del Super Admin sta ora in **`sessionStorage`**, la cui durata è esattamente quella voluta —
+     regge il ricaricamento, muore con la scheda/il browser e non passa a una scheda nuova. Restano
+     le due pulizie esplicite, che `sessionStorage` da solo non coprirebbe: **all'uscita** (chi entra
+     dopo sullo stesso browser non eredita il contesto di lavoro di qualcun altro) e **all'accesso**,
+     per il caso non ovvio della sessione scaduta con rilogin immediato nella stessa scheda.
+     Aggiunto anche l'azzeramento della Struttura quando il Cliente sparisce dalla lista: senza
+     Cliente non è più risolvibile, e ora che la selezione è persistente resterebbe lì per sempre.
+     La chiave dell'Operatore resta in `localStorage`: lì ricordare tra un accesso e l'altro è il
+     comportamento corretto e preesistente.
+
+533. **Verifica**: `npm run build` pulito. Il comportamento va provato in browser dall'utente
+     (ricaricare una pagina operativa da Super Admin, e controllare che l'uscita riporti le select
+     vuote).
+
+## Fatto — piani prezzo OTA: percentuale ed euro erano scambiati
+
+Segnalazione dell'utente, netta in entrambe le direzioni: «se metto variazione 19% mi aumenta i
+prezzi di 19 euro, se metto 19 euro me li aumenta del 19%».
+
+524. **L'inversione era solo nelle etichette dell'interfaccia.** Il backend è un proxy puro: prende
+     il `tipoVariazione` e lo passa a `add_vplan`/`mod_vplans` senza interpretarlo. Il frontend
+     invece mostrava **1 = "Importo fisso (€)"** e **2 = "Percentuale (%)"**, mentre per l'OTA
+     `variation_type` vale l'opposto: **1 = percentuale, 2 = importo fisso**. Chi sceglieva "19 €"
+     inviava 1 e si ritrovava +19%.
+
+525. **Verificato sui piani reali prima di correggere**, non dedotto: i tre piani virtuali
+     configurati hanno `tipoVariazione` 1, 2 e 1, e combaciano uno a uno con quello che l'utente
+     vede applicato sui prezzi (il piano dato per "19 €" ha tipo 1 e alza del 19%). Sola lettura,
+     nessuna modifica ai piani.
+
+526. **Etichette corrette e mappatura in un punto solo.** Nuove costanti
+     `TIPO_VARIAZIONE_PERCENTUALE`/`TIPO_VARIAZIONE_IMPORTO` e helper `simboloVariazione` in
+     `api/integrazioni.ts`, con la convenzione scritta accanto: il numero da solo non dice nulla e
+     l'inversione è invisibile finché non arriva sui prezzi pubblicati. Usati dal select del dialog
+     e dai **due** punti che mostravano il simbolo in elenco (tabella desktop e card mobile), dove
+     il `tipoVariazione === 2 ? '%' : '€'` era ripetuto a mano. Il default di un piano nuovo è ora
+     Percentuale (prima era lo stesso valore 1, ma etichettato "Importo fisso").
+
+528. **Indirizzo della pagina passato da `/wubook` a `/ota`**, su richiesta dell'utente: il nome
+     dell'OTA non deve comparire nemmeno nella barra degli indirizzi. Cambiati i due soli punti che
+     lo citavano (`navItems.ts` e `AppRouter.tsx`, che passa lo stesso path a `RouteGuard` per
+     risolvere permessi e servizio concesso); il vecchio indirizzo resta come **redirect** a `/ota`,
+     per non lasciare un 404 a chi ha il link salvato. Componente e file restano `WubookPage`:
+     identificatori interni, che la regola non tocca.
+
+527. **I piani già creati restano configurati al contrario di come li si voleva** — segnalato
+     all'utente, non toccato: sono prezzi pubblicati su canali OTA reali. Dopo il fix l'elenco li
+     mostra per quello che sono davvero, e si correggono dall'interfaccia.
+
+## Fatto — numero prenotazione: non si riassegna più, e sulle dirette si vede
+
+Bug segnalato dall'utente: dal Calendario, sezione Arrivi, modificando una prenotazione (aveva tolto
+la tassa di soggiorno) **il numero prenotazione cambiava**, e facendolo su due prenotazioni diverse
+a entrambe veniva assegnato **lo stesso numero**.
+
+518. **Due cause distinte, entrambe nel percorso di aggiornamento.** (a) `AggiornaAsync` ricalcolava
+     il numero a **ogni** salvataggio (`entity.NumeroPrenotazione = await NumeroPrenotazione…`):
+     bastava che il canale fosse "Diretta" e che il numero non arrivasse dal client — ed è sempre
+     così, perché il campo era nascosto proprio per le dirette e il dialog lo azzerava — perché ne
+     venisse generato uno nuovo al posto di quello esistente. Non c'entrava la tassa di soggiorno:
+     il numero saltava a qualunque modifica. (b) Il generatore usava **conteggio delle dirette
+     dell'anno + 1**: su una prenotazione già esistente, e quindi già compresa nel conteggio, il
+     risultato è sempre lo stesso valore — da cui lo stesso numero a due prenotazioni diverse.
+
+519. **Il numero assegnato non si tocca più.** `NumeroPrenotazioneOAutoIncrementoAsync` riceve ora
+     anche il numero già presente sulla prenotazione e sceglie, nell'ordine: quello scritto a mano
+     se c'è, altrimenti **quello già assegnato**, e solo per una "Diretta" che non ne ha ancora
+     (creazione, o passaggio a Diretta di una prenotazione senza numero) ne genera uno. È il
+     riferimento con cui l'ospite, le fatture e i log conoscono la prenotazione: una volta dato non
+     cambia.
+
+520. **Il progressivo si ricava dai numeri assegnati, non dal loro conteggio.**
+     `ContaDireteAnnoAsync` sostituita da `ListaNumeriDiretteAnnoAsync`, e il prossimo numero è il
+     **massimo** dei progressivi esistenti + 1 (`ProssimoNumeroDiretta`, statica e testata; i valori
+     non numerici vengono ignorati). Contare e numerare divergono appena una diretta passa a un
+     altro canale o un numero viene scritto fuori sequenza — nei dati reali il massimo è 35 con 38
+     dirette, quindi il vecchio calcolo avrebbe dato 39 saltando 36.
+
+521. **Numero visibile anche sulle dirette, ma solo in modifica** — precisato dall'utente in corsa
+     ("quando la creo no"): su una prenotazione già salvata il campo compare in **sola lettura** con
+     la nota "Assegnato automaticamente dal sistema", mentre in creazione resta nascosto, perché lì
+     un numero ancora non c'è e un campo vuoto non direbbe nulla. Prima era nascosto sempre, ma è
+     il riferimento che si detta all'ospite e andava cercato altrove.
+
+522. **Danno pregresso rilevato e lasciato intatto, per decisione dell'utente**: nelle dirette 2026
+     ci sono **11 numeri duplicati su 38 prenotazioni** (1, 2, 3, 4, 6, 7, 8, 9, 10, 12, 26, ciascuno
+     su due prenotazioni). Il fix ferma il problema da qui in avanti ma non ripara lo storico:
+     rinumerare cambierebbe il riferimento di prenotazioni già comunicate agli ospiti o fatturate.
+     Nessuna riga toccata.
+
+523. **Verifiche.** `dotnet build` pulito, **43/43 Application + 19/19 Api** (5 test nuovi,
+     `NumeroPrenotazioneDirettaTests`, sul generatore: sequenza piena, sequenza con buchi, valori
+     non numerici), `npm run build` pulito. **Provato dal vivo sui dati reali** con l'API
+     ricostruita, previa autorizzazione dell'utente: due prenotazioni dirette (#22 e #24 di Cala
+     Azzurra) salvate a parametri identici — **numeri rimasti 22 e 24**, dove prima sarebbero
+     diventati entrambi "39"; importi e flag schedine invariati, `UltimoErrore` dell'integrazione
+     OTA vuoto dopo i due push di disponibilità. Deliberatamente **non** toccata la tassa di
+     soggiorno nella prova: rimetterla avrebbe riportato le schedine a "da inviare", con il rischio
+     di una trasmissione reale a una PA — e il bug si riproduce comunque a qualunque salvataggio.
 
 ## Fatto — schedine Polizia di Stato: termini di legge rispettati, e invio della singola schedina
 
