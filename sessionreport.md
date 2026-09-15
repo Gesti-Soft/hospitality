@@ -1,6 +1,113 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-15 (sessione successiva — bug segnalati dall'utente: numero prenotazione rigenerato a ogni salvataggio, percentuale/euro invertiti nei piani prezzo OTA, la scelta di Struttura del Super Admin persa a ogni ricaricamento, centinaia di log identici a sera dal job Osservatorio; da quest'ultimo, una politica di tentativi condivisa dai tre invii alle PA.)
+Ultimo aggiornamento: 2026-09-15 (sessione successiva — progettata l'applicazione desktop offline GestiSoftGestionaleLocale, solo documento; sul web, controllo anti-duplicato PayTourist prima di dichiarare, provato dal vivo sull'ambiente di test. Prossima mossa: Fase 1 del desktop.)
+
+## Prossima mossa — sviluppo del gestionale desktop (GestiSoftGestionaleLocale)
+
+Il progetto è chiuso e approvato, il codice non è ancora iniziato: si parte dalla **Fase 1** del
+piano (solution, progetto dati con lo schema locale e le migrazioni, servizio Windows che si avvia,
+installer minimo con PostgreSQL), poi Fase 2 (pacchetto condiviso + area `/api/sync` di solo pull) e
+Fase 3 (client WPF in sola lettura). Il documento da seguire è
+`C:\Code\GestiSoft\GestiSoftGestionaleLocale\docs\architettura.md`, fuori da questo repository.
+
+## Fatto — progettato il gestionale desktop offline, e chiuso il buco dei doppi invii PayTourist
+
+Sessione in due parti: una lunga progettazione a quattro mani dell'applicazione desktop (nessun
+codice scritto, su richiesta esplicita dell'utente), e un lavoro reale sul gestionale web nato da
+una domanda emersa proprio discutendo il desktop.
+
+561. **Progetto dell'app desktop `GestiSoftGestionaleLocale`** (WPF/.NET 10, repository separato,
+     per ora solo `README.md` e `docs/architettura.md`). Decisioni prese con l'utente: un PC
+     **server** in sede con PostgreSQL su porta 5433, servizio Windows che ospita API locale, SignalR
+     e motore di sincronizzazione, mentre gli altri PC sono client sottili in LAN; **una sola
+     struttura** per installazione; sincronizzazione attraverso una nuova area `/api/sync/*`
+     **dentro `GestiSoft.Api`** e non un microservizio separato (dovrebbe comunque scrivere sullo
+     stesso Postgres e riusare la stessa logica, incluso il push disponibilità OTA sincrono);
+     dal locale al web si spingono **comandi** rieseguiti dal web con le sue regole, dal web al
+     locale scende lo stato; codice condiviso via pacchetto NuGet versionato.
+
+562. **Ambito del desktop ristretto alla reception**: prenotazioni, camere e tipologie, anagrafica
+     ospiti, cassa, e in futuro il bar. Criterio scelto: sta in locale ciò che, se non si può fare
+     subito, lascia un ospite fermo al bancone o fa saltare un incasso. Statistiche, fatturazione
+     elettronica, mappature OTA, utenti e impostazioni restano sul web — replicarle costerebbe due
+     interfacce da mantenere per sempre e conflitti in più, senza servire a nessuno con la linea giù.
+
+563. **Schedine sul desktop: sola visualizzazione.** L'elenco di cosa è inviato e cosa no scende già
+     pronto dal web, il locale non tiene stati né regole e non trasmette mai. Unica eccezione
+     decisa dopo averne discusso a lungo: un pulsante che genera il **file del tracciato Alloggiati
+     Web** da caricare a mano sul portale quando il server è irraggiungibile e il termine di legge
+     (24 ore, 6 per i soggiorni brevi) sta scadendo — funzione passiva, nessuna marcatura, con
+     avviso esplicito di **non** caricarlo su PayTourist, che pure lo importerebbe: quel tracciato
+     non contiene il `partner_id`, quindi la stessa persona verrebbe conteggiata due volte.
+
+564. **Nessuna credenziale sul PC locale**: scendono nomi, identificativi (`IdStrutturaPaytourist`,
+     `HotelCode`), mappature e stati di invio, mai token e password. Autonomia offline di **7 giorni
+     per utente**, ricaricati solo da un'autenticazione verificata dal web; accesso sempre
+     autenticato a ogni avvio e blocco per inattività a 15 minuti; struttura disattivata, licenza
+     scaduta o dispositivo revocato: messaggio ed esci, mai sola lettura.
+
+565. **Le prenotazioni OTA il desktop non le scarica mai.** Motivo tecnico, non stilistico:
+     `fetch_new_bookings` viene chiamato con `mark=1`, quindi chi legge per primo le consuma — un
+     secondo lettore significherebbe, ogni tanto, una prenotazione esistente solo sul PC di
+     reception. Un solo lettore possibile, ed è il server.
+
+566. **Controllo anti-duplicato PayTourist (lavoro reale sul web, non sul desktop).** Nato dalla
+     domanda dell'utente "se carico il file a mano, come evitiamo che il server lo rimandi?". Prima
+     di trasmettere, `PayTouristInvioService` ora interroga `GET /api/v1/reservations` e toglie dal
+     lotto le prenotazioni già dichiarate, marcandole come inviate senza ritrasmetterle. Serve già
+     oggi a prescindere dal desktop: un timeout dopo che il portale ha registrato, o un file
+     caricato a mano dall'albergatore, producono altrimenti **imposta di soggiorno chiesta due
+     volte**, e PayTourist non espone nessun endpoint per annullarla.
+
+567. **Due criteri di riconoscimento**, perché due sono i modi in cui una prenotazione può essere
+     finita sul portale: il nostro `partner_id` (`reservation_{id}_{data}`, estratto in
+     `PayTouristDtoBuilder.PartnerIdPrenotazione` così che invio e confronto usino la stessa chiave),
+     e — per ciò che è entrato da file — l'**anagrafica**: nome, cognome, data di nascita e giorno di
+     arrivo. Il portale restituisce nome e cognome in un campo unico e senza ordine garantito,
+     quindi il confronto usa le parole ordinate, senza accenti e senza maiuscole. Senza data di
+     nascita la chiave non si costruisce affatto: resterebbero solo nome e cognome, e scambiare due
+     omonimi significherebbe **non** dichiarare un soggiorno, che è peggio di un doppione.
+
+568. **Si salta una prenotazione solo se risultano dichiarati tutti i suoi ospiti**, non il solo
+     intestatario: fermarsi a lui basterebbe a saltare l'intera prenotazione, membri compresi, nel
+     caso in cui la stessa persona compaia come capofamiglia di due soggiorni con lo stesso arrivo.
+     Meglio una persona dichiarata due volte che tre lasciate indietro.
+
+569. **Adattato ai volumi alti** dopo l'osservazione dell'utente: fino a 7 giorni di arrivo distinti
+     il client fa una richiesta mirata per giorno (`check_in_date=`), oltre passa alla finestra unica
+     paginata — il caso di tutti i giorni è poche prenotazioni su pochi giorni, e la finestra si
+     porterebbe dietro centinaia di prenotazioni altrui. Tetto di pagine alzato a 200 e, se viene
+     toccato, l'elenco è marcato **incompleto** e il servizio lo scrive nel log: una prenotazione non
+     trovata in un elenco troncato non è una prenotazione non dichiarata.
+
+570. **Cosa i portali permettono davvero**, verificato e non supposto: PayTourist espone
+     `GET /api/v1/reservations` (la documentazione pubblica mostra però solo `id`, `guest_payment` e
+     `paid_by_guest` — i campi utili, `partner_id` e `guests`, ci sono ma sono emersi solo
+     interrogando l'ambiente di test). Alloggiati Web **non ha nulla di equivalente**: dal WSDL
+     ufficiale le operazioni sono GenerateToken, Authentication_Test, Test, Send, Tabella, Ricevuta e
+     la famiglia GestioneAppartamenti, e `Ricevuta(Utente, token, Data)` restituisce un PDF della
+     giornata, non un elenco confrontabile. Lì però un duplicato non costa nulla, quindi il controllo
+     non serve: scelta esplicita dell'utente, «se si invia due volte su polizia di stato pazienza».
+
+571. **Provato dal vivo sull'ambiente di test PayTourist** (struttura "Villa Chifeci Scopello",
+     `structure_id` 1034), con tre prenotazioni di prova create apposta: quella già inviata e rimessa
+     a "da inviare" **non** è stata reinviata (riconosciuta dal `partner_id`); una prenotazione
+     diversa con la stessa persona **non** è stata inviata (riconosciuta per anagrafica); una con lo
+     stesso intestatario più un ospite mai dichiarato **è** stata inviata, come deve essere. Sul
+     portale risultano le due prenotazioni attese e nessun doppione. Le tre prenotazioni di prova
+     sono rimaste nel database di sviluppo su decisione dell'utente.
+
+572. **Misure, invece di stime**: la chiamata di controllo costa 0,31-0,54 s ed è una sola per
+     struttura, contro una chiamata per ogni prenotazione in fase di invio (un lotto da 100 sono ~40
+     s) — e ogni prenotazione riconosciuta è una chiamata di invio risparmiata. Cinque letture
+     concorrenti verso il portale passano tutte senza rifiuti né rallentamenti, ma **nulla è stato
+     parallelizzato**: strutture, prenotazioni e letture del controllo restano in fila, per scelta.
+     I tre invii alle PA sono comunque già job Quartz distinti (Alloggiati Web, Osservatorio,
+     PayTourist), quindi indipendenti tra loro e non sovrapponibili a sé stessi.
+
+573. **Verifiche**: `dotnet build` pulito (0 avvisi), `dotnet test` 102 test verdi, di cui 7 nuovi
+     sulle due chiavi di riconoscimento, ancorati ai valori anagrafici realmente restituiti dal
+     portale.
 
 ## Fatto — il nome del fornitore OTA sparisce da tutto ciò che si legge a schermo
 

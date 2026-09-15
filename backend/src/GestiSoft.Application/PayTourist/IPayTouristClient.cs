@@ -8,6 +8,34 @@ public record PayTouristPortaleDto(int Id, string Nome);
 
 public record PayTouristStrutturaRemotaDto(int Id, string Nome);
 
+/// <summary>Un ospite come lo restituisce il portale: nome e cognome arrivano in un campo unico, senza distinguerli.</summary>
+public record PayTouristOspiteDichiaratoDto(string? NomeCompleto, DateTime? DataNascita, DateTime? CheckIn);
+
+/// <summary>
+/// Ciò che PayTourist ha già registrato nel periodo interrogato, sui due piani su cui si può
+/// riconoscere una prenotazione già dichiarata:
+/// <list type="bullet">
+/// <item><see cref="PartnerIdPrenotazioni"/> — le dichiarazioni partite da noi, riconoscibili dalla
+/// chiave che ci siamo dati (vedi <see cref="PayTouristDtoBuilder.PartnerIdPrenotazione"/>).</item>
+/// <item><see cref="Ospiti"/> — chiunque risulti dichiarato, compreso chi è entrato da un file di
+/// Pubblica Sicurezza caricato a mano sul portale: quel tracciato non contiene il nostro partner_id,
+/// quindi l'unico modo di riconoscere quelle persone è l'anagrafica (vedi
+/// <see cref="PayTouristDtoBuilder.ChiaveOspite"/>).</item>
+/// </list>
+/// </summary>
+/// <param name="Completo">
+/// False se la lettura si è fermata al tetto di pagine previsto invece di arrivare in fondo: il
+/// contenuto è parziale, quindi una prenotazione non trovata qui potrebbe comunque essere già
+/// dichiarata. Chi lo riceve deve dirlo nel log e non trattarlo come un "non c'è".
+/// </param>
+public record PayTouristDichiarazioniEsistenti(
+    IReadOnlyList<string> PartnerIdPrenotazioni,
+    IReadOnlyList<PayTouristOspiteDichiaratoDto> Ospiti,
+    bool Completo = true)
+{
+    public static PayTouristDichiarazioniEsistenti Vuoto { get; } = new([], []);
+}
+
 public record PayTouristGuestDto(
     string PartnerId,
     string? Nome,
@@ -61,6 +89,22 @@ public interface IPayTouristClient
     Task<(bool Ok, IReadOnlyList<PayTouristRiduzioneDto> Riduzioni, string? Errore)> GetRiduzioniAsync(string token, string? comuneAttivita, int idStruttura, int idSoftware, CancellationToken cancellationToken);
 
     Task<(bool Ok, IReadOnlyList<PayTouristPortaleDto> Portali, string? Errore)> GetPortaliOnlineAsync(string token, string? comuneAttivita, int idStruttura, int idSoftware, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Cosa risulta già dichiarato su PayTourist con check-in nell'intervallo indicato
+    /// (GET api/v1/reservations, paginato). Serve a non dichiarare due volte la stessa prenotazione:
+    /// a differenza di una schedina alloggiati duplicata — sgradevole ma innocua — qui un doppione è
+    /// imposta di soggiorno chiesta due volte allo stesso ospite, e l'Api non espone nessun modo per
+    /// annullarla.
+    /// </summary>
+    /// <param name="dateCheckIn">
+    /// I giorni di arrivo delle prenotazioni da controllare. Il client decide come interrogarli: per
+    /// poche date fa una richiesta mirata per ciascuna, per molte una finestra unica paginata — la
+    /// differenza conta quando la struttura ha molti arrivi, perché una finestra larga si porta
+    /// dietro anche tutte le prenotazioni che non stiamo controllando.
+    /// </param>
+    Task<(bool Ok, PayTouristDichiarazioniEsistenti Dichiarazioni, string? Errore)> GetDichiarazioniEsistentiAsync(
+        string token, string? comuneAttivita, int idStruttura, int idSoftware, IReadOnlyCollection<DateTime> dateCheckIn, CancellationToken cancellationToken);
 
     /// <summary>Elenco delle strutture abilitate su PayTourist per questo Token — usato per farle scegliere all'operatore invece di dover digitare a mano lo structure_id (vedi PayTouristConfigService.ListaStruttureDisponibiliAsync).</summary>
     Task<(bool Ok, IReadOnlyList<PayTouristStrutturaRemotaDto> Strutture, string? Errore)> GetStruttureAsync(string token, string? comuneAttivita, CancellationToken cancellationToken);

@@ -94,9 +94,60 @@ public class PayTouristDtoBuilder
             guests.Add(CostruisciMembro(membro, tipoMembroDescrizione, checkIn, checkOut));
         }
 
-        var partnerId = $"reservation_{prenotazione.Id}_{checkIn:yyyy-MM-dd}";
-        return (new PayTouristReservationDto(partnerId, checkIn, checkOut, portaleId, totaleDaPortale, idPrenotazionePortale, guests), null);
+        return (new PayTouristReservationDto(PartnerIdPrenotazione(prenotazione), checkIn, checkOut, portaleId, totaleDaPortale, idPrenotazionePortale, guests), null);
     }
+
+    /// <summary>
+    /// Chiave con cui PayTourist riconosce questa prenotazione ("partner_id" della reservation).
+    /// Deterministica per costruzione: la stessa prenotazione produce sempre lo stesso valore, ed è
+    /// per questo che PayTouristInvioService può confrontarla con l'elenco di ciò che risulta già
+    /// dichiarato sul portale ed evitare una seconda dichiarazione della stessa persona — su
+    /// un'imposta di soggiorno un doppione significa farla pagare due volte, e PayTourist non
+    /// espone nessun endpoint per cancellarlo.
+    /// Il fallback su oggi quando manca la data di check-in è lo stesso usato in
+    /// <see cref="Costruisci"/>: deve restare un calcolo solo, altrimenti il confronto cercherebbe
+    /// una chiave diversa da quella realmente inviata.
+    /// </summary>
+    public static string PartnerIdPrenotazione(Prenotazione prenotazione) =>
+        $"reservation_{prenotazione.Id}_{prenotazione.CheckIn ?? DateTime.UtcNow.Date:yyyy-MM-dd}";
+
+    /// <summary>
+    /// Chiave con cui riconoscere una persona già dichiarata sul portale quando il partner_id non
+    /// aiuta: è il caso del file di Pubblica Sicurezza caricato a mano: PayTourist lo importa, ma
+    /// quel tracciato non contiene nessuna nostra chiave, quindi quelle persone risultano dichiarate
+    /// senza che il confronto per partner_id possa accorgersene.
+    ///
+    /// Nome e cognome vengono confrontati come **insieme di parole ordinate**, non come stringa: il
+    /// portale li restituisce in un campo unico ("Ludovico Einaudi") senza dire quale sia il
+    /// cognome, e a seconda di come una riga è entrata l'ordine può essere invertito. Ordinandoli,
+    /// "ROSSI MARIO" e "MARIO ROSSI" diventano la stessa chiave.
+    ///
+    /// Restituisce null se manca la data di nascita o quella di arrivo: senza di esse resterebbero
+    /// solo nome e cognome, cioè si rischierebbe di scambiare due omonimi per la stessa persona — e
+    /// un falso positivo qui significa un'imposta di soggiorno mai dichiarata, che è peggio del
+    /// doppione che si sta cercando di evitare. In quel caso si preferisce non riconoscere nulla.
+    /// </summary>
+    public static string? ChiaveOspite(string? nomeCompleto, DateTime? dataNascita, DateTime? checkIn)
+    {
+        if (dataNascita is not { } nascita || checkIn is not { } arrivo)
+        {
+            return null;
+        }
+
+        var parole = TestoTracciato.Normalizza(nomeCompleto)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(parola => parola.ToUpperInvariant())
+            .OrderBy(parola => parola, StringComparer.Ordinal)
+            .ToList();
+
+        return parole.Count == 0
+            ? null
+            : $"{string.Join(' ', parole)}|{nascita:yyyy-MM-dd}|{arrivo:yyyy-MM-dd}";
+    }
+
+    /// <summary>Come sopra, per i nostri dati, dove nome e cognome sono due campi distinti.</summary>
+    public static string? ChiaveOspite(string? nome, string? cognome, DateTime? dataNascita, DateTime? checkIn) =>
+        ChiaveOspite($"{nome} {cognome}", dataNascita, checkIn);
 
     private PayTouristGuestDto CostruisciCapofamiglia(Ospite ospite, DateTime checkIn, DateTime checkOut) => new(
         PartnerId: $"ospite_{ospite.Id}_{checkIn:yyyy-MM-dd}",

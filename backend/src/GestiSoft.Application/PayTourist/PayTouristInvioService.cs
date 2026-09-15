@@ -457,6 +457,13 @@ public class PayTouristInvioService(
             return (0, 0, 0, []);
         }
 
+        daInviare = await EscludiGiaDichiarateAsync(strutturaId, daInviare, token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
+        if (daInviare.Count == 0)
+        {
+            await SalvaEsitoAsync(payTouristStruttura, 0, 0, null, Tentativo(EsitoTentativo.Riuscito), cancellationToken);
+            return (0, 0, 0, []);
+        }
+
         var (riduzioniOk, riduzioni, riduzioniErrore) = await client.GetRiduzioniAsync(token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
         if (!riduzioniOk)
         {
@@ -543,6 +550,143 @@ public class PayTouristInvioService(
         }
 
         return new RisultatoInvioPayTourist(0, 0, 0, errore);
+    }
+
+    /// <summary>
+    /// Toglie dal lotto le prenotazioni che PayTourist mostra già come dichiarate e le marca come
+    /// inviate, così non si ripresentano al giro successivo.
+    ///
+    /// Esiste perché su PayTourist un doppione non è un fastidio come una schedina alloggiati
+    /// inviata due volte: è imposta di soggiorno chiesta due volte allo stesso ospite, e l'Api non
+    /// offre nessun modo per annullarla. E i modi in cui può nascere non sono solo i nostri
+    /// reinvii: una risposta persa dopo che il portale aveva già registrato, oppure il file di
+    /// Pubblica Sicurezza caricato a mano sul portale dall'albergatore (PayTourist lo importa),
+    /// producono lo stesso risultato senza che il gestionale ne sappia nulla.
+    ///
+    /// Il confronto è esatto perché la chiave è deterministica da entrambe le parti, vedi
+    /// <see cref="PayTouristDtoBuilder.PartnerIdPrenotazione"/>.
+    /// </summary>
+    private async Task<IReadOnlyList<Ospite>> EscludiGiaDichiarateAsync(
+        Guid strutturaId,
+        IReadOnlyList<Ospite> daInviare,
+        string token,
+        string? comuneAttivita,
+        int idStruttura,
+        int idSoftware,
+        CancellationToken cancellationToken)
+    {
+        var conPrenotazione = daInviare.Where(o => o.Prenotazione is not null).ToList();
+        if (conPrenotazione.Count == 0)
+        {
+            return daInviare;
+        }
+
+        var dateCheckIn = conPrenotazione.Select(o => o.Prenotazione!.CheckIn ?? DateTime.UtcNow.Date).ToList();
+
+        var (ok, dichiarazioni, errore) = await client.GetDichiarazioniEsistentiAsync(
+            token, comuneAttivita, idStruttura, idSoftware, dateCheckIn, cancellationToken);
+
+        if (!ok)
+        {
+            // L'invio non si blocca: il controllo è una protezione in più, non una condizione per
+            // dichiarare — e se il portale non risponde qui, molto probabilmente non risponderà
+            // nemmeno all'invio. Resta però scritto che questa volta la verifica non c'è stata: è
+            // l'unica traccia utile se in seguito salta fuori un doppione.
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Controllo anti-duplicato PayTourist non eseguito: {errore ?? "elenco prenotazioni non disponibile."} L'invio prosegue senza verifica.",
+                origine: "PayTourist",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "PayTourist",
+                cancellationToken: cancellationToken);
+
+            return daInviare;
+        }
+
+        if (!dichiarazioni.Completo)
+        {
+            // Elenco troncato: quello che c'è dentro vale (una prenotazione trovata è davvero già
+            // dichiarata), ma le mancanti non sono necessariamente da dichiarare. Non si blocca
+            // niente, si scrive che il controllo di oggi ha visto solo una parte.
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                "Controllo anti-duplicato PayTourist parziale: l'elenco delle prenotazioni del portale è stato troncato. Una prenotazione già dichiarata potrebbe non essere stata riconosciuta.",
+                origine: "PayTourist",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "PayTourist",
+                cancellationToken: cancellationToken);
+        }
+
+        var partnerIdDichiarati = dichiarazioni.PartnerIdPrenotazioni.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var anagraficheDichiarate = dichiarazioni.Ospiti
+            .Select(o => PayTouristDtoBuilder.ChiaveOspite(o.NomeCompleto, o.DataNascita, o.CheckIn))
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+        var giaPresenti = conPrenotazione
+            .Where(o => GiaDichiarata(o, partnerIdDichiarati, anagraficheDichiarate))
+            .ToList();
+
+        if (giaPresenti.Count == 0)
+        {
+            return daInviare;
+        }
+
+        foreach (var ospite in giaPresenti)
+        {
+            await MarcaInviataAsync(ospite.PrenotazioneId, cancellationToken);
+        }
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Info,
+            $"PayTourist: {giaPresenti.Count} prenotazione/i risultavano già dichiarate sul portale, marcate come inviate senza ritrasmetterle.",
+            origine: "PayTourist",
+            clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+            strutturaId: strutturaId,
+            categoria: "PayTourist",
+            cancellationToken: cancellationToken);
+
+        var esclusi = giaPresenti.Select(o => o.Id).ToHashSet();
+        return daInviare.Where(o => !esclusi.Contains(o.Id)).ToList();
+    }
+
+    /// <summary>
+    /// Due modi di riconoscere una prenotazione già dichiarata, perché due sono i modi in cui può
+    /// essere finita sul portale:
+    /// <list type="number">
+    /// <item>l'abbiamo dichiarata noi (anche solo perché una risposta si è persa dopo che il portale
+    /// aveva già registrato): la si riconosce dalla nostra chiave;</item>
+    /// <item>ce l'ha messa una persona, caricando a mano il file di Pubblica Sicurezza, che PayTourist
+    /// importa: lì la nostra chiave non esiste e l'unico appiglio è l'anagrafica del capofamiglia —
+    /// nome, cognome, data di nascita e giorno di arrivo. È il capofamiglia a bastare: se lui
+    /// risulta già dichiarato, quel soggiorno è stato caricato per intero, non a metà.</item>
+    /// </list>
+    /// Senza data di nascita il confronto anagrafico non si fa affatto (vedi
+    /// <see cref="PayTouristDtoBuilder.ChiaveOspite"/>): meglio rischiare un doppione che saltare
+    /// una dichiarazione scambiando due omonimi per la stessa persona.
+    /// </summary>
+    private static bool GiaDichiarata(Ospite ospite, IReadOnlySet<string> partnerIdDichiarati, IReadOnlySet<string> anagraficheDichiarate)
+    {
+        if (partnerIdDichiarati.Contains(PayTouristDtoBuilder.PartnerIdPrenotazione(ospite.Prenotazione!)))
+        {
+            return true;
+        }
+
+        var checkIn = ospite.Prenotazione!.CheckIn;
+
+        var chiavi = new List<string?> { PayTouristDtoBuilder.ChiaveOspite(ospite.Nome, ospite.Cognome, ospite.DataNascita, checkIn) };
+        chiavi.AddRange(ospite.Membri.Select(m => PayTouristDtoBuilder.ChiaveOspite(m.Nome, m.Cognome, m.DataNascita, checkIn)));
+
+        // Devono esserci **tutti**, non solo l'intestatario. Se anche uno solo dei suoi ospiti non
+        // risulta dichiarato, questa prenotazione va trasmessa: fermarsi all'intestatario basterebbe
+        // a saltare l'intera prenotazione — membri compresi — nel caso in cui la stessa persona
+        // compaia come capofamiglia di due soggiorni con lo stesso arrivo. Meglio rischiare che una
+        // persona venga dichiarata due volte, che lasciarne indietro tre.
+        // Una chiave nulla (manca la data di nascita) non è verificabile: conta come "non trovato".
+        return chiavi.All(chiave => chiave is not null && anagraficheDichiarate.Contains(chiave));
     }
 
     private async Task MarcaInviataAsync(Guid? prenotazioneId, CancellationToken cancellationToken)

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -92,6 +92,125 @@ public class PayTouristClient(HttpClient http, IConfiguration configuration, ILo
             return (false, [], "Servizio PayTourist non raggiungibile (riduzioni).");
         }
     }
+
+    /// <summary>Quante prenotazioni per pagina: 50 è il massimo accettato dall'Api.</summary>
+    private const int ElementiPerPaginaElenco = 50;
+
+    /// <summary>
+    /// Tetto di pagine per ogni interrogazione (10.000 prenotazioni): un freno perché un ciclo di
+    /// richieste non possa proseguire all'infinito se l'Api rispondesse con una paginazione
+    /// inattesa. Se lo si tocca davvero la lettura è parziale, e va detto a chi la usa
+    /// (<see cref="PayTouristDichiarazioniEsistenti.Completo"/>): una prenotazione "non trovata" in
+    /// un elenco troncato non è una prenotazione non dichiarata.
+    /// </summary>
+    private const int MassimePagineElenco = 200;
+
+    /// <summary>
+    /// Fino a quante date di arrivo conviene interrogare una per una invece di scaricare l'intera
+    /// finestra che le contiene. Il caso di tutti i giorni è poche prenotazioni su pochi giorni: una
+    /// richiesta mirata per data riporta solo quel giorno, mentre la finestra min-max si porterebbe
+    /// dietro anche tutte le prenotazioni in mezzo, che in una struttura con molti arrivi sono
+    /// centinaia di righe inutili da paginare.
+    /// </summary>
+    private const int MassimeDateInterrogateSingolarmente = 7;
+
+    public async Task<(bool Ok, PayTouristDichiarazioniEsistenti Dichiarazioni, string? Errore)> GetDichiarazioniEsistentiAsync(
+        string token, string? comuneAttivita, int idStruttura, int idSoftware, IReadOnlyCollection<DateTime> dateCheckIn, CancellationToken cancellationToken)
+    {
+        if (RisolviBaseUri(comuneAttivita) is not { } baseUri)
+        {
+            return (false, PayTouristDichiarazioniEsistenti.Vuoto, ErroreConfigurazione(comuneAttivita));
+        }
+
+        var date = dateCheckIn.Select(data => data.Date).Distinct().OrderBy(data => data).ToList();
+        if (date.Count == 0)
+        {
+            return (true, PayTouristDichiarazioniEsistenti.Vuoto, null);
+        }
+
+        // Poche date: una richiesta per ciascuna, che riporta solo quel giorno. Molte: una finestra
+        // sola, perché a quel punto le richieste separate sarebbero più delle pagine da scorrere.
+        var filtri = date.Count <= MassimeDateInterrogateSingolarmente
+            ? date.Select(giorno => $"check_in_date={giorno:yyyy-MM-dd}").ToList()
+            : [$"check_in_start_date={date[0]:yyyy-MM-dd}&check_in_end_date={date[^1]:yyyy-MM-dd}"];
+
+        var partnerIds = new List<string>();
+        var ospiti = new List<PayTouristOspiteDichiaratoDto>();
+        var completo = true;
+
+        try
+        {
+            foreach (var filtro in filtri)
+            {
+                var pagina = 1;
+
+                for (; pagina <= MassimePagineElenco; pagina++)
+                {
+                    var percorso = $"api/v1/reservations?structure_id={idStruttura}&software_id={idSoftware}" +
+                        $"&{filtro}&perpage={ElementiPerPaginaElenco}&page={pagina}";
+
+                    using var request = CreaRichiesta(baseUri, percorso, token);
+                    using var response = await http.SendAsync(request, cancellationToken);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var corpo = await response.Content.ReadAsStringAsync(cancellationToken);
+                        return (false, PayTouristDichiarazioniEsistenti.Vuoto, EstraiMessaggioErrore(corpo) ?? $"Richiesta elenco prenotazioni rifiutata (stato: {response.StatusCode}).");
+                    }
+
+                    var risultato = await response.Content.ReadFromJsonAsync<WireReservationListResponse>(cancellationToken: cancellationToken);
+
+                    foreach (var prenotazione in risultato?.Data ?? [])
+                    {
+                        if (!string.IsNullOrWhiteSpace(prenotazione.PartnerId))
+                        {
+                            partnerIds.Add(prenotazione.PartnerId);
+                        }
+
+                        foreach (var ospite in prenotazione.Guests ?? [])
+                        {
+                            ospiti.Add(new PayTouristOspiteDichiaratoDto(
+                                ospite.Name,
+                                LeggiData(ospite.DateOfBirth),
+                                LeggiData(ospite.CheckInDate) ?? LeggiData(prenotazione.CheckInDate)));
+                        }
+                    }
+
+                    // L'ultima pagina la dichiara la risposta stessa; se "meta" mancasse, ci si ferma
+                    // qui invece di tirare a indovinare quante altre pagine chiedere.
+                    if (risultato?.Meta is not { } meta || pagina >= meta.LastPage)
+                    {
+                        break;
+                    }
+                }
+
+                if (pagina > MassimePagineElenco)
+                {
+                    completo = false;
+                    logger.LogWarning(
+                        "PayTourist: elenco prenotazioni troncato al tetto di {MassimePagine} pagine (struttura {IdStruttura}, filtro {Filtro}): il controllo anti-duplicato è parziale.",
+                        MassimePagineElenco, idStruttura, filtro);
+                }
+            }
+
+            return (true, new PayTouristDichiarazioniEsistenti(partnerIds, ospiti, completo), null);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException or JsonException)
+        {
+            logger.LogWarning(ex, "PayTourist GetDichiarazioniEsistentiAsync: fallimento di trasporto verso {BaseUri}", baseUri);
+            return (false, PayTouristDichiarazioniEsistenti.Vuoto, "Servizio PayTourist non raggiungibile (elenco prenotazioni).");
+        }
+    }
+
+    /// <summary>
+    /// Le date dell'elenco arrivano come stringhe ("2026-09-01", a volte con l'orario). Una data
+    /// illeggibile non è un errore da propagare: quella riga semplicemente non parteciperà al
+    /// confronto anagrafico, che senza data di nascita o di arrivo non si fa comunque.
+    /// </summary>
+    private static DateTime? LeggiData(string? valore) =>
+        DateTime.TryParse(valore, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var data)
+            ? data.Date
+            : null;
 
     public async Task<(bool Ok, IReadOnlyList<PayTouristPortaleDto> Portali, string? Errore)> GetPortaliOnlineAsync(string token, string? comuneAttivita, int idStruttura, int idSoftware, CancellationToken cancellationToken)
     {
@@ -433,4 +552,28 @@ public class PayTouristClient(HttpClient http, IConfiguration configuration, ILo
     private record WirePortale(
         [property: JsonPropertyName("id")] int Id,
         [property: JsonPropertyName("name")] string Name);
+
+    /// <summary>
+    /// Risposta di GET api/v1/reservations, ridotta a ciò che serve al controllo anti-duplicato: la
+    /// risposta reale porta anche date, ospiti, importi e stato dei pagamenti, ma qui interessa solo
+    /// sapere quali prenotazioni risultano già dichiarate. La documentazione pubblica dell'Api mostra
+    /// un esempio senza "partner_id"; il campo c'è, verificato contro l'ambiente di test.
+    /// </summary>
+    private record WireReservationListResponse(
+        [property: JsonPropertyName("data")] IReadOnlyList<WireReservationListItem> Data,
+        [property: JsonPropertyName("meta")] WireReservationListMeta? Meta);
+
+    private record WireReservationListItem(
+        [property: JsonPropertyName("partner_id")] string? PartnerId,
+        [property: JsonPropertyName("check_in_date")] string? CheckInDate,
+        [property: JsonPropertyName("guests")] IReadOnlyList<WireReservationListGuest>? Guests);
+
+    /// <summary>Dell'ospite dichiarato servono solo i tre dati del confronto anagrafico; "name" arriva come nome e cognome insieme, senza distinguerli.</summary>
+    private record WireReservationListGuest(
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("date_of_birth")] string? DateOfBirth,
+        [property: JsonPropertyName("check_in_date")] string? CheckInDate);
+
+    private record WireReservationListMeta(
+        [property: JsonPropertyName("last_page")] int LastPage);
 }
