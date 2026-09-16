@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
@@ -27,9 +27,12 @@ import {
   scaricaFatturaXml,
   useAggiornaDatiAziendali,
   useAnniDisponibiliFatture,
+  useCaricaLogoDatiAziendali,
   useDatiAziendali,
   useDatiClienti,
   useFatture,
+  useLogoDatiAziendali,
+  useRimuoviLogoDatiAziendali,
   type DatiAziendaliDto,
   type DatiAziendaliRequest,
   type DatiClienteDto,
@@ -45,6 +48,8 @@ import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaC
 import { FiltriRicercaData, nelRangeData, RigaCaricamentoAltri } from '../../components/finanze/FinanzeComuni'
 import { usePaginazioneScroll } from '../../lib/usePaginazioneScroll'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { alleggerisciLogo, LOGO_MAX_BYTE, LOGO_TIPI_ACCETTATI } from '../../lib/immagini'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -374,6 +379,8 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
         Questi dati compaiono come mittente su ogni fattura PDF/XML generata per questa struttura.
       </Typography>
 
+      <LogoFattura strutturaId={strutturaId} haLogo={dati.haLogo} />
+
       <TextField label="Denominazione (se azienda)" value={denominazione} onChange={(e) => setDenominazione(e.target.value)} disabled={aggiorna.isPending} />
 
       <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
@@ -461,6 +468,126 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
             Salva
           </Button>
         </Box>
+      )}
+    </Box>
+  )
+}
+
+/**
+ * Logo stampato in testa alla fattura. Sta qui e non nel form dei dati fiscali perche' si salva da
+ * solo, appena scelto: un'immagine non ha senso che aspetti il pulsante "Salva" insieme alla
+ * partita IVA, e cosi' l'anteprima mostra sempre quello che finira' davvero sul PDF.
+ */
+function LogoFattura({ strutturaId, haLogo }: { strutturaId: string; haLogo: boolean }) {
+  const puoScrivere = usePuoScrivere('financeWrite')
+  const logo = useLogoDatiAziendali(strutturaId, haLogo)
+  const carica = useCaricaLogoDatiAziendali(strutturaId)
+  const rimuovi = useRimuoviLogoDatiAziendali(strutturaId)
+  const [confermaRimozione, setConfermaRimozione] = useState(false)
+  const inputFile = useRef<HTMLInputElement>(null)
+  const toast = useToast()
+
+  const inCorso = carica.isPending || rimuovi.isPending
+
+  async function scegliFile(evento: ChangeEvent<HTMLInputElement>) {
+    const file = evento.target.files?.[0]
+    // Azzerato subito: senza questo, riscegliere lo stesso file non farebbe scattare l'evento.
+    evento.target.value = ''
+    if (!file) {
+      return
+    }
+
+    if (!LOGO_TIPI_ACCETTATI.includes(file.type)) {
+      toast.errore("Il logo deve essere un'immagine PNG o JPEG.")
+      return
+    }
+
+    const leggero = await alleggerisciLogo(file)
+    if (leggero.size > LOGO_MAX_BYTE) {
+      toast.errore(`Il logo supera ${LOGO_MAX_BYTE / 1024} KB anche dopo il ridimensionamento: usa un'immagine più semplice.`)
+      return
+    }
+
+    carica.mutate(leggero, {
+      onSuccess: () => toast.successo('Logo aggiornato.'),
+      onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Caricamento non riuscito, riprova.'),
+    })
+  }
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+      <Box
+        sx={{
+          width: 160,
+          height: 80,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: `1px solid ${tokens.surfaceBorder}`,
+          borderRadius: 1.5,
+          // Sfondo bianco come la carta: e' l'unico modo di vedere in anteprima cosa fara' il PDF.
+          bgcolor: '#FFFFFF',
+          overflow: 'hidden',
+          p: 1,
+        }}
+      >
+        {haLogo && logo.isLoading ? (
+          <Skeleton variant="rounded" width={120} height={48} />
+        ) : haLogo && logo.data ? (
+          <Box component="img" src={logo.data} alt="Logo della struttura" sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+        ) : (
+          <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>Nessun logo</Typography>
+        )}
+      </Box>
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Logo in fattura</Typography>
+        <Typography sx={{ fontSize: 12, color: tokens.textTertiary, maxWidth: 380 }}>
+          Compare in alto a sinistra sul PDF, sopra il nome della struttura. PNG o JPEG, massimo{' '}
+          {LOGO_MAX_BYTE / 1024} KB: le immagini più grandi vengono rimpicciolite in automatico prima di essere caricate.
+        </Typography>
+
+        {puoScrivere && (
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <input
+              ref={inputFile}
+              type="file"
+              accept={LOGO_TIPI_ACCETTATI.join(',')}
+              onChange={(e) => void scegliFile(e)}
+              style={{ display: 'none' }}
+            />
+            <Button size="small" variant="outlined" color="secondary" onClick={() => inputFile.current?.click()} disabled={inCorso}>
+              {haLogo ? 'Sostituisci' : 'Carica logo'}
+            </Button>
+            {haLogo && (
+              <Button size="small" color="error" onClick={() => setConfermaRimozione(true)} disabled={inCorso}>
+                Rimuovi
+              </Button>
+            )}
+          </Box>
+        )}
+      </Box>
+
+      {confermaRimozione && (
+        <ConfirmDialog
+          titolo="Rimuovere il logo?"
+          messaggio="Le fatture generate da qui in avanti torneranno senza logo. I documenti già scaricati non cambiano."
+          testoConferma="Rimuovi"
+          inCorso={rimuovi.isPending}
+          onAnnulla={() => setConfermaRimozione(false)}
+          onConferma={() =>
+            rimuovi.mutate(undefined, {
+              onSuccess: () => {
+                setConfermaRimozione(false)
+                toast.successo('Logo rimosso.')
+              },
+              onError: (err) => {
+                setConfermaRimozione(false)
+                toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+              },
+            })
+          }
+        />
       )}
     </Box>
   )

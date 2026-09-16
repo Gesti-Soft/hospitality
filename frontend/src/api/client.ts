@@ -102,6 +102,73 @@ export const apiPost = <T>(path: string, body?: unknown) => apiRequest<T>('POST'
 export const apiPut = <T>(path: string, body?: unknown) => apiRequest<T>('PUT', path, body)
 export const apiDelete = <T>(path: string) => apiRequest<T>('DELETE', path)
 
+/** GET autenticata di un'immagine: restituisce il Blob, o `null` se la risorsa non c'e' (404). */
+export async function apiScaricaBlob(path: string): Promise<Blob | null> {
+  const sessione = leggiSessione()
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: sessione ? { Authorization: `Bearer ${sessione.token}` } : {},
+  })
+
+  if (response.status === 401 && sessione) {
+    cancellaSessione()
+    window.dispatchEvent(new Event(SESSIONE_SCADUTA_EVENT))
+    throw new ApiError(401, "Sessione scaduta, effettua di nuovo l'accesso.")
+  }
+
+  rinnovaSessioneSeNecessario(sessione)
+
+  if (response.status === 404) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, `Lettura di ${path} non riuscita (${response.status}).`)
+  }
+
+  return await response.blob()
+}
+
+/** Invia un singolo file come multipart/form-data (campo "file"). Il Content-Type lo mette il browser, con il boundary: impostarlo a mano romperebbe la richiesta. */
+export async function apiInviaFile<T>(method: string, path: string, file: File): Promise<T> {
+  const sessione = leggiSessione()
+
+  const corpo = new FormData()
+  corpo.append('file', file)
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      ...(sessione ? { Authorization: `Bearer ${sessione.token}` } : {}),
+    },
+    body: corpo,
+  })
+
+  if (response.status === 401 && sessione) {
+    cancellaSessione()
+    window.dispatchEvent(new Event(SESSIONE_SCADUTA_EVENT))
+    throw new ApiError(401, "Sessione scaduta, effettua di nuovo l'accesso.")
+  }
+
+  rinnovaSessioneSeNecessario(sessione)
+
+  if (!response.ok) {
+    const corpoErrore = await response.json().catch(() => null)
+    const messaggio =
+      (corpoErrore && typeof corpoErrore === 'object' && 'detail' in corpoErrore && typeof corpoErrore.detail === 'string' && corpoErrore.detail) ||
+      (corpoErrore && typeof corpoErrore === 'object' && 'title' in corpoErrore && typeof corpoErrore.title === 'string' && corpoErrore.title) ||
+      `Invio del file a ${path} non riuscito (${response.status}).`
+    throw new ApiError(response.status, messaggio, corpoErrore)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return (await response.json()) as T
+}
+
 /** Scarica un file binario (PDF/XML) autenticato e avvia il download nel browser. */
 export async function apiScaricaFile(path: string, nomeFile: string): Promise<void> {
   const sessione = leggiSessione()

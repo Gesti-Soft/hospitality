@@ -47,6 +47,15 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                         // in piccolo, l'identità fiscale che vale davanti al fisco.
                         row.RelativeItem().Column(c =>
                         {
+                            // Il logo sta sopra e non al posto del nome: non tutti i loghi contengono
+                            // il nome della struttura, e una fattura che non dice chi l'ha emessa
+                            // sarebbe un documento peggiore. Riquadro massimo, proporzioni rispettate:
+                            // un logo largo o alto si adatta invece di sfondare la testata.
+                            if (azienda?.Logo is { Length: > 0 } logo)
+                            {
+                                c.Item().PaddingBottom(8).MaxWidth(190).MaxHeight(45).Image(logo).FitArea();
+                            }
+
                             c.Item().Text(intestazione).FontSize(19).SemiBold();
                             foreach (var riga in RigheEmittente(azienda))
                             {

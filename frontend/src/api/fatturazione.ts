@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost, apiPut, apiScaricaFile, ApiError } from './client'
+import { apiDelete, apiGet, apiInviaFile, apiPost, apiPut, apiScaricaBlob, apiScaricaFile, ApiError } from './client'
 
 // Gli enum arrivano sul wire come numeri (vedi commento in api/camere.ts). Valori esatti da
 // GestiSoft.Domain.Enums — qui solo il sottoinsieme rilevante per la fatturazione di una
@@ -47,6 +47,8 @@ export interface DatiAziendaliDto {
   naturaDefault: NaturaIva | null
   /** Frase di legge da stampare in fattura quando l'IVA non si applica: la detta il commercialista. */
   dicituraFattura: string | null
+  /** Il logo non viaggia nel DTO: si scarica a parte con useLogoDatiAziendali, altrimenti ogni lettura dei dati fiscali si porterebbe dietro un'immagine. */
+  haLogo: boolean
   indirizzo: string | null
   nCivico: string | null
   cap: string | null
@@ -55,7 +57,7 @@ export interface DatiAziendaliDto {
   nazione: string | null
 }
 
-export type DatiAziendaliRequest = Omit<DatiAziendaliDto, 'strutturaId'>
+export type DatiAziendaliRequest = Omit<DatiAziendaliDto, 'strutturaId' | 'haLogo'>
 
 export function useDatiAziendali(strutturaId: string | null) {
   return useQuery({
@@ -70,6 +72,54 @@ export function useAggiornaDatiAziendali(strutturaId: string | null) {
   return useMutation({
     mutationFn: (request: DatiAziendaliRequest) => apiPut<DatiAziendaliDto>(`/strutture/${strutturaId}/dati-aziendali`, request),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['dati-aziendali', strutturaId] }),
+  })
+}
+
+/**
+ * Il logo come data URL, pronto per un `<img src>`: l'immagine sta dietro un endpoint autenticato,
+ * quindi non e' indirizzabile direttamente dal browser e va scaricata con il token in mano.
+ */
+export function useLogoDatiAziendali(strutturaId: string | null, haLogo: boolean) {
+  return useQuery({
+    queryKey: ['dati-aziendali-logo', strutturaId],
+    queryFn: async () => {
+      const blob = await apiScaricaBlob(`/strutture/${strutturaId}/dati-aziendali/logo`)
+      if (!blob) {
+        return null
+      }
+
+      return await new Promise<string>((risolvi, rifiuta) => {
+        const lettore = new FileReader()
+        lettore.onload = () => risolvi(lettore.result as string)
+        lettore.onerror = () => rifiuta(new Error('logo non leggibile'))
+        lettore.readAsDataURL(blob)
+      })
+    },
+    enabled: !!strutturaId && haLogo,
+  })
+}
+
+export function useCaricaLogoDatiAziendali(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => apiInviaFile<DatiAziendaliDto>('PUT', `/strutture/${strutturaId}/dati-aziendali/logo`, file),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dati-aziendali', strutturaId] })
+      void queryClient.invalidateQueries({ queryKey: ['dati-aziendali-logo', strutturaId] })
+    },
+  })
+}
+
+export function useRimuoviLogoDatiAziendali(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiDelete<void>(`/strutture/${strutturaId}/dati-aziendali/logo`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dati-aziendali', strutturaId] })
+      // Svuotata a mano e non invalidata: senza logo la query resta disabilitata, quindi non
+      // rifarebbe la richiesta e l'anteprima continuerebbe a mostrare l'immagine appena tolta.
+      queryClient.setQueryData(['dati-aziendali-logo', strutturaId], null)
+    },
   })
 }
 
