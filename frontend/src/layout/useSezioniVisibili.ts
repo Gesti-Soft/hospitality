@@ -33,6 +33,10 @@ export function useSezioniVisibili(): SezioniVisibiliRisultato {
 
   const sezioni = navSections
     .filter((section) => section.sempreVisibile || !section.soloSuperAdmin || isSuperAdmin)
+    // Entrato in una Struttura, il Super Admin sta operando come quel Cliente: il proprio pannello
+    // sparisce dal menu finché non ci torna dalla barra arancione. Due contesti mischiati nella
+    // stessa barra sono il modo più facile per fare una cosa nel posto sbagliato.
+    .filter((section) => !section.soloSuperAdmin || !(isSuperAdmin && !!strutturaId))
     // Per il SuperAdmin, le sezioni operative restano nascoste finché non seleziona
     // esplicitamente una Struttura (nessuna struttura precaricata all'accesso).
     .filter((section) => section.sempreVisibile || section.soloSuperAdmin || !isSuperAdmin || !!strutturaId)

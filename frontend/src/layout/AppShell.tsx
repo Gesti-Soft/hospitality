@@ -39,7 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { sessione, esci } = useAuth()
-  const { isSuperAdmin, clienti, clienteId, strutture, strutturaId, strutturaCorrente, loading, selezionaCliente, selezionaStruttura } =
+  const { isSuperAdmin, clienti, clienteId, strutture, strutturaId, strutturaCorrente, loading, selezionaStruttura, esciDaImpersonazione } =
     useStruttura()
   const { sezioni: sezioniVisibili } = useSezioniVisibili()
 
@@ -80,18 +80,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => setSezioneMobileSelezionata(null), [location.pathname])
   const sezioneDaMostrare = mobile ? (sezioniVisibili.find((s) => s.section.title === sezioneMobileSelezionata) ?? sezioneAttiva) : sezioneAttiva
 
-  const selettoreCliente = isSuperAdmin && (
-    <SelettoreCercabile
-      etichetta="Cliente"
-      valore={clienteId}
-      opzioni={clienti.filter((c) => c.attivo).map((c) => ({ id: c.id, nome: c.ragioneSociale }))}
-      caricamento={loading && clienti.length === 0}
-      onChange={selezionaCliente}
-      compatta={!mobile}
-      larghezza={170}
-    />
-  )
-
   const tabSezioni = (
     <Box sx={{ display: 'flex', flexDirection: 'row', flexWrap: mobile ? 'wrap' : 'nowrap', alignItems: 'center', gap: mobile ? 1 : 0.5 }}>
       {sezioniVisibili.map(({ section, voci }) => (
@@ -121,7 +109,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         overflowY: 'auto',
       }}
     >
-      {mobile && selettoreCliente}
+      {mobile && clienteImpersonato && (
+        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.navText }}>{clienteImpersonato.ragioneSociale}</Typography>
+      )}
       {mobile && tabSezioni}
 
       {/* Il SuperAdmin senza ancora un Cliente scelto non ha alcuna struttura sensata da mostrare
@@ -204,7 +194,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           {!mobile && <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, color: '#fff' }}>GestiSoft</Typography>}
         </Box>
 
-        {!mobile && selettoreCliente}
+        {!mobile && clienteImpersonato && (
+          <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.navText, whiteSpace: 'nowrap' }}>
+            {clienteImpersonato.ragioneSociale}
+          </Typography>
+        )}
         {!mobile && tabSezioni}
 
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -250,6 +244,26 @@ export function AppShell({ children }: { children: ReactNode }) {
             <strong>Modalità impersonazione</strong> — Stai operando come <strong>{strutturaCorrente!.nome}</strong>
             {clienteImpersonato ? ` (${clienteImpersonato.ragioneSociale})` : ''}
           </Typography>
+          <Button
+            size="small"
+            onClick={() => {
+              esciDaImpersonazione()
+              navigate('/super-admin/clienti')
+            }}
+            sx={{
+              ml: 'auto',
+              flex: '0 0 auto',
+              color: '#fff',
+              borderColor: 'rgba(255,255,255,.55)',
+              fontSize: 12,
+              py: 0.25,
+              whiteSpace: 'nowrap',
+              '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,.12)' },
+            }}
+            variant="outlined"
+          >
+            Torna al pannello amministratore
+          </Button>
         </Box>
       )}
 

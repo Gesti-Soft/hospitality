@@ -19,6 +19,8 @@ interface StrutturaContextValue {
   loading: boolean
   selezionaCliente: (id: string) => void
   selezionaStruttura: (id: string) => void
+  /** Super Admin: lascia il Cliente su cui stava operando e torna al proprio pannello. */
+  esciDaImpersonazione: () => void
 }
 
 const StrutturaContext = createContext<StrutturaContextValue | null>(null)
@@ -89,6 +91,13 @@ export function StrutturaProvider({ children }: { children: ReactNode }) {
     if (!isSuperAdmin) salvaStrutturaOperatore(id)
   }
 
+  // Vanno azzerati entrambi: con il Cliente ancora scelto, l'effect qui sopra rimetterebbe subito
+  // la sua prima struttura e dall'impersonazione non si uscirebbe mai.
+  const esciDaImpersonazione = () => {
+    setClienteId(null)
+    setStrutturaId(null)
+  }
+
   const strutturaCorrente = strutture?.find((s) => s.id === strutturaId) ?? null
 
   return (
@@ -103,6 +112,7 @@ export function StrutturaProvider({ children }: { children: ReactNode }) {
         loading: clientiLoading || struttureLoading,
         selezionaCliente,
         selezionaStruttura,
+        esciDaImpersonazione,
       }}
     >
       {children}

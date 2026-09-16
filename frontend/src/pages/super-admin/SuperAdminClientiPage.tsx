@@ -25,8 +25,6 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
-import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined'
-import EditIcon from '@mui/icons-material/EditOutlined'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForeverOutlined'
 import { ApiError } from '../../api/client'
 import {
@@ -50,8 +48,10 @@ import { useCreaUtente } from '../../api/utenti'
 import { useAggiornaWubookLicenzaSuperAdmin, useWubookLicenzaSuperAdmin, type WubookLicenzaDto } from '../../api/superAdminImpostazioni'
 import { useAggiornaLicenzaStruttura, useLicenzaStruttura, type LicenzaStrutturaDto } from '../../api/licenzaStruttura'
 import { useWubookEventiRicevuti, type WubookEventoRicevutoDto } from '../../api/integrazioni'
+import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined'
+import EditIcon from '@mui/icons-material/EditOutlined'
 import { useStruttura } from '../../struttura/StrutturaContext'
-import { fontDisplay, fontMono, tokens } from '../../theme'
+import { fontDisplay, fontMono, stileImporto, tokens } from '../../theme'
 import { useToast } from '../../toast/ToastContext'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { KpiCard } from '../../components/KpiCard'
@@ -94,7 +94,7 @@ const SERVIZI: {
 
 export function SuperAdminClientiPage() {
   const mobile = useMobile()
-  const { isSuperAdmin } = useStruttura()
+  const { isSuperAdmin, selezionaCliente } = useStruttura()
   const dashboard = useDashboardSuperAdmin(isSuperAdmin)
 
   // Solo l'Id, non l'oggetto Cliente intero: dopo ogni switch (Attiva/riattiva struttura, Servizi
@@ -106,6 +106,7 @@ export function SuperAdminClientiPage() {
   const [nuovoClienteAperto, setNuovoClienteAperto] = useState(false)
   const [strutturaDaEliminare, setStrutturaDaEliminare] = useState<{ struttura: StrutturaAdminDto; clienteRagioneSociale: string } | null>(null)
   const [mostraNonAttivi, setMostraNonAttivi] = useState(false)
+  const [ricerca, setRicerca] = useState('')
 
   if (!isSuperAdmin) {
     return <Alert severity="error">Questa pagina è riservata al Super Admin.</Alert>
@@ -150,7 +151,21 @@ export function SuperAdminClientiPage() {
       .map((s) => ({ struttura: s, clienteRagioneSociale: c.ragioneSociale })),
   )
 
-  const clientiVisibili = mostraNonAttivi ? clienti : clienti.filter((c) => c.attivo)
+  // La ricerca guarda anche dentro le strutture e l'email del titolare: con l'elenco che cresce,
+  // di un cliente ci si ricorda spesso il nome dell'albergo o la mail con cui accede, non la
+  // ragione sociale con cui è registrato.
+  const testoRicerca = ricerca.trim().toLowerCase()
+  const clientiVisibili = (mostraNonAttivi ? clienti : clienti.filter((c) => c.attivo)).filter((c) => {
+    if (testoRicerca === '') return true
+    const campi = [c.ragioneSociale, c.partitaIva, trovaAdminCliente(c.id)?.email, ...c.strutture.map((s) => s.nome)]
+    return campi.some((campo) => campo?.toLowerCase().includes(testoRicerca))
+  })
+
+  // "Entra" fa esattamente quello che faceva la select Cliente in barra: sceglie il Cliente su cui
+  // operare. La struttura la si prende poi dalla sua select, che resta dov'è.
+  function entra(cliente: ClienteAdminDto) {
+    selezionaCliente(cliente.id)
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
@@ -251,13 +266,20 @@ export function SuperAdminClientiPage() {
               control={<Switch size="small" checked={mostraNonAttivi} onChange={(e) => setMostraNonAttivi(e.target.checked)} />}
               label={<Typography sx={{ fontSize: 12.5, fontWeight: 600, color: tokens.textSecondary }}>Mostra non attivi</Typography>}
             />
+            <TextField
+              size="small"
+              value={ricerca}
+              onChange={(e) => setRicerca(e.target.value)}
+              placeholder="Cerca per cliente, struttura, partita IVA o email"
+              sx={{ minWidth: { xs: '100%', sm: 320 } }}
+            />
             <BottoneNuovo etichetta="+ Nuovo Cliente" onClick={() => setNuovoClienteAperto(true)} />
           </Box>
         </Box>
 
         {clientiVisibili.length === 0 ? (
           <Box sx={{ bgcolor: tokens.surface, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: 4, textAlign: 'center', color: tokens.textSecondary }}>
-            {clienti.length === 0 ? 'Nessun Cliente presente.' : 'Nessun Cliente attivo.'}
+            {testoRicerca ? 'Nessun Cliente corrisponde alla ricerca.' : clienti.length === 0 ? 'Nessun Cliente presente.' : 'Nessun Cliente attivo.'}
           </Box>
         ) : (
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
@@ -266,6 +288,7 @@ export function SuperAdminClientiPage() {
                 key={c.id}
                 cliente={c}
                 adminUtente={trovaAdminCliente(c.id)}
+                onEntra={() => entra(c)}
                 onVediStrutture={() => setClienteStruttureAperto(c.id)}
                 onModifica={() => setClienteInModifica(c)}
               />
@@ -813,14 +836,35 @@ function EsitoServizioBadge({ nome, attivo, errore, dettaglio }: EsitoServizio &
   )
 }
 
+/** Un numero della card Cliente: il valore grande, l'etichetta piccola sotto. */
+function DatoCliente({ valore, etichetta, mono }: { valore: string; etichetta: string; mono?: boolean }) {
+  return (
+    <Box sx={{ bgcolor: tokens.paper, borderRadius: 1.5, px: 1, py: 0.9, minWidth: 0 }}>
+      <Typography
+        noWrap
+        sx={mono ? { ...stileImporto, fontSize: 12.5, fontWeight: 700 } : { fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}
+        title={valore}
+      >
+        {valore}
+      </Typography>
+      <Typography noWrap sx={{ fontSize: 11, color: tokens.textTertiary }}>
+        {etichetta}
+      </Typography>
+    </Box>
+  )
+}
+
+/** Un riquadro di sintesi per un Cliente: chi è, quanto pesa, e le azioni che ci si fanno sopra. */
 function ClienteCard({
   cliente,
   adminUtente,
+  onEntra,
   onVediStrutture,
   onModifica,
 }: {
   cliente: ClienteAdminDto
   adminUtente: UtenteAdminDto | null
+  onEntra: () => void
   onVediStrutture: () => void
   onModifica: () => void
 }) {
@@ -847,28 +891,39 @@ function ClienteCard({
         minWidth: 0,
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-        <Box sx={{ minWidth: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Box
+          sx={{
+            width: 38,
+            height: 38,
+            flex: '0 0 auto',
+            borderRadius: 1.5,
+            bgcolor: cliente.attivo ? tokens.blue600 : tokens.textTertiary,
+            color: '#fff',
+            display: 'grid',
+            placeItems: 'center',
+            fontFamily: fontDisplay,
+            fontWeight: 700,
+            fontSize: 17,
+          }}
+        >
+          {cliente.ragioneSociale.trim().charAt(0).toUpperCase() || '?'}
+        </Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, wordBreak: 'break-word' }}>{cliente.ragioneSociale}</Typography>
-          {adminUtente && (adminUtente.nome || adminUtente.cognome) && (
-            <Typography noWrap sx={{ fontSize: 12, color: tokens.textSecondary, mt: 0.25 }}>
-              {[adminUtente.nome, adminUtente.cognome].filter(Boolean).join(' ')}
-            </Typography>
-          )}
-          <Typography sx={{ fontSize: 12, color: tokens.textSecondary, fontFamily: fontMono, mt: 0.25 }}>
-            {cliente.partitaIva ?? 'P.IVA non indicata'}
-          </Typography>
           {adminUtente && (
             <Typography noWrap sx={{ fontSize: 12, color: tokens.textSecondary, mt: 0.25 }}>
-              {adminUtente.email}
+              {[adminUtente.nome, adminUtente.cognome].filter(Boolean).join(' ') || adminUtente.email}
             </Typography>
           )}
         </Box>
         <Box sx={{ display: 'flex', gap: 0.25, flex: '0 0 auto' }}>
           <Tooltip title="Strutture del Cliente">
-            <IconButton size="small" onClick={onVediStrutture} disabled={cliente.strutture.length === 0}>
-              <ApartmentOutlinedIcon fontSize="small" />
-            </IconButton>
+            <span>
+              <IconButton size="small" onClick={onVediStrutture} disabled={cliente.strutture.length === 0}>
+                <ApartmentOutlinedIcon fontSize="small" />
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title="Modifica dati Cliente e amministratore">
             <IconButton size="small" onClick={onModifica}>
@@ -877,6 +932,15 @@ function ClienteCard({
           </Tooltip>
         </Box>
       </Box>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+        <DatoCliente valore={String(cliente.strutture.length)} etichetta={cliente.strutture.length === 1 ? 'struttura' : 'strutture'} />
+        <DatoCliente valore={cliente.partitaIva ?? '—'} etichetta="partita IVA" mono />
+      </Box>
+
+      <Button size="small" variant="contained" onClick={onEntra} disabled={cliente.strutture.length === 0} sx={{ py: 0.5, alignSelf: 'flex-start' }}>
+        Entra
+      </Button>
 
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
         <Tooltip title={cliente.attivo ? 'Sospendi il Cliente (nessun suo utente potrà più accedere)' : 'Riattiva il Cliente'}>
