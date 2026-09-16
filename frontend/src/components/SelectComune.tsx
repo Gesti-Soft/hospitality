@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Autocomplete from '@mui/material/Autocomplete'
 import CircularProgress from '@mui/material/CircularProgress'
 import TextField from '@mui/material/TextField'
-import { type ComuneDto, useComuni } from '../api/riferimenti'
+import { type ComuneDto, useComuni, useStati } from '../api/riferimenti'
 
 /** Ritarda l'aggiornamento di un valore, per non interrogare il server ad ogni tasto premuto. */
 function useValoreConRitardo<T>(valore: T, ritardoMs: number): T {
@@ -14,7 +14,30 @@ function useValoreConRitardo<T>(valore: T, ritardoMs: number): T {
   return valoreRitardato
 }
 
-/** Select con ricerca lato server sui comuni italiani (~11.283 righe, non caricati tutti insieme). */
+/**
+ * Un'opzione dell'elenco: un comune italiano oppure uno stato estero. Gli stati prendono la stessa
+ * forma dei comuni perché a valle (schedina, PayTourist, fatturazione) il luogo è una descrizione e
+ * basta — provincia, CAP e codice Belfiore semplicemente non esistono per uno stato.
+ */
+type OpzioneLuogo = ComuneDto & { estero: boolean }
+
+/** Quanti stati esteri mostrare al massimo: stesso tetto che il server applica ai comuni. */
+const MassimiStati = 50
+
+/**
+ * Select con ricerca sui luoghi: comuni italiani (~11.283 righe, ricerca lato server) **e** stati
+ * esteri (236 righe, caricate una volta sola e filtrate qui).
+ *
+ * Gli stati ci sono perché i campi che usano questo componente sono luoghi, non comuni: chi è nato
+ * all'estero ha uno stato come luogo di nascita, chi risiede all'estero come residenza, e un
+ * documento può essere rilasciato fuori dall'Italia. Il backend lo dà già per scontato — la
+ * schedina cerca il codice di un luogo per descrizione tra comuni e stati concatenati
+ * (IAnagraficaAlloggiatiWebRepository.ListLuoghiAsync) — ma qui i soli comuni rendevano quei casi
+ * impossibili da compilare.
+ *
+ * Restano fuori di proposito i campi che sono solo stato (Cittadinanza, Stato di nascita): quelli
+ * usano SelectRiferimento con il solo elenco degli stati.
+ */
 export function SelectComune({
   label,
   value,
@@ -40,7 +63,34 @@ export function SelectComune({
   const [provinciaSelezionata, setProvinciaSelezionata] = useState<string | null>(null)
   const ricerca = useValoreConRitardo(testo, 300)
   const comuni = useComuni(ricerca)
-  const opzioni = comuni.data ?? []
+  const stati = useStati()
+
+  // Stessa relevanza applicata dal server ai comuni (RiferimentiRepository.CercaComuniAsync): prima
+  // chi ha il termine più vicino all'inizio, poi il nome più corto, infine l'ordine alfabetico.
+  // A elenco vuoto non si aggiunge nulla: senza un termine digitato l'elenco mostra già i primi 50
+  // comuni, e accodarci 50 stati sarebbe solo rumore.
+  const opzioniStati = useMemo<OpzioneLuogo[]>(() => {
+    const termine = ricerca.trim().toLowerCase()
+    if (termine.length === 0) return []
+
+    return (stati.data ?? [])
+      .filter((s) => s.descrizione.toLowerCase().includes(termine))
+      .sort((a, b) => {
+        const posizione = a.descrizione.toLowerCase().indexOf(termine) - b.descrizione.toLowerCase().indexOf(termine)
+        if (posizione !== 0) return posizione
+        if (a.descrizione.length !== b.descrizione.length) return a.descrizione.length - b.descrizione.length
+        return a.descrizione.localeCompare(b.descrizione)
+      })
+      .slice(0, MassimiStati)
+      .map((s) => ({ id: s.id, codice: s.codice, descrizione: s.descrizione, provincia: null, codiceBelfiore: null, cap: null, estero: true }))
+  }, [stati.data, ricerca])
+
+  // I comuni restano in testa: sono il caso di gran lunga più frequente, e le opzioni devono essere
+  // contigue per gruppo perché l'intestazione di `groupBy` non si ripeta.
+  const opzioni = useMemo<OpzioneLuogo[]>(
+    () => [...(comuni.data ?? []).map((c) => ({ ...c, estero: false })), ...opzioniStati],
+    [comuni.data, opzioniStati],
+  )
 
   // Risolve in automatico provincia/CAP/Belfiore di un valore già presente al montaggio (es. comune
   // di nascita copiato dalla scheda ospiti in un Cliente appena creato) non appena la ricerca
@@ -58,8 +108,8 @@ export function SelectComune({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, opzioni])
 
-  const opzioneSelezionata: ComuneDto | null =
-    value ? { id: '', codice: 0, descrizione: value, provincia: provinciaSelezionata, codiceBelfiore: null, cap: null } : null
+  const opzioneSelezionata: OpzioneLuogo | null =
+    value ? { id: '', codice: 0, descrizione: value, provincia: provinciaSelezionata, codiceBelfiore: null, cap: null, estero: false } : null
 
   return (
     <Autocomplete
@@ -88,6 +138,7 @@ export function SelectComune({
         // dell'operatore è già gestita correttamente da onChange qui sotto.
       }}
       isOptionEqualToValue={(o, v) => o.descrizione === v.descrizione}
+      groupBy={(o) => (o.estero ? 'Stati esteri' : 'Comuni italiani')}
       getOptionLabel={(o) => (o.provincia ? `${o.descrizione} (${o.provincia})` : o.descrizione)}
       onChange={(_, v) => {
         onChange(v?.descrizione ?? '')
@@ -95,7 +146,7 @@ export function SelectComune({
         setProvinciaSelezionata(v?.provincia ?? null)
         onComuneSelezionato?.(v ?? null)
       }}
-      noOptionsText={ricerca.trim().length < 2 ? 'Digita per cercare...' : 'Nessun comune trovato'}
+      noOptionsText={ricerca.trim().length < 2 ? 'Digita per cercare...' : 'Nessun comune o stato trovato'}
       renderInput={(params) => (
         <TextField
           {...params}
