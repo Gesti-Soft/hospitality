@@ -127,6 +127,20 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cognome, nome, dataNascita, sesso, belfioreNascita, denominazione, iso2])
 
+  // Cosa impedirebbe di generare l'XML per lo SdI. Ricalca i controlli del backend
+  // (FatturaDocumentGenerator.ValidaPerSdi), che resta l'unico a decidere: qui servono solo a farlo
+  // sapere adesso, mentre l'ospite è ancora davanti a te, invece che il giorno in cui qualcuno prova
+  // a scaricare la fattura. Il salvataggio non viene bloccato: un cliente incompleto va comunque
+  // salvato, il PDF si genera lo stesso.
+  const esteroSdi = iso2.trim() !== '' && iso2.trim().toUpperCase() !== 'IT'
+  const mancantiSdi: string[] = []
+  if (pIva.trim() === '' && codiceFiscale.trim() === '') mancantiSdi.push('partita IVA o codice fiscale')
+  if (indirizzo.trim() === '') mancantiSdi.push('indirizzo')
+  if (luogoResidenza.trim() === '') mancantiSdi.push('comune di residenza')
+  if (iso2.trim() !== '' && !/^[A-Za-z]{2}$/.test(iso2.trim())) mancantiSdi.push('nazione in due lettere (es. IT, DE)')
+  if (!esteroSdi && !/^\d{5}$/.test(cap.trim())) mancantiSdi.push('CAP di cinque cifre')
+  if (!esteroSdi && provincia.trim() !== '' && !/^[A-Za-z]{2}$/.test(provincia.trim())) mancantiSdi.push('provincia in due lettere (es. TP)')
+
   function salva() {
     if (denominazione.trim() === '' && (nome.trim() === '' || cognome.trim() === '')) {
       setErrore('Indica una denominazione (azienda) oppure nome e cognome (privato).')
@@ -179,6 +193,13 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
       <DialogTitle>{clienteEsistente ? 'Modifica cliente' : 'Nuovo cliente'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
+
+        {mancantiSdi.length > 0 && (
+          <Alert severity="warning">
+            Per la fattura elettronica manca ancora: {mancantiSdi.join(', ')}. Puoi salvare lo stesso — la fattura in PDF si
+            genera comunque — ma il file per lo SdI no.
+          </Alert>
+        )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TitoloSezione>Anagrafica</TitoloSezione>

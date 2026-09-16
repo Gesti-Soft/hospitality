@@ -16,4 +16,13 @@ public interface IFatturaDocumentGenerator
     byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda);
 
     byte[] GeneraXmlSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda);
+
+    /// <summary>
+    /// Motivi per cui l'XML non è trasmissibile, vuoto se è a posto — stesso principio di
+    /// SchedinaAlloggiatiWebBuilder.Valida: si controlla ciò che <see cref="GeneraXmlSdi"/> andrebbe
+    /// a scrivere, perché un campo obbligatorio mancante diventa un elemento vuoto e lo SDI scarta
+    /// il file senza che l'operatore possa capire quale dato mancava. Meglio non produrlo affatto e
+    /// dirlo subito, quando la fattura è ancora sotto gli occhi di chi l'ha fatta.
+    /// </summary>
+    IReadOnlyList<string> ValidaPerSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda);
 }

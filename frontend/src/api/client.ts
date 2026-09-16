@@ -119,7 +119,14 @@ export async function apiScaricaFile(path: string, nomeFile: string): Promise<vo
   rinnovaSessioneSeNecessario(sessione)
 
   if (!response.ok) {
-    throw new ApiError(response.status, `Download di ${nomeFile} non riuscito (${response.status}).`)
+    // Anche su un download l'errore arriva come ProblemDetails, e il suo "detail" è l'unica cosa
+    // utile da mostrare: per la fattura elettronica è l'elenco dei dati che mancano al cliente.
+    // Senza questa lettura resterebbe solo un "non riuscito (409)" che non dice cosa correggere.
+    const corpo = await response.json().catch(() => null)
+    const messaggio =
+      (corpo && typeof corpo === 'object' && 'detail' in corpo && typeof corpo.detail === 'string' && corpo.detail) ||
+      `Download di ${nomeFile} non riuscito (${response.status}).`
+    throw new ApiError(response.status, messaggio, corpo)
   }
 
   const blob = await response.blob()

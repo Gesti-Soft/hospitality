@@ -179,6 +179,16 @@ public class FatturazioneService(
     public async Task<byte[]> GeneraXmlSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
     {
         var (fattura, cliente, azienda) = await CaricaPerDocumentoAsync(currentUser, strutturaId, fatturaId, cancellationToken);
+
+        // Un dato obbligatorio mancante diventerebbe un elemento vuoto e lo SDI scarterebbe il file
+        // giorni dopo, quando nessuno ricorda più quella fattura: meglio non generarlo e dire cosa
+        // manca. Il PDF resta scaricabile comunque, non ha vincoli di tracciato.
+        var motivi = documentGenerator.ValidaPerSdi(fattura, cliente, azienda);
+        if (motivi.Count > 0)
+        {
+            throw new ConflictException($"Fattura elettronica non generabile: {string.Join("; ", motivi)}.");
+        }
+
         return documentGenerator.GeneraXmlSdi(fattura, cliente, azienda);
     }
 

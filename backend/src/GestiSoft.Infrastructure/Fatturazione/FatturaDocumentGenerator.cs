@@ -108,22 +108,33 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
 
         var imponibile = fattura.PrezzoTotale;
         var imposta = Math.Round(fattura.ImportoTotale - fattura.PrezzoTotale, 2, MidpointRounding.AwayFromZero);
+        var clienteEstero = Estero(cliente?.Iso2);
 
         var datiTrasmissione = new XElement("DatiTrasmissione",
             new XElement("IdTrasmittente",
-                new XElement("IdPaese", azienda?.Iso2 ?? "IT"),
+                new XElement("IdPaese", CodiceNazione(azienda?.Iso2)),
                 new XElement("IdCodice", azienda?.CodiceFiscale ?? azienda?.PIva ?? string.Empty)),
             new XElement("ProgressivoInvio", fattura.Progressivo.ToString("00000", CultureInfo.InvariantCulture)),
             new XElement("FormatoTrasmissione", "FPR12"),
-            new XElement("CodiceDestinatario", string.IsNullOrWhiteSpace(cliente?.CodiceDestinatario) ? "0000000" : cliente.CodiceDestinatario));
+            new XElement("CodiceDestinatario", CodiceDestinatario(cliente, clienteEstero)));
 
         var cedentePrestatore = new XElement("CedentePrestatore",
             DatiAnagrafici(azienda?.Iso2, azienda?.PIva, azienda?.CodiceFiscale, azienda?.Denominazione, azienda?.Nome, azienda?.Cognome, azienda?.RegimeFiscale),
             Sede(azienda?.Indirizzo, azienda?.NCivico, azienda?.Cap, azienda?.Comune, azienda?.Provincia, azienda?.Nazione));
 
+        // Per un cessionario non residente l'indirizzo segue le convenzioni dello SDI: CAP fisso a
+        // "00000" (il codice postale vero, se serve, va scritto dentro l'Indirizzo) e Provincia
+        // omessa, che è valorizzabile solo per l'Italia. La Nazione è quella del cliente: prima era
+        // scritta fissa a "IT" e un cliente estero risultava residente in Italia.
         var cessionarioCommittente = new XElement("CessionarioCommittente",
             DatiAnagrafici(cliente?.Iso2, cliente?.PIva, cliente?.CodiceFiscale, cliente?.Denominazione, cliente?.Nome, cliente?.Cognome, regimeFiscale: null),
-            Sede(cliente?.Indirizzo, cliente?.NCivico, cliente?.Cap, cliente?.LuogoResidenza, cliente?.Provincia, "IT"));
+            Sede(
+                cliente?.Indirizzo,
+                cliente?.NCivico,
+                clienteEstero ? CapEstero : cliente?.Cap,
+                cliente?.LuogoResidenza,
+                clienteEstero ? null : cliente?.Provincia,
+                cliente?.Iso2));
 
         var datiGenerali = new XElement("DatiGenerali",
             new XElement("DatiGeneraliDocumento",
@@ -167,6 +178,116 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         return stream.ToArray();
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<string> ValidaPerSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda)
+    {
+        // Numero, data e importi della fattura non si controllano: sono campi non annullabili del
+        // modello, valorizzati alla creazione. Qui manca solo ciò che l'operatore può lasciare in
+        // bianco, cioè le anagrafiche.
+        var motivi = new List<string>();
+
+        if (azienda is null)
+        {
+            motivi.Add("mancano i dati fiscali della struttura");
+        }
+        else
+        {
+            // La sede della struttura scrive azienda.Nazione, l'identificativo fiscale usa azienda.Iso2:
+            // sono due campi distinti e vanno controllati entrambi.
+            motivi.AddRange(ValidaControparte(
+                "della struttura", azienda.Nazione, azienda.PIva, azienda.CodiceFiscale,
+                azienda.Denominazione, azienda.Nome, azienda.Cognome,
+                azienda.Indirizzo, azienda.Comune, azienda.Cap, azienda.Provincia));
+
+            // L'ISO2 della struttura finisce sempre nel file, anche senza partita IVA: identifica
+            // chi trasmette.
+            if (!NazioneValida(azienda.Iso2))
+            {
+                motivi.Add("il codice nazione della struttura non è di due lettere (es. IT)");
+            }
+
+            if (azienda.RegimeFiscale is null)
+            {
+                motivi.Add("manca il regime fiscale della struttura");
+            }
+        }
+
+        if (cliente is null)
+        {
+            motivi.Add("la fattura non ha un cliente collegato");
+        }
+        else
+        {
+            motivi.AddRange(ValidaControparte(
+                "del cliente", cliente.Iso2, cliente.PIva, cliente.CodiceFiscale,
+                cliente.Denominazione, cliente.Nome, cliente.Cognome,
+                cliente.Indirizzo, cliente.LuogoResidenza, cliente.Cap, cliente.Provincia));
+        }
+
+        return motivi;
+    }
+
+    /// <summary>
+    /// I controlli comuni a chi emette e a chi riceve: sono gli stessi campi, con le stesse regole di
+    /// tracciato. CAP e Provincia si controllano solo per l'Italia — per l'estero
+    /// <see cref="GeneraXmlSdi"/> scrive comunque le convenzioni ("00000", provincia omessa) e quello
+    /// che c'è scritto in anagrafica non finisce nel file.
+    /// </summary>
+    private static List<string> ValidaControparte(
+        string chi, string? nazione, string? pIva, string? codiceFiscale, string? denominazione, string? nome, string? cognome,
+        string? indirizzo, string? comune, string? cap, string? provincia)
+    {
+        var motivi = new List<string>();
+        var estero = Estero(nazione);
+
+        if (string.IsNullOrWhiteSpace(pIva) && string.IsNullOrWhiteSpace(codiceFiscale))
+        {
+            motivi.Add($"manca la partita IVA o il codice fiscale {chi}");
+        }
+
+        if (string.IsNullOrWhiteSpace(denominazione) && (string.IsNullOrWhiteSpace(nome) || string.IsNullOrWhiteSpace(cognome)))
+        {
+            motivi.Add($"manca la denominazione {chi}, oppure nome e cognome");
+        }
+
+        if (string.IsNullOrWhiteSpace(indirizzo))
+        {
+            motivi.Add($"manca l'indirizzo {chi}");
+        }
+
+        if (string.IsNullOrWhiteSpace(comune))
+        {
+            motivi.Add($"manca il comune {chi}");
+        }
+
+        if (!NazioneValida(nazione))
+        {
+            motivi.Add($"la nazione {chi} non è un codice di due lettere (es. IT, DE)");
+        }
+
+        if (!estero && !CapValido(cap))
+        {
+            motivi.Add($"il CAP {chi} non è valido: servono cinque cifre");
+        }
+
+        if (!estero && !string.IsNullOrWhiteSpace(provincia) && !ProvinciaValida(provincia))
+        {
+            motivi.Add($"la provincia {chi} non è una sigla di due lettere (es. TP)");
+        }
+
+        return motivi;
+    }
+
+    /// <summary>Vuoto va bene: <see cref="CodiceNazione"/> ripiega su IT. Altrimenti servono esattamente due lettere.</summary>
+    private static bool NazioneValida(string? nazione) =>
+        string.IsNullOrWhiteSpace(nazione) || (nazione.Trim().Length == 2 && nazione.Trim().All(char.IsLetter));
+
+    private static bool CapValido(string? cap) =>
+        !string.IsNullOrWhiteSpace(cap) && cap.Trim().Length == 5 && cap.Trim().All(char.IsAsciiDigit);
+
+    private static bool ProvinciaValida(string? provincia) =>
+        provincia is not null && provincia.Trim().Length == 2 && provincia.Trim().All(char.IsLetter);
+
     private static XElement DatiAnagrafici(string? iso2, string? pIva, string? codiceFiscale, string? denominazione, string? nome, string? cognome, RegimeFiscale? regimeFiscale)
     {
         var anagrafica = !string.IsNullOrWhiteSpace(denominazione)
@@ -188,8 +309,37 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         !string.IsNullOrWhiteSpace(nCivico) ? new XElement("NumeroCivico", nCivico) : null,
         new XElement("CAP", string.IsNullOrWhiteSpace(cap) ? "00000" : cap),
         new XElement("Comune", comune ?? string.Empty),
-        !string.IsNullOrWhiteSpace(provincia) ? new XElement("Provincia", provincia) : null,
-        new XElement("Nazione", string.IsNullOrWhiteSpace(nazione) ? "IT" : nazione));
+        !string.IsNullOrWhiteSpace(provincia) ? new XElement("Provincia", provincia.Trim().ToUpperInvariant()) : null,
+        new XElement("Nazione", CodiceNazione(nazione)));
+
+    /// <summary>CAP convenzionale degli indirizzi esteri: il tracciato vuole cinque cifre e per l'estero sono cinque zeri.</summary>
+    private const string CapEstero = "00000";
+
+    /// <summary>Codice destinatario di un cessionario non residente: sette "X", convenzione dello SDI.</summary>
+    private const string CodiceDestinatarioEstero = "XXXXXXX";
+
+    /// <summary>Codice destinatario di ripiego per un cliente italiano che non ne ha comunicato uno.</summary>
+    private const string CodiceDestinatarioItaliano = "0000000";
+
+    /// <summary>
+    /// La controparte è estera quando l'ISO2 c'è ed è diverso da IT. Campo vuoto significa italiano:
+    /// è lo stesso criterio con cui il frontend decide se calcolare il Codice Fiscale.
+    /// </summary>
+    private static bool Estero(string? iso2) =>
+        !string.IsNullOrWhiteSpace(iso2) && !string.Equals(iso2.Trim(), "IT", StringComparison.OrdinalIgnoreCase);
+
+    private static string CodiceNazione(string? iso2) =>
+        string.IsNullOrWhiteSpace(iso2) ? "IT" : iso2.Trim().ToUpperInvariant();
+
+    /// <summary>
+    /// Un codice destinatario scritto a mano vince sempre: un cliente estero può averne uno vero
+    /// (rappresentante fiscale, sede identificata in Italia) e sovrascriverlo con la convenzione
+    /// impedirebbe il recapito. La convenzione interviene solo quando il campo è vuoto.
+    /// </summary>
+    private static string CodiceDestinatario(DatiCliente? cliente, bool estero) =>
+        !string.IsNullOrWhiteSpace(cliente?.CodiceDestinatario)
+            ? cliente.CodiceDestinatario.Trim()
+            : estero ? CodiceDestinatarioEstero : CodiceDestinatarioItaliano;
 
     private static string CodiceNatura(NaturaIva natura) => natura switch
     {
