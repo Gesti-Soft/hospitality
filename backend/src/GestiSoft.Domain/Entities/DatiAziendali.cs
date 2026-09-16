@@ -23,6 +23,16 @@ public class DatiAziendali : TenantEntity
 
     public RegimeFiscale? RegimeFiscale { get; set; }
 
+    /// <summary>
+    /// Aliquota IVA e Natura proposte su una fattura nuova: sono una caratteristica di chi emette
+    /// (il regime fiscale della struttura), non della singola fattura, quindi stanno qui e non si
+    /// ridigitano ogni volta. Restano modificabili sulla fattura, dove finisce il valore effettivo.
+    /// </summary>
+    public AliquotaIva? AliquotaIvaDefault { get; set; }
+
+    /// <inheritdoc cref="AliquotaIvaDefault"/>
+    public NaturaIva? NaturaDefault { get; set; }
+
     public string? Indirizzo { get; set; }
 
     public string? NCivico { get; set; }

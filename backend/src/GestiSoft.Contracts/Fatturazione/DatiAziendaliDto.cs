@@ -11,6 +11,8 @@ public record DatiAziendaliDto(
     string? Nome,
     string? Cognome,
     RegimeFiscale? RegimeFiscale,
+    AliquotaIva? AliquotaIvaDefault,
+    NaturaIva? NaturaDefault,
     string? Indirizzo,
     string? NCivico,
     string? Cap,

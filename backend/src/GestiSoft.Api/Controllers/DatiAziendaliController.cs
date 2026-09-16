@@ -27,5 +27,6 @@ public class DatiAziendaliController(DatiAziendaliService service, ICurrentUser 
 
     private static DatiAziendaliDto ToDto(Domain.Entities.DatiAziendali d) => new(
         d.StrutturaId, d.Iso2, d.PIva, d.CodiceFiscale, d.Denominazione, d.Nome, d.Cognome,
-        d.RegimeFiscale, d.Indirizzo, d.NCivico, d.Cap, d.Comune, d.Provincia, d.Nazione);
+        d.RegimeFiscale, d.AliquotaIvaDefault, d.NaturaDefault,
+        d.Indirizzo, d.NCivico, d.Cap, d.Comune, d.Provincia, d.Nazione);
 }

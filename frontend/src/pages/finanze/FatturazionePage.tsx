@@ -21,6 +21,7 @@ import { useStruttura } from '../../struttura/StrutturaContext'
 import { useStoricoPrenotazioni } from '../../api/prenotazioni'
 import { ApiError } from '../../api/client'
 import {
+  AliquotaIva,
   RegimeFiscale,
   scaricaFatturaPdf,
   scaricaFatturaXml,
@@ -39,7 +40,7 @@ import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
 import { useToast } from '../../toast/ToastContext'
 import { useMobile } from '../../lib/useMobile'
 import { DatiClienteDialog } from '../../components/DatiClienteDialog'
-import { FatturaDialog, type StatoFatturaIniziale } from '../../components/FatturaDialog'
+import { ETICHETTA_NATURA, FatturaDialog, type StatoFatturaIniziale } from '../../components/FatturaDialog'
 import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, SentinellaCaricamentoElenco, TestataCardElenco } from '../../components/CardElenco'
 import { FiltriRicercaData, nelRangeData, RigaCaricamentoAltri } from '../../components/finanze/FinanzeComuni'
 import { usePaginazioneScroll } from '../../lib/usePaginazioneScroll'
@@ -326,6 +327,8 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
   const [nome, setNome] = useState(dati.nome ?? '')
   const [cognome, setCognome] = useState(dati.cognome ?? '')
   const [regimeFiscale, setRegimeFiscale] = useState<string>(dati.regimeFiscale != null ? String(dati.regimeFiscale) : '')
+  const [aliquotaIvaDefault, setAliquotaIvaDefault] = useState<string>(dati.aliquotaIvaDefault != null ? String(dati.aliquotaIvaDefault) : '')
+  const [naturaDefault, setNaturaDefault] = useState<string>(dati.naturaDefault != null ? String(dati.naturaDefault) : '')
   const [indirizzo, setIndirizzo] = useState(dati.indirizzo ?? '')
   const [nCivico, setNCivico] = useState(dati.nCivico ?? '')
   const [cap, setCap] = useState(dati.cap ?? '')
@@ -346,6 +349,8 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
       nome: vuoto(nome),
       cognome: vuoto(cognome),
       regimeFiscale: regimeFiscale === '' ? null : (Number(regimeFiscale) as DatiAziendaliDto['regimeFiscale']),
+      aliquotaIvaDefault: aliquotaIvaDefault === '' ? null : (Number(aliquotaIvaDefault) as DatiAziendaliDto['aliquotaIvaDefault']),
+      naturaDefault: naturaDefault === '' ? null : (Number(naturaDefault) as DatiAziendaliDto['naturaDefault']),
       indirizzo: vuoto(indirizzo),
       nCivico: vuoto(nCivico),
       cap: vuoto(cap),
@@ -399,6 +404,43 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
 
       <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
         <TextField label="Nazione (denominazione)" value={nazione} onChange={(e) => setNazione(e.target.value)} fullWidth disabled={aggiorna.isPending} />
+      </Box>
+
+      <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+        Aliquota e natura qui sotto sono solo la proposta iniziale di una fattura nuova: restano modificabili su ogni singola fattura.
+      </Typography>
+
+      <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
+        <TextField
+          select
+          label="Aliquota IVA predefinita"
+          value={aliquotaIvaDefault}
+          onChange={(e) => setAliquotaIvaDefault(e.target.value)}
+          fullWidth
+          disabled={aggiorna.isPending}
+        >
+          <MenuItem value="">—</MenuItem>
+          {Object.values(AliquotaIva).map((valore) => (
+            <MenuItem key={valore} value={String(valore)}>{`${valore}%`}</MenuItem>
+          ))}
+        </TextField>
+        {aliquotaIvaDefault === String(AliquotaIva.Iva0) && (
+          <TextField
+            select
+            label="Natura IVA predefinita"
+            value={naturaDefault}
+            onChange={(e) => setNaturaDefault(e.target.value)}
+            fullWidth
+            disabled={aggiorna.isPending}
+          >
+            <MenuItem value="">—</MenuItem>
+            {Object.entries(ETICHETTA_NATURA).map(([valore, etichetta]) => (
+              <MenuItem key={valore} value={valore}>
+                {etichetta}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
       </Box>
 
       {puoScrivere && (

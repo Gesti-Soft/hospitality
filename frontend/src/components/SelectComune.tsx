@@ -92,6 +92,19 @@ export function SelectComune({
     [comuni.data, opzioniStati],
   )
 
+  // Il testo mostrato segue il valore anche quando a cambiarlo è il modulo e non chi digita (es. il
+  // comune compilato in automatico per un cliente estero): `testo` viene inizializzato una volta
+  // sola, quindi senza questo allineamento il campo resterebbe visivamente vuoto mentre il valore
+  // sotto è cambiato. Scatta solo su un cambio vero del valore: durante la digitazione libera
+  // `value` non si muove, e dopo una selezione dalla lista il testo è già quello giusto.
+  const ultimoValore = useRef(value)
+  useEffect(() => {
+    if (value !== ultimoValore.current) {
+      ultimoValore.current = value
+      setTesto(value)
+    }
+  }, [value])
+
   // Risolve in automatico provincia/CAP/Belfiore di un valore già presente al montaggio (es. comune
   // di nascita copiato dalla scheda ospiti in un Cliente appena creato) non appena la ricerca
   // restituisce un riscontro esatto — altrimenti resterebbero noti solo se l'operatore riseleziona

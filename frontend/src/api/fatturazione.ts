@@ -42,6 +42,9 @@ export interface DatiAziendaliDto {
   nome: string | null
   cognome: string | null
   regimeFiscale: RegimeFiscale | null
+  /** Aliquota e natura proposte su una fattura nuova: dipendono dal regime di chi emette, non dalla singola fattura. */
+  aliquotaIvaDefault: AliquotaIva | null
+  naturaDefault: NaturaIva | null
   indirizzo: string | null
   nCivico: string | null
   cap: string | null

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
@@ -18,6 +18,7 @@ import {
   TipoDocumentoFattura,
   useAggiornaFattura,
   useCreaFattura,
+  useDatiAziendali,
   useRisolviClientePerPrenotazione,
   type AggiornaFatturaRequest,
   type CreaFatturaDaPrenotazioneRequest,
@@ -41,7 +42,7 @@ const ETICHETTA_REGIME: Record<RegimeFiscale, string> = {
   [RegimeFiscale.RF19_Forfettario]: 'RF19 — Forfettario',
 }
 
-const ETICHETTA_NATURA: Record<NaturaIva, string> = {
+export const ETICHETTA_NATURA: Record<NaturaIva, string> = {
   [NaturaIva.N1_EscluseArt15]: 'N1 — Escluse art. 15',
   [NaturaIva.N2_2_NonSoggetteAltriCasi]: 'N2.2 — Non soggette',
   [NaturaIva.N4_Esenti]: 'N4 — Esenti',
@@ -73,7 +74,9 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   const [datiClienteId, setDatiClienteId] = useState(modifica?.datiClienteId ?? '')
   const [tipoDocumento, setTipoDocumento] = useState<string>(modifica?.tipoDocumento != null ? String(modifica.tipoDocumento) : String(TipoDocumentoFattura.TD01_Fattura))
   const [regimeFiscale, setRegimeFiscale] = useState<string>(modifica?.regimeFiscale != null ? String(modifica.regimeFiscale) : String(RegimeFiscale.RF01_Ordinario))
-  const [descrizione, setDescrizione] = useState(modifica?.descrizione ?? 'Soggiorno')
+  // Nessun testo proposto: la descrizione è quello che il cliente si ritrova scritto in fattura,
+  // e "Soggiorno" precompilato veniva confermato senza leggerlo. Va scritta ogni volta.
+  const [descrizione, setDescrizione] = useState(modifica?.descrizione ?? '')
   const [quantita, setQuantita] = useState(String(modifica?.quantita ?? 1))
   const [prezzoUnitario, setPrezzoUnitario] = useState(modifica?.prezzoUnitario != null ? String(modifica.prezzoUnitario) : '')
   // Finché l'operatore non tocca il campo a mano, "Prezzo unitario" segue il prezzo della prenotazione
@@ -91,6 +94,22 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   const aggiorna = useAggiornaFattura(strutturaId)
   const risolviCliente = useRisolviClientePerPrenotazione(strutturaId)
   const inCorso = crea.isPending || aggiorna.isPending
+
+  // Regime fiscale, aliquota e natura di una fattura nuova arrivano dal profilo fiscale della
+  // struttura: dipendono da chi emette, non dalla singola fattura, e prima erano valori fissi nel
+  // codice (RF01 e 10%) che un forfettario doveva correggere a ogni fattura. Si applicano una volta
+  // sola, quando i dati arrivano, e mai in modifica — lì contano i valori con cui è stata emessa.
+  const datiAziendali = useDatiAziendali(strutturaId)
+  const predefinitiApplicati = useRef(false)
+  useEffect(() => {
+    if (modifica !== null || predefinitiApplicati.current || !datiAziendali.data) return
+    predefinitiApplicati.current = true
+
+    if (datiAziendali.data.regimeFiscale != null) setRegimeFiscale(String(datiAziendali.data.regimeFiscale))
+    if (datiAziendali.data.aliquotaIvaDefault != null) setAliquotaIva(String(datiAziendali.data.aliquotaIvaDefault))
+    if (datiAziendali.data.naturaDefault != null) setNatura(String(datiAziendali.data.naturaDefault))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datiAziendali.data])
 
   // Ogni volta che si sceglie una prenotazione (mai in modifica, dove il Cliente è già assegnato),
   // chiede subito un'ANTEPRIMA (nessuna scrittura) del Cliente fatturabile collegato al suo ospite —
@@ -125,6 +144,10 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   function salva() {
     if (!modifica && prenotazioneId === '') {
       setErrore('Seleziona la prenotazione da fatturare.')
+      return
+    }
+    if (descrizione.trim() === '') {
+      setErrore('Scrivi la descrizione: è la riga che comparirà in fattura.')
       return
     }
     if (Number(quantita) <= 0) {
@@ -238,7 +261,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           </TextField>
         </Box>
 
-        <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} disabled={inCorso} />
+        <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} required disabled={inCorso} />
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', flexWrap: 'wrap', gap: 2 }}>
           <TextField

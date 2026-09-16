@@ -91,6 +91,98 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
   // esplicitamente quando l'operatore svuota di nuovo il campo.
   const ultimoCfAutomatico = useRef<string | null>(null)
 
+  // Convenzioni della fattura elettronica verso l'estero, scritte nel modulo appena la Nazione dice
+  // che il cliente non è italiano: CAP "00000", nessuna provincia (valorizzabile solo per l'Italia)
+  // e codice destinatario "XXXXXXX". Stessa regola degli altri automatismi qui sopra — si scrive
+  // solo su un campo vuoto o che contiene ancora il valore messo da noi, così una correzione a mano
+  // non viene mai sovrascritta (un cliente estero può avere un codice destinatario vero).
+  // Tornando su un cliente italiano si ritira solo ciò che avevamo scritto noi, provincia compresa.
+  const CapEstero = '00000'
+  const CodiceDestinatarioEstero = 'XXXXXXX'
+  // Lo SDI pretende almeno un identificativo fiscale sul cliente, e un privato straniero di norma
+  // non ha né partita IVA né codice fiscale italiano: si mette un segnaposto, e se poi il cliente
+  // comunica la sua partita IVA vera l'operatore la scrive sopra.
+  const PIvaEstero = '0000000'
+  const ultimoCapAutomatico = useRef<string | null>(null)
+  const ultimoCodiceDestinatarioAutomatico = useRef<string | null>(null)
+  const ultimaPIvaAutomatica = useRef<string | null>(null)
+  const ultimoIndirizzoAutomatico = useRef<string | null>(null)
+  const ultimoComuneAutomatico = useRef<string | null>(null)
+  const provinciaPrimaDellEstero = useRef<string | null>(null)
+
+  useEffect(() => {
+    const estero = iso2.trim() !== '' && iso2.trim().toUpperCase() !== 'IT'
+
+    // Indirizzo e comune di un cliente estero portano il nome dello stato — è quello che contiene
+    // la fattura verso l'estero già accettata dallo SDI ("Germania - 00000, Germania - DE"): il
+    // tracciato pretende entrambi i campi non vuoti e la città estera non sta in nessuna tabella.
+    // Il nome si ricava dall'ISO2 sull'elenco degli stati, con la cittadinanza come ripiego.
+    const nomeNazione = estero
+      ? (stati.data ?? []).find((s) => s.acronimo?.trim().toUpperCase() === iso2.trim().toUpperCase())?.descrizione
+        ?? (cittadinanza.trim() === '' ? null : cittadinanza.trim())
+      : null
+
+    if (estero) {
+      if (nomeNazione !== null && nomeNazione !== undefined) {
+        if (indirizzo.trim() === '' || indirizzo === ultimoIndirizzoAutomatico.current) {
+          ultimoIndirizzoAutomatico.current = nomeNazione
+          setIndirizzo(nomeNazione)
+        }
+        if (luogoResidenza.trim() === '' || luogoResidenza === ultimoComuneAutomatico.current) {
+          ultimoComuneAutomatico.current = nomeNazione
+          setLuogoResidenza(nomeNazione)
+        }
+      }
+      if (cap.trim() === '' || cap === ultimoCapAutomatico.current) {
+        ultimoCapAutomatico.current = CapEstero
+        setCap(CapEstero)
+      }
+      if (codiceDestinatario.trim() === '' || codiceDestinatario === ultimoCodiceDestinatarioAutomatico.current) {
+        ultimoCodiceDestinatarioAutomatico.current = CodiceDestinatarioEstero
+        setCodiceDestinatario(CodiceDestinatarioEstero)
+      }
+      if (provincia.trim() !== '') {
+        provinciaPrimaDellEstero.current = provincia
+        setProvincia('')
+      }
+      // Il segnaposto serve solo a chi non ha nessun identificativo: se il cliente ha già un codice
+      // fiscale, quello basta allo SDI e una partita IVA finta accanto sarebbe solo un dato falso.
+      if ((pIva.trim() === '' && codiceFiscale.trim() === '') || pIva === ultimaPIvaAutomatica.current) {
+        ultimaPIvaAutomatica.current = PIvaEstero
+        setPIva(PIvaEstero)
+      }
+      return
+    }
+
+    if (cap === ultimoCapAutomatico.current) {
+      ultimoCapAutomatico.current = null
+      setCap('')
+    }
+    if (codiceDestinatario === ultimoCodiceDestinatarioAutomatico.current) {
+      ultimoCodiceDestinatarioAutomatico.current = null
+      setCodiceDestinatario('')
+    }
+    if (pIva === ultimaPIvaAutomatica.current) {
+      ultimaPIvaAutomatica.current = null
+      setPIva('')
+    }
+    if (indirizzo === ultimoIndirizzoAutomatico.current) {
+      ultimoIndirizzoAutomatico.current = null
+      setIndirizzo('')
+    }
+    if (luogoResidenza === ultimoComuneAutomatico.current) {
+      ultimoComuneAutomatico.current = null
+      setLuogoResidenza('')
+    }
+    if (provincia.trim() === '' && provinciaPrimaDellEstero.current !== null) {
+      setProvincia(provinciaPrimaDellEstero.current)
+      provinciaPrimaDellEstero.current = null
+    }
+    // stati.data serve perché l'elenco può arrivare dopo che la Nazione è già impostata: senza,
+    // il nome dello stato resterebbe quello di ripiego (o nessuno) per tutta la sessione.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iso2, stati.data])
+
   useEffect(() => {
     if (cittadinanza.trim() === '') return
     const stato = (stati.data ?? []).find((x) => x.descrizione.toLowerCase() === cittadinanza.trim().toLowerCase())
