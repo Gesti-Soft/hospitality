@@ -120,10 +120,10 @@ public class OsservatorioClient(HttpClient http) : IOsservatorioClient
     }
 
     public Task<OsservatorioEsitoOperazione> SendArrivalsAsync(string token, string hotelCode, IReadOnlyList<OsservatorioStayDto> stays, CancellationToken cancellationToken) =>
-        InviaOperazioneAsync("stay/addfrompms", token, CostruisciStaysPmsDto(stays), cancellationToken);
+        InviaOperazioneAsync("stay/addfrompms", token, CostruisciStaysPmsDto(hotelCode, stays), cancellationToken);
 
     public Task<OsservatorioEsitoOperazione> SendCheckoutsAsync(string token, string hotelCode, IReadOnlyList<OsservatorioStayDto> stays, CancellationToken cancellationToken) =>
-        InviaOperazioneAsync("stay/updatefrompms", token, CostruisciStaysPmsDto(stays), cancellationToken);
+        InviaOperazioneAsync("stay/updatefrompms", token, CostruisciStaysPmsDto(hotelCode, stays), cancellationToken);
 
     private async Task<OsservatorioEsitoOperazione> InviaOperazioneAsync(string percorso, string token, XElement payload, CancellationToken cancellationToken)
     {
@@ -154,12 +154,21 @@ public class OsservatorioClient(HttpClient http) : IOsservatorioClient
         }
     }
 
-    private static XElement CostruisciStaysPmsDto(IReadOnlyList<OsservatorioStayDto> stays) =>
-        new("StaysPmsDTO", stays.Select(CostruisciStay));
+    private static XElement CostruisciStaysPmsDto(string hotelCode, IReadOnlyList<OsservatorioStayDto> stays) =>
+        new("StaysPmsDTO", stays.Select(stay => CostruisciStay(hotelCode, stay)));
 
-    private static XElement CostruisciStay(OsservatorioStayDto stay) =>
+    /// <summary>
+    /// L'ordine degli elementi conta: lo schema del portale è una sequenza, e il codice albergo sta
+    /// tra StayId e Guests (stesso tracciato del DTO legacy StayFieldDTO). Mancava del tutto — il
+    /// parametro hotelCode arrivava fino a qui e veniva buttato via, senza nessun avviso del
+    /// compilatore, e il portale rifiutava ogni invio con "Il contenuto dell'elemento Stay è
+    /// incompleto. Elenco dei possibili elementi previsti: HotelCode". La verifica connessione non
+    /// poteva accorgersene: fa login e legge la data corrente, non costruisce mai uno Stay.
+    /// </summary>
+    private static XElement CostruisciStay(string hotelCode, OsservatorioStayDto stay) =>
         new("Stay",
             new XElement("StayId", stay.StayId),
+            new XElement("HotelCode", hotelCode),
             new XElement("Guests", stay.Guests.Select(CostruisciGuest)));
 
     private static XElement CostruisciGuest(OsservatorioGuestDto guest) =>
