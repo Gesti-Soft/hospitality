@@ -47,6 +47,7 @@ public class FatturazioneService(
     IPrenotazioneRepository prenotazioni,
     IOspiteRepository ospiti,
     IRiferimentiRepository riferimenti,
+    IStrutturaRepository strutture,
     IFatturaDocumentGenerator documentGenerator,
     PermessoStrutturaGuard permessoGuard)
 {
@@ -173,7 +174,8 @@ public class FatturazioneService(
     public async Task<byte[]> GeneraPdfAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
     {
         var (fattura, cliente, azienda) = await CaricaPerDocumentoAsync(currentUser, strutturaId, fatturaId, cancellationToken);
-        return documentGenerator.GeneraPdf(fattura, cliente, azienda);
+        var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken);
+        return documentGenerator.GeneraPdf(fattura, cliente, azienda, struttura?.Nome);
     }
 
     public async Task<byte[]> GeneraXmlSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)

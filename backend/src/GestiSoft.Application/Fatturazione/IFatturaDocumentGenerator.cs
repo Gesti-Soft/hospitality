@@ -13,7 +13,8 @@ namespace GestiSoft.Application.Fatturazione;
 /// </summary>
 public interface IFatturaDocumentGenerator
 {
-    byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda);
+    /// <param name="nomeStruttura">Il nome con cui la struttura è conosciuta, in testa al documento: i dati fiscali dell'emittente stanno sotto, ma chi riceve la fattura riconosce quello.</param>
+    byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, string? nomeStruttura);
 
     byte[] GeneraXmlSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda);
 

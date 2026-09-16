@@ -35,7 +35,7 @@ import {
   type DatiClienteDto,
   type DatiFatturaDto,
 } from '../../api/fatturazione'
-import { fontDisplay, fontMono, tokens } from '../../theme'
+import { fontDisplay, fontMono, stileImporto, tokens } from '../../theme'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
 import { useToast } from '../../toast/ToastContext'
 import { useMobile } from '../../lib/useMobile'
@@ -201,7 +201,7 @@ function TabFatture({
                 titolo={`${f.numeroDocumento}/${f.anno}`}
                 sottotitolo={f.clienteNome ?? undefined}
                 azioneDestra={
-                  <Box component="span" sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 15 }}>
+                  <Box component="span" sx={{ ...stileImporto, fontWeight: 700, fontSize: 15 }}>
                     {formattatoreValuta.format(f.importoTotale)}
                   </Box>
                 }
@@ -262,10 +262,10 @@ function TabFatture({
                   <TableCell sx={{ fontFamily: fontMono, fontWeight: 700 }}>
                     {f.numeroDocumento}/{f.anno}
                   </TableCell>
-                  <TableCell sx={{ fontFamily: fontMono }}>{formattatoreData.format(new Date(f.dataDocumento))}</TableCell>
+                  <TableCell sx={{ ...stileImporto }}>{formattatoreData.format(new Date(f.dataDocumento))}</TableCell>
                   <TableCell>{f.clienteNome ?? '—'}</TableCell>
                   <TableCell>{f.descrizione ?? '—'}</TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700 }}>
+                  <TableCell align="right" sx={{ ...stileImporto, fontWeight: 700 }}>
                     {formattatoreValuta.format(f.importoTotale)}
                   </TableCell>
                   <TableCell align="right">
@@ -329,6 +329,7 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
   const [regimeFiscale, setRegimeFiscale] = useState<string>(dati.regimeFiscale != null ? String(dati.regimeFiscale) : '')
   const [aliquotaIvaDefault, setAliquotaIvaDefault] = useState<string>(dati.aliquotaIvaDefault != null ? String(dati.aliquotaIvaDefault) : '')
   const [naturaDefault, setNaturaDefault] = useState<string>(dati.naturaDefault != null ? String(dati.naturaDefault) : '')
+  const [dicituraFattura, setDicituraFattura] = useState(dati.dicituraFattura ?? '')
   const [indirizzo, setIndirizzo] = useState(dati.indirizzo ?? '')
   const [nCivico, setNCivico] = useState(dati.nCivico ?? '')
   const [cap, setCap] = useState(dati.cap ?? '')
@@ -351,6 +352,7 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
       regimeFiscale: regimeFiscale === '' ? null : (Number(regimeFiscale) as DatiAziendaliDto['regimeFiscale']),
       aliquotaIvaDefault: aliquotaIvaDefault === '' ? null : (Number(aliquotaIvaDefault) as DatiAziendaliDto['aliquotaIvaDefault']),
       naturaDefault: naturaDefault === '' ? null : (Number(naturaDefault) as DatiAziendaliDto['naturaDefault']),
+      dicituraFattura: vuoto(dicituraFattura),
       indirizzo: vuoto(indirizzo),
       nCivico: vuoto(nCivico),
       cap: vuoto(cap),
@@ -442,6 +444,16 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
           </TextField>
         )}
       </Box>
+
+      <TextField
+        label="Dicitura in fattura"
+        value={dicituraFattura}
+        onChange={(e) => setDicituraFattura(e.target.value)}
+        multiline
+        minRows={2}
+        disabled={aggiorna.isPending}
+        helperText="La frase che deve comparire in fattura quando l'IVA non si applica — chiedila al commercialista, viene stampata così com'è."
+      />
 
       {puoScrivere && (
         <Box>

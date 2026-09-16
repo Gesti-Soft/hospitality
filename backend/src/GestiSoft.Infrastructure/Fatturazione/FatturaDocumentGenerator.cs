@@ -19,87 +19,182 @@ namespace GestiSoft.Infrastructure.Fatturazione;
 /// </summary>
 public class FatturaDocumentGenerator : IFatturaDocumentGenerator
 {
-    public byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda)
+    /// <summary>Colori presi dai token del frontend, così il documento non sembra di un altro prodotto.</summary>
+    private const string Inchiostro = "#1B222C";
+    private const string InchiostroTenue = "#5B6472";
+    private const string Filetto = "#D7DCE3";
+
+    private static readonly CultureInfo Italiano = CultureInfo.GetCultureInfo("it-IT");
+
+    public byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, string? nomeStruttura)
     {
+        var intestazione = PrimoNonVuoto(nomeStruttura, azienda?.Denominazione, $"{azienda?.Nome} {azienda?.Cognome}") ?? "Fattura";
+        var imposta = Math.Round(fattura.ImportoTotale - fattura.PrezzoTotale, 2, MidpointRounding.AwayFromZero);
+
         var documento = Document.Create(container =>
         {
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
                 page.Margin(2, Unit.Centimetre);
-                page.DefaultTextStyle(x => x.FontSize(10));
+                page.DefaultTextStyle(x => x.FontSize(9.5f).FontColor(Inchiostro));
 
-                page.Header().Text($"Fattura n. {fattura.NumeroDocumento} del {fattura.DataDocumento:dd/MM/yyyy}")
-                    .FontSize(16).Bold();
-
-                page.Content().PaddingTop(15).Column(col =>
+                page.Header().Column(testata =>
                 {
-                    col.Spacing(15);
-
-                    col.Item().Row(row =>
+                    testata.Item().Row(row =>
                     {
-                        row.RelativeItem().Column(c => ScriviAnagrafica(c, "Emittente",
-                            azienda?.Denominazione, azienda?.Nome, azienda?.Cognome,
-                            azienda?.Indirizzo, azienda?.NCivico, azienda?.Cap, azienda?.Comune, azienda?.Provincia,
-                            azienda?.PIva, azienda?.CodiceFiscale));
+                        // A sinistra chi emette: il nome con cui la struttura è conosciuta, e sotto,
+                        // in piccolo, l'identità fiscale che vale davanti al fisco.
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text(intestazione).FontSize(19).SemiBold();
+                            foreach (var riga in RigheEmittente(azienda))
+                            {
+                                c.Item().PaddingTop(1).Text(riga).FontSize(8.5f).FontColor(InchiostroTenue);
+                            }
+                        });
 
-                        row.RelativeItem().Column(c => ScriviAnagrafica(c, "Destinatario",
-                            cliente?.Denominazione, cliente?.Nome, cliente?.Cognome,
-                            cliente?.Indirizzo, cliente?.NCivico, cliente?.Cap, cliente?.LuogoResidenza, cliente?.Provincia,
-                            cliente?.PIva, cliente?.CodiceFiscale));
+                        // A destra l'identità del documento: è il dato che si cerca per primo quando
+                        // una fattura va ritrovata.
+                        row.ConstantItem(170).Column(c =>
+                        {
+                            c.Item().AlignRight().Text(EtichettaTipoDocumento(fattura.TipoDocumento)).FontSize(11).SemiBold();
+                            c.Item().AlignRight().PaddingTop(2).Text($"n. {fattura.NumeroDocumento} / {fattura.Anno}").FontSize(14).SemiBold();
+                            c.Item().AlignRight().PaddingTop(1).Text(fattura.DataDocumento.ToString("d MMMM yyyy", Italiano)).FontSize(9).FontColor(InchiostroTenue);
+                        });
+                    });
+
+                    testata.Item().PaddingTop(12).LineHorizontal(1).LineColor(Filetto);
+                });
+
+                page.Content().PaddingTop(18).Column(col =>
+                {
+                    col.Spacing(18);
+
+                    col.Item().Column(c =>
+                    {
+                        c.Item().Text("Fatturato a").FontSize(8.5f).FontColor(InchiostroTenue);
+                        c.Item().PaddingTop(2).Text(NomeCliente(cliente)).FontSize(11.5f).SemiBold();
+                        foreach (var riga in RigheCliente(cliente))
+                        {
+                            c.Item().PaddingTop(1).Text(riga).FontSize(9).FontColor(InchiostroTenue);
+                        }
                     });
 
                     col.Item().Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
                         {
-                            columns.RelativeColumn(4);
-                            columns.RelativeColumn(1);
-                            columns.RelativeColumn(1);
-                            columns.RelativeColumn(1);
-                            columns.RelativeColumn(1);
+                            columns.RelativeColumn(5);
+                            columns.ConstantColumn(50);
+                            columns.ConstantColumn(80);
+                            columns.ConstantColumn(40);
+                            columns.ConstantColumn(85);
                         });
 
                         table.Header(header =>
                         {
-                            header.Cell().Text("Descrizione").Bold();
-                            header.Cell().AlignRight().Text("Qtà").Bold();
-                            header.Cell().AlignRight().Text("Prezzo unit.").Bold();
-                            header.Cell().AlignRight().Text("IVA").Bold();
-                            header.Cell().AlignRight().Text("Totale").Bold();
+                            header.Cell().Element(CellaTestata).Text("Descrizione");
+                            header.Cell().Element(CellaTestata).AlignRight().Text("Quantità");
+                            header.Cell().Element(CellaTestata).AlignRight().Text("Prezzo");
+                            header.Cell().Element(CellaTestata).AlignRight().Text("IVA");
+                            header.Cell().Element(CellaTestata).AlignRight().Text("Importo");
                         });
 
-                        table.Cell().Text(fattura.Descrizione ?? "-");
-                        table.Cell().AlignRight().Text(fattura.Quantita.ToString("0.##", CultureInfo.InvariantCulture));
-                        table.Cell().AlignRight().Text(fattura.PrezzoUnitario.ToString("0.00", CultureInfo.InvariantCulture));
-                        table.Cell().AlignRight().Text(fattura.AliquotaIva is { } iva ? $"{(int)iva}%" : "-");
-                        table.Cell().AlignRight().Text(fattura.ImportoTotale.ToString("0.00", CultureInfo.InvariantCulture));
+                        table.Cell().Element(CellaRiga).Text(fattura.Descrizione ?? "—");
+                        table.Cell().Element(CellaRiga).AlignRight().Text(fattura.Quantita.ToString("0.##", Italiano));
+                        table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(fattura.PrezzoUnitario));
+                        table.Cell().Element(CellaRiga).AlignRight().Text(fattura.AliquotaIva is { } iva ? $"{(int)iva}%" : "—");
+                        table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(fattura.PrezzoTotale));
                     });
 
-                    col.Item().AlignRight().Text($"Totale: {fattura.ImportoTotale:0.00} {fattura.Divisa ?? "EUR"}")
-                        .FontSize(14).Bold();
+                    col.Item().AlignRight().Width(230).Column(totali =>
+                    {
+                        totali.Item().Element(c => RigaTotale(c, "Imponibile", Valuta(fattura.PrezzoTotale), false));
+                        totali.Item().Element(c => RigaTotale(c, "Imposta", Valuta(imposta), false));
+                        totali.Item().PaddingTop(5).BorderTop(1).BorderColor(Filetto).PaddingTop(6)
+                            .Element(c => RigaTotale(c, "Totale", Valuta(fattura.ImportoTotale), true));
+                    });
+
+                    // La dicitura di legge vince sempre sul codice: il codice natura dice allo SdI
+                    // perché l'IVA non c'è, la dicitura lo dice a chi legge la fattura, ed è quella
+                    // che il fisco pretende sul documento.
+                    if (!string.IsNullOrWhiteSpace(azienda?.DicituraFattura))
+                    {
+                        col.Item().Text(azienda.DicituraFattura!.Trim()).FontSize(8.5f).FontColor(InchiostroTenue);
+                    }
+                    else if (fattura.Natura is { } natura)
+                    {
+                        col.Item().Text($"Operazione non soggetta a IVA — natura {CodiceNatura(natura)}.").FontSize(8.5f).FontColor(InchiostroTenue);
+                    }
                 });
 
-                page.Footer().AlignCenter().Text("Documento generato da GestiSoft Gestionale — non costituisce invio allo SdI")
-                    .FontSize(8).FontColor(Colors.Grey.Darken1);
             });
         });
 
         return documento.GeneratePdf();
     }
 
-    private static void ScriviAnagrafica(
-        QuestPDF.Fluent.ColumnDescriptor col, string titolo,
-        string? denominazione, string? nome, string? cognome,
-        string? indirizzo, string? nCivico, string? cap, string? comune, string? provincia,
-        string? pIva, string? codiceFiscale)
+    private static IContainer CellaTestata(IContainer c) =>
+        c.BorderBottom(1).BorderColor(Filetto).PaddingBottom(5).DefaultTextStyle(x => x.FontSize(8.5f).SemiBold().FontColor(InchiostroTenue));
+
+    private static IContainer CellaRiga(IContainer c) => c.PaddingVertical(7);
+
+    private static void RigaTotale(IContainer contenitore, string etichetta, string valore, bool forte)
     {
-        col.Item().Text(titolo).Bold();
-        col.Item().Text(!string.IsNullOrWhiteSpace(denominazione) ? denominazione : $"{nome} {cognome}".Trim());
-        col.Item().Text($"{indirizzo} {nCivico}".Trim());
-        col.Item().Text($"{cap} {comune} ({provincia})".Trim());
-        col.Item().Text($"P.IVA: {pIva ?? "-"}   CF: {codiceFiscale ?? "-"}");
+        contenitore.Row(row =>
+        {
+            row.RelativeItem().Text(etichetta).FontSize(forte ? 11 : 9).FontColor(forte ? Inchiostro : InchiostroTenue);
+            row.ConstantItem(110).AlignRight().Text(valore).FontSize(forte ? 13 : 9.5f).SemiBold();
+        });
     }
+
+    private static string Valuta(decimal importo) => importo.ToString("C2", Italiano);
+
+    private static string EtichettaTipoDocumento(TipoDocumentoFattura? tipo) => tipo switch
+    {
+        TipoDocumentoFattura.TD04_NotaDiCredito => "Nota di credito",
+        TipoDocumentoFattura.TD06_Parcella => "Parcella",
+        _ => "Fattura",
+    };
+
+    /// <summary>L'identità fiscale dell'emittente, saltando le righe che non hanno niente da dire.</summary>
+    private static IEnumerable<string> RigheEmittente(DatiAziendali? a)
+    {
+        if (a is null) yield break;
+
+        var ragione = PrimoNonVuoto(a.Denominazione, $"{a.Nome} {a.Cognome}");
+        if (ragione is not null) yield return ragione;
+
+        var via = $"{a.Indirizzo} {a.NCivico}".Trim();
+        if (via.Length > 0) yield return via;
+
+        var citta = ($"{a.Cap} {a.Comune}".Trim() + (string.IsNullOrWhiteSpace(a.Provincia) ? string.Empty : $" ({a.Provincia})")).Trim();
+        if (citta.Length > 0) yield return citta;
+
+        if (!string.IsNullOrWhiteSpace(a.PIva)) yield return $"P. IVA {a.PIva}";
+        if (!string.IsNullOrWhiteSpace(a.CodiceFiscale) && a.CodiceFiscale != a.PIva) yield return $"C.F. {a.CodiceFiscale}";
+    }
+
+    private static string NomeCliente(DatiCliente? c) =>
+        PrimoNonVuoto(c?.Denominazione, $"{c?.Nome} {c?.Cognome}") ?? "—";
+
+    private static IEnumerable<string> RigheCliente(DatiCliente? c)
+    {
+        if (c is null) yield break;
+
+        var via = $"{c.Indirizzo} {c.NCivico}".Trim();
+        if (via.Length > 0) yield return via;
+
+        var citta = ($"{c.Cap} {c.LuogoResidenza}".Trim() + (string.IsNullOrWhiteSpace(c.Provincia) ? string.Empty : $" ({c.Provincia})")).Trim();
+        if (citta.Length > 0) yield return citta;
+
+        if (!string.IsNullOrWhiteSpace(c.PIva)) yield return $"P. IVA {c.PIva}";
+        if (!string.IsNullOrWhiteSpace(c.CodiceFiscale)) yield return $"C.F. {c.CodiceFiscale}";
+    }
+
+    private static string? PrimoNonVuoto(params string?[] valori) =>
+        valori.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
 
     public byte[] GeneraXmlSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda)
     {

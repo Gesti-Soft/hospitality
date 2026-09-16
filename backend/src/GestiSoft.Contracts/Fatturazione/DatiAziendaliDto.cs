@@ -13,6 +13,7 @@ public record DatiAziendaliDto(
     RegimeFiscale? RegimeFiscale,
     AliquotaIva? AliquotaIvaDefault,
     NaturaIva? NaturaDefault,
+    string? DicituraFattura,
     string? Indirizzo,
     string? NCivico,
     string? Cap,

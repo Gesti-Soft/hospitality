@@ -45,6 +45,8 @@ export interface DatiAziendaliDto {
   /** Aliquota e natura proposte su una fattura nuova: dipendono dal regime di chi emette, non dalla singola fattura. */
   aliquotaIvaDefault: AliquotaIva | null
   naturaDefault: NaturaIva | null
+  /** Frase di legge da stampare in fattura quando l'IVA non si applica: la detta il commercialista. */
+  dicituraFattura: string | null
   indirizzo: string | null
   nCivico: string | null
   cap: string | null

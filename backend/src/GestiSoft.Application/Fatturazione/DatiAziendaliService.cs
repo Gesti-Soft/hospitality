@@ -14,6 +14,7 @@ public record AggiornaDatiAziendaliRequest(
     RegimeFiscale? RegimeFiscale,
     AliquotaIva? AliquotaIvaDefault,
     NaturaIva? NaturaDefault,
+    string? DicituraFattura,
     string? Indirizzo,
     string? NCivico,
     string? Cap,
@@ -51,6 +52,7 @@ public class DatiAziendaliService(IDatiAziendaliRepository repository, PermessoS
         entity.RegimeFiscale = request.RegimeFiscale;
         entity.AliquotaIvaDefault = request.AliquotaIvaDefault;
         entity.NaturaDefault = request.NaturaDefault;
+        entity.DicituraFattura = request.DicituraFattura;
         entity.Indirizzo = request.Indirizzo;
         entity.NCivico = request.NCivico;
         entity.Cap = request.Cap;

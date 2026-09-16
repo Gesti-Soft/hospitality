@@ -33,6 +33,14 @@ public class DatiAziendali : TenantEntity
     /// <inheritdoc cref="AliquotaIvaDefault"/>
     public NaturaIva? NaturaDefault { get; set; }
 
+    /// <summary>
+    /// La frase che per legge deve comparire in fattura quando l'IVA non si applica (regime
+    /// forfettario, operazione non soggetta, esente...). È il commercialista a dettarla parola per
+    /// parola e cambia da situazione a situazione: si scrive qui una volta e ogni fattura se la
+    /// porta, invece di essere inventata dal software.
+    /// </summary>
+    public string? DicituraFattura { get; set; }
+
     public string? Indirizzo { get; set; }
 
     public string? NCivico { get; set; }
