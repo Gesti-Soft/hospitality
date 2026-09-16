@@ -41,6 +41,16 @@ public class DatiAziendali : TenantEntity
     /// </summary>
     public string? DicituraFattura { get; set; }
 
+    /// <summary>
+    /// Logo della struttura stampato in testa alla fattura PDF. Sta nel database e non su disco:
+    /// entra cosi' nei backup gia' esistenti, non chiede un volume montato sull'Api e viaggia da
+    /// solo verso il gestionale desktop. Tetto di 512 KB imposto dal servizio, PNG o JPEG.
+    /// </summary>
+    public byte[]? Logo { get; set; }
+
+    /// <summary>Content-type del <see cref="Logo"/> ("image/png" o "image/jpeg"), verificato sui byte reali e non su quanto dichiarato dal browser.</summary>
+    public string? LogoContentType { get; set; }
+
     public string? Indirizzo { get; set; }
 
     public string? NCivico { get; set; }

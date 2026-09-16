@@ -14,6 +14,8 @@ public record DatiAziendaliDto(
     AliquotaIva? AliquotaIvaDefault,
     NaturaIva? NaturaDefault,
     string? DicituraFattura,
+    /// <summary>Il logo non viaggia dentro questo DTO: si scarica a parte da /dati-aziendali/logo, cosi' ogni lettura dei dati fiscali non si porta dietro un'immagine.</summary>
+    bool HaLogo,
     string? Indirizzo,
     string? NCivico,
     string? Cap,
