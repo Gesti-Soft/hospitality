@@ -1,8 +1,8 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-16. Stato: web in produzione sulla VPS, Fase 2 della
-sincronizzazione col gestionale desktop ferma sul ramo `fase-2-sync-locale`; su `master`
-fatturazione verso l'estero e correzione dell'invio all'Osservatorio.
+Ultimo aggiornamento: 2026-09-16 (seconda parte). Stato: web in produzione sulla VPS, Fase 2
+della sincronizzazione col desktop ferma sul ramo `fase-2-sync-locale`; su `master`
+fatturazione (estero, PDF rifatto), Osservatorio corretto e una passata di design.
 
 > **Cap: 300 righe.** Questo file è caricato a ogni sessione, la sua dimensione è un
 > costo permanente di contesto. Voci nuove brevi: cosa è cambiato, perché, cosa resta
@@ -53,9 +53,16 @@ Ordine non di priorità. Dettagli e design già concordati: vedi archivio.
   tracciato quel campo non può esserlo.
 - **PDF della fattura da rifare**, con logo della struttura: oggi non esiste nessun campo dove
   caricarlo, va deciso prima dove si conserva l'immagine.
-- **Importi a schermo in IBM Plex Mono peso 700**, che non viene caricato (solo 400/500/600):
-  il grassetto è sintetizzato dal browser. Valutato il passaggio a cifre tabulari sul font del
-  testo, con il mono lasciato ai soli codici.
+- **Etichette in maiuscolo spaziato** in dodici punti dell'interfaccia: stesso tic ripetuto, da
+  decidere in un giro a sé.
+- **PDF fattura: mai guardato con gli occhi.** Si genera (provato davvero, HTTP 200 e file
+  valido), ma i font incorporati impediscono di verificarne il contenuto da qui.
+- **Nel PDF non c'è una riga "nazione"**: per un cliente estero lo stato si legge già
+  nell'indirizzo e nel comune, come nella fattura reale accettata. Da decidere se separarla.
+- **Lasciati fuori dal PDF di proposito**: unità di misura sulla riga (la quantità non sempre
+  sono notti, scriverlo sarebbe falso), Pagato/Saldo (il pagato sta sulla prenotazione, altro
+  registro: un saldo calcolato sottraendo i due sarebbe sbagliato), data di scadenza (dato
+  inesistente, senza senso per un soggiorno saldato al check-out).
 - **Dati finti sul Postgres locale da cancellare**: prenotazioni `TEST-OSSERVATORIO-03SET` e
   `-16SET` (`aaaaaaaa-…0007`/`0009`, ospiti `…0008`/`0010`), struttura Villa Chifeci Scopello.
 
@@ -149,6 +156,28 @@ alle PA sono irreversibili: mai inviare nulla senza richiesta esplicita.
 ## Cronologia — cosa è stato fatto
 
 Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
+
+**Design e pannello Super Admin** (16/09, seconda parte)
+- Sfondo e bordi da caldi a freddi (`#FAF8F4` → `#F4F6F9`, `#E7E2D8` → `#E2E6EC`): il crema con
+  grigi freddi sopra faceva sembrare sporca l'interfaccia, e il bordo beige contornava ogni
+  riquadro. Ora l'arancione del marchio è l'unica cosa calda a schermo.
+- Importi e date fuori dal monospazio: nuovo token `stileImporto` (font del testo + cifre
+  tabulari). Le colonne restano incolonnate, i numeri non sembrano più un terminale. Il mono
+  resta ai codici veri. Caricato anche il peso 700 del mono, che il codice chiedeva senza averlo.
+- Super Admin → Clienti: barra di ricerca (cliente, struttura, partita IVA, email) e card
+  rifatte. **"Entra" sceglie il Cliente** su cui operare — la select Cliente in barra è stata
+  tolta, quella delle Strutture resta. Entrando, la sezione Super Admin sparisce dal menu e
+  nella barra arancione compare "Torna al pannello amministratore": per uscire davvero vanno
+  azzerati **sia** cliente **sia** struttura, o la prima struttura viene subito riselezionata.
+- PDF della fattura rifatto: nome della struttura in testa, identità fiscale sotto in piccolo,
+  documento a destra, "Fatturato a", tabella con la sola intestazione filettata, totali a destra
+  col totale staccato. Niente logo (non ne esiste uno) e niente piè di pagina — regime fiscale e
+  avvertenza SdI non interessano a chi riceve. Importi in euro all'italiana.
+- Dati aziendali: aliquota IVA e natura predefinite, più la **dicitura di legge** da stampare
+  quando l'IVA non si applica (la detta il commercialista, il software non la inventa). Due
+  migrazioni, applicate al Postgres locale.
+- Fattura nuova: descrizione vuota e obbligatoria, regime/aliquota/natura presi dai dati
+  aziendali invece che dai valori fissi RF01 e 10%.
 
 **Fatturazione verso l'estero e Osservatorio** (16/09)
 - Stati esteri selezionabili nei campi luogo: il backend cercava già il codice tra comuni e
