@@ -14,7 +14,7 @@ import { useStruttura } from '../../struttura/StrutturaContext'
 import { useAnniDisponibiliFinanze } from '../../api/finanze'
 import { useSpese, useEliminaSpesa, type SpesaDto } from '../../api/spese'
 import { ApiError } from '../../api/client'
-import { fontMono, tokens } from '../../theme'
+import { stileImporto, tokens } from '../../theme'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
 import { useMobile } from '../../lib/useMobile'
 import { SpesaDialog } from '../../components/SpesaDialog'
@@ -110,7 +110,7 @@ export function SpesePage() {
                 titolo={s.descrizione ?? '—'}
                 sottotitolo={s.tipoSpesa ?? undefined}
                 azioneDestra={
-                  <Box component="span" sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 15, color: tokens.error600 }}>
+                  <Box component="span" sx={{ ...stileImporto, fontWeight: 700, fontSize: 15, color: tokens.error600 }}>
                     {formattatoreValuta.format(s.importoSpesa)}
                   </Box>
                 }
@@ -161,11 +161,11 @@ export function SpesePage() {
               )}
               {datiVisibili.map((s) => (
                 <TableRow key={s.id} hover>
-                  <TableCell sx={{ fontFamily: fontMono }}>{s.dataSpesa ? formattatoreData.format(new Date(s.dataSpesa)) : '—'}</TableCell>
+                  <TableCell sx={{ ...stileImporto }}>{s.dataSpesa ? formattatoreData.format(new Date(s.dataSpesa)) : '—'}</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{s.descrizione ?? '—'}</TableCell>
                   <TableCell>{s.tipoSpesa ?? '—'}</TableCell>
                   <TableCell>{s.metodoPagamento ?? '—'}</TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700, color: tokens.error600 }}>
+                  <TableCell align="right" sx={{ ...stileImporto, fontWeight: 700, color: tokens.error600 }}>
                     {formattatoreValuta.format(s.importoSpesa)}
                   </TableCell>
                   <TableCell align="right">

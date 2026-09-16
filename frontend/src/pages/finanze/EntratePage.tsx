@@ -14,7 +14,7 @@ import { useStruttura } from '../../struttura/StrutturaContext'
 import { useAnniDisponibiliFinanze } from '../../api/finanze'
 import { useEntrate, useEliminaEntrata, type EntrataDto } from '../../api/entrate'
 import { ApiError } from '../../api/client'
-import { fontMono, tokens } from '../../theme'
+import { stileImporto, tokens } from '../../theme'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
 import { useMobile } from '../../lib/useMobile'
 import { EntrataDialog } from '../../components/EntrataDialog'
@@ -108,7 +108,7 @@ export function EntratePage() {
                 titolo={e.descrizione ?? '—'}
                 sottotitolo={e.tipoEntrata ?? undefined}
                 azioneDestra={
-                  <Box component="span" sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 15, color: tokens.ok600 }}>
+                  <Box component="span" sx={{ ...stileImporto, fontWeight: 700, fontSize: 15, color: tokens.ok600 }}>
                     {formattatoreValuta.format(e.importoEntrata)}
                   </Box>
                 }
@@ -153,10 +153,10 @@ export function EntratePage() {
               )}
               {datiVisibili.map((e) => (
                 <TableRow key={e.id} hover>
-                  <TableCell sx={{ fontFamily: fontMono }}>{e.data ? formattatoreData.format(new Date(e.data)) : '—'}</TableCell>
+                  <TableCell sx={{ ...stileImporto }}>{e.data ? formattatoreData.format(new Date(e.data)) : '—'}</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>{e.descrizione ?? '—'}</TableCell>
                   <TableCell>{e.tipoEntrata ?? '—'}</TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700, color: tokens.ok600 }}>
+                  <TableCell align="right" sx={{ ...stileImporto, fontWeight: 700, color: tokens.ok600 }}>
                     {formattatoreValuta.format(e.importoEntrata)}
                   </TableCell>
                   <TableCell align="right">

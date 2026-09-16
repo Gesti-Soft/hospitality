@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
-import { fontMono, tokens } from '../theme'
+import { stileImporto, tokens } from '../theme'
 
 type ColoreAccento = 'orange' | 'error'
 
@@ -66,7 +66,7 @@ export function KpiCard({
           {valore === null ? (
             <Skeleton width={60} height={34} />
           ) : (
-            <Typography sx={{ fontFamily: fontMono, fontSize: 28, fontWeight: 600 }}>{valore}</Typography>
+            <Typography sx={{ ...stileImporto, fontSize: 28, fontWeight: 600 }}>{valore}</Typography>
           )}
           {dettaglio && valore !== null && <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>{dettaglio}</Typography>}
         </Box>
@@ -90,7 +90,7 @@ export function KpiCardDoppia({ etichetta, voci }: { etichetta: string; voci: { 
             {v.valore === null ? (
               <Skeleton width={40} height={34} />
             ) : (
-              <Typography sx={{ fontFamily: fontMono, fontSize: 28, fontWeight: 600 }}>{v.valore}</Typography>
+              <Typography sx={{ ...stileImporto, fontSize: 28, fontWeight: 600 }}>{v.valore}</Typography>
             )}
             {v.valore !== null && <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>{v.etichetta}</Typography>}
           </Box>

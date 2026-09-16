@@ -8,7 +8,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import SearchIcon from '@mui/icons-material/Search'
-import { fontMono, tokens } from '../../theme'
+import { stileImporto, tokens } from '../../theme'
 import { CampoData } from '../CampoData'
 import { BottoneNuovo } from '../CardElenco'
 import { inizioGiornoLocale, parsaInputData } from '../../lib/date'
@@ -162,7 +162,7 @@ export function BarraTotale({ etichetta, valore, colore }: { etichetta: string; 
       }}
     >
       <Typography sx={{ fontSize: 13, fontWeight: 700, color: tokens.textSecondary }}>{etichetta}</Typography>
-      <Typography sx={{ fontFamily: fontMono, fontWeight: 700, fontSize: 15, color: colore ?? tokens.textPrimary }}>
+      <Typography sx={{ ...stileImporto, fontWeight: 700, fontSize: 15, color: colore ?? tokens.textPrimary }}>
         {formattatoreValuta.format(valore)}
       </Typography>
     </Box>

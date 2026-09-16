@@ -9,7 +9,7 @@ import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { useAnniDisponibiliFinanze, useCauzioni } from '../../api/finanze'
-import { fontMono, tokens } from '../../theme'
+import { stileImporto, tokens } from '../../theme'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
 import { useMobile } from '../../lib/useMobile'
 import { BarraTotale, Cornice, formattatoreData, formattatoreValuta, IntestazioneFinanze, RigaVuota } from '../../components/finanze/FinanzeComuni'
@@ -71,8 +71,8 @@ export function CauzioniPage() {
               {dati.length === 0 && <RigaVuota colSpan={2} messaggio="Nessuna cauzione trattenuta per l'anno selezionato." />}
               {dati.map((c) => (
                 <TableRow key={c.id} hover>
-                  <TableCell sx={{ fontFamily: fontMono }}>{c.dataInserimento ? formattatoreData.format(new Date(c.dataInserimento)) : '—'}</TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono, fontWeight: 700 }}>
+                  <TableCell sx={{ ...stileImporto }}>{c.dataInserimento ? formattatoreData.format(new Date(c.dataInserimento)) : '—'}</TableCell>
+                  <TableCell align="right" sx={{ ...stileImporto, fontWeight: 700 }}>
                     {c.importoCauzione != null ? formattatoreValuta.format(c.importoCauzione) : '—'}
                   </TableCell>
                 </TableRow>

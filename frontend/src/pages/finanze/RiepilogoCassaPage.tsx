@@ -4,7 +4,7 @@ import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { useAnniDisponibiliFinanze, useRiepilogoCassa } from '../../api/finanze'
-import { fontMono, tokens } from '../../theme'
+import { stileImporto, tokens } from '../../theme'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
 import { formattatoreValuta, IntestazioneFinanze } from '../../components/finanze/FinanzeComuni'
 
@@ -37,7 +37,7 @@ export function RiepilogoCassaPage() {
             return (
               <Box key={r.etichetta} sx={{ border: `1.5px solid ${colore}`, borderRadius: 2, bgcolor: tokens.surface, p: 2.25 }}>
                 <Typography sx={{ fontSize: 12, fontWeight: 600, color: tokens.textSecondary }}>{r.etichetta}</Typography>
-                <Typography sx={{ fontFamily: fontMono, fontSize: 22, fontWeight: 600, mt: 0.75, color: colore }}>
+                <Typography sx={{ ...stileImporto, fontSize: 22, fontWeight: 600, mt: 0.75, color: colore }}>
                   {r.segno === '-' ? '−' : ''}
                   {formattatoreValuta.format(r.valore)}
                 </Typography>
@@ -52,7 +52,7 @@ export function RiepilogoCassaPage() {
             return (
               <Box key={r.etichetta} sx={{ border: `1.5px solid ${colore}`, borderRadius: 2, bgcolor: tokens.surface, p: 2.25 }}>
                 <Typography sx={{ fontSize: 12, fontWeight: 600, color: tokens.textSecondary }}>{r.etichetta}</Typography>
-                <Typography sx={{ fontFamily: fontMono, fontSize: 22, fontWeight: 700, mt: 0.75, color: colore }}>{formattatoreValuta.format(r.valore)}</Typography>
+                <Typography sx={{ ...stileImporto, fontSize: 22, fontWeight: 700, mt: 0.75, color: colore }}>{formattatoreValuta.format(r.valore)}</Typography>
               </Box>
             )
           })}

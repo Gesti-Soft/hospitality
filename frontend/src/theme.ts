@@ -11,9 +11,9 @@ export const tokens = {
   ink700: '#232C38',
   ink600: '#3A4453',
   ink100: '#C9D2DE',
-  paper: '#FAF8F4',
+  paper: '#F4F6F9',
   surface: '#FFFFFF',
-  surfaceBorder: '#E7E2D8',
+  surfaceBorder: '#E2E6EC',
   textPrimary: '#1B222C',
   textSecondary: '#5B6472',
   textTertiary: '#8B93A0',
@@ -40,6 +40,14 @@ export const tokens = {
 export const fontDisplay = "'Montserrat','Segoe UI',sans-serif"
 export const fontBody = "'Public Sans','Segoe UI',sans-serif"
 export const fontMono = "'IBM Plex Mono',Consolas,monospace"
+
+/**
+ * Stile di ogni numero che si legge come quantità — importi, totali, date. Non usa il mono: il
+ * monospazio serviva solo ad allineare le cifre in colonna, e per quello bastano le cifre tabulari,
+ * che lo fanno restando nel font del testo. Il mono resta ai codici veri (numero prenotazione,
+ * codice fiscale, id nei log), dove il carattere-per-carattere è il punto.
+ */
+export const stileImporto = { fontFamily: fontBody, fontVariantNumeric: 'tabular-nums' } as const
 
 export const theme = createTheme({
   palette: {
