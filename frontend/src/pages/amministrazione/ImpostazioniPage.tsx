@@ -34,10 +34,12 @@ import {
   usePayTouristConfig,
   usePayTouristStrutture,
   useSuggerimentoEtaTassaPayTourist,
+  useVerificaPortaliOnlinePayTourist,
   useWubookConfig,
   type AlloggiatiWebIntegrazioneDto,
   type OsservatorioAppartamentoDto,
   type PayTouristIntegrazioneDto,
+  type PayTouristPortaleOnlineDto,
   type PayTouristStrutturaDto,
   type WubookIntegrazioneDto,
 } from '../../api/integrazioni'
@@ -501,7 +503,7 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
           onChange={(e) => setPassword(e.target.value)}
           fullWidth
           disabled={aggiorna.isPending}
-          helperText={dati.credenzialiConfigurate ? "Già salvata: lasciarla vuota e salvare la AZZERA" : ' '}
+          helperText={dati.credenzialiConfigurate ? "Già salvata: lasciarla vuota non la modifica" : ' '}
         />
         <TextField
           label={<EtichettaConPallino testo="Ws Key" inserito={dati.credenzialiConfigurate} />}
@@ -510,7 +512,7 @@ function AlloggiatiWebCredenzialiForm({ strutturaId, dati }: { strutturaId: stri
           onChange={(e) => setWsKey(e.target.value)}
           fullWidth
           disabled={aggiorna.isPending}
-          helperText={dati.credenzialiConfigurate ? "Già salvata: lasciarla vuota e salvare la AZZERA" : ' '}
+          helperText={dati.credenzialiConfigurate ? "Già salvata: lasciarla vuota non la modifica" : ' '}
         />
       </Box>
 
@@ -774,17 +776,67 @@ function TabPayTourist({ strutturaId }: { strutturaId: string | null }) {
 function PayTouristConfigForm({ strutturaId, dati }: { strutturaId: string; dati: PayTouristIntegrazioneDto }) {
   const [token, setToken] = useState('')
   const [portaleOnlineAttivo, setPortaleOnlineAttivo] = useState(dati.portaleOnlineAttivo)
+  // Portali fra cui scegliere: all'apertura sono quelli già salvati, così la pagina si legge anche
+  // senza interrogare PayTourist; diventano l'elenco vero appena lo si ricarica dal portale.
+  const [portaliDisponibili, setPortaliDisponibili] = useState<PayTouristPortaleOnlineDto[]>(dati.portaliAttivi)
+  const [portaliSelezionati, setPortaliSelezionati] = useState<number[]>(dati.portaliAttivi.map((p) => p.id))
+  // Mostrato solo quando è stato salvato un token nuovo: un token rifiutato non arriva mai qui,
+  // perché in quel caso il salvataggio fallisce e il messaggio esce come errore.
+  const [esitoVerifica, setEsitoVerifica] = useState<{ ok: boolean; errore: string | null } | null>(null)
   const toast = useToast()
 
   const aggiorna = useAggiornaPayTouristConfig(strutturaId)
+  const verificaPortali = useVerificaPortaliOnlinePayTourist(strutturaId)
+
+  /**
+   * Spegnere l'opzione non richiede niente; accenderla sì. Ha senso solo se l'ente PayTourist
+   * prevede l'incasso tramite portali online: dove non lo prevede, l'opzione attiva non serve a
+   * nulla — e prima il motivo si leggeva solo a invio fallito, la sera.
+   */
+  function cambiaPortaleOnline(attivo: boolean) {
+    if (!attivo) {
+      setPortaleOnlineAttivo(false)
+      return
+    }
+
+    caricaPortali(() => setPortaleOnlineAttivo(true))
+  }
+
+  /** Chiede a PayTourist quali portali riconosce il Comune. Le spunte già date si conservano solo se quel portale c'è ancora. */
+  function caricaPortali(alTermine?: () => void) {
+    verificaPortali.mutate(undefined, {
+      onSuccess: (esito) => {
+        if (!esito.abilitato) {
+          toast.errore(esito.messaggio ?? 'Portali online non abilitati su questo ente.')
+          return
+        }
+
+        const disponibili = esito.portali.map((p) => p.id)
+        setPortaliDisponibili(esito.portali)
+        setPortaliSelezionati((precedenti) => precedenti.filter((id) => disponibili.includes(id)))
+        alTermine?.()
+        toast.successo(`Portali riconosciuti dal Comune: ${esito.portali.map((p) => p.nome).join(', ')}.`)
+      },
+      onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Verifica non riuscita, riprova.'),
+    })
+  }
+
+  function cambiaPortaleSelezionato(id: number, scelto: boolean) {
+    setPortaliSelezionati((precedenti) => (scelto ? [...precedenti, id] : precedenti.filter((x) => x !== id)))
+  }
 
   function salva() {
     aggiorna.mutate(
-      { token: token.trim() === '' ? null : token.trim(), portaleOnlineAttivo },
       {
-        onSuccess: () => {
-          toast.successo('Configurazione salvata.')
+        token: token.trim() === '' ? null : token.trim(),
+        portaleOnlineAttivo,
+        portaliAttivi: portaliDisponibili.filter((p) => portaliSelezionati.includes(p.id)),
+      },
+      {
+        onSuccess: (risultato) => {
           setToken('')
+          setEsitoVerifica(risultato.verificaOk === null ? null : { ok: risultato.verificaOk, errore: risultato.verificaErrore })
+          toast.successo('Configurazione salvata.')
         },
         onError: (err) => toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
       },
@@ -798,19 +850,69 @@ function PayTouristConfigForm({ strutturaId, dati }: { strutturaId: string; dati
         <Chip size="small" label={dati.tokenConfigurato ? 'Configurato' : 'Non configurato'} sx={{ bgcolor: dati.tokenConfigurato ? tokens.ok600 : tokens.textTertiary, color: '#fff', fontWeight: 700 }} />
       </Box>
 
+      {esitoVerifica && (
+        <Alert severity={esitoVerifica.ok ? 'success' : 'warning'} onClose={() => setEsitoVerifica(null)}>
+          {esitoVerifica.ok
+            ? 'Token salvato — verificato su PayTourist.'
+            : `Token salvato, ma non è stato possibile verificarlo: ${esitoVerifica.errore ?? 'errore sconosciuto'}`}
+        </Alert>
+      )}
+
       <TextField
         label={<EtichettaConPallino testo="Token" inserito={dati.tokenConfigurato} />}
         type="password"
         value={token}
         onChange={(e) => setToken(e.target.value)}
         disabled={aggiorna.isPending}
-        helperText={dati.tokenConfigurato ? "Già salvato: lasciarlo vuoto e salvare lo AZZERA" : ' '}
+        helperText={dati.tokenConfigurato ? "Già salvato: lasciarlo vuoto non lo modifica" : ' '}
       />
 
       <FormControlLabel
-        control={<Checkbox checked={portaleOnlineAttivo} onChange={(e) => setPortaleOnlineAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
-        label="Filtra per portale online (scarta le prenotazioni di canali senza un portale PayTourist corrispondente)"
+        control={
+          <Checkbox
+            checked={portaleOnlineAttivo}
+            onChange={(e) => cambiaPortaleOnline(e.target.checked)}
+            disabled={aggiorna.isPending || verificaPortali.isPending}
+          />
+        }
+        label="Portale online"
       />
+
+      {portaleOnlineAttivo && (
+        <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: 13.5 }}>Imposta incassata dal portale</Typography>
+          <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+            Spunta i portali che riscuotono loro l'imposta e la versano al Comune. Le prenotazioni degli altri canali vengono
+            dichiarate come riscosse da te.
+          </Typography>
+
+          {portaliDisponibili.length === 0 ? (
+            <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+              Nessun portale caricato: chiedi l'elenco a PayTourist per poter scegliere.
+            </Typography>
+          ) : (
+            portaliDisponibili.map((portale) => (
+              <FormControlLabel
+                key={portale.id}
+                control={
+                  <Checkbox
+                    checked={portaliSelezionati.includes(portale.id)}
+                    onChange={(e) => cambiaPortaleSelezionato(portale.id, e.target.checked)}
+                    disabled={aggiorna.isPending || verificaPortali.isPending}
+                  />
+                }
+                label={portale.nome}
+              />
+            ))
+          )}
+
+          <Box>
+            <Button size="small" variant="outlined" onClick={() => caricaPortali()} disabled={aggiorna.isPending || verificaPortali.isPending}>
+              Aggiorna elenco da PayTourist
+            </Button>
+          </Box>
+        </Box>
+      )}
 
       <Box>
         <Button variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>

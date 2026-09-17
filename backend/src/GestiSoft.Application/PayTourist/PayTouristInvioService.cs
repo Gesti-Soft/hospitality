@@ -1,4 +1,4 @@
-using GestiSoft.Application.AlloggiatiWeb;
+﻿using GestiSoft.Application.AlloggiatiWeb;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Impostazioni;
@@ -146,7 +146,7 @@ public class PayTouristInvioService(
             }
 
             var (inviate, trovate, erroriStruttura, messaggi) = await ProcessaStrutturaAsync(
-                strutturaId, payTouristStruttura, integrazione.Token, idSoftware, integrazione.PortaleOnlineAttivo, anagraficaDati, automatico, cancellationToken);
+                strutturaId, payTouristStruttura, integrazione.Token, idSoftware, PortaliDaUsare(integrazione), anagraficaDati, automatico, cancellationToken);
 
             totaleInviate += inviate;
             totalePrenotazioni += trovate;
@@ -182,7 +182,7 @@ public class PayTouristInvioService(
         var anagraficaDati = await CaricaAnagraficaAsync(strutturaId, cancellationToken);
 
         IReadOnlyList<PayTouristRiduzioneDto> riduzioni = [];
-        IReadOnlyList<PayTouristPortaleDto> portali = [];
+        var portali = PortaliDaUsare(integrazione);
         int idSoftware = 0;
 
         if (payTouristStruttura.IdStrutturaPaytourist is { } idStruttura && !string.IsNullOrWhiteSpace(integrazione.Token))
@@ -192,12 +192,6 @@ public class PayTouristInvioService(
                 idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(cancellationToken);
                 var (riduzioniOk, riduzioniRisultato, _) = await client.GetRiduzioniAsync(integrazione.Token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
                 riduzioni = riduzioniOk ? riduzioniRisultato : [];
-
-                if (integrazione.PortaleOnlineAttivo)
-                {
-                    var (portaliOk, portaliRisultato, _) = await client.GetPortaliOnlineAsync(integrazione.Token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
-                    portali = portaliOk ? portaliRisultato : [];
-                }
             }
             catch (ConflictException)
             {
@@ -209,7 +203,7 @@ public class PayTouristInvioService(
 
         var righe = daInviare.Select(o =>
         {
-            var (reservation, motivoScarto) = builder.Costruisci(o, integrazione.PortaleOnlineAttivo);
+            var (reservation, motivoScarto) = builder.Costruisci(o);
             return reservation is not null
                 ? client.SerializzaPerExport(payTouristStruttura.IdStrutturaPaytourist ?? 0, idSoftware, reservation)
                 : $"// SALTATA: {motivoScarto}";
@@ -318,21 +312,9 @@ public class PayTouristInvioService(
                 throw new ConflictException(riduzioniErrore ?? "Impossibile recuperare le riduzioni PayTourist.");
             }
 
-            IReadOnlyList<PayTouristPortaleDto> portali = [];
-            if (integrazione.PortaleOnlineAttivo)
-            {
-                var (portaliOk, portaliRisultato, portaliErrore) = await client.GetPortaliOnlineAsync(integrazione.Token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
-                if (!portaliOk)
-                {
-                    throw new ConflictException(portaliErrore ?? "Impossibile recuperare i portali online PayTourist.");
-                }
+            var builder = new PayTouristDtoBuilder(anagraficaDati.Luoghi, anagraficaDati.Documenti, anagraficaDati.TipiAlloggiato, riduzioni, PortaliDaUsare(integrazione), anagraficaDati.ComuneStruttura);
 
-                portali = portaliRisultato;
-            }
-
-            var builder = new PayTouristDtoBuilder(anagraficaDati.Luoghi, anagraficaDati.Documenti, anagraficaDati.TipiAlloggiato, riduzioni, portali, anagraficaDati.ComuneStruttura);
-
-            var (reservation, motivoScarto) = builder.Costruisci(ospite, integrazione.PortaleOnlineAttivo);
+            var (reservation, motivoScarto) = builder.Costruisci(ospite);
             if (reservation is null)
             {
                 throw new ConflictException(motivoScarto ?? "Impossibile costruire la prenotazione per l'invio.");
@@ -430,7 +412,7 @@ public class PayTouristInvioService(
         PayTouristStruttura payTouristStruttura,
         string token,
         int idSoftware,
-        bool portaleOnlineAttivo,
+        IReadOnlyList<PayTouristPortaleDto> portali,
         AnagraficaPayTourist anagraficaDati,
         bool automatico,
         CancellationToken cancellationToken)
@@ -472,20 +454,6 @@ public class PayTouristInvioService(
             return (0, daInviare.Count, daInviare.Count, [errore]);
         }
 
-        IReadOnlyList<PayTouristPortaleDto> portali = [];
-        if (portaleOnlineAttivo)
-        {
-            var (portaliOk, portaliRisultato, portaliErrore) = await client.GetPortaliOnlineAsync(token, anagraficaDati.ComuneStruttura, idStruttura, idSoftware, cancellationToken);
-            if (!portaliOk)
-            {
-                var errore = portaliErrore ?? "Impossibile recuperare i portali online PayTourist.";
-                await SalvaEsitoAsync(payTouristStruttura, 0, daInviare.Count, errore, Tentativo(EsitoTentativo.ErroreRitentabile), cancellationToken);
-                return (0, daInviare.Count, daInviare.Count, [errore]);
-            }
-
-            portali = portaliRisultato;
-        }
-
         var builder = new PayTouristDtoBuilder(anagraficaDati.Luoghi, anagraficaDati.Documenti, anagraficaDati.TipiAlloggiato, riduzioni, portali, anagraficaDati.ComuneStruttura);
 
         var inviate = 0;
@@ -494,7 +462,7 @@ public class PayTouristInvioService(
 
         foreach (var ospite in daInviare)
         {
-            var (reservation, motivoScarto) = builder.Costruisci(ospite, portaleOnlineAttivo);
+            var (reservation, motivoScarto) = builder.Costruisci(ospite);
             if (reservation is null)
             {
                 ultimoErrore = motivoScarto;
@@ -530,6 +498,24 @@ public class PayTouristInvioService(
         await SalvaEsitoAsync(payTouristStruttura, inviate, daInviare.Count, ultimoErrore, Tentativo(esitoLotto), cancellationToken);
         return (inviate, daInviare.Count, daInviare.Count - inviate, messaggi);
     }
+
+    /// <summary>
+    /// I portali per cui l'imposta la incassa il portale: quelli spuntati in Impostazioni, non
+    /// l'intero elenco riconosciuto dal Comune. Sullo stesso Comune l'incasso automatico può valere
+    /// per un canale e non per un altro (Airbnb riscuote d'ufficio dove c'è la convenzione, Booking
+    /// solo dove ha un accordo attivo per quella struttura), e dichiarare come riscossa dal portale
+    /// un'imposta incassata alla reception significa che il Comune aspetta quei soldi da chi non
+    /// glieli manderà.
+    /// <para>
+    /// L'elenco non viene più richiesto a PayTourist ad ogni invio: si usa quello salvato, che
+    /// l'operatore aggiorna dalla pagina Impostazioni. Così un ente senza portali non fa più
+    /// fallire l'invio serale su una chiamata che non serviva a nulla.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<PayTouristPortaleDto> PortaliDaUsare(PayTouristIntegrazione integrazione) =>
+        integrazione.PortaleOnlineAttivo
+            ? integrazione.PortaliAttivi.Select(p => new PayTouristPortaleDto(p.IdPortale, p.Nome)).ToList()
+            : [];
 
     private async Task<AnagraficaPayTourist> CaricaAnagraficaAsync(Guid strutturaId, CancellationToken cancellationToken) => new(
         await anagrafica.ListLuoghiAsync(cancellationToken),

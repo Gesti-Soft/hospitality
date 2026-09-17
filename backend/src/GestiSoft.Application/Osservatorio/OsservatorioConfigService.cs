@@ -131,7 +131,15 @@ public class OsservatorioConfigService(
     {
         entity.Nome = request.Nome;
         entity.EntityCode = request.EntityCode;
-        entity.Password = request.Password;
+
+        // Password vuota = "non toccarla", mai "azzerala": non torna mai al client, il dialogo la
+        // mostra sempre vuota, e un salvataggio fatto per correggere Hotel code o le tipologie
+        // cancellerebbe una credenziale funzionante senza averlo chiesto (richiesta dell'utente).
+        if (!string.IsNullOrWhiteSpace(request.Password))
+        {
+            entity.Password = request.Password;
+        }
+
         entity.HotelCode = request.HotelCode;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 

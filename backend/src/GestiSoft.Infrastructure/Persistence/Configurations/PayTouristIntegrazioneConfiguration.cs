@@ -13,5 +13,10 @@ public class PayTouristIntegrazioneConfiguration : IEntityTypeConfiguration<PayT
 
         // Una sola configurazione PayTourist per Struttura.
         builder.HasIndex(p => p.StrutturaId).IsUnique();
+
+        builder.HasMany(p => p.PortaliAttivi)
+            .WithOne(x => x.Integrazione)
+            .HasForeignKey(x => x.PayTouristIntegrazioneId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

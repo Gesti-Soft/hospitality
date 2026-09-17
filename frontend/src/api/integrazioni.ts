@@ -87,10 +87,32 @@ export interface OsservatorioAppartamentoDto {
   ultimaVerificaOkAtUtc: string | null
 }
 
+/** Un portale online riconosciuto da PayTourist: l'id serve a salvarlo, il nome è quello con cui si riconosce il canale di una prenotazione. */
+export interface PayTouristPortaleOnlineDto {
+  id: number
+  nome: string
+}
+
 export interface PayTouristIntegrazioneDto {
   strutturaId: string
   tokenConfigurato: boolean
   portaleOnlineAttivo: boolean
+  /** Portali per cui l'imposta la incassa il portale. Vuoto = la incassa sempre la struttura. */
+  portaliAttivi: PayTouristPortaleOnlineDto[]
+}
+
+/** Esito del salvataggio della configurazione PayTourist: `verificaOk` è null quando non è stato indicato nessun token nuovo, quindi non c'era niente da verificare. Un token rifiutato dal portale non arriva qui — la richiesta fallisce con un errore. */
+export interface SalvaPayTouristConfigRisultatoDto {
+  integrazione: PayTouristIntegrazioneDto
+  verificaOk: boolean | null
+  verificaErrore: string | null
+}
+
+/** Esito di GET …/paytourist/config/portali-online: `messaggio` è il motivo da mostrare quando l'opzione non si può attivare, riportato come lo scrive PayTourist. */
+export interface VerificaPortaliOnlineDto {
+  abilitato: boolean
+  messaggio: string | null
+  portali: PayTouristPortaleOnlineDto[]
 }
 
 export interface PayTouristStrutturaDto {
@@ -171,6 +193,13 @@ export function usePayTouristConfig(strutturaId: string | null) {
 export function useSuggerimentoEtaTassaPayTourist(strutturaId: string | null) {
   return useMutation({
     mutationFn: () => apiGet<SuggerimentoEtaTassaDto>(`/strutture/${strutturaId}/paytourist/config/suggerimento-eta-tassa`),
+  })
+}
+
+/** Chiesto al momento di attivare "Filtra per portale online": solo PayTourist sa se l'ente prevede l'incasso tramite portali, e la risposta non si mette in cache perché l'ente può cambiarla. */
+export function useVerificaPortaliOnlinePayTourist(strutturaId: string | null) {
+  return useMutation({
+    mutationFn: () => apiGet<VerificaPortaliOnlineDto>(`/strutture/${strutturaId}/paytourist/config/portali-online`),
   })
 }
 
@@ -402,6 +431,8 @@ export function useAnniOsservatorio(strutturaId: string | null) {
 export interface PayTouristConfigRequest {
   token: string | null
   portaleOnlineAttivo: boolean
+  /** Assente = non toccare la selezione salvata; lista vuota = nessun portale incassa. */
+  portaliAttivi?: PayTouristPortaleOnlineDto[]
 }
 
 export interface PayTouristStrutturaRequest {
@@ -421,7 +452,7 @@ export interface RisultatoInvioPayTouristDto {
 export function useAggiornaPayTouristConfig(strutturaId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (request: PayTouristConfigRequest) => apiPut<PayTouristIntegrazioneDto>(`/strutture/${strutturaId}/paytourist/config`, request),
+    mutationFn: (request: PayTouristConfigRequest) => apiPut<SalvaPayTouristConfigRisultatoDto>(`/strutture/${strutturaId}/paytourist/config`, request),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['paytourist-config', strutturaId] }),
   })
 }

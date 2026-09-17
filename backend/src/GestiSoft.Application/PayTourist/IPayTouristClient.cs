@@ -88,6 +88,19 @@ public interface IPayTouristClient
 
     Task<(bool Ok, IReadOnlyList<PayTouristRiduzioneDto> Riduzioni, string? Errore)> GetRiduzioniAsync(string token, string? comuneAttivita, int idStruttura, int idSoftware, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Il Token è valido? Interroga GET api/v1/structures, l'unica chiamata PayTourist che non
+    /// richiede anche uno <c>structure_id</c> — così il token si può verificare appena inserito,
+    /// prima che esista una struttura PayTourist configurata.
+    /// <para>
+    /// <c>Raggiungibile</c> separa "il portale ha risposto e ha rifiutato il token" da "non è stato
+    /// possibile chiedere" (portale giù, host non risolvibile, Comune Attività mancante): sul primo
+    /// caso il chiamante rifiuta il salvataggio, sul secondo no — un guasto di rete non deve
+    /// impedire di configurare un token buono.
+    /// </para>
+    /// </summary>
+    Task<(bool Ok, bool Raggiungibile, string? Errore)> VerificaTokenAsync(string token, string? comuneAttivita, CancellationToken cancellationToken);
+
     Task<(bool Ok, IReadOnlyList<PayTouristPortaleDto> Portali, string? Errore)> GetPortaliOnlineAsync(string token, string? comuneAttivita, int idStruttura, int idSoftware, CancellationToken cancellationToken);
 
     /// <summary>

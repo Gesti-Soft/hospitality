@@ -10,9 +10,22 @@ using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.PayTourist;
 
-public record AggiornaPayTouristConfigRequest(string? Token, bool PortaleOnlineAttivo);
+/// <summary>
+/// <see cref="PortaliAttivi"/> sono i portali per cui l'imposta la incassa il portale: nullo
+/// significa "non toccare la selezione già salvata", una lista vuota significa "nessuno, la incasso
+/// sempre io".
+/// </summary>
+public record AggiornaPayTouristConfigRequest(string? Token, bool PortaleOnlineAttivo, IReadOnlyList<PayTouristPortaleDto>? PortaliAttivi = null);
 
 public record SalvaPayTouristStrutturaRequest(string? Nome, int? IdStrutturaPaytourist, IReadOnlyList<Guid> TipologieIds);
+
+/// <summary>
+/// Esito della domanda "su questo ente l'incasso tramite portali online è attivo?" — vedi
+/// <see cref="PayTouristConfigService.VerificaPortaliOnlineAsync"/>. <see cref="Messaggio"/> è il
+/// motivo da mostrare quando <see cref="Abilitato"/> è falso, e quando arriva da PayTourist viene
+/// riportato parola per parola: è più preciso di qualunque riformulazione nostra.
+/// </summary>
+public record VerificaPortaliOnlineDto(bool Abilitato, string? Messaggio, IReadOnlyList<PayTouristPortaleDto> Portali);
 
 /// <summary>
 /// Suggerimento (non un dato autorevole) per le soglie età e le percentuali di riduzione di
@@ -57,20 +70,129 @@ public class PayTouristConfigService(
             ?? new PayTouristIntegrazione { StrutturaId = strutturaId };
     }
 
-    public async Task<PayTouristIntegrazione> AggiornaConfigAsync(ICurrentUser currentUser, Guid strutturaId, AggiornaPayTouristConfigRequest request, CancellationToken cancellationToken)
+    /// <summary>
+    /// <see cref="VerificaOk"/> è nullo quando non è stato indicato nessun token nuovo: non è
+    /// "verifica fallita", è "non c'era niente da verificare".
+    /// </summary>
+    public async Task<(PayTouristIntegrazione Integrazione, bool? VerificaOk, string? VerificaErrore)> AggiornaConfigAsync(ICurrentUser currentUser, Guid strutturaId, AggiornaPayTouristConfigRequest request, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceSettings, cancellationToken);
 
         var entity = await integrazioni.GetByStrutturaIdAsync(strutturaId, cancellationToken)
             ?? new PayTouristIntegrazione { StrutturaId = strutturaId };
 
-        entity.Token = RimuoviPrefissoBearer(request.Token);
+        // Campo vuoto = "non toccare", mai "azzera": il token non viene mai rimandato al client, il
+        // form lo mostra sempre vuoto, e chi salva per cambiare l'opzione qui sotto cancellerebbe
+        // una credenziale funzionante senza averlo chiesto (richiesta esplicita dell'utente).
+        var tokenRichiesto = RimuoviPrefissoBearer(request.Token);
+        bool? verificaOk = null;
+        string? verificaErrore = null;
+
+        if (!string.IsNullOrWhiteSpace(tokenRichiesto))
+        {
+            tokenRichiesto = PulisciEValidaToken(tokenRichiesto);
+
+            var comuneAttivita = (await impostazioniStruttura.GetByStrutturaIdAsync(strutturaId, cancellationToken))?.ComuneAttivita;
+            var (ok, raggiungibile, errore) = await client.VerificaTokenAsync(tokenRichiesto, comuneAttivita, cancellationToken);
+
+            await LogTokenAsync(
+                currentUser,
+                strutturaId,
+                ok,
+                ok ? "Token PayTourist salvato e verificato." : $"Token PayTourist {(raggiungibile ? "rifiutato dal portale" : "non verificabile")}: {errore}",
+                cancellationToken);
+
+            // Il portale ha risposto e ha rifiutato il token: non si salva, o un errore di battitura
+            // sostituirebbe una credenziale funzionante e gli invii fallirebbero da lì in avanti.
+            // Portale non raggiungibile: si salva comunque, dicendolo — un guasto di rete non può
+            // impedire di configurare un token buono (scelta esplicita dell'utente).
+            if (!ok && raggiungibile)
+            {
+                throw new ConflictException($"Token PayTourist rifiutato dal portale: {errore}");
+            }
+
+            entity.Token = tokenRichiesto;
+            verificaOk = ok;
+            verificaErrore = ok ? null : errore;
+        }
+
         entity.PortaleOnlineAttivo = request.PortaleOnlineAttivo;
+
+        if (request.PortaliAttivi is { } portaliScelti)
+        {
+            SincronizzaPortaliAttivi(entity, portaliScelti);
+        }
+
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await integrazioni.UpsertAsync(entity, cancellationToken);
-        return entity;
+        return (entity, verificaOk, verificaErrore);
     }
+
+    /// <summary>
+    /// Allinea i portali salvati a quelli scelti, aggiungendo e togliendo solo ciò che cambia —
+    /// stessa forma di SincronizzaTipologie per gli appartamenti Osservatorio. Il nome viene
+    /// riscritto anche sulle righe che restano: se PayTourist rinomina un portale, l'abbinamento
+    /// col canale della prenotazione si fa su quel nome, e tenerne uno vecchio lo farebbe fallire
+    /// in silenzio.
+    /// </summary>
+    private static void SincronizzaPortaliAttivi(PayTouristIntegrazione entity, IReadOnlyList<PayTouristPortaleDto> scelti)
+    {
+        var richiesti = scelti.ToDictionary(p => p.Id, p => p.Nome);
+
+        foreach (var daRimuovere in entity.PortaliAttivi.Where(p => !richiesti.ContainsKey(p.IdPortale)).ToList())
+        {
+            entity.PortaliAttivi.Remove(daRimuovere);
+        }
+
+        foreach (var esistente in entity.PortaliAttivi)
+        {
+            esistente.Nome = richiesti[esistente.IdPortale];
+        }
+
+        var giaPresenti = entity.PortaliAttivi.Select(p => p.IdPortale).ToHashSet();
+        foreach (var (id, nome) in richiesti.Where(r => !giaPresenti.Contains(r.Key)))
+        {
+            entity.PortaliAttivi.Add(new PayTouristPortaleAttivo { PayTouristIntegrazioneId = entity.Id, IdPortale = id, Nome = nome });
+        }
+    }
+
+    /// <summary>
+    /// Il Token viaggia in un header HTTP, che ammette solo ASCII: una lettera accentata o uno
+    /// spazio invisibile arrivati con il copia-incolla fanno fallire ogni chiamata con
+    /// "Request headers must contain only ASCII characters", tradotto dal client in "servizio non
+    /// raggiungibile" — chi salva legge un problema di rete al posto di un token sbagliato (successo
+    /// dal vivo, con un token che conteneva una "è"). Spazi e caratteri a larghezza zero si tolgono,
+    /// perché sono dell'incolla e non del token; su qualunque altro carattere estraneo il
+    /// salvataggio si ferma dicendo dov'è, senza mai riportare il token.
+    /// </summary>
+    private static string PulisciEValidaToken(string token)
+    {
+        var pulito = new string(token.Where(c => !char.IsWhiteSpace(c) && c is not ('​' or '‌' or '‍' or '﻿')).ToArray());
+
+        for (var i = 0; i < pulito.Length; i++)
+        {
+            if (pulito[i] is < ' ' or > '~')
+            {
+                throw new ConflictException(
+                    $"Il token contiene un carattere non ammesso alla posizione {i + 1} (sono ammessi solo caratteri ASCII): controlla di averlo copiato per intero, senza lettere accentate.");
+            }
+        }
+
+        return pulito;
+    }
+
+    /// <summary>Traccia chi ha cambiato il Token e com'è andata la verifica — mai il valore del token, che resta un segreto anche nei log.</summary>
+    private async Task LogTokenAsync(ICurrentUser currentUser, Guid strutturaId, bool ok, string messaggio, CancellationToken cancellationToken) =>
+        await logEventi.RegistraAsync(
+            ok ? LivelloLog.Info : LivelloLog.Warning,
+            messaggio,
+            origine: "PayTourist",
+            clienteId: await strutturaRepository.GetClienteIdAsync(strutturaId, cancellationToken),
+            strutturaId: strutturaId,
+            categoria: "PayTourist",
+            operatore: currentUser.Email,
+            cancellationToken: cancellationToken);
 
     /// <summary>
     /// Il pannello PayTourist mostra il token già con il prefisso "Bearer " davanti — se l'operatore
@@ -114,6 +236,47 @@ public class PayTouristConfigService(
         }
 
         return elenco;
+    }
+
+    /// <summary>
+    /// Risponde a "l'incasso tramite portali online è attivo su questo ente?" prima che l'operatore
+    /// accenda il filtro portale online: finché non c'era, l'opzione si poteva spuntare anche su un
+    /// ente che non la prevede, e l'unico segnale arrivava la sera, come invio fallito. La domanda
+    /// si può porre solo a PayTourist — nessun dato locale dice se il Comune l'ha attivata — e la
+    /// risposta non viene salvata: l'ente può cambiarla quando vuole. Sola lettura, nessun invio.
+    /// </summary>
+    public async Task<VerificaPortaliOnlineDto> VerificaPortaliOnlineAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceSettings, cancellationToken);
+
+        var integrazione = await integrazioni.GetByStrutturaIdAsync(strutturaId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(integrazione?.Token))
+        {
+            throw new ConflictException("Token PayTourist non configurato: salvalo prima di attivare questa opzione.");
+        }
+
+        // L'endpoint dei portali vuole uno structure_id, ma la risposta riguarda l'ente, non la
+        // singola struttura: va bene la prima configurata, senza chiedere all'operatore quale.
+        var strutturePayTourist = await strutture.ListByStrutturaAsync(strutturaId, cancellationToken);
+        if (strutturePayTourist.FirstOrDefault(s => s.IdStrutturaPaytourist is not null)?.IdStrutturaPaytourist is not { } idStrutturaPaytourist)
+        {
+            throw new ConflictException("Nessuna struttura PayTourist configurata con il suo Id: serve per interrogare il portale.");
+        }
+
+        var idSoftware = await wubookLicenzaService.GetIdPaytouristAsync(cancellationToken);
+        var comuneAttivita = (await impostazioniStruttura.GetByStrutturaIdAsync(strutturaId, cancellationToken))?.ComuneAttivita;
+
+        var (ok, portali, errore) = await client.GetPortaliOnlineAsync(integrazione.Token, comuneAttivita, idStrutturaPaytourist, idSoftware, cancellationToken);
+        if (!ok)
+        {
+            return new VerificaPortaliOnlineDto(false, errore ?? "Impossibile verificare i portali online su PayTourist.", []);
+        }
+
+        // Ente abilitato ma senza nessun portale: non c'è niente da spuntare, quindi per chi
+        // configura equivale a "non abilitato".
+        return portali.Count == 0
+            ? new VerificaPortaliOnlineDto(false, "Nessun portale online risulta abilitato su questo ente: non c'è niente da scegliere, l'imposta la incassi tu su ogni prenotazione.", [])
+            : new VerificaPortaliOnlineDto(true, null, portali);
     }
 
     public async Task<(PayTouristStruttura Struttura, bool ConnessioneOk, string? ConnessioneErrore)> CreaStrutturaAsync(ICurrentUser currentUser, Guid strutturaId, SalvaPayTouristStrutturaRequest request, CancellationToken cancellationToken)

@@ -8,7 +8,9 @@ namespace GestiSoft.Infrastructure.Repositories;
 public class PayTouristIntegrazioneRepository(GestiSoftDbContext db) : IPayTouristIntegrazioneRepository
 {
     public Task<PayTouristIntegrazione?> GetByStrutturaIdAsync(Guid strutturaId, CancellationToken cancellationToken) =>
-        db.PayTouristIntegrazioni.FirstOrDefaultAsync(p => p.StrutturaId == strutturaId, cancellationToken);
+        db.PayTouristIntegrazioni
+            .Include(p => p.PortaliAttivi)
+            .FirstOrDefaultAsync(p => p.StrutturaId == strutturaId, cancellationToken);
 
     public async Task UpsertAsync(PayTouristIntegrazione entity, CancellationToken cancellationToken)
     {

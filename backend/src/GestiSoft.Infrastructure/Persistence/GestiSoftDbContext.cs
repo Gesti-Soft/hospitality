@@ -75,6 +75,8 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
 
     public DbSet<PayTouristIntegrazione> PayTouristIntegrazioni => Set<PayTouristIntegrazione>();
 
+    public DbSet<PayTouristPortaleAttivo> PayTouristPortaliAttivi => Set<PayTouristPortaleAttivo>();
+
     public DbSet<PayTouristStruttura> PayTouristStrutture => Set<PayTouristStruttura>();
 
     public DbSet<PayTouristStrutturaTipologia> PayTouristStruttureTipologie => Set<PayTouristStrutturaTipologia>();

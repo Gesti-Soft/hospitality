@@ -230,8 +230,8 @@ public class PayTouristClient(HttpClient http, IConfiguration configuration, ILo
                 return (false, [], EstraiMessaggioErrore(corpo) ?? $"Richiesta portali online rifiutata (stato: {response.StatusCode}).");
             }
 
-            var risultato = await response.Content.ReadFromJsonAsync<List<WirePortale>>(cancellationToken: cancellationToken) ?? [];
-            return (true, risultato.Select(p => new PayTouristPortaleDto(p.Id, p.Name)).ToList(), null);
+            var testo = await response.Content.ReadAsStringAsync(cancellationToken);
+            return InterpretaPortali(testo);
         }
         catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException or JsonException)
         {
@@ -239,6 +239,62 @@ public class PayTouristClient(HttpClient http, IConfiguration configuration, ILo
             return (false, [], "Servizio PayTourist non raggiungibile (portali online).");
         }
     }
+
+    /// <summary>
+    /// La risposta di online-portals-enabled non ha una forma sola: l'elenco arriva come array JSON
+    /// diretto, ma quando l'ente non ha attivato l'incasso tramite portali PayTourist risponde
+    /// <b>200</b> con un oggetto <c>{"errors": "Attenzione", "message": "Incasso da portali online
+    /// non abilitato su questo ente."}</c> — verificato dal vivo sull'ente di Castellammare del
+    /// Golfo. Deserializzare rigidamente in <c>List&lt;WirePortale&gt;</c> faceva lanciare
+    /// JsonException, che il catch traduceva in "Servizio PayTourist non raggiungibile": all'
+    /// operatore arrivava un messaggio fuorviante al posto di uno che spiegava esattamente il
+    /// problema (bug reale, non ipotetico). Si accetta anche la forma "wrappata in data" usata da
+    /// reductions, per lo stesso motivo per cui la accetta <see cref="GetStruttureAsync"/>: la
+    /// documentazione pubblica non mostra un esempio di risposta per questo endpoint.
+    /// </summary>
+    private static (bool Ok, IReadOnlyList<PayTouristPortaleDto> Portali, string? Errore) InterpretaPortali(string corpo)
+    {
+        // Corpo vuoto: nessun portale, non un errore — non c'è niente da abbinare e l'operatore lo
+        // legge come "nessun portale abilitato", che è ciò che significa.
+        if (string.IsNullOrWhiteSpace(corpo))
+        {
+            return (true, [], null);
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(corpo);
+
+            var elementi = doc.RootElement.ValueKind == JsonValueKind.Array
+                ? doc.RootElement
+                : doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.ValueKind == JsonValueKind.Array ? dataEl : default;
+
+            if (elementi.ValueKind == JsonValueKind.Array)
+            {
+                var portali = elementi.EnumerateArray()
+                    .Where(el => el.ValueKind == JsonValueKind.Object)
+                    .Select(EstraiPortale)
+                    .Where(p => p is not null)
+                    .Select(p => new PayTouristPortaleDto(p!.Value.Id, p.Value.Nome))
+                    .ToList();
+
+                return (true, portali, null);
+            }
+
+            // Non è un elenco: è il modo in cui PayTourist dice "qui non si può fare", con un 200.
+            // "message" da solo, non passando da EstraiMessaggioErrore: qui "errors" porta la sola
+            // parola "Attenzione", che accodata al messaggio lo sporcherebbe senza aggiungere nulla.
+            var messaggio = doc.RootElement.ValueKind == JsonValueKind.Object ? TryGetString(doc.RootElement, "message") : null;
+            return (false, [], messaggio ?? EstraiMessaggioErrore(corpo) ?? "Risposta portali online PayTourist non riconosciuta.");
+        }
+        catch (JsonException)
+        {
+            return (false, [], "Risposta portali online PayTourist non riconosciuta.");
+        }
+    }
+
+    private static (int Id, string Nome)? EstraiPortale(JsonElement el) =>
+        TryGetInt(el, out var id, "id") ? (id, TryGetString(el, "name") ?? $"Portale #{id}") : null;
 
     /// <summary>
     /// Elenco strutture abilitate su PayTourist per questo Token (GET api/v1/structures). La
@@ -289,6 +345,36 @@ public class PayTouristClient(HttpClient http, IConfiguration configuration, ILo
         {
             logger.LogWarning(ex, "PayTourist GetStruttureAsync: fallimento di trasporto verso {BaseUri}", baseUri);
             return (false, [], "Servizio PayTourist non raggiungibile (strutture).");
+        }
+    }
+
+    public async Task<(bool Ok, bool Raggiungibile, string? Errore)> VerificaTokenAsync(string token, string? comuneAttivita, CancellationToken cancellationToken)
+    {
+        if (RisolviBaseUri(comuneAttivita) is not { } baseUri)
+        {
+            return (false, false, ErroreConfigurazione(comuneAttivita));
+        }
+
+        try
+        {
+            using var request = CreaRichiesta(baseUri, "api/v1/structures", token);
+            using var response = await http.SendAsync(request, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return (true, true, null);
+            }
+
+            // Il portale ha risposto e ha detto di no: qui il token è sbagliato, non la rete. Il
+            // corpo non viene letto per il contenuto ma per il messaggio, che è quello che
+            // l'operatore deve leggere.
+            var corpo = await response.Content.ReadAsStringAsync(cancellationToken);
+            return (false, true, EstraiMessaggioErrore(corpo) ?? $"Token rifiutato da PayTourist (stato: {response.StatusCode}).");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(ex, "PayTourist VerificaTokenAsync: fallimento di trasporto verso {BaseUri}", baseUri);
+            return (false, false, "Servizio PayTourist non raggiungibile.");
         }
     }
 
@@ -548,10 +634,6 @@ public class PayTouristClient(HttpClient http, IConfiguration configuration, ILo
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("description")] string? Description,
         [property: JsonPropertyName("percentage")] string? Percentage);
-
-    private record WirePortale(
-        [property: JsonPropertyName("id")] int Id,
-        [property: JsonPropertyName("name")] string Name);
 
     /// <summary>
     /// Risposta di GET api/v1/reservations, ridotta a ciò che serve al controllo anti-duplicato: la

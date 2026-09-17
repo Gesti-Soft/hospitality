@@ -22,7 +22,16 @@ public class PayTouristIntegrazione : TenantEntity
     /// <summary>
     /// Se attivo, l'invio arricchisce ogni prenotazione con i dati del portale online di
     /// prenotazione (abbinato per nome canale a <see cref="Prenotazione.Agenzia"/>) — porta
-    /// "PORTALE ONLINE (0 = NO, 1 = SI)" del legacy.
+    /// "PORTALE ONLINE (0 = NO, 1 = SI)" del legacy. Da solo non basta più: contano i portali
+    /// scelti in <see cref="PortaliAttivi"/>, perché l'incasso automatico può valere su un canale
+    /// e non su un altro.
     /// </summary>
     public bool PortaleOnlineAttivo { get; set; }
+
+    /// <summary>
+    /// I portali per cui l'imposta la incassa il portale, scelti uno per uno dall'operatore fra
+    /// quelli riconosciuti dal Comune. Vuoto significa "la incasso sempre io": le prenotazioni
+    /// partono comunque, dichiarate come riscosse dalla struttura.
+    /// </summary>
+    public ICollection<PayTouristPortaleAttivo> PortaliAttivi { get; set; } = new List<PayTouristPortaleAttivo>();
 }

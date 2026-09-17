@@ -89,7 +89,7 @@ export function OsservatorioAppartamentoDialog({ strutturaId, appartamento, tipo
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={inCorso || salvato}
-          helperText={appartamento?.credenzialiConfigurate ? "Già salvata: lasciarla vuota e salvare la AZZERA" : ' '}
+          helperText={appartamento?.credenzialiConfigurate ? "Già salvata: lasciarla vuota non la modifica" : ' '}
         />
 
         <TextField

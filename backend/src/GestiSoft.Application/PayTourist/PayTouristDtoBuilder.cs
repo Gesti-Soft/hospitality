@@ -24,7 +24,6 @@ public class PayTouristDtoBuilder
     private readonly ILookup<string, VoceAnagrafica> _tipiAlloggiato;
     private readonly IReadOnlyList<PayTouristRiduzioneDto> _riduzioni;
     private readonly ILookup<string, PayTouristPortaleDto> _portali;
-    private readonly bool _nessunPortaleConfigurato;
     private readonly string? _comuneStruttura;
 
     public PayTouristDtoBuilder(
@@ -40,22 +39,22 @@ public class PayTouristDtoBuilder
         _tipiAlloggiato = tipiAlloggiato.ToLookup(v => v.Descrizione, StringComparer.OrdinalIgnoreCase);
         _riduzioni = riduzioni;
         _portali = portali.ToLookup(p => p.Nome, StringComparer.OrdinalIgnoreCase);
-        _nessunPortaleConfigurato = portali.Count == 0;
         _comuneStruttura = ExtractCity(comuneStruttura);
     }
 
     /// <summary>
-    /// Costruisce la prenotazione. Restituisce (null, motivo) solo se il portale online è richiesto
-    /// (impostazione PortaleOnlineAttivo) ma l'account PayTourist non ha NESSUN portale configurato
-    /// — in quel caso la prenotazione va saltata, stesso comportamento del legacy (che loggava
-    /// l'errore e passava alla successiva). Se invece i portali esistono ma nessuno corrisponde al
-    /// canale di questa specifica prenotazione (<see cref="Prenotazione.Agenzia"/>, es. "Diretta"),
-    /// il legacy NON bloccava l'invio — mandava comunque la prenotazione senza l'arricchimento
-    /// portale (StatePoliceLogic.SendSchedinePayTourist: il controllo "portal != null" si limitava a
-    /// non valorizzare OnlinePortal/TotalFromOnlinePortal/OnlinePortalReservationId, mai a scartare):
-    /// fedele qui, non ogni prenotazione arriva da un portale online.
+    /// Costruisce la prenotazione. Se il canale (<see cref="Prenotazione.Agenzia"/>) corrisponde a
+    /// uno dei portali scelti, la dichiarazione porta anche portale, importo e numero prenotazione
+    /// del portale; altrimenti parte senza — come faceva il legacy, che su "portal != null" si
+    /// limitava a non valorizzare quei campi e non scartava mai nulla
+    /// (StatePoliceLogic.SendSchedinePayTourist). Nessun portale scelto significa "l'imposta la
+    /// incasso io su tutto", non "non inviare": la prenotazione parte lo stesso.
+    /// <para>
+    /// La coppia (null, motivo) resta come esito possibile per gli scarti futuri, ma oggi non viene
+    /// mai restituita.
+    /// </para>
     /// </summary>
-    public (PayTouristReservationDto? Prenotazione, string? MotivoScarto) Costruisci(Ospite ospite, bool portaleOnlineRichiesto)
+    public (PayTouristReservationDto? Prenotazione, string? MotivoScarto) Costruisci(Ospite ospite)
     {
         var prenotazione = ospite.Prenotazione!;
         var checkIn = prenotazione.CheckIn ?? DateTime.UtcNow.Date;
@@ -65,20 +64,15 @@ public class PayTouristDtoBuilder
         decimal? totaleDaPortale = null;
         string? idPrenotazionePortale = null;
 
-        if (portaleOnlineRichiesto)
+        // I portali qui dentro sono già solo quelli scelti dall'operatore, per i quali l'imposta la
+        // incassa il portale: se il canale di questa prenotazione è uno di quelli, lo si dichiara
+        // con l'importo; altrimenti la prenotazione parte lo stesso, come riscossa dalla struttura.
+        var portale = _portali[prenotazione.Agenzia ?? string.Empty].FirstOrDefault();
+        if (portale is not null)
         {
-            if (_nessunPortaleConfigurato)
-            {
-                return (null, "Nessun portale online PayTourist configurato per questo account.");
-            }
-
-            var portale = _portali[prenotazione.Agenzia ?? string.Empty].FirstOrDefault();
-            if (portale is not null)
-            {
-                portaleId = portale.Id;
-                totaleDaPortale = prenotazione.TotalTax;
-                idPrenotazionePortale = prenotazione.NumeroPrenotazione;
-            }
+            portaleId = portale.Id;
+            totaleDaPortale = prenotazione.TotalTax;
+            idPrenotazionePortale = prenotazione.NumeroPrenotazione;
         }
 
         var guests = new List<PayTouristGuestDto> { CostruisciCapofamiglia(ospite, checkIn, checkOut) };

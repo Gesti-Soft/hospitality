@@ -35,8 +35,20 @@ public class AlloggiatiWebConfigService(
             ?? new AlloggiatiWebIntegrazione { StrutturaId = strutturaId };
 
         entity.Utente = request.Utente;
-        entity.Password = request.Password;
-        entity.WsKey = request.WsKey;
+
+        // Password e Ws Key vuote = "non toccarle", mai "azzerale": non tornano mai al client, il
+        // form le mostra sempre vuote, e un salvataggio fatto per correggere l'utente cancellerebbe
+        // credenziali funzionanti senza averlo chiesto (richiesta esplicita dell'utente).
+        if (!string.IsNullOrWhiteSpace(request.Password))
+        {
+            entity.Password = request.Password;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.WsKey))
+        {
+            entity.WsKey = request.WsKey;
+        }
+
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         var (ok, errore) = await VerificaConnessioneAsync(entity, cancellationToken);
