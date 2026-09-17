@@ -1,3 +1,4 @@
+﻿using GestiSoft.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
@@ -18,6 +19,8 @@ public class GestiSoftDbContextFactory : IDesignTimeDbContextFactory<GestiSoftDb
         var optionsBuilder = new DbContextOptionsBuilder<GestiSoftDbContext>();
         optionsBuilder.UseNpgsql(connectionString);
 
-        return new GestiSoftDbContext(optionsBuilder.Options);
+        // Chiave fittizia: la cifratura delle credenziali è un ValueConverter, non tocca lo schema,
+        // e gli strumenti da riga di comando non leggono né scrivono dati veri.
+        return new GestiSoftDbContext(optionsBuilder.Options, new CredenzialiProtector(new byte[32]));
     }
 }

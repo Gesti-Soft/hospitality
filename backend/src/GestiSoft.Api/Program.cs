@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using GestiSoft.Api;
 using System.Threading.RateLimiting;
 using GestiSoft.Api.Auth;
@@ -143,6 +143,12 @@ using (var startupScope = app.Services.CreateScope())
 
     var identitySeeder = startupScope.ServiceProvider.GetRequiredService<IdentitySeeder>();
     await identitySeeder.SeedAsync();
+
+    // Cifra le credenziali dei servizi esterni rimaste in chiaro da prima che la cifratura
+    // esistesse: senza questo passo resterebbero leggibili in ogni backup finché qualcuno non
+    // risalva quella configurazione a mano.
+    var credenzialiSeeder = startupScope.ServiceProvider.GetRequiredService<CredenzialiCifraturaSeeder>();
+    await credenzialiSeeder.SeedAsync();
 }
 
 // Configure the HTTP request pipeline.

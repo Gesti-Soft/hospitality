@@ -1,11 +1,12 @@
-using GestiSoft.Domain.Entities;
+﻿using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Entities.Riferimenti;
+using GestiSoft.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace GestiSoft.Infrastructure.Persistence;
 
-public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : DbContext(options)
+public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options, CredenzialiProtector credenziali) : DbContext(options)
 {
     public DbSet<Cliente> Clienti => Set<Cliente>();
 
@@ -118,5 +119,20 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options) : 
                 }
             }
         }
+
+        // Credenziali dei servizi esterni cifrate a riposo: sono le chiavi d'accesso a portali della
+        // PA, e in chiaro finivano in ogni backup e in ogni dump scaricato per assistenza. La
+        // conversione sta qui e non nelle singole Configuration perché quelle vengono create per
+        // riflessione, senza accesso al protector (vedi CredenzialiProtector).
+        var credenzialeConverter = new ValueConverter<string?, string?>(
+            v => credenziali.Proteggi(v),
+            v => credenziali.Leggi(v));
+
+        modelBuilder.Entity<PayTouristIntegrazione>().Property(p => p.Token).HasConversion(credenzialeConverter);
+        modelBuilder.Entity<AlloggiatiWebIntegrazione>().Property(p => p.Password).HasConversion(credenzialeConverter);
+        modelBuilder.Entity<AlloggiatiWebIntegrazione>().Property(p => p.WsKey).HasConversion(credenzialeConverter);
+        modelBuilder.Entity<OsservatorioAppartamento>().Property(p => p.Password).HasConversion(credenzialeConverter);
+        modelBuilder.Entity<ImpostazioniGlobali>().Property(p => p.TokenWubook).HasConversion(credenzialeConverter);
+        modelBuilder.Entity<WubookIntegrazione>().Property(p => p.GestisoftToken).HasConversion(credenzialeConverter);
     }
 }

@@ -71,6 +71,11 @@ services:
       AlloggiatiWeb__Endpoint: ${ALLOGGIATIWEB_ENDPOINT:-}
       Osservatorio__BaseUrl: ${OSSERVATORIO_BASE_URL:-}
       PayTourist__BaseUrl: ${PAYTOURIST_BASE_URL:-}
+      # Cifra a riposo le credenziali dei servizi esterni (token PayTourist, utenza Alloggiati Web,
+      # password Osservatorio, token OTA). Sta fuori dal database di proposito: il rischio da cui
+      # protegge è che giri una copia del database. Perderla significa non poter più rileggere le
+      # credenziali salvate, quindi va conservata insieme agli altri segreti di produzione.
+      Credenziali__ChiaveCifratura: ${CREDENZIALI_CHIAVE_CIFRATURA:?set CREDENZIALI_CHIAVE_CIFRATURA (32 byte casuali in base64, es. openssl rand -base64 32)}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-5080}:8080"
 
@@ -103,6 +108,11 @@ services:
       AlloggiatiWeb__Endpoint: ${ALLOGGIATIWEB_ENDPOINT:-}
       Osservatorio__BaseUrl: ${OSSERVATORIO_BASE_URL:-}
       PayTourist__BaseUrl: ${PAYTOURIST_BASE_URL:-}
+      # Cifra a riposo le credenziali dei servizi esterni (token PayTourist, utenza Alloggiati Web,
+      # password Osservatorio, token OTA). Sta fuori dal database di proposito: il rischio da cui
+      # protegge è che giri una copia del database. Perderla significa non poter più rileggere le
+      # credenziali salvate, quindi va conservata insieme agli altri segreti di produzione.
+      Credenziali__ChiaveCifratura: ${CREDENZIALI_CHIAVE_CIFRATURA:?set CREDENZIALI_CHIAVE_CIFRATURA (32 byte casuali in base64, es. openssl rand -base64 32)}
 
   worker-schedine:
     build:
@@ -126,6 +136,11 @@ services:
       AlloggiatiWeb__Endpoint: ${ALLOGGIATIWEB_ENDPOINT:-}
       Osservatorio__BaseUrl: ${OSSERVATORIO_BASE_URL:-}
       PayTourist__BaseUrl: ${PAYTOURIST_BASE_URL:-}
+      # Cifra a riposo le credenziali dei servizi esterni (token PayTourist, utenza Alloggiati Web,
+      # password Osservatorio, token OTA). Sta fuori dal database di proposito: il rischio da cui
+      # protegge è che giri una copia del database. Perderla significa non poter più rileggere le
+      # credenziali salvate, quindi va conservata insieme agli altri segreti di produzione.
+      Credenziali__ChiaveCifratura: ${CREDENZIALI_CHIAVE_CIFRATURA:?set CREDENZIALI_CHIAVE_CIFRATURA (32 byte casuali in base64, es. openssl rand -base64 32)}
 
   frontend:
     build:

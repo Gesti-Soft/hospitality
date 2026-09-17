@@ -48,6 +48,7 @@ Valori da impostare:
 |---|---|
 | `POSTGRES_PASSWORD` | **Nuova**, generata apposta — mai riusare quella di sviluppo (`openssl rand -base64 32`) |
 | `JWT_SECRET` | **Nuovo**, generato apposta (`openssl rand -base64 48`) — invalida tutte le sessioni esistenti al primo avvio, normale |
+| `CREDENZIALI_CHIAVE_CIFRATURA` | **Nuova**, generata apposta (`openssl rand -base64 32`) — cifra a riposo le credenziali dei servizi esterni salvate nel database. Obbligatoria: senza, l'Api non parte. Va conservata insieme agli altri segreti del server: perdendola, le credenziali già salvate diventano illeggibili e vanno reinserite a mano |
 | `FRONTEND_ORIGIN` | `https://hospitality.gestisoft.it` |
 | `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` | Lasciare pure i valori di esempio — **non verranno usati**: il database ripristinato al passo 5 porta già il vero Super Admin, il seeder si ferma da solo appena trova un Super Admin già esistente (nessun rischio di duplicazione) |
 | `GESTISOFT_BASE_URL`, `ALLOGGIATIWEB_ENDPOINT`, `OSSERVATORIO_BASE_URL`, `PAYTOURIST_BASE_URL` | **Stessi valori già in uso in locale** (`.env` locale) — sono gli endpoint reali delle integrazioni esterne già funzionanti oggi per Villa Chifeci Scopello, non vanno cambiati |

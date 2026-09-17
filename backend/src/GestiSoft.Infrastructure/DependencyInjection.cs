@@ -1,4 +1,4 @@
-using GestiSoft.Application.AlloggiatiWeb;
+﻿using GestiSoft.Application.AlloggiatiWeb;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Clienti;
@@ -24,6 +24,7 @@ using GestiSoft.Infrastructure.Fatturazione;
 using GestiSoft.Infrastructure.Osservatorio;
 using GestiSoft.Infrastructure.PayTourist;
 using GestiSoft.Infrastructure.Persistence;
+using GestiSoft.Infrastructure.Security;
 using GestiSoft.Infrastructure.Repositories;
 using GestiSoft.Infrastructure.Seed;
 using GestiSoft.Infrastructure.SuperAdmin;
@@ -62,6 +63,10 @@ public static class DependencyInjection
             TcpKeepAliveInterval = 5,
         };
 
+        // Registrato prima del DbContext, che lo riceve nel costruttore: senza chiave di cifratura
+        // l'avvio si ferma qui, invece di ripartire scrivendo credenziali in chiaro.
+        services.AddSingleton(CredenzialiProtector.Da(configuration));
+
         services.AddDbContext<GestiSoftDbContext>(options => options.UseNpgsql(
             connectionStringBuilder.ConnectionString,
             npgsql => npgsql.EnableRetryOnFailure(
@@ -70,6 +75,7 @@ public static class DependencyInjection
                 errorCodesToAdd: null)));
         services.AddScoped<ReferenceDataSeeder>();
         services.AddScoped<IdentitySeeder>();
+        services.AddScoped<CredenzialiCifraturaSeeder>();
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.AddScoped<IUtenteRepository, UtenteRepository>();

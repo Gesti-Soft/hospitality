@@ -1,6 +1,7 @@
-using GestiSoft.Domain.Entities;
+﻿using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 using GestiSoft.Infrastructure.Persistence;
+using GestiSoft.Infrastructure.Security;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,7 +42,19 @@ var strutturaNome = Environment.GetEnvironmentVariable("FASE10_STRUTTURA_NOME") 
 
 var optionsBuilder = new DbContextOptionsBuilder<GestiSoftDbContext>();
 optionsBuilder.UseNpgsql(pgConnectionString);
-await using var db = new GestiSoftDbContext(optionsBuilder.Options);
+
+// Questo tool scrive credenziali vere (token PayTourist, utenza Alloggiati Web): vanno cifrate con
+// la stessa chiave dell'applicazione, altrimenti l'Api non riuscirebbe più a rileggerle.
+var chiaveCredenziali = Environment.GetEnvironmentVariable("Credenziali__ChiaveCifratura");
+if (string.IsNullOrWhiteSpace(chiaveCredenziali))
+{
+    Console.WriteLine("Credenziali__ChiaveCifratura non impostata: è la stessa chiave usata dall'Api (32 byte in base64). Interrotto (nessuna scrittura).");
+    return 1;
+}
+
+await using var db = new GestiSoftDbContext(
+    optionsBuilder.Options,
+    new CredenzialiProtector(Convert.FromBase64String(chiaveCredenziali.Trim())));
 
 if (await db.Strutture.AnyAsync(s => s.Nome == strutturaNome))
 {
