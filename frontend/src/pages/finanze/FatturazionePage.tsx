@@ -542,10 +542,7 @@ function LogoFattura({ strutturaId, haLogo }: { strutturaId: string; haLogo: boo
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Logo in fattura</Typography>
-        <Typography sx={{ fontSize: 12, color: tokens.textTertiary, maxWidth: 380 }}>
-          Compare in alto a sinistra sul PDF, sopra il nome della struttura. PNG o JPEG, massimo{' '}
-          {LOGO_MAX_BYTE / 1024} KB: le immagini più grandi vengono rimpicciolite in automatico prima di essere caricate.
-        </Typography>
+
 
         {puoScrivere && (
           <Box sx={{ display: 'flex', gap: 1 }}>
