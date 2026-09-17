@@ -113,6 +113,8 @@ export interface VerificaPortaliOnlineDto {
   abilitato: boolean
   messaggio: string | null
   portali: PayTouristPortaleOnlineDto[]
+  /** Canali delle prenotazioni che non corrispondono a nessun portale: le loro prenotazioni risultano incassate dalla struttura. */
+  canaliSenzaPortale: string[]
 }
 
 export interface PayTouristStrutturaDto {

@@ -1,6 +1,6 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-16 (seconda parte). Stato: web in produzione sulla VPS, Fase 2
+Ultimo aggiornamento: 2026-09-17. Stato: web in produzione sulla VPS, Fase 2
 della sincronizzazione col desktop ferma sul ramo `fase-2-sync-locale`; su `master`
 fatturazione (estero, PDF rifatto), Osservatorio corretto e una passata di design.
 
@@ -41,6 +41,9 @@ per scelta, ma finché non esiste la Fase 1 non è chiusa. Serve un PC pulito pe
 
 Ordine non di priorità. Dettagli e design già concordati: vedi archivio.
 
+- **Portali online PayTourist: mai provati contro un ente che li abilita davvero.** Castellammare
+  non ne ha, quindi la scelta dei portali è stata verificata solo nella parte che dice "non ce ne
+  sono". Da riprovare su un Comune convenzionato.
 - **`HotelCode` Osservatorio: corretto ma mai verificato.** Si prova col pulsante di invio
   manuale quando il cursore del portale coincide con la data odierna: manda gli arrivi senza
   chiudere la giornata, quindi è ripetibile. Con arretrato da chiudere il manuale non fa nulla.
@@ -156,6 +159,26 @@ alle PA sono irreversibili: mai inviare nulla senza richiesta esplicita.
 ## Cronologia — cosa è stato fatto
 
 Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
+
+**PayTourist: portali, verifica token, credenziali cifrate** (17/09)
+- Dump di produzione importato in un database a parte per capire perché l'invio di APP. ZAGARA
+  falliva ogni sera: PayTourist risponde **200** con `{"message": "Incasso da portali online non
+  abilitato su questo ente."}` e la deserializzazione rigida lo trasformava in "servizio non
+  raggiungibile". Castellammare del Golfo non abilita nessun portale.
+- Portali scelti uno per uno (`paytourist_portali_attivi`): sullo stesso Comune Airbnb può riscuotere
+  e Booking no, e un interruttore unico dichiarava al Comune un incasso che non c'era. L'invio non
+  interroga più i portali ad ogni giro, usa l'elenco salvato. Nessuna prenotazione viene più
+  scartata. La pagina segnala i canali senza portale corrispondente (abbinamento per nome esatto).
+- Confermato sulla documentazione PayTourist che in `total_from_online_portal` va **l'imposta già
+  incassata dal portale**: quindi `TotalTax` era giusto.
+- Token verificato al salvataggio con `api/v1/structures` (l'unica chiamata che non vuole uno
+  structure_id): rifiutato non si salva, portale irraggiungibile si salva con avviso. Un carattere
+  non ASCII (una "è" incollata) ora si segnala invece di far fallire tutto come problema di rete.
+- Credenziale lasciata vuota non azzera più quella salvata, su tutte e tre le integrazioni.
+- **Credenziali cifrate a riposo** (AES-GCM, chiave in `CREDENZIALI_CHIAVE_CIFRATURA`, fuori dal
+  database perché il rischio è proprio il dump): token PayTourist e OTA, utenza Alloggiati Web,
+  password Osservatorio. I valori storici si rileggono in chiaro e vengono cifrati al primo avvio.
+  ⚠️ **Senza quella variabile l'Api non parte: va aggiunta al `.env` della VPS prima del deploy.**
 
 **Design e pannello Super Admin** (16/09, seconda parte)
 - Sfondo e bordi da caldi a freddi (`#FAF8F4` → `#F4F6F9`, `#E7E2D8` → `#E2E6EC`): il crema con

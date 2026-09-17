@@ -1,9 +1,10 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.RegularExpressions;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -25,7 +26,13 @@ public record SalvaPayTouristStrutturaRequest(string? Nome, int? IdStrutturaPayt
 /// motivo da mostrare quando <see cref="Abilitato"/> è falso, e quando arriva da PayTourist viene
 /// riportato parola per parola: è più preciso di qualunque riformulazione nostra.
 /// </summary>
-public record VerificaPortaliOnlineDto(bool Abilitato, string? Messaggio, IReadOnlyList<PayTouristPortaleDto> Portali);
+/// <param name="CanaliSenzaPortale">
+/// Canali usati dalle prenotazioni che non corrispondono a nessun portale riconosciuto. L'abbinamento
+/// è per nome esatto, e finora un nome diverso da quello di PayTourist (es. "Airbnb" contro "Airbnb
+/// Ireland") faceva semplicemente partire la prenotazione come riscossa dalla struttura, senza che
+/// nessuno potesse accorgersene.
+/// </param>
+public record VerificaPortaliOnlineDto(bool Abilitato, string? Messaggio, IReadOnlyList<PayTouristPortaleDto> Portali, IReadOnlyList<string> CanaliSenzaPortale);
 
 /// <summary>
 /// Suggerimento (non un dato autorevole) per le soglie età e le percentuali di riduzione di
@@ -57,6 +64,7 @@ public class PayTouristConfigService(
     IPayTouristStrutturaRepository strutture,
     IPayTouristClient client,
     IImpostazioniStrutturaRepository impostazioniStruttura,
+    IPrenotazioneRepository prenotazioni,
     WubookLicenzaService wubookLicenzaService,
     IStrutturaRepository strutturaRepository,
     ILogEventoService logEventi,
@@ -269,14 +277,23 @@ public class PayTouristConfigService(
         var (ok, portali, errore) = await client.GetPortaliOnlineAsync(integrazione.Token, comuneAttivita, idStrutturaPaytourist, idSoftware, cancellationToken);
         if (!ok)
         {
-            return new VerificaPortaliOnlineDto(false, errore ?? "Impossibile verificare i portali online su PayTourist.", []);
+            return new VerificaPortaliOnlineDto(false, errore ?? "Impossibile verificare i portali online su PayTourist.", [], []);
         }
 
         // Ente abilitato ma senza nessun portale: non c'è niente da spuntare, quindi per chi
         // configura equivale a "non abilitato".
-        return portali.Count == 0
-            ? new VerificaPortaliOnlineDto(false, "Nessun portale online risulta abilitato su questo ente: non c'è niente da scegliere, l'imposta la incassi tu su ogni prenotazione.", [])
-            : new VerificaPortaliOnlineDto(true, null, portali);
+        if (portali.Count == 0)
+        {
+            return new VerificaPortaliOnlineDto(false, "Nessun portale online risulta abilitato su questo ente: non c'è niente da scegliere, l'imposta la incassi tu su ogni prenotazione.", [], []);
+        }
+
+        // I canali che nessun portale riconosce: vanno mostrati, perché è lì che si nasconde
+        // l'errore silenzioso (un nome diverso e la prenotazione parte come riscossa dalla
+        // struttura, senza nessun avviso).
+        var nomiPortali = portali.Select(p => p.Nome).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var canali = await prenotazioni.ListaAgenzieAsync(strutturaId, cancellationToken);
+
+        return new VerificaPortaliOnlineDto(true, null, portali, canali.Where(c => !nomiPortali.Contains(c)).ToList());
     }
 
     public async Task<(PayTouristStruttura Struttura, bool ConnessioneOk, string? ConnessioneErrore)> CreaStrutturaAsync(ICurrentUser currentUser, Guid strutturaId, SalvaPayTouristStrutturaRequest request, CancellationToken cancellationToken)

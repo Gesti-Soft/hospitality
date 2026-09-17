@@ -780,6 +780,9 @@ function PayTouristConfigForm({ strutturaId, dati }: { strutturaId: string; dati
   // senza interrogare PayTourist; diventano l'elenco vero appena lo si ricarica dal portale.
   const [portaliDisponibili, setPortaliDisponibili] = useState<PayTouristPortaleOnlineDto[]>(dati.portaliAttivi)
   const [portaliSelezionati, setPortaliSelezionati] = useState<number[]>(dati.portaliAttivi.map((p) => p.id))
+  // Canali usati dalle prenotazioni che nessun portale riconosce: l'abbinamento è per nome esatto,
+  // e senza mostrarli un nome diverso da quello di PayTourist resterebbe un errore invisibile.
+  const [canaliSenzaPortale, setCanaliSenzaPortale] = useState<string[]>([])
   // Mostrato solo quando è stato salvato un token nuovo: un token rifiutato non arriva mai qui,
   // perché in quel caso il salvataggio fallisce e il messaggio esce come errore.
   const [esitoVerifica, setEsitoVerifica] = useState<{ ok: boolean; errore: string | null } | null>(null)
@@ -814,6 +817,7 @@ function PayTouristConfigForm({ strutturaId, dati }: { strutturaId: string; dati
         const disponibili = esito.portali.map((p) => p.id)
         setPortaliDisponibili(esito.portali)
         setPortaliSelezionati((precedenti) => precedenti.filter((id) => disponibili.includes(id)))
+        setCanaliSenzaPortale(esito.canaliSenzaPortale)
         alTermine?.()
         toast.successo(`Portali riconosciuti dal Comune: ${esito.portali.map((p) => p.nome).join(', ')}.`)
       },
@@ -904,6 +908,14 @@ function PayTouristConfigForm({ strutturaId, dati }: { strutturaId: string; dati
                 label={portale.nome}
               />
             ))
+          )}
+
+          {canaliSenzaPortale.length > 0 && (
+            <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+              Canali senza un portale corrispondente: <b>{canaliSenzaPortale.join(', ')}</b>. Le loro prenotazioni risultano
+              incassate da te. Se qui compare un canale che invece incassa il portale, il nome non coincide con quello di
+              PayTourist.
+            </Typography>
           )}
 
           <Box>
