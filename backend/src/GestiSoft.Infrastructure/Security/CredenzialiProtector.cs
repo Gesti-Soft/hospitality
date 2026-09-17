@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
 
 namespace GestiSoft.Infrastructure.Security;
@@ -29,16 +29,31 @@ public sealed class CredenzialiProtector
     private const int LunghezzaChiave = 32;
 
     private readonly byte[] _chiave;
+    private readonly byte[]? _chiavePrecedente;
 
-    public CredenzialiProtector(byte[] chiave)
+    /// <param name="chiavePrecedente">
+    /// Chiave usata prima di una rotazione: serve solo a <b>leggere</b> ciò che non è ancora stato
+    /// riscritto. La scrittura usa sempre e soltanto la chiave corrente, altrimenti la rotazione non
+    /// finirebbe mai.
+    /// </param>
+    public CredenzialiProtector(byte[] chiave, byte[]? chiavePrecedente = null)
     {
         if (chiave.Length != LunghezzaChiave)
         {
             throw new InvalidOperationException($"Chiave di cifratura credenziali non valida: servono {LunghezzaChiave} byte, ne sono arrivati {chiave.Length}.");
         }
 
+        if (chiavePrecedente is not null && chiavePrecedente.Length != LunghezzaChiave)
+        {
+            throw new InvalidOperationException($"Chiave di cifratura precedente non valida: servono {LunghezzaChiave} byte, ne sono arrivati {chiavePrecedente.Length}.");
+        }
+
         _chiave = chiave;
+        _chiavePrecedente = chiavePrecedente;
     }
+
+    /// <summary>Vero durante una rotazione: c'è una chiave vecchia da cui migrare, e le credenziali vanno riscritte tutte con quella corrente.</summary>
+    public bool RotazioneInCorso => _chiavePrecedente is not null;
 
     /// <summary>
     /// Legge la chiave dalla configurazione. Assente o malformata è un errore di avvio, non un
@@ -55,17 +70,26 @@ public sealed class CredenzialiProtector
                 "Generare 32 byte casuali in base64, per esempio con: openssl rand -base64 32");
         }
 
-        byte[] chiave;
+        return new CredenzialiProtector(
+            DaBase64(valore, "Credenziali:ChiaveCifratura")!,
+            DaBase64(configuration["Credenziali:ChiaveCifraturaPrecedente"], "Credenziali:ChiaveCifraturaPrecedente"));
+    }
+
+    private static byte[]? DaBase64(string? valore, string nome)
+    {
+        if (string.IsNullOrWhiteSpace(valore))
+        {
+            return null;
+        }
+
         try
         {
-            chiave = Convert.FromBase64String(valore.Trim());
+            return Convert.FromBase64String(valore.Trim());
         }
         catch (FormatException)
         {
-            throw new InvalidOperationException("Credenziali:ChiaveCifratura non è in base64 valido.");
+            throw new InvalidOperationException($"{nome} non è in base64 valido.");
         }
-
-        return new CredenzialiProtector(chiave);
     }
 
     public static bool IsProtetto(string? valore) =>
@@ -109,22 +133,38 @@ public sealed class CredenzialiProtector
             throw new InvalidOperationException("Credenziale cifrata illeggibile: pacchetto più corto del previsto.");
         }
 
+        if (Decifra(pacchetto, _chiave) is { } conCorrente)
+        {
+            return conCorrente;
+        }
+
+        // Rotazione in corso: questo valore è ancora scritto con la chiave vecchia e non è stato
+        // ancora riscritto. La lettura funziona lo stesso, la riscrittura la fa il seeder all'avvio.
+        if (_chiavePrecedente is not null && Decifra(pacchetto, _chiavePrecedente) is { } conPrecedente)
+        {
+            return conPrecedente;
+        }
+
+        // Meglio fermarsi che restituire in silenzio una credenziale sbagliata, che si tradurrebbe
+        // in invii al portale rifiutati senza una ragione comprensibile.
+        throw new InvalidOperationException("Credenziale cifrata illeggibile: chiave di cifratura diversa da quella usata per salvarla.");
+    }
+
+    private static string? Decifra(byte[] pacchetto, byte[] chiave)
+    {
         var nonce = pacchetto.AsSpan(0, LunghezzaNonce);
         var tag = pacchetto.AsSpan(LunghezzaNonce, LunghezzaTag);
         var cifrato = pacchetto.AsSpan(LunghezzaNonce + LunghezzaTag);
         var chiaro = new byte[cifrato.Length];
 
-        using var aes = new AesGcm(_chiave, LunghezzaTag);
+        using var aes = new AesGcm(chiave, LunghezzaTag);
         try
         {
             aes.Decrypt(nonce, cifrato, tag, chiaro);
         }
-        catch (CryptographicException ex)
+        catch (CryptographicException)
         {
-            // Quasi sempre significa chiave diversa da quella con cui il valore è stato scritto:
-            // meglio fermarsi che restituire in silenzio una credenziale sbagliata, che si
-            // tradurrebbe in inviti al portale rifiutati senza una ragione comprensibile.
-            throw new InvalidOperationException("Credenziale cifrata illeggibile: chiave di cifratura diversa da quella usata per salvarla.", ex);
+            return null;
         }
 
         return System.Text.Encoding.UTF8.GetString(chiaro);

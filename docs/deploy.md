@@ -207,6 +207,40 @@ il repo è clonato con un nome diverso da `gestisoft-gestionale`, verificare il 
 `docker volume ls | grep pgbackrest_repo` e correggere la variabile `REPO_VOLUME` in cima allo
 script prima di lanciarlo.
 
+## Cambiare la chiave di cifratura delle credenziali
+
+Da fare se la chiave si è vista (una chat, uno screenshot, un backup di configurazione finito
+altrove) o se ha smesso di lavorare con noi qualcuno che la conosceva. Le credenziali dei servizi
+esterni restano dove sono: vengono solo riscritte con la chiave nuova, nessuno deve reinserirle.
+
+1. Genera la chiave nuova: `openssl rand -base64 32`
+2. Nel `.env` tieni **tutte e due** le chiavi — la vecchia passa in "precedente":
+
+   ```bash
+   CREDENZIALI_CHIAVE_CIFRATURA=<nuova>
+   CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE=<vecchia>
+   ```
+
+3. Riavvia (`docker compose up -d`). All'avvio l'Api rilegge ogni credenziale — con la chiave nuova
+   dove già basta, con la vecchia dove serve — e le riscrive tutte con quella nuova.
+4. Controlla il log: `docker logs gestisoft-gestionale-api | grep "Rotazione chiave"`. Deve dire
+   quante ne ha riscritte. Poi apri Impostazioni di una struttura e fai una verifica connessione:
+   se legge le credenziali, la rotazione è andata.
+5. Togli `CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE` dal `.env` e riavvia.
+
+Tre cose da sapere:
+
+- **È ripetibile.** Se il riavvio si interrompe a metà riscrittura, basta riavviare ancora con
+  entrambe le chiavi: quelle già riscritte si leggono con la nuova, le altre con la vecchia, e il
+  lavoro si completa. Non esiste uno stato da cui non si esce.
+- **Se togli la vecchia troppo presto** e qualcosa non era stato riscritto, quella credenziale
+  diventa illeggibile: rimetti la variabile, riavvia, e riparte.
+- **Non buttare la chiave vecchia dopo il passo 5.** I backup fatti prima della rotazione
+  contengono credenziali cifrate con quella (pgBackRest ne tiene 30 giorni, i `pg_dump` 7).
+  Ripristinando un backup più vecchio senza quella chiave i dati ci sarebbero tutti, ma le
+  credenziali dei portali andrebbero reinserite a mano. Toglila dal `.env`, conservala coi segreti
+  finché esistono backup anteriori alla rotazione.
+
 ## Rollback / in caso di problema
 
 Nessuna azione qui è distruttiva verso l'ambiente locale: il dump è una copia, l'originale

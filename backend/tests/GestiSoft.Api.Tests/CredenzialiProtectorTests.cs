@@ -85,6 +85,47 @@ public class CredenzialiProtectorTests
         Assert.Throws<InvalidOperationException>(() => protector.Leggi(manomesso));
     }
 
+    /// <summary>
+    /// Durante una rotazione convivono valori scritti con la chiave vecchia e con la nuova: se non
+    /// si leggessero entrambi, cambiare chiave significherebbe reinserire a mano tutte le
+    /// credenziali di tutte le strutture.
+    /// </summary>
+    [Fact]
+    public void DuranteLaRotazione_SiLeggeAncheCioCheHaLaChiaveVecchia()
+    {
+        var vecchio = Protector(seme: 1).Proteggi("token-di-ieri");
+        var inRotazione = new CredenzialiProtector(Enumerable.Repeat((byte)2, 32).ToArray(), Enumerable.Repeat((byte)1, 32).ToArray());
+
+        Assert.Equal("token-di-ieri", inRotazione.Leggi(vecchio));
+        Assert.Equal("token-di-oggi", inRotazione.Leggi(inRotazione.Proteggi("token-di-oggi")));
+    }
+
+    /// <summary>La scrittura deve usare sempre la chiave corrente, o la rotazione non finirebbe mai: quello che riscrive non deve più essere leggibile con la sola chiave vecchia.</summary>
+    [Fact]
+    public void DuranteLaRotazione_SiScriveSempreConLaChiaveNuova()
+    {
+        var inRotazione = new CredenzialiProtector(Enumerable.Repeat((byte)2, 32).ToArray(), Enumerable.Repeat((byte)1, 32).ToArray());
+
+        var riscritto = inRotazione.Proteggi("token");
+
+        Assert.Equal("token", Protector(seme: 2).Leggi(riscritto));
+        Assert.Throws<InvalidOperationException>(() => Protector(seme: 1).Leggi(riscritto));
+    }
+
+    [Fact]
+    public void SenzaChiavePrecedente_NonRisultaNessunaRotazione()
+    {
+        Assert.False(Protector().RotazioneInCorso);
+        Assert.True(new CredenzialiProtector(Enumerable.Repeat((byte)2, 32).ToArray(), Enumerable.Repeat((byte)1, 32).ToArray()).RotazioneInCorso);
+    }
+
+    [Fact]
+    public void ChiavePrecedenteDiLunghezzaSbagliata_VieneRifiutata()
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => new CredenzialiProtector(Enumerable.Repeat((byte)1, 32).ToArray(), RandomNumberGenerator.GetBytes(8)));
+    }
+
     [Fact]
     public void ChiaveDiLunghezzaSbagliata_VieneRifiutata()
     {

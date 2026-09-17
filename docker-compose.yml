@@ -76,6 +76,9 @@ services:
       # protegge è che giri una copia del database. Perderla significa non poter più rileggere le
       # credenziali salvate, quindi va conservata insieme agli altri segreti di produzione.
       Credenziali__ChiaveCifratura: ${CREDENZIALI_CHIAVE_CIFRATURA:?set CREDENZIALI_CHIAVE_CIFRATURA (32 byte casuali in base64, es. openssl rand -base64 32)}
+      # Valorizzata solo durante il cambio di chiave: serve a leggere ciò che è ancora cifrato con
+      # la chiave vecchia mentre l'avvio riscrive tutto con quella nuova. Vedi docs/deploy.md.
+      Credenziali__ChiaveCifraturaPrecedente: ${CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE:-}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-5080}:8080"
 
@@ -113,6 +116,9 @@ services:
       # protegge è che giri una copia del database. Perderla significa non poter più rileggere le
       # credenziali salvate, quindi va conservata insieme agli altri segreti di produzione.
       Credenziali__ChiaveCifratura: ${CREDENZIALI_CHIAVE_CIFRATURA:?set CREDENZIALI_CHIAVE_CIFRATURA (32 byte casuali in base64, es. openssl rand -base64 32)}
+      # Valorizzata solo durante il cambio di chiave: serve a leggere ciò che è ancora cifrato con
+      # la chiave vecchia mentre l'avvio riscrive tutto con quella nuova. Vedi docs/deploy.md.
+      Credenziali__ChiaveCifraturaPrecedente: ${CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE:-}
 
   worker-schedine:
     build:
@@ -141,6 +147,9 @@ services:
       # protegge è che giri una copia del database. Perderla significa non poter più rileggere le
       # credenziali salvate, quindi va conservata insieme agli altri segreti di produzione.
       Credenziali__ChiaveCifratura: ${CREDENZIALI_CHIAVE_CIFRATURA:?set CREDENZIALI_CHIAVE_CIFRATURA (32 byte casuali in base64, es. openssl rand -base64 32)}
+      # Valorizzata solo durante il cambio di chiave: serve a leggere ciò che è ancora cifrato con
+      # la chiave vecchia mentre l'avvio riscrive tutto con quella nuova. Vedi docs/deploy.md.
+      Credenziali__ChiaveCifraturaPrecedente: ${CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE:-}
 
   frontend:
     build:

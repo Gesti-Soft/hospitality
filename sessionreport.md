@@ -50,10 +50,6 @@ Ordine non di priorità. Dettagli e design già concordati: vedi archivio.
 - **L'arrivo in una giornata passata non arriva mai all'Osservatorio**: il recupero
   dell'arretrato manda solo partenze e chiusure. Fedele al legacy, ma è un dato che non
   raggiunge una PA. Cala Azzurra ha il cursore al 15/09.
-- **Dati aziendali, campo Nazione = "Italia" invece di "IT"** (e il form lo propone così):
-  finché resta, l'XML non si genera. Pulito sarebbe scrivere l'ISO2 anche per l'emittente.
-- **Descrizione fattura obbligatoria solo nel dialogo**: l'Api accetta ancora vuoto, e nel
-  tracciato quel campo non può esserlo.
 - **PDF della fattura da rifare**, con logo della struttura: oggi non esiste nessun campo dove
   caricarlo, va deciso prima dove si conserva l'immagine.
 - **Etichette in maiuscolo spaziato** in dodici punti dell'interfaccia: stesso tic ripetuto, da
@@ -175,10 +171,18 @@ Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
   structure_id): rifiutato non si salva, portale irraggiungibile si salva con avviso. Un carattere
   non ASCII (una "è" incollata) ora si segnala invece di far fallire tutto come problema di rete.
 - Credenziale lasciata vuota non azzera più quella salvata, su tutte e tre le integrazioni.
+- Fattura elettronica: la sede dell'emittente scriveva il campo "Nazione" dei dati aziendali
+  ("ITALIA"), non l'ISO2 che era già lì accanto — l'XML non si generava, e per giunta la struttura
+  passava per estera, quindi CAP e provincia non venivano più controllati. Descrizione ora
+  obbligatoria anche lato Api e nella validazione, non solo nel dialogo.
 - **Credenziali cifrate a riposo** (AES-GCM, chiave in `CREDENZIALI_CHIAVE_CIFRATURA`, fuori dal
   database perché il rischio è proprio il dump): token PayTourist e OTA, utenza Alloggiati Web,
   password Osservatorio. I valori storici si rileggono in chiaro e vengono cifrati al primo avvio.
   ⚠️ **Senza quella variabile l'Api non parte: va aggiunta al `.env` della VPS prima del deploy.**
+  Provato dal vivo sul locale: 13 credenziali cifrate al primo riavvio. Il cambio di chiave si fa
+  tenendo per un riavvio anche `CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE` (procedura in
+  `docs/deploy.md`); la chiave vecchia va conservata finché esistono backup anteriori alla
+  rotazione, o quelle copie non sarebbero più rileggibili.
 
 **Design e pannello Super Admin** (16/09, seconda parte)
 - Sfondo e bordi da caldi a freddi (`#FAF8F4` → `#F4F6F9`, `#E7E2D8` → `#E2E6EC`): il crema con
