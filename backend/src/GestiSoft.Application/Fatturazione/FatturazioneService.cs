@@ -1,4 +1,4 @@
-using GestiSoft.Application.Auth;
+﻿using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
@@ -82,6 +82,8 @@ public class FatturazioneService(
 
     public async Task<DatiFattura> CreaDaPrenotazioneAsync(ICurrentUser currentUser, Guid strutturaId, CreaFatturaDaPrenotazioneRequest request, CancellationToken cancellationToken)
     {
+        EsigiDescrizione(request.Descrizione);
+
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceWrite, cancellationToken);
 
         var prenotazione = await prenotazioni.GetAsync(request.PrenotazioneId, cancellationToken)
@@ -138,6 +140,8 @@ public class FatturazioneService(
 
     public async Task<DatiFattura> AggiornaAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, AggiornaFatturaRequest request, CancellationToken cancellationToken)
     {
+        EsigiDescrizione(request.Descrizione);
+
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceWrite, cancellationToken);
 
         var entity = await GetOwnedAsync(strutturaId, fatturaId, cancellationToken);
@@ -204,6 +208,20 @@ public class FatturazioneService(
         var azienda = await aziende.GetByStrutturaIdAsync(strutturaId, cancellationToken);
 
         return (fattura, cliente, azienda);
+    }
+
+    /// <summary>
+    /// La descrizione della riga è obbligatoria nel tracciato della fattura elettronica: vuota
+    /// produce un file che lo SDI scarta giorni dopo, quando di quella fattura non si ricorda più
+    /// niente. Finora la pretendeva solo il dialogo dell'interfaccia, e bastava creare o modificare
+    /// la fattura da un altro punto perché il controllo sparisse.
+    /// </summary>
+    private static void EsigiDescrizione(string? descrizione)
+    {
+        if (string.IsNullOrWhiteSpace(descrizione))
+        {
+            throw new ConflictException("La descrizione della fattura è obbligatoria: senza, la fattura elettronica verrebbe scartata.");
+        }
     }
 
     private static string CostruisciCustomerKey(Ospite capofila) =>

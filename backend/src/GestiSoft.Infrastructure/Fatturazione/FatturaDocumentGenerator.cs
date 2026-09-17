@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Xml.Linq;
 using GestiSoft.Application.Fatturazione;
 using GestiSoft.Domain.Entities;
@@ -222,9 +222,12 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
             new XElement("FormatoTrasmissione", "FPR12"),
             new XElement("CodiceDestinatario", CodiceDestinatario(cliente, clienteEstero)));
 
+        // La nazione della sede è l'ISO2, non il campo "Nazione" dei dati aziendali: quello è una
+        // denominazione leggibile ("Italia") e nel tracciato vale solo il codice a due lettere. Ci
+        // finiva davvero, e bastava a impedire la generazione del file.
         var cedentePrestatore = new XElement("CedentePrestatore",
             DatiAnagrafici(azienda?.Iso2, azienda?.PIva, azienda?.CodiceFiscale, azienda?.Denominazione, azienda?.Nome, azienda?.Cognome, azienda?.RegimeFiscale),
-            Sede(azienda?.Indirizzo, azienda?.NCivico, azienda?.Cap, azienda?.Comune, azienda?.Provincia, azienda?.Nazione));
+            Sede(azienda?.Indirizzo, azienda?.NCivico, azienda?.Cap, azienda?.Comune, azienda?.Provincia, azienda?.Iso2));
 
         // Per un cessionario non residente l'indirizzo segue le convenzioni dello SDI: CAP fisso a
         // "00000" (il codice postale vero, se serve, va scritto dentro l'Indirizzo) e Provincia
@@ -296,24 +299,27 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         }
         else
         {
-            // La sede della struttura scrive azienda.Nazione, l'identificativo fiscale usa azienda.Iso2:
-            // sono due campi distinti e vanno controllati entrambi.
+            // Si controlla l'ISO2, che è ciò che finisce davvero nel file sia come identificativo
+            // fiscale sia come nazione della sede. Prima qui arrivava azienda.Nazione ("Italia"), e
+            // oltre a bloccare la generazione faceva passare la struttura per estera: da lì in poi
+            // CAP e Provincia non venivano più controllati, perché per l'estero non si controllano.
             motivi.AddRange(ValidaControparte(
-                "della struttura", azienda.Nazione, azienda.PIva, azienda.CodiceFiscale,
+                "della struttura", azienda.Iso2, azienda.PIva, azienda.CodiceFiscale,
                 azienda.Denominazione, azienda.Nome, azienda.Cognome,
                 azienda.Indirizzo, azienda.Comune, azienda.Cap, azienda.Provincia));
-
-            // L'ISO2 della struttura finisce sempre nel file, anche senza partita IVA: identifica
-            // chi trasmette.
-            if (!NazioneValida(azienda.Iso2))
-            {
-                motivi.Add("il codice nazione della struttura non è di due lettere (es. IT)");
-            }
 
             if (azienda.RegimeFiscale is null)
             {
                 motivi.Add("manca il regime fiscale della struttura");
             }
+        }
+
+        // Descrizione della riga: obbligatoria nel tracciato. Finora la pretendeva solo il dialogo
+        // dell'interfaccia, quindi una fattura creata altrove usciva con l'elemento vuoto e lo SDI
+        // la scartava giorni dopo.
+        if (string.IsNullOrWhiteSpace(fattura.Descrizione))
+        {
+            motivi.Add("manca la descrizione della fattura");
         }
 
         if (cliente is null)
