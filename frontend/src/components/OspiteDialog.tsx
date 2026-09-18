@@ -33,6 +33,7 @@ import { useDocumenti, useStati, useTipiAlloggiato } from '../api/riferimenti'
 import { differenzaGiorni, formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
+import { ConfirmDialog } from './ConfirmDialog'
 import { SelectComune } from './SelectComune'
 import { fontDisplay, tokens } from '../theme'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
@@ -81,6 +82,32 @@ export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenota
 }
 
 const permanenzaDefault = (p: PrenotazioneDto) => (p.checkIn && p.checkOut ? Math.max(differenzaGiorni(new Date(p.checkOut), new Date(p.checkIn)), 1) : 1)
+
+const persone = (quante: number) => (quante === 1 ? '1 ospite' : `${quante} ospiti`)
+
+/**
+ * Tipo ospite (classificazione della schedina) che discende dal numero di persone della
+ * prenotazione: chi arriva da solo è OSPITE SINGOLO, chi arriva accompagnato è il capo della
+ * scheda e gli altri diventano FAMILIARE. È la stessa regola con cui l'import OTA compila la
+ * scheda (v. WubookPrenotazioniService), che dal portale riceve solo l'ospite principale e quante
+ * persone sono — qui vale anche per le prenotazioni inserite a mano, dove il campo partiva vuoto e
+ * andava scelto ogni volta.
+ *
+ * Due eccezioni, entrambe per non cancellare in automatico una scelta che solo una persona può
+ * fare: CAPO GRUPPO resta CAPO GRUPPO (cambia anche la classificazione dei membri, 20 "membro
+ * gruppo" invece di 19 "familiare"), e una scheda già compilata a più nomi non torna a OSPITE
+ * SINGOLO, che nasconderebbe gli "Altri ospiti" già inseriti. Prenotazione senza numero ospiti:
+ * nessuna informazione su cui decidere, il campo resta com'è.
+ */
+function tipoOspiteSuggerito(numeroOspiti: number | null, membri: number, attuale: string): string {
+  if (numeroOspiti == null) {
+    return attuale
+  }
+  if (Math.max(numeroOspiti, 1 + membri) <= 1) {
+    return 'OSPITE SINGOLO'
+  }
+  return attuale.trim().toUpperCase() === 'CAPO GRUPPO' ? attuale : 'CAPO FAMIGLIA'
+}
 
 /** Select con autocompletamento sopra un elenco statico già caricato (Stati, Documenti, Tipo ospite). */
 function SelectRiferimento({
@@ -167,7 +194,7 @@ function SchedaOspitiForm({
   // della schedina, mai per il capofamiglia — stesso filtro del gestionale legacy.
   const opzioniTipoOspite = (tipiAlloggiato.data ?? []).filter((t) => t.codice !== '19' && t.codice !== '20').map((t) => t.descrizione)
 
-  const [tipoOspite, setTipoOspite] = useState(ospite?.tipoOspite ?? '')
+  const [tipoOspite, setTipoOspite] = useState(tipoOspiteSuggerito(prenotazione.numeroOspiti, ospite?.membri?.length ?? 0, ospite?.tipoOspite ?? ''))
   const [permanenza, setPermanenza] = useState(String(ospite?.permanenza ?? permanenzaDefault(prenotazione)))
   const [dataNascita, setDataNascita] = useState(ospite?.dataNascita ? formatoInputData(new Date(ospite.dataNascita)) : '')
   const [sesso, setSesso] = useState<string>(ospite?.sesso != null ? String(ospite.sesso) : '')
@@ -210,7 +237,15 @@ function SchedaOspitiForm({
     })),
   )
 
+  // Ospite singolo con delle righe ancora in scheda: la sezione "Altri ospiti" resta visibile —
+  // nasconderla metterebbe l'operatore davanti a una richiesta ("togli gli ospiti in più") che non
+  // può eseguire, e le righe partirebbero lo stesso al salvataggio, classificate come membri di un
+  // gruppo che la schedina non dichiara.
+  const singoloConAltriOspiti = isOspiteSingolo && membri.length > 0
+
   const [errore, setErrore] = useState<string | null>(null)
+  /** Scheda pronta per il salvataggio, in attesa che venga confermata la correzione del numero ospiti della prenotazione. */
+  const [confermaNumeroOspiti, setConfermaNumeroOspiti] = useState<SalvaSchedaOspitiRequest | null>(null)
 
   const salva = useSalvaSchedaOspiti(strutturaId, prenotazione.id)
 
@@ -253,6 +288,12 @@ function SchedaOspitiForm({
       setErrore('Aggiungi almeno un ospite, oppure imposta "Tipo ospite" su Ospite singolo.')
       return
     }
+    if (singoloConAltriOspiti) {
+      setErrore(
+        `"Ospite singolo" vale per chi soggiorna da solo: togli ${membri.length === 1 ? "l'altro ospite" : `gli altri ${membri.length} ospiti`} dalla scheda, oppure scegli Capo famiglia o Capo gruppo.`,
+      )
+      return
+    }
     setErrore(null)
 
     const request: SalvaSchedaOspitiRequest = {
@@ -274,12 +315,28 @@ function SchedaOspitiForm({
       membri: membri.map(({ _key, ...m }) => m),
     }
 
+    // Il salvataggio allinea sempre il numero ospiti della prenotazione alle persone davvero in
+    // scheda (v. OspitiService). Quando i due numeri non coincidono la correzione va confermata:
+    // dietro a un conteggio diverso può esserci un ospite dimenticato in scheda, e quel numero è
+    // anche quello che si confronta con ciò che l'OTA ha venduto.
+    if (prenotazione.numeroOspiti != null && prenotazione.numeroOspiti !== 1 + membri.length) {
+      setConfermaNumeroOspiti(request)
+      return
+    }
+
+    esegui(request)
+  }
+
+  function esegui(request: SalvaSchedaOspitiRequest) {
     salva.mutate(request, {
       onSuccess: () => {
         dopoSalvataggio?.()
         onClose()
       },
-      onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      onError: (err) => {
+        setConfermaNumeroOspiti(null)
+        setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+      },
     })
   }
 
@@ -345,13 +402,20 @@ function SchedaOspitiForm({
           />
         </Box>
 
-        {!isOspiteSingolo && (
+        {(!isOspiteSingolo || singoloConAltriOspiti) && (
           <>
             <Divider sx={{ mt: 1 }} />
 
+            {singoloConAltriOspiti && (
+              <Alert severity="warning">
+                Hai scelto "Ospite singolo", ma nella scheda {membri.length === 1 ? "c'è ancora un altro ospite" : `ci sono ancora altri ${membri.length} ospiti`}: togli le righe in più,
+                oppure scegli Capo famiglia o Capo gruppo.
+              </Alert>
+            )}
+
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 13.5 }}>Altri ospiti ({membri.length})</Typography>
-              {puoScrivere && (
+              {puoScrivere && !isOspiteSingolo && (
                 <Button size="small" onClick={aggiungiMembro} disabled={salva.isPending}>
                   + Aggiungi ospite
                 </Button>
@@ -458,6 +522,18 @@ function SchedaOspitiForm({
           </Button>
         )}
       </DialogActions>
+
+      {confermaNumeroOspiti && (
+        <ConfirmDialog
+          titolo="Numero ospiti diverso"
+          messaggio={`La prenotazione è per ${persone(prenotazione.numeroOspiti ?? 0)}, ma nella scheda ${membri.length === 0 ? 'ne hai inserito 1' : `ne hai inseriti ${1 + membri.length}`}. Salvando, il numero ospiti della prenotazione diventa ${1 + membri.length}.`}
+          testoConferma="Aggiorna e salva"
+          pericoloso={false}
+          inCorso={salva.isPending}
+          onConferma={() => esegui(confermaNumeroOspiti)}
+          onAnnulla={() => setConfermaNumeroOspiti(null)}
+        />
+      )}
     </>
   )
 }
