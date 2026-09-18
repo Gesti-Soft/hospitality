@@ -25,6 +25,7 @@ import {
   RegimeFiscale,
   scaricaFatturaPdf,
   scaricaFatturaXml,
+  TipoEmissioneDocumento,
   useAggiornaDatiAziendali,
   useAnniDisponibiliFatture,
   useCaricaLogoDatiAziendali,
@@ -230,11 +231,13 @@ function TabFatture({
                     <PictureAsPdfIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="Scarica XML SDI">
-                  <IconButton size="small" onClick={() => scarica(scaricaFatturaXml, f)}>
-                    <CodeIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+                {f.tipoEmissione !== TipoEmissioneDocumento.Ricevuta && (
+                  <Tooltip title="Scarica XML SDI">
+                    <IconButton size="small" onClick={() => scarica(scaricaFatturaXml, f)}>
+                      <CodeIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </AzioniCardElenco>
             </CardElenco>
           ))}
@@ -286,11 +289,13 @@ function TabFatture({
                         <PictureAsPdfIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Scarica XML SDI">
-                      <IconButton size="small" onClick={() => scarica(scaricaFatturaXml, f)}>
-                        <CodeIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    {f.tipoEmissione !== TipoEmissioneDocumento.Ricevuta && (
+                      <Tooltip title="Scarica XML SDI">
+                        <IconButton size="small" onClick={() => scarica(scaricaFatturaXml, f)}>
+                          <CodeIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

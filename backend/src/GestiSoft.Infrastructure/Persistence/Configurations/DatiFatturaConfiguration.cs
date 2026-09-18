@@ -1,4 +1,4 @@
-using GestiSoft.Domain.Entities;
+﻿using GestiSoft.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -16,8 +16,11 @@ public class DatiFatturaConfiguration : IEntityTypeConfiguration<DatiFattura>
         builder.Property(f => f.PrezzoTotale).HasPrecision(18, 2);
         builder.Property(f => f.ImportoTotale).HasPrecision(18, 2);
         builder.Property(f => f.Arrotondamento).HasPrecision(18, 2);
+        builder.Property(f => f.ImpostaSoggiorno).HasPrecision(18, 2);
+        builder.Property(f => f.ImportoBollo).HasPrecision(18, 2);
 
-        // Numero progressivo univoco per anno e Struttura (le fatture non si duplicano per anno fiscale).
-        builder.HasIndex(f => new { f.StrutturaId, f.Anno, f.Progressivo }).IsUnique();
+        // Numero progressivo univoco per anno, Struttura e serie: fatture e ricevute sono due
+        // numerazioni distinte, e dentro ciascuna un numero non si ripete.
+        builder.HasIndex(f => new { f.StrutturaId, f.Anno, f.TipoEmissione, f.Progressivo }).IsUnique();
     }
 }

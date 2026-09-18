@@ -1,4 +1,4 @@
-using GestiSoft.Domain.Common;
+﻿using GestiSoft.Domain.Common;
 using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Domain.Entities;
@@ -62,4 +62,5 @@ public class DatiAziendali : TenantEntity
     public string? Provincia { get; set; }
 
     public string? Nazione { get; set; }
+
 }

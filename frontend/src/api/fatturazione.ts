@@ -192,6 +192,15 @@ export function useAggiornaDatiCliente(strutturaId: string | null) {
 // Fatture
 // ---------------------------------------------------------------------------
 
+/**
+ * Che documento si emette: dipende da chi ospita, non da una preferenza di stampa, e le due serie
+ * hanno numerazione separata. `Fattura` per chi ha partita IVA (va allo SdI, porta aliquota o
+ * natura), `Ricevuta` per la locazione breve di un privato (fuori campo IVA, nessun file per lo
+ * SdI, bollo sopra 77,47 €).
+ */
+export const TipoEmissioneDocumento = { Fattura: 1, Ricevuta: 2 } as const
+export type TipoEmissioneDocumento = (typeof TipoEmissioneDocumento)[keyof typeof TipoEmissioneDocumento]
+
 export interface DatiFatturaDto {
   id: string
   strutturaId: string
@@ -200,6 +209,7 @@ export interface DatiFatturaDto {
   progressivo: number
   tipoDocumento: TipoDocumentoFattura | null
   regimeFiscale: RegimeFiscale | null
+  tipoEmissione: TipoEmissioneDocumento
   numeroDocumento: number
   dataDocumento: string
   divisa: string | null
@@ -210,6 +220,10 @@ export interface DatiFatturaDto {
   importoTotale: number
   aliquotaIva: AliquotaIva | null
   natura: NaturaIva | null
+  /** Imposta di soggiorno riaddebitata: in fattura è una riga a sé, esclusa art. 15 (natura N1). */
+  impostaSoggiorno: number | null
+  /** Bollo virtuale da 2 €, calcolato dal server sulle sole somme non soggette a IVA sopra 77,47 €. */
+  importoBollo: number | null
   anno: number
 }
 
@@ -223,6 +237,10 @@ export interface CreaFatturaDaPrenotazioneRequest {
   aliquotaIva: AliquotaIva | null
   natura: NaturaIva | null
   divisa: string | null
+  /** Omessa o zero: l'imposta di soggiorno non viene riaddebitata in fattura. */
+  impostaSoggiorno?: number | null
+  /** Assente = fattura. */
+  tipoEmissione?: TipoEmissioneDocumento
 }
 
 export interface AggiornaFatturaRequest {
@@ -235,6 +253,7 @@ export interface AggiornaFatturaRequest {
   aliquotaIva: AliquotaIva | null
   natura: NaturaIva | null
   divisa: string | null
+  impostaSoggiorno?: number | null
 }
 
 export function useFatture(strutturaId: string | null, anno: number) {

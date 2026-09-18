@@ -1,4 +1,4 @@
-using GestiSoft.Domain.Entities;
+﻿using GestiSoft.Domain.Entities;
 
 namespace GestiSoft.Application.Fatturazione;
 

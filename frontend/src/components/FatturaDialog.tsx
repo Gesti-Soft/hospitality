@@ -16,6 +16,7 @@ import {
   NaturaIva,
   RegimeFiscale,
   TipoDocumentoFattura,
+  TipoEmissioneDocumento,
   useAggiornaFattura,
   useCreaFattura,
   useDatiAziendali,
@@ -72,6 +73,10 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   // una prenotazione specifica), è già preselezionata: non ha senso farla ricercare di nuovo.
   const [prenotazioneId, setPrenotazioneId] = useState(prenotazioniDisponibili.length === 1 ? prenotazioniDisponibili[0].id : '')
   const [datiClienteId, setDatiClienteId] = useState(modifica?.datiClienteId ?? '')
+  // Fattura o ricevuta: chi ha partita IVA emette fattura, un privato che affitta emette ricevuta.
+  // Non si cambia in modifica — sono due numerazioni diverse, e il numero è già stato assegnato.
+  const [tipoEmissione, setTipoEmissione] = useState<TipoEmissioneDocumento>(modifica?.tipoEmissione ?? TipoEmissioneDocumento.Fattura)
+  const ricevuta = tipoEmissione === TipoEmissioneDocumento.Ricevuta
   const [tipoDocumento, setTipoDocumento] = useState<string>(modifica?.tipoDocumento != null ? String(modifica.tipoDocumento) : String(TipoDocumentoFattura.TD01_Fattura))
   const [regimeFiscale, setRegimeFiscale] = useState<string>(modifica?.regimeFiscale != null ? String(modifica.regimeFiscale) : String(RegimeFiscale.RF01_Ordinario))
   // Nessun testo proposto: la descrizione è quello che il cliente si ritrova scritto in fattura,
@@ -85,6 +90,10 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   const [aliquotaIva, setAliquotaIva] = useState<string>(modifica?.aliquotaIva != null ? String(modifica.aliquotaIva) : String(AliquotaIva.Iva10))
   const [natura, setNatura] = useState<string>(modifica?.natura != null ? String(modifica.natura) : '')
   const [divisa, setDivisa] = useState(modifica?.divisa ?? 'EUR')
+  // L'imposta di soggiorno non entra nel prezzo del soggiorno: va in fattura su una riga sua,
+  // esclusa dalla base imponibile ex art. 15, altrimenti pagherebbe un'IVA che non deve.
+  const [impostaSoggiorno, setImpostaSoggiorno] = useState(modifica?.impostaSoggiorno != null ? String(modifica.impostaSoggiorno) : '')
+  const [impostaSoggiornoAuto, setImpostaSoggiornoAuto] = useState(!modifica)
   const [errore, setErrore] = useState<string | null>(null)
   // Cliente fatturabile appena creato (bare-bones) per la prenotazione scelta, da completare con
   // P.IVA/CF/indirizzo/PEC prima di procedere — vedi effect sotto.
@@ -141,6 +150,15 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prenotazioneId, prezzoUnitarioAuto])
 
+  // Proposta dalla prenotazione, che l'imposta la calcola già: resta modificabile, perché a volte
+  // l'ospite l'ha versata al portale o è esente. Si ferma appena l'operatore tocca il campo.
+  useEffect(() => {
+    if (!impostaSoggiornoAuto) return
+    const p = prenotazioniDisponibili.find((x) => x.id === prenotazioneId)
+    setImpostaSoggiorno(p?.totalTax != null && p.totalTax > 0 ? String(p.totalTax) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prenotazioneId, impostaSoggiornoAuto])
+
   function salva() {
     if (!modifica && prenotazioneId === '') {
       setErrore('Seleziona la prenotazione da fatturare.')
@@ -169,6 +187,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
         aliquotaIva: aliquotaIva === '' ? null : (Number(aliquotaIva) as AliquotaIva),
         natura: natura === '' ? null : (Number(natura) as NaturaIva),
         divisa: divisa.trim() === '' ? null : divisa.trim(),
+        impostaSoggiorno: impostaSoggiorno.trim() === '' ? null : Number(impostaSoggiorno),
       }
       aggiorna.mutate({ fatturaId: modifica.id, request }, { onSuccess: onClose, onError })
     } else {
@@ -182,6 +201,8 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
         aliquotaIva: aliquotaIva === '' ? null : (Number(aliquotaIva) as AliquotaIva),
         natura: natura === '' ? null : (Number(natura) as NaturaIva),
         divisa: divisa.trim() === '' ? null : divisa.trim(),
+        impostaSoggiorno: impostaSoggiorno.trim() === '' ? null : Number(impostaSoggiorno),
+        tipoEmissione,
       }
       crea.mutate(request, { onSuccess: onClose, onError })
     }
@@ -213,9 +234,8 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
             const p = prenotazioniDisponibili.find((x) => x.id === prenotazioneId)
             return p?.totalTax ? (
               <Alert severity="info">
-                Questa prenotazione ha una tassa di soggiorno di {p.totalTax.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}, non
-                inclusa automaticamente nel prezzo qui sotto (non è soggetta a IVA come il soggiorno): aggiungila manualmente all'importo o in una
-                riga/nota separata se vuoi fatturarla insieme.
+                Imposta di soggiorno della prenotazione: {p.totalTax.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}. È già proposta
+                nel campo qui sotto e finisce in fattura su una riga separata, esclusa dall'IVA: non va sommata al prezzo del soggiorno.
               </Alert>
             ) : null
           })()}
@@ -244,7 +264,25 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           </TextField>
         )}
 
-        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
+        {!modifica && (
+          <TextField
+            select
+            label="Documento da emettere"
+            value={String(tipoEmissione)}
+            onChange={(e) => setTipoEmissione(Number(e.target.value) as TipoEmissioneDocumento)}
+            disabled={inCorso}
+            helperText={
+              ricevuta
+                ? 'Locazione breve di un privato: fuori dal campo IVA, nessun file per lo SdI, bollo di 2 € sopra 77,47 €.'
+                : 'Chi ha partita IVA, anche in regime forfettario: si genera anche il file per lo SdI.'
+            }
+          >
+            <MenuItem value={String(TipoEmissioneDocumento.Fattura)}>Fattura</MenuItem>
+            <MenuItem value={String(TipoEmissioneDocumento.Ricevuta)}>Ricevuta (locazione breve)</MenuItem>
+          </TextField>
+        )}
+
+        <Box sx={{ display: ricevuta ? 'none' : 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField select label="Tipo documento" value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)} fullWidth disabled={inCorso}>
             {Object.entries(ETICHETTA_TIPO_DOCUMENTO).map(([valore, etichetta]) => (
               <MenuItem key={valore} value={valore}>
@@ -295,7 +333,29 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           />
         </Box>
 
-        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
+        <TextField
+          label="Imposta di soggiorno"
+          type="number"
+          value={impostaSoggiorno}
+          onChange={(e) => {
+            setImpostaSoggiornoAuto(false)
+            setImpostaSoggiorno(e.target.value)
+          }}
+          disabled={inCorso}
+          helperText="Riga a sé in fattura, esclusa dall'IVA (art. 15 DPR 633/72). Vuoto se l'ospite non la paga qui."
+        />
+
+        {modifica?.importoBollo != null && (
+          <Alert severity="info">
+            Questa fattura sconta l'imposta di bollo di{' '}
+            {modifica.importoBollo.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}: le somme senza IVA superano 77,47 €. Viene
+            dichiarata nel file per lo SdI e stampata sul PDF.
+          </Alert>
+        )}
+
+        {/* Su una ricevuta di locazione breve l'IVA non esiste: aliquota e natura sono codici del
+            tracciato elettronico, e mostrarli inviterebbe a compilarli per niente. */}
+        <Box sx={{ display: ricevuta ? 'none' : 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField select label="Aliquota IVA" value={aliquotaIva} onChange={(e) => setAliquotaIva(e.target.value)} fullWidth disabled={inCorso}>
             {Object.entries(AliquotaIva).map(([nome, valore]) => (
               <MenuItem key={nome} value={String(valore)}>

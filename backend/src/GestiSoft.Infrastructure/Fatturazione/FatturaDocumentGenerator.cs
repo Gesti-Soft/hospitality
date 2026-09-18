@@ -29,7 +29,8 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
     public byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, string? nomeStruttura)
     {
         var intestazione = PrimoNonVuoto(nomeStruttura, azienda?.Denominazione, $"{azienda?.Nome} {azienda?.Cognome}") ?? "Fattura";
-        var imposta = Math.Round(fattura.ImportoTotale - fattura.PrezzoTotale, 2, MidpointRounding.AwayFromZero);
+        var ricevuta = fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta;
+        var imposta = Math.Round(fattura.ImportoTotale - fattura.PrezzoTotale - (fattura.ImpostaSoggiorno ?? 0), 2, MidpointRounding.AwayFromZero);
 
         var documento = Document.Create(container =>
         {
@@ -67,7 +68,7 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                         // una fattura va ritrovata.
                         row.ConstantItem(170).Column(c =>
                         {
-                            c.Item().AlignRight().Text(EtichettaTipoDocumento(fattura.TipoDocumento)).FontSize(11).SemiBold();
+                            c.Item().AlignRight().Text(EtichettaTipoDocumento(fattura)).FontSize(11).SemiBold();
                             c.Item().AlignRight().PaddingTop(2).Text($"n. {fattura.NumeroDocumento} / {fattura.Anno}").FontSize(14).SemiBold();
                             c.Item().AlignRight().PaddingTop(1).Text(fattura.DataDocumento.ToString("d MMMM yyyy", Italiano)).FontSize(9).FontColor(InchiostroTenue);
                         });
@@ -82,7 +83,7 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
 
                     col.Item().Column(c =>
                     {
-                        c.Item().Text("Fatturato a").FontSize(8.5f).FontColor(InchiostroTenue);
+                        c.Item().Text(fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta ? "Ricevuta rilasciata a" : "Fatturato a").FontSize(8.5f).FontColor(InchiostroTenue);
                         c.Item().PaddingTop(2).Text(NomeCliente(cliente)).FontSize(11.5f).SemiBold();
                         foreach (var riga in RigheCliente(cliente))
                         {
@@ -106,21 +107,40 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                             header.Cell().Element(CellaTestata).Text("Descrizione");
                             header.Cell().Element(CellaTestata).AlignRight().Text("Quantità");
                             header.Cell().Element(CellaTestata).AlignRight().Text("Prezzo");
-                            header.Cell().Element(CellaTestata).AlignRight().Text("IVA");
+                            header.Cell().Element(CellaTestata).AlignRight().Text(ricevuta ? "" : "IVA");
                             header.Cell().Element(CellaTestata).AlignRight().Text("Importo");
                         });
 
                         table.Cell().Element(CellaRiga).Text(fattura.Descrizione ?? "—");
                         table.Cell().Element(CellaRiga).AlignRight().Text(fattura.Quantita.ToString("0.##", Italiano));
                         table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(fattura.PrezzoUnitario));
-                        table.Cell().Element(CellaRiga).AlignRight().Text(fattura.AliquotaIva is { } iva ? $"{(int)iva}%" : "—");
+                        table.Cell().Element(CellaRiga).AlignRight().Text(ricevuta ? "" : fattura.AliquotaIva is { } iva ? $"{(int)iva}%" : "—");
                         table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(fattura.PrezzoTotale));
+
+                        // Riga a sé anche sulla carta: chi legge deve vedere che quella somma non ha
+                        // IVA e perché, non trovarsela confusa nel prezzo del soggiorno.
+                        if (fattura.ImpostaSoggiorno is { } tassa and > 0)
+                        {
+                            table.Cell().Element(CellaRiga).Text("Imposta di soggiorno");
+                            table.Cell().Element(CellaRiga).AlignRight().Text("1");
+                            table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(tassa));
+                            table.Cell().Element(CellaRiga).AlignRight().Text("—");
+                            table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(tassa));
+                        }
                     });
 
                     col.Item().AlignRight().Width(230).Column(totali =>
                     {
-                        totali.Item().Element(c => RigaTotale(c, "Imponibile", Valuta(fattura.PrezzoTotale), false));
-                        totali.Item().Element(c => RigaTotale(c, "Imposta", Valuta(imposta), false));
+                        totali.Item().Element(c => RigaTotale(c, ricevuta ? "Corrispettivo" : "Imponibile", Valuta(fattura.PrezzoTotale), false));
+                        if (!ricevuta)
+                        {
+                            totali.Item().Element(c => RigaTotale(c, "Imposta", Valuta(imposta), false));
+                        }
+                        if (fattura.ImpostaSoggiorno is { } tassaTotale and > 0)
+                        {
+                            totali.Item().Element(c => RigaTotale(c, "Imposta di soggiorno", Valuta(tassaTotale), false));
+                        }
+
                         totali.Item().PaddingTop(5).BorderTop(1).BorderColor(Filetto).PaddingTop(6)
                             .Element(c => RigaTotale(c, "Totale", Valuta(fattura.ImportoTotale), true));
                     });
@@ -135,6 +155,22 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                     else if (fattura.Natura is { } natura)
                     {
                         col.Item().Text($"Operazione non soggetta a IVA — natura {CodiceNatura(natura)}.").FontSize(8.5f).FontColor(InchiostroTenue);
+                    }
+
+                    if (ricevuta)
+                    {
+                        col.Item().Text("Locazione breve — operazione fuori dal campo di applicazione dell'IVA. Documento non fiscale.").FontSize(8.5f).FontColor(InchiostroTenue);
+                    }
+
+                    if (fattura.ImpostaSoggiorno is > 0)
+                    {
+                        col.Item().Text("Imposta di soggiorno esclusa dalla base imponibile ai sensi dell'art. 15 c.1 n.3 DPR 633/72.").FontSize(8.5f).FontColor(InchiostroTenue);
+                    }
+
+                    // Va stampata sul documento, non basta il blocco DatiBollo nell'XML.
+                    if (fattura.ImportoBollo is > 0)
+                    {
+                        col.Item().Text(DicituraBollo).FontSize(8.5f).FontColor(InchiostroTenue);
                     }
                 });
 
@@ -160,12 +196,15 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
 
     private static string Valuta(decimal importo) => importo.ToString("C2", Italiano);
 
-    private static string EtichettaTipoDocumento(TipoDocumentoFattura? tipo) => tipo switch
-    {
-        TipoDocumentoFattura.TD04_NotaDiCredito => "Nota di credito",
-        TipoDocumentoFattura.TD06_Parcella => "Parcella",
-        _ => "Fattura",
-    };
+    private static string EtichettaTipoDocumento(DatiFattura fattura) =>
+        fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta
+            ? "Ricevuta"
+            : fattura.TipoDocumento switch
+            {
+                TipoDocumentoFattura.TD04_NotaDiCredito => "Nota di credito",
+                TipoDocumentoFattura.TD06_Parcella => "Parcella",
+                _ => "Fattura",
+            };
 
     /// <summary>L'identità fiscale dell'emittente, saltando le righe che non hanno niente da dire.</summary>
     private static IEnumerable<string> RigheEmittente(DatiAziendali? a)
@@ -243,12 +282,19 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                 clienteEstero ? null : cliente?.Provincia,
                 cliente?.Iso2));
 
+        // L'ordine degli elementi dentro DatiGeneraliDocumento è fissato dallo schema: TipoDocumento,
+        // Divisa, Data, Numero, DatiBollo, ... — invertirli fa scartare il file.
         var datiGenerali = new XElement("DatiGenerali",
             new XElement("DatiGeneraliDocumento",
                 new XElement("TipoDocumento", fattura.TipoDocumento is { } td ? $"TD{(int)td:00}" : "TD01"),
                 new XElement("Divisa", fattura.Divisa ?? "EUR"),
                 new XElement("Data", fattura.DataDocumento.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-                new XElement("Numero", fattura.NumeroDocumento)));
+                new XElement("Numero", fattura.NumeroDocumento),
+                fattura.ImportoBollo is { } bollo
+                    ? new XElement("DatiBollo",
+                        new XElement("BolloVirtuale", "SI"),
+                        new XElement("ImportoBollo", bollo.ToString("0.00", CultureInfo.InvariantCulture)))
+                    : null));
 
         var dettaglioLinee = new XElement("DettaglioLinee",
             new XElement("NumeroLinea", 1),
@@ -266,7 +312,31 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
             new XElement("Imposta", imposta.ToString("0.00", CultureInfo.InvariantCulture)),
             new XElement("EsigibilitaIVA", "I"));
 
-        var datiBeniServizi = new XElement("DatiBeniServizi", dettaglioLinee, datiRiepilogo);
+        // L'imposta di soggiorno è una somma anticipata in nome e per conto del cliente verso il
+        // Comune: esclusa dalla base imponibile ex art. 15 c.1 n.3 DPR 633/72, quindi riga a sé con
+        // natura N1 e riepilogo separato, mai sommata all'imponibile del soggiorno — lì dentro
+        // pagherebbe un'IVA che non deve.
+        var rigaImpostaSoggiorno = fattura.ImpostaSoggiorno is { } impostaSoggiorno and > 0
+            ? new XElement("DettaglioLinee",
+                new XElement("NumeroLinea", 2),
+                new XElement("Descrizione", DescrizioneImpostaSoggiorno),
+                new XElement("Quantita", "1.00"),
+                new XElement("PrezzoUnitario", impostaSoggiorno.ToString("0.00000", CultureInfo.InvariantCulture)),
+                new XElement("PrezzoTotale", impostaSoggiorno.ToString("0.00", CultureInfo.InvariantCulture)),
+                new XElement("AliquotaIVA", "0.00"),
+                new XElement("Natura", CodiceNatura(NaturaIva.N1_EscluseArt15)))
+            : null;
+
+        var riepilogoImpostaSoggiorno = fattura.ImpostaSoggiorno is { } impostaRiepilogo and > 0
+            ? new XElement("DatiRiepilogo",
+                new XElement("AliquotaIVA", "0.00"),
+                new XElement("Natura", CodiceNatura(NaturaIva.N1_EscluseArt15)),
+                new XElement("ImponibileImporto", impostaRiepilogo.ToString("0.00", CultureInfo.InvariantCulture)),
+                new XElement("Imposta", "0.00"),
+                new XElement("EsigibilitaIVA", "I"))
+            : null;
+
+        var datiBeniServizi = new XElement("DatiBeniServizi", dettaglioLinee, rigaImpostaSoggiorno, datiRiepilogo, riepilogoImpostaSoggiorno);
 
         var header = new XElement("FatturaElettronicaHeader", datiTrasmissione, cedentePrestatore, cessionarioCommittente);
         var body = new XElement("FatturaElettronicaBody", datiGenerali, datiBeniServizi);
@@ -421,6 +491,12 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         new XElement("Comune", comune ?? string.Empty),
         !string.IsNullOrWhiteSpace(provincia) ? new XElement("Provincia", provincia.Trim().ToUpperInvariant()) : null,
         new XElement("Nazione", CodiceNazione(nazione)));
+
+    /// <summary>Descrizione della riga dell'imposta di soggiorno: cita la norma perché chi riceve la fattura (e chi la controlla) capisca perché quella somma non ha IVA.</summary>
+    private const string DescrizioneImpostaSoggiorno = "Imposta di soggiorno - somma esclusa ex art. 15 c.1 n.3 DPR 633/72";
+
+    /// <summary>Dicitura di legge del bollo assolto in modo virtuale, da stampare sul documento.</summary>
+    public const string DicituraBollo = "Imposta di bollo assolta in modo virtuale ai sensi dell'art. 15 del D.P.R. 642/1972 e del D.M. 17/06/2014";
 
     /// <summary>CAP convenzionale degli indirizzi esteri: il tracciato vuole cinque cifre e per l'estero sono cinque zeri.</summary>
     private const string CapEstero = "00000";

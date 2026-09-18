@@ -1,4 +1,5 @@
-using GestiSoft.Domain.Entities;
+﻿using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.Fatturazione;
 
@@ -14,7 +15,8 @@ public interface IDatiFatturaRepository
     /// <summary>Anni con almeno una fattura emessa — per il selettore Anno.</summary>
     Task<IReadOnlyList<int>> ListaAnniConDatiAsync(Guid strutturaId, CancellationToken cancellationToken);
 
-    Task<int> GetMaxProgressivoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
+    /// <summary>Ultimo numero usato nella serie indicata: fatture e ricevute hanno numerazioni separate.</summary>
+    Task<int> GetMaxProgressivoAsync(Guid strutturaId, int anno, TipoEmissioneDocumento tipoEmissione, CancellationToken cancellationToken);
 
     /// <summary>
     /// Tenta l'inserimento; restituisce false in caso di conflitto sul vincolo unique

@@ -1,5 +1,6 @@
-using GestiSoft.Application.Fatturazione;
+﻿using GestiSoft.Application.Fatturazione;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 using GestiSoft.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -35,10 +36,10 @@ public class DatiFatturaRepository(GestiSoftDbContext db) : IDatiFatturaReposito
             .Distinct()
             .ToListAsync(cancellationToken);
 
-    public async Task<int> GetMaxProgressivoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken)
+    public async Task<int> GetMaxProgressivoAsync(Guid strutturaId, int anno, TipoEmissioneDocumento tipoEmissione, CancellationToken cancellationToken)
     {
         var max = await db.DatiFattura
-            .Where(f => f.StrutturaId == strutturaId && f.Anno == anno)
+            .Where(f => f.StrutturaId == strutturaId && f.Anno == anno && f.TipoEmissione == tipoEmissione)
             .Select(f => (int?)f.Progressivo)
             .MaxAsync(cancellationToken);
 

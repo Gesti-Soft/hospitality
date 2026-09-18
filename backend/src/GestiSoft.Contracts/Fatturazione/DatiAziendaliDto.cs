@@ -1,4 +1,4 @@
-using GestiSoft.Domain.Enums;
+﻿using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Contracts.Fatturazione;
 

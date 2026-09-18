@@ -1,4 +1,4 @@
-using GestiSoft.Domain.Common;
+﻿using GestiSoft.Domain.Common;
 
 namespace GestiSoft.Domain.Entities;
 
@@ -57,4 +57,5 @@ public class ImpostazioniStruttura : TenantEntity
     /// PayTourist per residenza/esenzione (StatePoliceLogic.ControlReduction nel legacy).
     /// </summary>
     public string? ComuneAttivita { get; set; }
+
 }

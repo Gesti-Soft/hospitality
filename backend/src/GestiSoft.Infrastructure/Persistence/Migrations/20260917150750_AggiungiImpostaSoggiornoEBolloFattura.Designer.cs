@@ -3,6 +3,7 @@ using System;
 using GestiSoft.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GestiSoft.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GestiSoftDbContext))]
-    partial class GestiSoftDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260917150750_AggiungiImpostaSoggiornoEBolloFattura")]
+    partial class AggiungiImpostaSoggiornoEBolloFattura
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -442,9 +445,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<int?>("TipoDocumento")
                         .HasColumnType("integer");
 
-                    b.Property<int>("TipoEmissione")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -454,7 +454,7 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("StrutturaId");
 
-                    b.HasIndex("StrutturaId", "Anno", "TipoEmissione", "Progressivo")
+                    b.HasIndex("StrutturaId", "Anno", "Progressivo")
                         .IsUnique();
 
                     b.ToTable("dati_fattura", (string)null);

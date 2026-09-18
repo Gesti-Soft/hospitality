@@ -1,4 +1,4 @@
-namespace GestiSoft.Contracts.Impostazioni;
+﻿namespace GestiSoft.Contracts.Impostazioni;
 
 public record ImpostazioniStrutturaDto(
     Guid StrutturaId,

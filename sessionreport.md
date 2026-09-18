@@ -156,6 +156,31 @@ alle PA sono irreversibili: mai inviare nulla senza richiesta esplicita.
 
 Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
 
+**Fatturazione a norma per il settore ricettivo** (17/09, seconda parte)
+- Normativa verificata sul web prima di scrivere: imposta di soggiorno riaddebitata **esclusa** dalla
+  base imponibile (art. 15 c.1 n.3 DPR 633/72, natura **N1** — chiarimento dell'Agenzia, non N2), bollo
+  di 2 € solo sulle somme **non** soggette a IVA sopra 77,47 € (alternatività IVA/bollo, art. 6 Tabella B
+  DPR 642/72), forfettari obbligati alla fattura elettronica dal 2024, locazione breve di un privato
+  senza P.IVA = ricevuta non fiscale con bollo. Fonti nei messaggi della sessione.
+- **Imposta di soggiorno in fattura**: riga a sé con natura N1 e riepilogo separato nell'XML, riga e
+  spiegazione nel PDF, campo nel dialogo precompilato dalla prenotazione (`TotalTax`). Prima l'interfaccia
+  consigliava di sommarla al prezzo del soggiorno: le faceva pagare l'IVA.
+- **Imposta di bollo**: calcolata sulla sola parte non soggetta (un hotel ordinario non la paga quasi mai,
+  un forfettario quasi sempre), blocco `DatiBollo` nell'XML e dicitura di legge sul PDF.
+- **Ricevuta per locazione breve**: nuovo `TipoEmissione` su `DatiFattura`, **numerazione separata** dalle
+  fatture (l'indice unico ora comprende la serie), niente XML né aliquota/natura, PDF con "Ricevuta" e la
+  dicitura "fuori campo IVA". Nella migration il default è 1 = Fattura: con lo 0 generato da EF le fatture
+  esistenti sarebbero finite in una serie fantasma e i numeri sarebbero ripartiti da 1.
+- **CIN: aggiunto e poi tolto.** Era finito nel piano come voce di conformità senza verificare dove la
+  norma lo pretende: obbligatorio negli annunci, all'esterno della struttura e in dichiarazione dei
+  redditi (RB24/RB25, 730 rigo B12), **non** in fattura. Resta il fatto che è per unità immobiliare,
+  mentre nel software ci sarebbe stato un campo solo per Struttura: Cala Azzurra ha tre appartamenti e
+  presumibilmente tre CIN. Se un domani serve, va sulla Tipologia.
+- Le migration del CIN restano in sequenza (crea → sposta → elimina): erano già state applicate in
+  locale, e una migration applicata si annulla con un'altra, non si riscrive.
+- Restano fuori: corrispettivi telematici e documento commerciale (servono un registratore telematico o
+  la procedura web dell'Agenzia, non pilotabile da software terzi) e l'invio diretto allo SDI.
+
 **PayTourist: portali, verifica token, credenziali cifrate** (17/09)
 - Dump di produzione importato in un database a parte per capire perché l'invio di APP. ZAGARA
   falliva ogni sera: PayTourist risponde **200** con `{"message": "Incasso da portali online non
@@ -179,7 +204,8 @@ Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
   database perché il rischio è proprio il dump): token PayTourist e OTA, utenza Alloggiati Web,
   password Osservatorio. I valori storici si rileggono in chiaro e vengono cifrati al primo avvio.
   ⚠️ **Senza quella variabile l'Api non parte: va aggiunta al `.env` della VPS prima del deploy.**
-  Provato dal vivo sul locale: 13 credenziali cifrate al primo riavvio. Il cambio di chiave si fa
+  Provato dal vivo: 13 credenziali cifrate al primo riavvio, e la rotazione provata sul database
+  di produzione importato in locale (lette con la chiave del server, riscritte con quella locale). Il cambio di chiave si fa
   tenendo per un riavvio anche `CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE` (procedura in
   `docs/deploy.md`); la chiave vecchia va conservata finché esistono backup anteriori alla
   rotazione, o quelle copie non sarebbero più rileggibili.
@@ -248,42 +274,17 @@ Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
   log del Cliente limitato alla struttura selezionata.
 - Fattura: nazione ISO2 dedotta dalla cittadinanza. Cassa cumulata fino all'anno scelto.
 
-**Fase 11 — Backup e gestione DB** (2026-09-08, solo parte locale)
-- pgBackRest (backup fisico + WAL, retention 30 giorni) e `pg_dump` (7 giorni), test di
-  restore mensile automatico, pagina "Backup" in sola lettura per il Super Admin: il
-  ripristino non è a un click da un pannello web, di proposito. Off-site ancora da fare.
-
-**Fase 10 — Migrazione dati legacy** (SQL Server → Postgres)
-- Ricognizione dei `.bak` prima di scrivere codice, ripristinati in database temporanei
-  per non toccare nulla. Una sola installazione migrata; il tool è rilanciabile.
-- I 3 utenti reali dell'originale **non** hanno un account nel nuovo sistema: da ricreare
-  a mano.
-- Importazione dati storici in una Struttura nuova via `GestiSoft.ImportStruttura`.
-
-**Fase 9 — Design e frontend React** (completa, commit `fe03934`)
-- Calendario/booking board, Ospiti, Finanze, Fatturazione, 4 schermate di integrazione,
-  Utenti, Impostazioni, Log, centro notifiche in-app.
-- Menu orizzontale con tab di sezione, shell mobile, select ricercabili, `CampoData` a
-  segmenti, ricerca comuni per rilevanza, toast al posto degli alert.
-- Dashboard Super Admin a card, statistiche per Amministratore e per Super Admin.
-- Calendario: filtro Agenzia, vista Lista, colori canale stabili tra periodi.
-- Pagina Servizi OTA ricostruita due volte, poi pooling delle camere identiche
-  (associazione spostata da Camera a Tipologia).
-- Primo deploy reale in produzione sulla VPS OVH condivisa.
-
-**Fasi 5-8 — Integrazioni esterne**
-- Wubook (channel manager), Alloggiati Web (schedine Questura), Osservatorio Turistico,
-  PayTourist (imposta di soggiorno). Parità con `OtaService.Web` del legacy.
-- Riduzioni tassa di soggiorno per età/residenza, verifica connessione per le tre
-  integrazioni, log invii e verifiche sempre visibili.
-- Worker diviso in due processi (OTA + schedine). Vincolo orario 14:00-18:00 per la
-  manutenzione PayTourist.
-
-**Fasi 0-4 — Fondamenta**
-- Fase 0: scaffolding backend .NET 10 + Docker + Postgres, verificato end-to-end.
-- Fase 1: schema dati operativo + seed Alloggiati Web.
-- Fase 2: auth JWT, gestione errori centralizzata, Cliente/Struttura/Utente, log.
-- Fase 3: Camere e Prenotazioni. Fase 4: Finanze e Fatturazione (PDF + XML SDI).
+**Fasi 0-11 — la costruzione** (dettagli in `docs/session-archive.md`)
+- Fondamenta: .NET 10 + Docker + Postgres, schema dati, auth JWT con permessi per Struttura, Camere e
+  Prenotazioni, Finanze e Fatturazione (PDF + XML SDI).
+- Integrazioni esterne (Wubook, Alloggiati Web, Osservatorio, PayTourist) con parità rispetto a
+  `OtaService.Web` del legacy; Worker diviso in due processi.
+- Frontend React completo (calendario/booking board, ospiti, finanze, impostazioni, log, notifiche) e
+  primo deploy reale sulla VPS.
+- Migrazione dati legacy da SQL Server: una sola installazione migrata, tool rilanciabile; **i 3 utenti
+  reali dell'originale non hanno un account nel nuovo sistema**, vanno ricreati a mano.
+- Backup: pgBackRest (fisico + WAL, 30 giorni) e `pg_dump` (7 giorni), test di restore mensile, pagina
+  "Backup" in sola lettura — il ripristino non è a un click da un pannello web, di proposito.
 
 **Incidenti da ricordare**
 - Una prenotazione reale cancellata da un'operazione di pulizia: si cancella solo ciò che

@@ -17,7 +17,11 @@ public record CreaFatturaDaPrenotazioneRequest(
     decimal? PrezzoUnitario,
     AliquotaIva? AliquotaIva,
     NaturaIva? Natura,
-    string? Divisa);
+    string? Divisa,
+    /// <summary>Imposta di soggiorno da riaddebitare in fattura come riga esclusa art. 15. Null la lascia fuori; il valore predefinito lo propone la prenotazione.</summary>
+    decimal? ImpostaSoggiorno = null,
+    /// <summary>Fattura (chi ha partita IVA) o ricevuta (locazione breve di un privato). Serie di numerazione distinte.</summary>
+    TipoEmissioneDocumento TipoEmissione = TipoEmissioneDocumento.Fattura);
 
 public record AggiornaFatturaRequest(
     Guid? DatiClienteId,
@@ -28,7 +32,8 @@ public record AggiornaFatturaRequest(
     decimal PrezzoUnitario,
     AliquotaIva? AliquotaIva,
     NaturaIva? Natura,
-    string? Divisa);
+    string? Divisa,
+    decimal? ImpostaSoggiorno = null);
 
 /// <summary>
 /// Fatture — porta FatturazioneViewModel del legacy (Sezione C del report Fase 4). La fattura
@@ -98,15 +103,18 @@ public class FatturazioneService(
 
         var (cliente, _) = await RisolviOCreaClienteAsync(strutturaId, capofila, cancellationToken);
 
+        var ricevuta = request.TipoEmissione == TipoEmissioneDocumento.Ricevuta;
         var prezzoUnitario = request.PrezzoUnitario ?? prenotazione.ImportoTotale ?? 0;
         var prezzoTotale = request.Quantita * prezzoUnitario;
-        var aliquotaPercentuale = request.AliquotaIva is { } aliquota ? (decimal)aliquota / 100m : 0m;
-        var importoTotale = Math.Round(prezzoTotale * (1 + aliquotaPercentuale), 2, MidpointRounding.AwayFromZero);
+        var aliquotaPercentuale = !ricevuta && request.AliquotaIva is { } aliquota ? (decimal)aliquota / 100m : 0m;
+        // L'imposta di soggiorno entra nel totale da pagare ma non nell'imponibile: l'ospite la versa
+        // insieme al resto, il Comune la incassa tramite la struttura.
+        var importoTotale = Math.Round(prezzoTotale * (1 + aliquotaPercentuale), 2, MidpointRounding.AwayFromZero) + (request.ImpostaSoggiorno ?? 0);
 
         var anno = DateTime.UtcNow.Year;
         for (var tentativo = 0; tentativo < MassimiTentativiProgressivo; tentativo++)
         {
-            var progressivo = await fatture.GetMaxProgressivoAsync(strutturaId, anno, cancellationToken) + 1;
+            var progressivo = await fatture.GetMaxProgressivoAsync(strutturaId, anno, request.TipoEmissione, cancellationToken) + 1;
 
             var candidata = new DatiFattura
             {
@@ -115,17 +123,23 @@ public class FatturazioneService(
                 DatiClienteId = cliente.Id,
                 Progressivo = progressivo,
                 NumeroDocumento = progressivo,
-                TipoDocumento = request.TipoDocumento,
-                RegimeFiscale = request.RegimeFiscale,
+                TipoEmissione = request.TipoEmissione,
+                // Una ricevuta di locazione breve è fuori dal campo IVA e non passa dallo SDI:
+                // aliquota, natura, regime e tipo documento sono codici del tracciato elettronico e
+                // su quel foglio non significano niente.
+                TipoDocumento = ricevuta ? null : request.TipoDocumento,
+                RegimeFiscale = ricevuta ? null : request.RegimeFiscale,
                 DataDocumento = DateTime.UtcNow.Date,
                 Divisa = string.IsNullOrWhiteSpace(request.Divisa) ? "EUR" : request.Divisa,
                 Descrizione = request.Descrizione,
+                ImpostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno : null,
+                ImportoBollo = CalcolaBollo(request.TipoEmissione, request.Natura, prezzoTotale, request.ImpostaSoggiorno ?? 0),
                 Quantita = request.Quantita,
                 PrezzoUnitario = prezzoUnitario,
                 PrezzoTotale = prezzoTotale,
                 ImportoTotale = importoTotale,
-                AliquotaIva = request.AliquotaIva,
-                Natura = request.Natura,
+                AliquotaIva = ricevuta ? null : request.AliquotaIva,
+                Natura = ricevuta ? null : request.Natura,
                 Anno = anno,
             };
 
@@ -165,7 +179,9 @@ public class FatturazioneService(
         entity.Quantita = request.Quantita;
         entity.PrezzoUnitario = request.PrezzoUnitario;
         entity.PrezzoTotale = prezzoTotale;
-        entity.ImportoTotale = Math.Round(prezzoTotale * (1 + aliquotaPercentuale), 2, MidpointRounding.AwayFromZero);
+        entity.ImpostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno : null;
+        entity.ImportoBollo = CalcolaBollo(entity.TipoEmissione, request.Natura, prezzoTotale, request.ImpostaSoggiorno ?? 0);
+        entity.ImportoTotale = Math.Round(prezzoTotale * (1 + aliquotaPercentuale), 2, MidpointRounding.AwayFromZero) + (request.ImpostaSoggiorno ?? 0);
         entity.AliquotaIva = request.AliquotaIva;
         entity.Natura = request.Natura;
         entity.Divisa = string.IsNullOrWhiteSpace(request.Divisa) ? entity.Divisa : request.Divisa;
@@ -185,6 +201,11 @@ public class FatturazioneService(
     public async Task<byte[]> GeneraXmlSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
     {
         var (fattura, cliente, azienda) = await CaricaPerDocumentoAsync(currentUser, strutturaId, fatturaId, cancellationToken);
+
+        if (fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta)
+        {
+            throw new ConflictException("Una ricevuta di locazione breve non ha una fattura elettronica: l'operazione è fuori dal campo IVA e non passa dallo SDI. Resta scaricabile il PDF.");
+        }
 
         // Un dato obbligatorio mancante diventerebbe un elemento vuoto e lo SDI scarterebbe il file
         // giorni dopo, quando nessuno ricorda più quella fattura: meglio non generarlo e dire cosa
@@ -208,6 +229,31 @@ public class FatturazioneService(
         var azienda = await aziende.GetByStrutturaIdAsync(strutturaId, cancellationToken);
 
         return (fattura, cliente, azienda);
+    }
+
+    /// <summary>Sopra questa soglia le somme non soggette a IVA scontano il bollo (art. 13 Tariffa DPR 642/72).</summary>
+    private const decimal SogliaBollo = 77.47m;
+
+    private const decimal ImportoBolloVirtuale = 2.00m;
+
+    /// <summary>
+    /// IVA e bollo sono alternativi (art. 6 Tabella B DPR 642/72): dove c'è IVA il bollo non si paga
+    /// mai, dove non c'è si paga sopra 77,47 €. La soglia si misura sulla sola parte <b>non</b>
+    /// soggetta, non sul totale della fattura: in una fattura mista — soggiorno con IVA al 10% più
+    /// imposta di soggiorno esclusa art. 15 — conta solo la seconda. In pratica un hotel in regime
+    /// ordinario non lo paga quasi mai, un forfettario quasi sempre.
+    /// <para>
+    /// La riga del soggiorno si considera fuori dall'IVA quando porta una Natura: è la convenzione
+    /// dello SDI, dove o c'è un'aliquota o c'è il motivo per cui non c'è.
+    /// </para>
+    /// </summary>
+    public static decimal? CalcolaBollo(TipoEmissioneDocumento tipoEmissione, NaturaIva? natura, decimal prezzoTotale, decimal impostaSoggiorno)
+    {
+        // Una ricevuta di locazione breve è interamente fuori dal campo IVA: non ha una natura da
+        // esporre, ma l'intero importo concorre alla soglia.
+        var fuoriCampoIva = tipoEmissione == TipoEmissioneDocumento.Ricevuta || natura is not null;
+        var nonSoggetto = (fuoriCampoIva ? prezzoTotale : 0m) + impostaSoggiorno;
+        return nonSoggetto > SogliaBollo ? ImportoBolloVirtuale : null;
     }
 
     /// <summary>

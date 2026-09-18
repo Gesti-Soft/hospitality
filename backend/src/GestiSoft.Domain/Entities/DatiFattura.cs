@@ -1,4 +1,4 @@
-using GestiSoft.Domain.Common;
+﻿using GestiSoft.Domain.Common;
 using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Domain.Entities;
@@ -20,6 +20,13 @@ public class DatiFattura : TenantEntity
 
     public DatiCliente? Cliente { get; set; }
 
+    /// <summary>
+    /// Fattura o ricevuta: decide numerazione, contenuto del PDF e se esiste un file per lo SDI.
+    /// Le righe create prima di questo campo sono tutte fatture.
+    /// </summary>
+    public TipoEmissioneDocumento TipoEmissione { get; set; } = TipoEmissioneDocumento.Fattura;
+
+    /// <summary>Progressivo dentro la propria serie: fatture e ricevute contano separatamente.</summary>
     public int Progressivo { get; set; }
 
     public TipoDocumentoFattura? TipoDocumento { get; set; }
@@ -47,6 +54,23 @@ public class DatiFattura : TenantEntity
     public decimal ImportoTotale { get; set; }
 
     public decimal Arrotondamento { get; set; }
+
+    /// <summary>
+    /// Imposta di soggiorno riaddebitata all'ospite, esposta in fattura come riga a sé con natura
+    /// <see cref="NaturaIva.N1_EscluseArt15"/>: è una somma anticipata in nome e per conto del
+    /// cliente verso il Comune, esclusa dalla base imponibile IVA ex art. 15 c.1 n.3 DPR 633/72.
+    /// Nasconderla dentro il prezzo del soggiorno la farebbe entrare nell'imponibile, cioè le
+    /// farebbe pagare l'IVA che non deve.
+    /// </summary>
+    public decimal? ImpostaSoggiorno { get; set; }
+
+    /// <summary>
+    /// Imposta di bollo assolta in modo virtuale (2,00 €), calcolata dal sistema e conservata qui
+    /// com'era al momento dell'emissione. Si applica alle sole somme <b>non</b> soggette a IVA
+    /// quando superano 77,47 € (principio di alternatività IVA/bollo, art. 6 Tabella B DPR 642/72):
+    /// una fattura con IVA non la paga mai, una di un forfettario quasi sempre.
+    /// </summary>
+    public decimal? ImportoBollo { get; set; }
 
     /// <summary>Percorso/URL del PDF o XML generato.</summary>
     public string? Link { get; set; }

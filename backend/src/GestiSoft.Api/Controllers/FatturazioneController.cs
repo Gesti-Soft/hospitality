@@ -1,4 +1,4 @@
-using GestiSoft.Application.Auth;
+﻿using GestiSoft.Application.Auth;
 using GestiSoft.Application.Fatturazione;
 using GestiSoft.Contracts.Fatturazione;
 using GestiSoft.Domain.Entities;
@@ -85,7 +85,8 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
         f.Id, f.StrutturaId, f.DatiClienteId,
         f.Cliente is null ? null : !string.IsNullOrWhiteSpace(f.Cliente.Denominazione) ? f.Cliente.Denominazione : $"{f.Cliente.Nome} {f.Cliente.Cognome}".Trim(),
         f.Progressivo, f.TipoDocumento, f.RegimeFiscale, f.NumeroDocumento, f.DataDocumento, f.Divisa,
-        f.Descrizione, f.Quantita, f.PrezzoUnitario, f.PrezzoTotale, f.ImportoTotale, f.AliquotaIva, f.Natura, f.Anno);
+        f.Descrizione, f.Quantita, f.PrezzoUnitario, f.PrezzoTotale, f.ImportoTotale, f.AliquotaIva, f.Natura,
+        f.ImpostaSoggiorno, f.ImportoBollo, f.Anno);
 
     private static DatiClienteDto ToDtoCliente(DatiCliente c) => new(
         c.Id, c.StrutturaId, c.Iso2, c.PIva, c.CodiceFiscale, c.Denominazione, c.Nome, c.Cognome,
