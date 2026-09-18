@@ -46,6 +46,7 @@ import { useMobile } from '../../lib/useMobile'
 import { CameraDialog } from '../../components/CameraDialog'
 import { PrezzoDialog } from '../../components/PrezzoDialog'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { SelettoreColore } from '../../components/SelettoreColore'
 import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
@@ -862,14 +863,7 @@ function TabCanali({
                     }}
                   />
                 ))}
-                <Box
-                  component="input"
-                  type="color"
-                  value={colore || '#1C7EA8'}
-                  onChange={(e) => setColore(e.target.value)}
-                  disabled={inCorso}
-                  sx={{ width: 34, height: 26, border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 1, p: 0, cursor: inCorso ? 'default' : 'pointer' }}
-                />
+                <SelettoreColore value={colore || '#1C7EA8'} onChange={setColore} disabled={inCorso} ariaLabel="Colore personalizzato" />
               </Box>
             </Box>
           </DialogContent>
