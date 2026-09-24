@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import MenuItem from '@mui/material/MenuItem'
@@ -29,6 +29,12 @@ const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', c
 // matrice completa (tutte le tipologie, non solo le prime) resta comunque disponibile in tabella.
 const MASSIMO_TIPOLOGIE_PER_GRAFICO = 6
 
+// Sotto questa larghezza della card la legenda di fianco non lascia spazio al disegno: le etichette
+// delle nazionalità sono lunghe ("STATI UNITI D'AMERICA — 7.1%") e si prendono oltre 260 px, così a
+// 1210 px di finestra la ciambella si riduceva a 180 px. Si misura la card e non la finestra perché
+// la stessa finestra dà card larghe o strette a seconda che la griglia sia a una o due colonne.
+const LARGHEZZA_MINIMA_PER_LEGENDA_A_LATO = 560
+
 export function StatistichePage() {
   const { strutturaId } = useStruttura()
   const mobile = useMobile()
@@ -40,14 +46,32 @@ export function StatistichePage() {
 
   const statistiche = useStatisticheStruttura(strutturaId, anno)
 
-  // La legenda della torta sta di default a destra del disegno e si prende la larghezza che le
-  // serve: su uno schermo stretto la ciambella finisce spinta a sinistra, tagliata, e per vederla
-  // tutta bisogna scorrere. Sotto i 900 px la legenda passa sotto, così il disegno tiene tutta la
-  // larghezza della card e resta centrato. L'altezza cresce perché la legenda non gli mangi spazio.
-  const legendaTorta = mobile
+  // Le due torte stanno nella stessa colonna della griglia, quindi hanno sempre la stessa larghezza:
+  // ne basta misurare una. Finché la misura non è arrivata si parte dalla finestra, così su un
+  // telefono la prima pennellata è già quella giusta e non si vede il salto.
+  const rifTorta = useRef<HTMLDivElement | null>(null)
+  const [larghezzaTorta, setLarghezzaTorta] = useState(0)
+  // Le card dei grafici nascono solo quando i dati arrivano: prima di allora non c'è niente da misurare.
+  const graficiPresenti = statistiche.data !== undefined
+  useEffect(() => {
+    const nodo = rifTorta.current
+    if (!nodo) {
+      return
+    }
+    const osservatore = new ResizeObserver(([voce]) => setLarghezzaTorta(voce.contentRect.width))
+    osservatore.observe(nodo)
+    return () => osservatore.disconnect()
+  }, [graficiPresenti])
+
+  // La legenda sta di default a destra del disegno e si prende la larghezza che le serve: quando la
+  // card è stretta la ciambella si rimpicciolisce fino a diventare illeggibile. Sotto la soglia la
+  // legenda passa sotto, così il disegno tiene tutta la larghezza e resta centrato; l'altezza cresce
+  // perché la legenda non gli mangi lo spazio appena guadagnato.
+  const legendaSotto = larghezzaTorta > 0 ? larghezzaTorta < LARGHEZZA_MINIMA_PER_LEGENDA_A_LATO : mobile
+  const legendaTorta = legendaSotto
     ? { legend: { direction: 'horizontal' as const, position: { vertical: 'bottom' as const, horizontal: 'center' as const } } }
     : undefined
-  const altezzaTorta = mobile ? 340 : 280
+  const altezzaTorta = legendaSotto ? 340 : 280
   const dati = statistiche.data
 
   return (
@@ -89,22 +113,25 @@ export function StatistichePage() {
           ) : (
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' }, gap: 2.5, alignItems: 'start' }}>
               <CardGrafico titolo="Prenotazioni per agenzia">
-                <PieChart
-                  height={altezzaTorta}
-                  slotProps={legendaTorta}
-                  series={[
-                    {
-                      innerRadius: '58%',
-                      cornerRadius: 6,
-                      paddingAngle: 2,
-                      highlightScope: { highlight: 'item', fade: 'none' },
-                      highlighted: { additionalRadius: 6 },
-                      data: dati.prenotazioniPerAgenzia.map((v) => ({ id: v.etichetta, value: v.conteggio, label: v.etichetta })),
-                      valueFormatter: (v) => `${v.value} prenotazioni`,
-                    },
-                  ]}
-                  colors={coloriPerEtichette(dati.prenotazioniPerAgenzia.map((v) => v.etichetta))}
-                />
+                {/* Il riferimento serve a misurare la larghezza reale della card (vedi legendaSotto). */}
+                <Box ref={rifTorta}>
+                  <PieChart
+                    height={altezzaTorta}
+                    slotProps={legendaTorta}
+                    series={[
+                      {
+                        innerRadius: '58%',
+                        cornerRadius: 6,
+                        paddingAngle: 2,
+                        highlightScope: { highlight: 'item', fade: 'none' },
+                        highlighted: { additionalRadius: 6 },
+                        data: dati.prenotazioniPerAgenzia.map((v) => ({ id: v.etichetta, value: v.conteggio, label: v.etichetta })),
+                        valueFormatter: (v) => `${v.value} prenotazioni`,
+                      },
+                    ]}
+                    colors={coloriPerEtichette(dati.prenotazioniPerAgenzia.map((v) => v.etichetta))}
+                  />
+                </Box>
               </CardGrafico>
 
               <CardGrafico titolo="Prenotazioni per nazionalità">
