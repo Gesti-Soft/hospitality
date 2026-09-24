@@ -179,6 +179,9 @@ function CardPrenotazione({
           { etichetta: 'Canale', valore: prenotazione.agenzia ?? 'Diretta' },
           { etichetta: 'Check-in', valore: prenotazione.checkIn ? formattatoreData.format(new Date(prenotazione.checkIn)) : '—' },
           { etichetta: 'Check-out', valore: prenotazione.checkOut ? formattatoreData.format(new Date(prenotazione.checkOut)) : '—' },
+          // Quante persone si presentano al banco: serve per preparare la camera senza dover aprire
+          // la prenotazione.
+          { etichetta: 'Ospiti', valore: prenotazione.numeroOspiti ?? '—' },
         ]}
       />
       <AzioniCardElenco>
