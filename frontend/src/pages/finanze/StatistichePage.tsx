@@ -20,6 +20,7 @@ import { MatriceTipologieMese, NOMI_MESI } from '../../components/statistiche/Ma
 import { coloriPerEtichette, PALETTE_CATEGORICA } from '../../lib/chartColors'
 import { formattatoreAsseCompatto } from '../../lib/numberFormat'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
+import { useMobile } from '../../lib/useMobile'
 import { fontDisplay, tokens } from '../../theme'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
@@ -30,6 +31,7 @@ const MASSIMO_TIPOLOGIE_PER_GRAFICO = 6
 
 export function StatistichePage() {
   const { strutturaId } = useStruttura()
+  const mobile = useMobile()
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const anniDisponibili = useAnniDisponibiliStatistiche(strutturaId)
   // Su richiesta esplicita, il selettore propone gli anni con dati reali più l'anno corrente,
@@ -37,6 +39,15 @@ export function StatistichePage() {
   const anniSelezionabili = anniConAnnoCorrente(anniDisponibili.data)
 
   const statistiche = useStatisticheStruttura(strutturaId, anno)
+
+  // La legenda della torta sta di default a destra del disegno e si prende la larghezza che le
+  // serve: su uno schermo stretto la ciambella finisce spinta a sinistra, tagliata, e per vederla
+  // tutta bisogna scorrere. Sotto i 900 px la legenda passa sotto, così il disegno tiene tutta la
+  // larghezza della card e resta centrato. L'altezza cresce perché la legenda non gli mangi spazio.
+  const legendaTorta = mobile
+    ? { legend: { direction: 'horizontal' as const, position: { vertical: 'bottom' as const, horizontal: 'center' as const } } }
+    : undefined
+  const altezzaTorta = mobile ? 340 : 280
   const dati = statistiche.data
 
   return (
@@ -56,7 +67,10 @@ export function StatistichePage() {
 
       {dati && (
         <>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
+          {/* minmax(0, …) e non 1fr: una colonna 1fr non scende sotto il contenuto, e un importo a
+              sette cifre allargava la griglia oltre la finestra, facendo comparire lo scorrimento
+              orizzontale su tutta la pagina invece di mandare i riquadri a capo. */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' }, gap: 2 }}>
             <KpiCard etichetta="Prenotazioni anno" valore={String(dati.kpi.numeroPrenotazioni)} icona={<BarChartIcon />} />
             <KpiCard etichetta="Ricavo stimato" valore={formattatoreValuta.format(dati.kpi.ricavoStimato)} icona={<EuroIcon />} />
             <KpiCard etichetta="Ricavo effettivo" valore={formattatoreValuta.format(dati.kpi.ricavoEffettivo)} accento icona={<EuroIcon />} />
@@ -73,10 +87,11 @@ export function StatistichePage() {
           {dati.kpi.numeroPrenotazioni === 0 ? (
             <Typography sx={{ fontSize: 13.5, color: tokens.textSecondary }}>Nessuna prenotazione per l'anno selezionato.</Typography>
           ) : (
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2.5, alignItems: 'start' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' }, gap: 2.5, alignItems: 'start' }}>
               <CardGrafico titolo="Prenotazioni per agenzia">
                 <PieChart
-                  height={280}
+                  height={altezzaTorta}
+                  slotProps={legendaTorta}
                   series={[
                     {
                       innerRadius: '58%',
@@ -94,7 +109,8 @@ export function StatistichePage() {
 
               <CardGrafico titolo="Prenotazioni per nazionalità">
                 <PieChart
-                  height={280}
+                  height={altezzaTorta}
+                  slotProps={legendaTorta}
                   series={[
                     {
                       innerRadius: '58%',
