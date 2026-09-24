@@ -53,7 +53,12 @@ export function useSezioniVisibili(): SezioniVisibiliRisultato {
     }))
     .filter(({ voci }) => voci.length > 0)
 
-  return { sezioni, caricamento: !isSuperAdmin && !!strutturaId && mioPermesso.isLoading }
+  // Finché la Struttura non è nota i permessi non sono nemmeno stati chiesti, e senza permessi
+  // l'unica voce che sopravvive al filtro è "Il mio account" (sempreVisibile, nessun permesso
+  // richiesto): decidere in quel momento manderebbe lì sia il redirect di "/" sia le guardie di
+  // rotta. Succede al primo accesso da un browser nuovo (il telefono), dove non c'è una struttura
+  // ricordata da leggere subito e la lista arriva solo dopo il primo render.
+  return { sezioni, caricamento: !isSuperAdmin && (!strutturaId || mioPermesso.isLoading) }
 }
 
 export interface VoceProtettaRisultato {
