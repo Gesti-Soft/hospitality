@@ -207,6 +207,10 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
 
   function onKeyDownCampo(e: KeyboardEvent<HTMLElement>) {
     if (e.ctrlKey || e.metaKey || e.altKey || e.key === 'Tab') return
+    // Tastiere virtuali (Android e la maggior parte degli IME): il keydown arriva senza il carattere
+    // — `key` vale "Unidentified" — e il testo vero passa solo da `beforeinput`. Bloccarlo qui
+    // significava non poter scrivere niente da telefono, su qualunque segmento.
+    if (e.key === 'Unidentified') return
     if (e.key === 'Enter') {
       e.currentTarget.blur()
       return
@@ -233,6 +237,37 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
     }
     e.preventDefault()
   }
+
+  // `beforeinput` è l'unico evento che porta il carattere anche quando a scriverlo è una tastiera
+  // virtuale. Si registra a mano sull'input invece di usare la prop di React perché serve
+  // `inputType`, che distingue l'inserimento dalla cancellazione. Il riferimento tiene la versione
+  // aggiornata della funzione, così l'ascoltatore registrato una volta sola non lavora su uno stato
+  // vecchio (segmento e cifre cambiano a ogni tasto).
+  const gestisciBeforeInput = useRef<(e: InputEvent) => void>(() => {})
+  // Riscritta dopo ogni render, non durante: così vede sempre lo stato appena disegnato.
+  useEffect(() => {
+    gestisciBeforeInput.current = (e: InputEvent) => {
+      e.preventDefault()
+      if (e.inputType === 'deleteContentBackward') {
+        cancellaCifra()
+        return
+      }
+      if (!e.inputType.startsWith('insert') || !e.data) return
+      // Una cifra per volta: `scriviCifra` legge lo stato corrente, e in un ciclo le chiamate
+      // successive lavorerebbero su valori non ancora aggiornati. Le tastiere ne mandano una per
+      // evento, e l'incolla è disabilitato a parte.
+      const cifra = [...e.data].find((c) => /[0-9]/.test(c))
+      if (cifra) scriviCifra(cifra)
+    }
+  })
+
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    const ascolta = (e: Event) => gestisciBeforeInput.current(e as InputEvent)
+    el.addEventListener('beforeinput', ascolta)
+    return () => el.removeEventListener('beforeinput', ascolta)
+  }, [])
 
   function commetti() {
     setInModifica(false)
@@ -294,6 +329,9 @@ export function CampoData({ label, value, onChange, min, max, fullWidth, require
         helperText={helperText}
         size={size}
         slotProps={{
+          // Sul telefono deve aprirsi il tastierino numerico: la data si scrive solo con le cifre,
+          // e la tastiera alfabetica costringerebbe a cambiarla a mano ogni volta.
+          htmlInput: { inputMode: 'numeric' },
           input: {
             inputRef,
             endAdornment: (
