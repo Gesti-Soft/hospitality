@@ -4,6 +4,7 @@ using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Logging;
 using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Ospiti;
+using GestiSoft.Application.Trattamenti;
 using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -29,7 +30,9 @@ public record CreaPrenotazioneRequest(
     bool AnimaliAttiva = false,
     bool CauzioneAttiva = true,
     // Età all'arrivo di ciascun bambino compreso in NumeroOspiti (vedi Prenotazione.EtaBambini).
-    IReadOnlyList<int>? EtaBambini = null);
+    IReadOnlyList<int>? EtaBambini = null,
+    // Null = solo pernottamento.
+    TipoTrattamento? Trattamento = null);
 
 public record AggiornaPrenotazioneRequest(
     Guid? CameraId,
@@ -51,7 +54,9 @@ public record AggiornaPrenotazioneRequest(
     // quello già registrato, così un salvataggio qualsiasi non lo azzera.
     DateTime? CheckInEffettuatoAtUtc = null,
     // Null = lascia quelle registrate, come sopra; una lista vuota le toglie.
-    IReadOnlyList<int>? EtaBambini = null);
+    IReadOnlyList<int>? EtaBambini = null,
+    // Null = solo pernottamento: a differenza delle età il dialog lo manda sempre.
+    TipoTrattamento? Trattamento = null);
 
 public record CheckOutRequest(bool RestituisciCauzione, decimal? ImportoCauzioneTrattenuta);
 
@@ -74,7 +79,8 @@ public class PrenotazioniService(
     NotificaService notificaService,
     AssegnazioneCameraService assegnazioneCamera,
     WubookDisponibilitaService disponibilitaOta,
-    WubookLicenzaService licenzaOta)
+    WubookLicenzaService licenzaOta,
+    TrattamentiService trattamenti)
 {
     /// <summary>
     /// Spinge subito la disponibilità aggiornata su Wubook per il periodo appena toccato (creazione,
@@ -294,6 +300,7 @@ public class PrenotazioniService(
             PMS = tassaDisattivata || !struttura.OsservatorioAbilitato,
             PayTourist = tassaDisattivata || !struttura.PayTouristAbilitato,
         };
+        await ImpostaTrattamentoAsync(strutturaId, entity, request.Trattamento, cancellationToken);
 
         await prenotazioni.AddAsync(entity, cancellationToken);
         await SincronizzaDisponibilitaOtaAsync(strutturaId, request.CheckIn, request.CheckOut, cancellationToken);
@@ -330,6 +337,7 @@ public class PrenotazioniService(
         var spesePuliziaPrima = entity.SpesePuliziaAttiva;
         var animaliPrima = entity.AnimaliAttiva;
         var cauzionePrima = entity.CauzioneAttiva;
+        var trattamentoPrima = entity.Trattamento;
         var importoPrenotazionePrima = entity.ImportoPrenotazione;
         var importoTotalePrima = entity.ImportoTotale;
         var importoPagatoPrima = entity.ImportoPagato;
@@ -426,6 +434,12 @@ public class PrenotazioniService(
             entity.SpesePuliziaAttiva = request.SpesePuliziaAttiva;
             entity.AnimaliAttiva = request.AnimaliAttiva;
             entity.CauzioneAttiva = request.CauzioneAttiva;
+
+            // Solo se cambia: lo stesso trattamento tiene i prezzi con cui era stato venduto.
+            if (request.Trattamento != entity.Trattamento)
+            {
+                await ImpostaTrattamentoAsync(strutturaId, entity, request.Trattamento, cancellationToken);
+            }
         }
 
         entity.ImportoPrenotazione = request.ImportoPrenotazione;
@@ -458,6 +472,10 @@ public class PrenotazioniService(
         if (cauzionePrima != entity.CauzioneAttiva)
         {
             modificheEconomiche.Add($"Cauzione {(cauzionePrima ? "attiva" : "disattivata")}→{(entity.CauzioneAttiva ? "attiva" : "disattivata")}");
+        }
+        if (trattamentoPrima != entity.Trattamento)
+        {
+            modificheEconomiche.Add($"Trattamento {NomeTrattamento(trattamentoPrima)}→{NomeTrattamento(entity.Trattamento)}");
         }
         if (importoPrenotazionePrima != entity.ImportoPrenotazione)
         {
@@ -771,6 +789,18 @@ public class PrenotazioniService(
         return await camere.GetAsync(cameraId, cancellationToken)
             ?? throw new NotFoundException("Camera non trovata.");
     }
+
+    /// <summary>Copia sulla prenotazione i prezzi del trattamento dal listino attuale, o li toglie per il solo pernottamento.</summary>
+    private async Task ImpostaTrattamentoAsync(Guid strutturaId, Prenotazione entity, TipoTrattamento? trattamento, CancellationToken cancellationToken)
+    {
+        var prezzi = trattamento is { } tipo ? await trattamenti.PrezziDaListinoAsync(strutturaId, tipo, cancellationToken) : null;
+        entity.Trattamento = trattamento;
+        entity.TrattamentoPrezzoAdulto = prezzi?.PrezzoAdulto;
+        entity.TrattamentoPrezzoBambino = prezzi?.PrezzoBambino;
+        entity.TrattamentoEtaMassimaBambini = prezzi?.EtaMassimaBambini;
+    }
+
+    private static string NomeTrattamento(TipoTrattamento? tipo) => tipo is { } t ? TrattamentiService.Nome(t) : "solo pernottamento";
 
     /// <summary>
     /// Un'età per bambino, da 0 a 17 anni (dai 18 si è adulti, come per Booking), e almeno un

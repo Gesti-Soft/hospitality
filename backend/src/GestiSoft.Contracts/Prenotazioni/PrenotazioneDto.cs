@@ -35,4 +35,6 @@ public record PrenotazioneDto(
     bool RinunciaPulizia = false,
     bool RinunciaBiancheria = false,
     // Età all'arrivo dei bambini compresi in NumeroOspiti, per il supplemento per fascia d'età.
-    IReadOnlyList<int>? EtaBambini = null);
+    IReadOnlyList<int>? EtaBambini = null,
+    // Null = solo pernottamento.
+    TipoTrattamento? Trattamento = null);

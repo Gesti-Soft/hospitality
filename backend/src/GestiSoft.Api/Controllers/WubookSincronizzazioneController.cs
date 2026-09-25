@@ -21,8 +21,8 @@ public class WubookSincronizzazioneController(
     [HttpPost("prezzi/sincronizza")]
     public async Task<IActionResult> SincronizzaPrezzi(Guid strutturaId, [FromBody] SincronizzaPeriodoRequest request, CancellationToken cancellationToken)
     {
-        await prezziService.SincronizzaAsync(currentUser, strutturaId, request.DataInizio, request.DataFine, cancellationToken);
-        return NoContent();
+        var avvisi = await prezziService.SincronizzaAsync(currentUser, strutturaId, request.DataInizio, request.DataFine, cancellationToken);
+        return Ok(new RisultatoSincronizzazionePrezziDto(avvisi));
     }
 
     [HttpPost("disponibilita/sincronizza")]

@@ -364,6 +364,9 @@ public class CamereService(
                 PrezzoDefault = t.PrezzoDefault,
                 NumeroImplementoPersona = t.NumeroImplementoPersona,
                 Implemento = t.Implemento,
+                RiduzioneOspiteInMeno = t.RiduzioneOspiteInMeno,
+                TipoRiduzioneOspiteInMeno = t.TipoRiduzioneOspiteInMeno,
+                TipoImplemento = t.TipoImplemento,
             };
             await tipologie.AddAsync(nuova, cancellationToken);
             mappaTipologie[t.Id] = nuova.Id;
@@ -378,6 +381,7 @@ public class CamereService(
                     EtaMin = f.EtaMin,
                     EtaMax = f.EtaMax,
                     ImportoPerNotte = f.ImportoPerNotte,
+                    TipoImporto = f.TipoImporto,
                 }).ToList(), cancellationToken);
             }
         }

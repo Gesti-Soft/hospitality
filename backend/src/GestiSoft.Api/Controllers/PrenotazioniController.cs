@@ -138,5 +138,5 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
         p.ImportoPrenotazione, p.ImportoPagato, p.ImportoTotale, p.CheckIn, p.CheckOut, p.CheckInEffettuatoAtUtc,
         p.NumeroOspiti, p.StatePolice, p.PMS, p.PayTourist, p.Anno, p.TotalTax, p.StatoPrenotazione,
         p.TassaSoggiornoAttiva, p.SpesePuliziaAttiva, p.AnimaliAttiva, p.CauzioneAttiva, p.Ospite?.Nome, p.Ospite?.Cognome,
-        p.RinunciaPulizia, p.RinunciaBiancheria, p.EtaBambini);
+        p.RinunciaPulizia, p.RinunciaBiancheria, p.EtaBambini, p.Trattamento);
 }

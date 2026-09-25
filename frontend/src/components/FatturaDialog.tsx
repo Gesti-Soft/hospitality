@@ -287,6 +287,15 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           </TextField>
         )}
 
+        {/* Avviso, non blocco: la scelta fiscale resta del cliente. La colazione è già compresa
+            nell'importo della prenotazione e non ha una riga a sé sulla ricevuta. */}
+        {!modifica && ricevuta && prenotazioniDisponibili.find((x) => x.id === prenotazioneId)?.trattamento != null && (
+          <Alert severity="warning">
+            La prenotazione comprende un trattamento (colazione o pasti): con servizi di ristorazione la locazione breve e la cedolare secca
+            potrebbero non essere applicabili (art. 4 DL 50/2017). Verifica con il commercialista prima di emettere la ricevuta.
+          </Alert>
+        )}
+
         {ricevuta && (
           <TextField
             select

@@ -3,11 +3,12 @@ using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Contracts.Camere;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.Tests;
 
 /// <summary>
-/// Supplemento per persona in più con fasce d'età, sul modello di Booking: importo fisso per fascia,
+/// Supplemento per persona in più con fasce d'età, sul modello di Booking: importo per fascia,
 /// supplemento pieno per adulti ed età fuori fascia. Esempio della struttura: due ospiti inclusi,
 /// 20 € a notte per persona in più, gratis fino a 13 anni, 10 € da 14 a 17.
 /// </summary>
@@ -24,31 +25,31 @@ public class SupplementoFasceEtaTests
     [Fact]
     public void SenzaFasce_OgniOspiteInPiuPagaIlSupplementoPieno()
     {
-        Assert.Equal(20m, PrezziCameraService.SupplementoPerNotte(Tipologia, [], 3, [15]));
+        Assert.Equal(20m, PrezziCameraService.SupplementoPerNotte(Tipologia, [], 3, [15], 100m));
     }
 
     [Fact]
     public void EntroGliOspitiInclusi_NessunSupplemento()
     {
-        Assert.Equal(0m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 2, [15]));
+        Assert.Equal(0m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 2, [15], 100m));
     }
 
     [Fact]
     public void DueAdultiEUnRagazzoDi15Anni_PagaLaFasciaRidotta()
     {
-        Assert.Equal(10m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 3, [15]));
+        Assert.Equal(10m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 3, [15], 100m));
     }
 
     [Fact]
     public void DueAdultiEUnBambinoDi8Anni_Gratis()
     {
-        Assert.Equal(0m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 3, [8]));
+        Assert.Equal(0m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 3, [8], 100m));
     }
 
     [Fact]
     public void TreAdulti_IlTerzoPagaPieno()
     {
-        Assert.Equal(20m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 3, []));
+        Assert.Equal(20m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 3, [], 100m));
     }
 
     /// <summary>I posti inclusi vanno ai più grandi: con un adulto e due ragazzi paga il più piccolo, non l'adulto.</summary>
@@ -56,13 +57,13 @@ public class SupplementoFasceEtaTests
     public void UnAdultoEDueFigli_IPostiInclusiVannoAiPiuGrandi()
     {
         // Adulto e ragazzo di 16 anni nei posti inclusi, paga il bambino di 6: gratis.
-        Assert.Equal(0m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 3, [6, 16]));
+        Assert.Equal(0m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 3, [6, 16], 100m));
     }
 
     [Fact]
     public void DueAdultiEDueFigli_OgnunoPagaLaSuaFascia()
     {
-        Assert.Equal(10m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 4, [6, 16]));
+        Assert.Equal(10m, PrezziCameraService.SupplementoPerNotte(Tipologia, Fasce, 4, [6, 16], 100m));
     }
 
     /// <summary>Come Booking: un'età che non rientra in nessuna fascia paga come un adulto.</summary>
@@ -70,7 +71,38 @@ public class SupplementoFasceEtaTests
     public void EtaFuoriDaOgniFascia_PagaIlSupplementoPieno()
     {
         FasciaEtaSupplemento[] soloPiccoli = [new() { EtaMin = 0, EtaMax = 2, ImportoPerNotte = 0m }];
-        Assert.Equal(20m, PrezziCameraService.SupplementoPerNotte(Tipologia, soloPiccoli, 3, [10]));
+        Assert.Equal(20m, PrezziCameraService.SupplementoPerNotte(Tipologia, soloPiccoli, 3, [10], 100m));
+    }
+
+    /// <summary>Supplemento in percentuale: si calcola sul prezzo della camera di quella notte.</summary>
+    [Fact]
+    public void SupplementoInPercentuale_SulPrezzoDellaNotte()
+    {
+        var inPercentuale = new SettingTipologia { NumeroImplementoPersona = 2, Implemento = 20m, TipoImplemento = TipoVariazionePrezzo.Percentuale };
+        Assert.Equal(19m, PrezziCameraService.SupplementoPerNotte(inPercentuale, [], 3, [], 95m));
+    }
+
+    /// <summary>Fascia in percentuale: si calcola sul supplemento pieno, "da 14 a 17 anni il 50%".</summary>
+    [Fact]
+    public void FasciaInPercentuale_SulSupplementoPieno()
+    {
+        FasciaEtaSupplemento[] meta = [new() { EtaMin = 14, EtaMax = 17, ImportoPerNotte = 50m, TipoImporto = TipoVariazionePrezzo.Percentuale }];
+        Assert.Equal(10m, PrezziCameraService.SupplementoPerNotte(Tipologia, meta, 3, [15], 100m));
+    }
+
+    [Fact]
+    public void SupplementoEFasciaEntrambiInPercentuale()
+    {
+        var inPercentuale = new SettingTipologia { NumeroImplementoPersona = 2, Implemento = 20m, TipoImplemento = TipoVariazionePrezzo.Percentuale };
+        FasciaEtaSupplemento[] meta = [new() { EtaMin = 14, EtaMax = 17, ImportoPerNotte = 50m, TipoImporto = TipoVariazionePrezzo.Percentuale }];
+        // 20% di 95 € = 19 €, metà per il ragazzo = 9,50 €.
+        Assert.Equal(9.5m, PrezziCameraService.SupplementoPerNotte(inPercentuale, meta, 3, [15], 95m));
+    }
+
+    [Fact]
+    public void FasciaInPercentualeOltre100_Rifiutata()
+    {
+        Assert.Throws<ConflictException>(() => PrezziCameraService.ValidaFasceEta([new(14, 17, 120m, TipoVariazionePrezzo.Percentuale)]));
     }
 
     [Fact]

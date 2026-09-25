@@ -64,6 +64,22 @@ public class Prenotazione : TenantEntity
     /// </summary>
     public List<int> EtaBambini { get; set; } = [];
 
+    /// <summary>
+    /// Trattamento scelto (null = solo pernottamento). I prezzi sotto sono quelli del listino della
+    /// struttura al momento della scelta, già in euro: un cambio di listino non deve cambiare il
+    /// conto di una prenotazione già fatta. Si ricopiano solo se cambia il trattamento.
+    /// </summary>
+    public TipoTrattamento? Trattamento { get; set; }
+
+    /// <inheritdoc cref="Trattamento"/>
+    public decimal? TrattamentoPrezzoAdulto { get; set; }
+
+    /// <summary>Prezzo a notte di un bambino fino a <see cref="TrattamentoEtaMassimaBambini"/>; null = come un adulto.</summary>
+    public decimal? TrattamentoPrezzoBambino { get; set; }
+
+    /// <inheritdoc cref="TrattamentoPrezzoBambino"/>
+    public int? TrattamentoEtaMassimaBambini { get; set; }
+
     public bool StatePolice { get; set; }
 
     public bool PMS { get; set; }

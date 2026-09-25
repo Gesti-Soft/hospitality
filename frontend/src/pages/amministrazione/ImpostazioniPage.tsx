@@ -50,9 +50,10 @@ import { AzioniCardElenco, BottoneNuovo, CardElenco, MessaggioVuotoElenco, RigaC
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { OsservatorioAppartamentoDialog } from '../../components/OsservatorioAppartamentoDialog'
 import { PayTouristStrutturaDialog } from '../../components/PayTouristStrutturaDialog'
+import { TrattamentiStruttura } from '../../components/TrattamentiStruttura'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
-type TabImpostazioni = 'generali' | 'polizia' | 'osservatorio' | 'paytourist'
+type TabImpostazioni = 'generali' | 'servizi' | 'polizia' | 'osservatorio' | 'paytourist'
 
 /** Pallino colorato (verde = inserito, grigio = mancante) — usato come indicatore compatto accanto a un campo o un titolo, al posto di un Chip testuale. */
 function Pallino({ inserito }: { inserito: boolean }) {
@@ -91,6 +92,7 @@ export function ImpostazioniPage() {
 
   const tabVisibile: Record<TabImpostazioni, boolean> = {
     generali: true,
+    servizi: true,
     polizia: mostraPolizia,
     osservatorio: mostraOsservatorio,
     paytourist: mostraPayTourist,
@@ -101,12 +103,15 @@ export function ImpostazioniPage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Tabs value={tabEffettivo} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ minHeight: 0 }}>
         <Tab label="Generali" value="generali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+        <Tab label="Servizi" value="servizi" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
         {mostraPolizia && <Tab label="Alloggiati Web" value="polizia" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
         {mostraOsservatorio && <Tab label="Osservatorio Turistico" value="osservatorio" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
         {mostraPayTourist && <Tab label="PayTourist" value="paytourist" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
       </Tabs>
 
       {tabEffettivo === 'generali' && <TabGenerali strutturaId={strutturaId} />}
+      {/* La pagina è già riservata a chi gestisce la struttura: chi la vede può modificarli. */}
+      {tabEffettivo === 'servizi' && strutturaId && <TrattamentiStruttura strutturaId={strutturaId} puoScrivere />}
       {tabEffettivo === 'polizia' && <TabAlloggiatiWeb strutturaId={strutturaId} />}
       {tabEffettivo === 'osservatorio' && <TabOsservatorio strutturaId={strutturaId} />}
       {tabEffettivo === 'paytourist' && <TabPayTourist strutturaId={strutturaId} />}

@@ -9,6 +9,8 @@ export interface PrezzoCameraDto {
   dataInizio: string | null
   dataFine: string | null
   prezzoPerNotte: number | null
+  /** Solo nella risposta al salvataggio: il prezzo parte subito verso l'OTA, e qui c'è cosa non è andato. Null = tutto bene. */
+  avvisoOta?: string | null
 }
 
 export interface ImpostaPrezzoRequest {
@@ -43,7 +45,8 @@ export function useImpostaPrezzo(strutturaId: string | null) {
 export function useEliminaPrezzo(strutturaId: string | null) {
   const invalida = useInvalidaPrezzi(strutturaId)
   return useMutation({
-    mutationFn: (prezzoId: string) => apiDelete<void>(`/strutture/${strutturaId}/prezzi-camera/${prezzoId}`),
+    // Anche l'eliminazione rimanda subito i prezzi all'OTA: avvisoOta dice cosa non è andato.
+    mutationFn: (prezzoId: string) => apiDelete<{ avvisoOta: string | null }>(`/strutture/${strutturaId}/prezzi-camera/${prezzoId}`),
     onSuccess: invalida,
   })
 }

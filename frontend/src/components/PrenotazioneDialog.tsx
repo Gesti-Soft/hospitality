@@ -38,6 +38,7 @@ import {
   type PrenotazioneRequest,
 } from '../api/prenotazioni'
 import { ApiError } from '../api/client'
+import { NOME_TRATTAMENTO, TipoTrattamento, scaricaBuoniColazione, useTrattamenti } from '../api/trattamenti'
 import { aggiungiGiorni, formatoInputData, inizioGiornoLocale, isOggiOPrima, isoLocale, parsaInputData, perCampoDataOra } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
@@ -121,6 +122,14 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   // Età all'arrivo dei bambini compresi negli ospiti, una per campo: il supplemento per persona in
   // più può dipendere dall'età (fasce della tipologia).
   const [etaBambini, setEtaBambini] = useState<string[]>(modifica?.etaBambini?.map(String) ?? [])
+  // Null = solo pernottamento.
+  const [trattamento, setTrattamento] = useState<TipoTrattamento | null>(modifica?.trattamento ?? null)
+  const trattamenti = useTrattamenti(strutturaId)
+  // Quelli offerti, più quello già sulla prenotazione anche se nel frattempo non è più offerto:
+  // sparirebbe dalla scelta e un salvataggio qualsiasi lo toglierebbe.
+  const trattamentiSceglibili = (Object.values(TipoTrattamento) as TipoTrattamento[]).filter(
+    (t) => (trattamenti.data ?? []).some((l) => l.tipo === t && l.attivo) || t === modifica?.trattamento,
+  )
   const [importoTotale, setImportoTotale] = useState<string>(modifica?.importoTotale != null ? String(modifica.importoTotale) : '')
   // Finché l'operatore non tocca il campo a mano, "Importo totale" segue il preventivo — se cambi
   // camera/date/checkbox si aggiorna da solo, senza dover recliccare "Usa" ogni volta.
@@ -226,6 +235,8 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     animaliPrevisti && animaliAttiva,
     cauzionePrevista && cauzioneAttiva,
     true,
+    trattamento,
+    modifica?.id ?? null,
   )
 
   useEffect(() => {
@@ -243,11 +254,22 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     checkOut: string
     numeroOspiti: string
     etaBambini: string[]
+    trattamento: TipoTrattamento | null
     spesePuliziaAttiva: boolean
     animaliAttiva: boolean
     cauzioneAttiva: boolean
   }
-  const snapshotInputPreventivo = (): InputPreventivo => ({ cameraId, checkIn, checkOut, numeroOspiti, etaBambini, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva })
+  const snapshotInputPreventivo = (): InputPreventivo => ({
+    cameraId,
+    checkIn,
+    checkOut,
+    numeroOspiti,
+    etaBambini,
+    trattamento,
+    spesePuliziaAttiva,
+    animaliAttiva,
+    cauzioneAttiva,
+  })
 
   // Su una prenotazione esistente il primo valore ricevuto è solo la "fotografia" di partenza (non
   // va proposto subito riaprendo il dialog): si propone l'aggiornamento solo quando il preventivo
@@ -268,7 +290,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     const nuovoListino = preventivo.data.totale
     if (preventivoPrecedenteRef.current === null) {
       preventivoPrecedenteRef.current = nuovoListino
-      inputPrecedenteRef.current = { cameraId, checkIn, checkOut, numeroOspiti, etaBambini, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva }
+      inputPrecedenteRef.current = { cameraId, checkIn, checkOut, numeroOspiti, etaBambini, trattamento, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva }
       return
     }
     if (nuovoListino !== preventivoPrecedenteRef.current) {
@@ -277,7 +299,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       const proposto = Math.round((attuale + delta) * 100) / 100
       setPropostaImporto({ nuovoListino, proposto })
     }
-  }, [preventivo.data, modifica, cameraId, checkIn, checkOut, numeroOspiti, etaBambini, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva, importoTotale])
+  }, [preventivo.data, modifica, cameraId, checkIn, checkOut, numeroOspiti, etaBambini, trattamento, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva, importoTotale])
 
   function confermaAggiornaImporto() {
     if (propostaImporto === null) return
@@ -295,6 +317,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       setCheckOut(precedente.checkOut)
       setNumeroOspiti(precedente.numeroOspiti)
       setEtaBambini(precedente.etaBambini)
+      setTrattamento(precedente.trattamento)
       setSpesePuliziaAttiva(precedente.spesePuliziaAttiva)
       setAnimaliAttiva(precedente.animaliAttiva)
       setCauzioneAttiva(precedente.cauzioneAttiva)
@@ -336,6 +359,15 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
   }
 
+  async function scaricaBuoni() {
+    if (!modifica) return
+    try {
+      await scaricaBuoniColazione(strutturaId, modifica.id, modifica.numeroPrenotazione)
+    } catch (err) {
+      gestisciErrore(err)
+    }
+  }
+
   function salva() {
     if (!tipologiaFiltroId || (!modalitaPool && !cameraId) || !dateValide) {
       setErrore("Seleziona una tipologia e una camera (o l'assegnazione automatica alla prima libera) e un periodo valido (check-out dopo il check-in).")
@@ -368,6 +400,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       numeroOspiti: numeroOspitiNumero || null,
       // Un campo lasciato vuoto non è un bambino: si scarta invece di mandarlo come 0 anni.
       etaBambini: etaBambini.filter((e) => e.trim() !== '').map(Number),
+      trattamento,
       tassaSoggiornoAttiva,
       spesePuliziaAttiva,
       animaliAttiva: animaliPrevisti && animaliAttiva,
@@ -598,6 +631,25 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           </Box>
         </Box>
 
+        {/* Solo se la struttura offre almeno un trattamento: chi vende solo il pernottamento non vede niente. */}
+        {trattamentiSceglibili.length > 0 && (
+          <TextField
+            select
+            label="Trattamento"
+            value={trattamento ?? ''}
+            onChange={(e) => setTrattamento(e.target.value === '' ? null : (Number(e.target.value) as TipoTrattamento))}
+            disabled={inCorso || soloImporti}
+            helperText="A persona e a notte, in aggiunta al prezzo della camera."
+          >
+            <MenuItem value="">Solo pernottamento</MenuItem>
+            {trattamentiSceglibili.map((t) => (
+              <MenuItem key={t} value={t}>
+                {NOME_TRATTAMENTO[t]}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
+
         {(agenzia !== 'Diretta' || numeroAssegnato !== '') && (
           <TextField
             label="Numero prenotazione"
@@ -742,6 +794,12 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
         {modifica && (
           <Button onClick={() => setSchedaOspitiAperta(true)} disabled={inCorso}>
             Scheda ospiti
+          </Button>
+        )}
+        {/* Sul trattamento salvato: se è stato appena cambiato, i buoni seguono dopo il salvataggio. */}
+        {modifica?.trattamento != null && (
+          <Button onClick={scaricaBuoni} disabled={inCorso}>
+            Buoni colazione
           </Button>
         )}
         <Button onClick={onClose} disabled={inCorso}>

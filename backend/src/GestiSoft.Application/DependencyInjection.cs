@@ -17,6 +17,7 @@ using GestiSoft.Application.Riferimenti;
 using GestiSoft.Application.Statistiche;
 using GestiSoft.Application.Strutture;
 using GestiSoft.Application.SuperAdmin;
+using GestiSoft.Application.Trattamenti;
 using GestiSoft.Application.Utenti;
 using GestiSoft.Application.Wubook;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<UtenteManagementService>();
         services.AddScoped<CamereService>();
         services.AddScoped<PrezziCameraService>();
+        services.AddScoped<TrattamentiService>();
         services.AddScoped<CanaliVenditaService>();
         services.AddScoped<AssegnazioneCameraService>();
         services.AddScoped<PrenotazioniService>();

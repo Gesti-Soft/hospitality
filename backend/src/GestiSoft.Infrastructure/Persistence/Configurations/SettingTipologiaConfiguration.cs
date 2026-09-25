@@ -1,4 +1,5 @@
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -19,6 +20,10 @@ public class SettingTipologiaConfiguration : IEntityTypeConfiguration<SettingTip
         builder.Property(t => t.Cauzione).HasPrecision(18, 2);
         builder.Property(t => t.PrezzoDefault).HasPrecision(18, 2);
         builder.Property(t => t.Implemento).HasPrecision(18, 2);
+        builder.Property(t => t.RiduzioneOspiteInMeno).HasPrecision(18, 2);
+        // Default a livello DB: senza, le tipologie esistenti prenderebbero 0, che non è un valore dell'enum.
+        builder.Property(t => t.TipoRiduzioneOspiteInMeno).HasDefaultValue(TipoVariazionePrezzo.Euro);
+        builder.Property(t => t.TipoImplemento).HasDefaultValue(TipoVariazionePrezzo.Euro);
 
         builder.Property(t => t.CodiceCameraWubook).HasMaxLength(4);
         builder.Property(t => t.WubookSoloWoodoo).HasDefaultValue(false);

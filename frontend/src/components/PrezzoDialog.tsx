@@ -17,6 +17,7 @@ import type { TipologiaCameraDto } from '../api/tipologie'
 import { useImpostaPrezzo, type ImpostaPrezzoRequest } from '../api/prezzi'
 import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
+import { useToast } from '../toast/ToastContext'
 import { CampoData } from './CampoData'
 
 interface Props {
@@ -39,6 +40,7 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
   const [errore, setErrore] = useState<string | null>(null)
 
   const imposta = useImpostaPrezzo(strutturaId)
+  const toast = useToast()
 
   const camereTipologia = camere.filter((c) => c.tipologiaId === tipologiaId)
 
@@ -73,7 +75,10 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
     }
 
     imposta.mutate(request, {
-      onSuccess: onClose,
+      onSuccess: (salvato) => {
+        if (salvato.avvisoOta) toast.errore(salvato.avvisoOta)
+        onClose()
+      },
       onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
     })
   }

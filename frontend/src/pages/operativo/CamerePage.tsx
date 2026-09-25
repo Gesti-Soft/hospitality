@@ -432,6 +432,7 @@ function TabPrezzi({
   const [vista, setVista] = useState<'lista' | 'calendario'>('lista')
   const [daEliminare, setDaEliminare] = useState<PrezzoCameraDto | null>(null)
   const elimina = useEliminaPrezzo(strutturaId)
+  const toast = useToast()
 
   const camereTipologia = camere.filter((c) => c.tipologiaId === tipologiaId)
   const prezziTipologia = (prezzi ?? []).filter(
@@ -447,7 +448,13 @@ function TabPrezzi({
 
   function confermaEliminaPrezzo() {
     if (!daEliminare) return
-    elimina.mutate(daEliminare.id, { onSuccess: () => setDaEliminare(null), onError: onErrore })
+    elimina.mutate(daEliminare.id, {
+      onSuccess: (esito) => {
+        if (esito?.avvisoOta) toast.errore(esito.avvisoOta)
+        setDaEliminare(null)
+      },
+      onError: onErrore,
+    })
   }
 
   return (

@@ -1,4 +1,5 @@
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -12,6 +13,8 @@ public class FasciaEtaSupplementoConfiguration : IEntityTypeConfiguration<Fascia
         builder.ConfigureTenant();
 
         builder.Property(f => f.ImportoPerNotte).HasPrecision(18, 2);
+        // Le fasce già salvate erano tutte in euro.
+        builder.Property(f => f.TipoImporto).HasDefaultValue(TipoVariazionePrezzo.Euro);
 
         // Le fasce vivono e muoiono con la tipologia: senza, non significano niente.
         builder.HasOne<SettingTipologia>()

@@ -44,5 +44,5 @@ public class TipologieCameraController(CamereService service, ICurrentUser curre
         t.Id, t.StrutturaId, t.TipologiaCamera, t.SpesePulizia, t.Animali, t.Cauzione,
         t.PrezzoDefault, t.NumeroImplementoPersona, t.Implemento,
         t.IdCameraWubook, t.WubookAttiva, t.CodiceCameraWubook, t.WubookSoloWoodoo,
-        t.IntervalloPuliziaGiorni, t.IntervalloBiancheriaGiorni);
+        t.IntervalloPuliziaGiorni, t.IntervalloBiancheriaGiorni, t.RiduzioneOspiteInMeno, t.TipoRiduzioneOspiteInMeno, t.TipoImplemento);
 }

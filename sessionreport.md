@@ -1,9 +1,9 @@
 # Session report — Migrazione GestiSoft a Web
 
 Ultimo aggiornamento: 2026-09-25. Stato: web in produzione sulla VPS, Fase 2
-della sincronizzazione col desktop ferma sul ramo `fase-2-sync-locale`; su `master`
-assistenza (committata), e **non committati**: ricevuta di locazione breve, fattura proposta al
-check-in, permessi separati, pulizie durante il soggiorno e relative notifiche.
+della sincronizzazione col desktop ferma sul ramo `fase-2-sync-locale`; su `master` tutto
+committato, lavoro del 25/09 **non ancora deployato** (ricevuta di locazione breve, permessi,
+pulizie, ricevuta Polizia, prezzi per occupazione e trattamenti).
 
 > **Cap: 300 righe.** Questo file è caricato a ogni sessione, la sua dimensione è un
 > costo permanente di contesto. Voci nuove brevi: cosa è cambiato, perché, cosa resta
@@ -51,10 +51,15 @@ Ordine non di priorità. Dettagli e design già concordati: vedi archivio.
 - **L'arrivo in una giornata passata non arriva mai all'Osservatorio**: il recupero
   dell'arretrato manda solo partenze e chiusure. Fedele al legacy, ma è un dato che non
   raggiunge una PA. Cala Azzurra ha il cursore al 15/09.
-- **5 migration generate e mai applicate** (`AssistenzaTicket`, `RicevutaLocazioneBreve`,
-  `PermessiCamereCheckIn`, `PulizieDuranteSoggiorno`, `NotifichePulizie`): nessuna provata su un
-  database, e nessuna delle funzioni del 25/09 provata dal vivo (Docker spento). `PermessiCamereCheckIn`
-  contiene anche un `UPDATE` dei dati: da controllare prima del deploy.
+- **Migration del 25/09 applicate solo in locale**, non in produzione: `AssistenzaTicket`,
+  `RicevutaLocazioneBreve`, `PermessiCamereCheckIn`, `PulizieDuranteSoggiorno`, `NotifichePulizie`,
+  `FasceEtaSupplemento`, `RiduzioneOspiteInMeno`, `TipoSupplementoEuroPercentuale`, `Trattamenti`.
+  `PermessiCamereCheckIn` contiene anche un `UPDATE` dei dati: da controllare prima del deploy.
+- **Prezzi e trattamenti, proposte in attesa di risposta**: "Numero ospiti" → "Adulti" + bambini a
+  parte (oggi chi scrive gli adulti e poi aggiunge i bambini sbaglia prezzo, riduzione compresa);
+  trattamento "a persona / a camera" (l'utente si aspettava la colazione a camera); spunta "Offerto"
+  automatica o avviso (un trattamento salvato con prezzo ma non offerto non compare). Il duplica-struttura
+  non copia i trattamenti; il PDF dei buoni colazione non è mai stato guardato a occhio.
 - **Deploy**: variabili `EMAIL_*` da aggiungere al `.env` della VPS (senza, i ticket funzionano ma
   nessuna email parte; porta 587, la 465 non è supportata). Volume nuovo `gestisoft_allegati`.
 - **Ricevute modificate prima del 25/09** possono avere l'IVA nel totale: query per trovarle nei
@@ -163,6 +168,21 @@ alle PA sono irreversibili: mai inviare nulla senza richiesta esplicita.
   all'email mostrata al login, non serve aprire ticket.
 - **Ricevuta di locazione breve**: marca da bollo di carta (riquadro sul PDF), mai la dicitura del
   bollo virtuale; la cedolare secca non esenta le ricevute dal bollo.
+- **Prezzi per occupazione, modello Booking** (verificato sul web): prezzo della tipologia per gli ospiti
+  inclusi, riduzione per ognuno in meno, supplemento per ognuno in più con fasce d'età (max 3, 0-17; 18+ o
+  età fuori fascia = pieno). I posti inclusi vanno ai più grandi; i bambini contano come ospiti. In %:
+  supplemento e riduzione sul prezzo della notte, fascia sul supplemento pieno (max 100%). Scelto dall'utente
+  al posto di un listino per ogni occupazione. Impostazioni che non devono passare dal form generale della
+  tipologia (la pagina OTA lo rimanda con campi fissi e le azzererebbe) hanno un endpoint loro.
+- **Trattamenti**: listino per struttura, a persona e a notte, prezzo bambini facoltativo; salvarli richiede
+  "gestione utenti" come le altre impostazioni generali. La prenotazione copia i prezzi e li ricopia solo se
+  cambia il trattamento. Non vanno all'OTA.
+- **Colazione e locazione breve**: colazione e pasti escludono il regime (art. 4 DL 50/2017). Se l'host incassa
+  la colazione e la fa servire da un bar, l'importo è **compreso nel totale della ricevuta** senza riga propria,
+  con un avviso di sentire il commercialista. **Rifiutato** di tenerlo fuori dalla ricevuta: sarebbe un
+  incasso non documentato.
+- **Prezzi verso l'OTA**: si inviano subito a ogni salvataggio o eliminazione di un periodo; mai prezzi a zero
+  (WuBook vuole > 0,01): i giorni senza prezzo restano fuori con un avviso.
 
 ## Pattern consolidati (riusare, non reinventare)
 
@@ -202,14 +222,16 @@ Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
 - **Permessi** separati e **pulizie durante il soggiorno** (sezione "Camere occupate" in Pulizie,
   14 test sulla regola), **notifica** "Pulizie di oggi" (7-14) e "di domani" (dalle 17).
 - Stato camera manuale: portare in "Occupata" ha gli stessi paletti del check-in e scrive nel log.
-- **Ricevuta Polizia di Stato**: pulsante nella pagina Polizia di Stato, metodo SOAP `Ricevuta` (PDF degli
-  invii di un giorno, ultimi 30 giorni escluso oggi, dal manuale WS_ALLOGGIATI). Scaricata al momento, non
-  conservata, download a log con l'operatore. **Mai provata contro il portale.**
-- **Supplemento per fasce d'età** (modello Booking, verificato sul web): fino a 3 fasce 0-17 per tipologia
-  con importo fisso a notte (tabella `fasce_eta_supplemento`, endpoint a parte come le pulizie); 18+ o età
-  fuori fascia = supplemento pieno. Età all'arrivo dei bambini su `Prenotazione.EtaBambini` (integer[]),
-  almeno un adulto. I posti inclusi vanno ai più grandi. Vale solo per il preventivo: le OTA calcolano il
-  loro. Migration `FasceEtaSupplemento` generata, **non applicata**; 17 test sulla regola.
+- **Ricevuta Polizia di Stato** (commit `c3ded75`): pulsante nella pagina Polizia, metodo SOAP `Ricevuta`
+  (invii di un giorno, ultimi 30 giorni escluso oggi). Al momento, non conservata, download a log.
+- **Prezzo per occupazione** (commit `aaf9f79` e successivo), tutto facoltativo e solo per il preventivo
+  del gestionale (le OTA calcolano il loro): età all'arrivo dei bambini sulla prenotazione
+  (`EtaBambini`, almeno un adulto); fino a 3 fasce d'età 0-17 per tipologia; riduzione per ospite in meno;
+  supplemento, fasce e riduzione in € o %. 20+ test sulle regole.
+- **Prezzi all'OTA subito**: salvare o eliminare un periodo della tipologia lo manda a WuBook; i giorni senza
+  prezzo non partono più come 0 ma si segnalano. **Mai provato contro WuBook.**
+- **Trattamenti** (colazione, mezza pensione, pensione completa) in Impostazioni → Servizi, scelti nella
+  prenotazione, con buoni colazione PDF (uno per ospite e mattina, niente nomi, bar convenzionato).
 
 **Fatturazione a norma per il settore ricettivo** (17/09, seconda parte)
 - Normativa verificata sul web prima di scrivere: imposta di soggiorno riaddebitata **esclusa** dalla

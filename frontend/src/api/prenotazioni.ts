@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut } from './client'
 import { isoLocale } from '../lib/date'
+import type { TipoTrattamento } from './trattamenti'
 
 // Come StatoCamera in api/camere.ts: l'Api serializza gli enum come numeri, non come stringhe.
 export const StatoPrenotazione = { InCorso: 1, Incompleta: 2, Annullata: 3, Completata: 4 } as const
@@ -42,6 +43,8 @@ export interface PrenotazioneDto {
   rinunciaBiancheria: boolean
   /** Età all'arrivo dei bambini compresi in numeroOspiti: servono al supplemento per fascia d'età. */
   etaBambini: number[] | null
+  /** Null = solo pernottamento. */
+  trattamento: TipoTrattamento | null
 }
 
 export interface PrenotazioneRequest {
@@ -67,6 +70,8 @@ export interface PrenotazioneRequest {
   checkInEffettuatoAtUtc?: string | null
   /** Un'età (0-17) per bambino, compresi in numeroOspiti. Lista vuota = tutti adulti. */
   etaBambini: number[]
+  /** Null = solo pernottamento. Cambiandolo si ricopiano i prezzi dal listino di oggi. */
+  trattamento: TipoTrattamento | null
 }
 
 export interface PreventivoDto {
@@ -154,13 +159,17 @@ export function usePreventivo(
   animali: boolean,
   cauzione: boolean,
   abilitato: boolean,
+  trattamento: TipoTrattamento | null = null,
+  /** Su una prenotazione esistente: con lo stesso trattamento valgono i prezzi con cui è stato venduto. */
+  prenotazioneId: string | null = null,
 ) {
   const parametriEta = etaBambini.map((e) => `&etaBambini=${e}`).join('')
+  const parametriTrattamento = `${trattamento ? `&trattamento=${trattamento}` : ''}${prenotazioneId ? `&prenotazioneId=${prenotazioneId}` : ''}`
   return useQuery({
-    queryKey: ['preventivo', strutturaId, cameraId, checkIn, checkOut, numeroOspiti, etaBambini.join(','), spesePulizia, animali, cauzione],
+    queryKey: ['preventivo', strutturaId, cameraId, checkIn, checkOut, numeroOspiti, etaBambini.join(','), spesePulizia, animali, cauzione, trattamento, prenotazioneId],
     queryFn: () =>
       apiGet<PreventivoDto>(
-        `/strutture/${strutturaId}/prezzi-camera/preventivo?cameraId=${cameraId}&checkIn=${checkIn}&checkOut=${checkOut}&numeroOspiti=${numeroOspiti}${parametriEta}&spesePulizia=${spesePulizia}&animali=${animali}&cauzione=${cauzione}`,
+        `/strutture/${strutturaId}/prezzi-camera/preventivo?cameraId=${cameraId}&checkIn=${checkIn}&checkOut=${checkOut}&numeroOspiti=${numeroOspiti}${parametriEta}&spesePulizia=${spesePulizia}&animali=${animali}&cauzione=${cauzione}${parametriTrattamento}`,
       ),
     enabled: abilitato && !!strutturaId && !!cameraId && !!checkIn && !!checkOut && !!numeroOspiti,
     retry: false,

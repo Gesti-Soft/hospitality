@@ -595,7 +595,8 @@ export function useAggiornaWubookConfig(strutturaId: string | null) {
 export function useSincronizzaWubookPrezzi(strutturaId: string | null) {
   return useMutation({
     mutationFn: ({ dataInizio, dataFine }: { dataInizio: string; dataFine: string }) =>
-      apiPost<void>(`/strutture/${strutturaId}/wubook/prezzi/sincronizza`, { dataInizio, dataFine }),
+      // Avvisi: tratti di giorni senza prezzo, rimasti fuori dall'invio (l'OTA rifiuta i prezzi a zero).
+      apiPost<{ avvisi: string[] }>(`/strutture/${strutturaId}/wubook/prezzi/sincronizza`, { dataInizio, dataFine }),
   })
 }
 

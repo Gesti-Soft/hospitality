@@ -158,7 +158,13 @@ function SincronizzazioneForm({ strutturaId }: { strutturaId: string }) {
     const periodo = { dataInizio: isoLocale(parsaInputData(dataInizio)), dataFine: isoLocale(parsaInputData(dataFine)) }
 
     if (azione === 'prezzi') {
-      sincronizzaPrezzi.mutate(periodo, { onSuccess: () => setMessaggio('Prezzi sincronizzati.'), onError: gestisciErrore })
+      sincronizzaPrezzi.mutate(periodo, {
+        onSuccess: (r) => {
+          setMessaggio(r.avvisi.length > 0 ? 'Prezzi sincronizzati, tranne i giorni senza prezzo.' : 'Prezzi sincronizzati.')
+          r.avvisi.forEach((a) => toast.errore(a))
+        },
+        onError: gestisciErrore,
+      })
     } else if (azione === 'disponibilita') {
       sincronizzaDisponibilita.mutate(periodo, {
         onSuccess: () => setMessaggio('Disponibilità sincronizzata (chiusure e restrizioni per periodo incluse).'),

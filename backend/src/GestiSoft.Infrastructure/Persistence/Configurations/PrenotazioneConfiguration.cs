@@ -15,6 +15,8 @@ public class PrenotazioneConfiguration : IEntityTypeConfiguration<Prenotazione>
         builder.Property(p => p.ImportoPagato).HasPrecision(18, 2);
         builder.Property(p => p.ImportoTotale).HasPrecision(18, 2);
         builder.Property(p => p.TotalTax).HasPrecision(18, 2);
+        builder.Property(p => p.TrattamentoPrezzoAdulto).HasPrecision(18, 2);
+        builder.Property(p => p.TrattamentoPrezzoBambino).HasPrecision(18, 2);
 
         // Default true a livello DB (non solo nell'initializer C#, che EF non traduce da solo in
         // HasDefaultValue): senza questo, la migration avrebbe backfillato false sulle prenotazioni

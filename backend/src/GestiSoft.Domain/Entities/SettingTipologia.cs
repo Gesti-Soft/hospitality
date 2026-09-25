@@ -1,4 +1,5 @@
 using GestiSoft.Domain.Common;
+using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Domain.Entities;
 
@@ -21,6 +22,24 @@ public class SettingTipologia : TenantEntity
     public int NumeroImplementoPersona { get; set; }
 
     public decimal Implemento { get; set; }
+
+    /// <summary>
+    /// Come si legge <see cref="Implemento"/>: euro a notte, oppure percentuale del prezzo della camera
+    /// per quella notte. Si salva con la riduzione per ospite in meno, non dal form generale (che la
+    /// pagina OTA rimanda con un elenco fisso di campi e lo riporterebbe a euro).
+    /// </summary>
+    public TipoVariazionePrezzo TipoImplemento { get; set; } = TipoVariazionePrezzo.Euro;
+
+    /// <summary>
+    /// Riduzione a notte per ogni ospite in meno rispetto a <see cref="NumeroImplementoPersona"/>
+    /// (es. doppia a uso singola), come il prezzo derivato per occupazione di Booking. Facoltativa:
+    /// null o 0 = nessuna riduzione, il prezzo resta quello degli ospiti inclusi. I bambini contano
+    /// come ospiti. Si salva da un endpoint suo, come le pulizie.
+    /// </summary>
+    public decimal? RiduzioneOspiteInMeno { get; set; }
+
+    /// <inheritdoc cref="RiduzioneOspiteInMeno"/>
+    public TipoVariazionePrezzo TipoRiduzioneOspiteInMeno { get; set; } = TipoVariazionePrezzo.Euro;
 
     /// <summary>
     /// Id camera lato Wubook per l'intero pool di questa Tipologia — ottenuto da new_room o
