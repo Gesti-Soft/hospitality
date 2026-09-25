@@ -1,4 +1,6 @@
 ﻿using GestiSoft.Application.AlloggiatiWeb;
+using GestiSoft.Application.Assistenza;
+using GestiSoft.Application.Common;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Clienti;
@@ -19,6 +21,8 @@ using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 using GestiSoft.Infrastructure.AlloggiatiWeb;
+using GestiSoft.Infrastructure.Assistenza;
+using GestiSoft.Infrastructure.Email;
 using GestiSoft.Infrastructure.Auth;
 using GestiSoft.Infrastructure.Fatturazione;
 using GestiSoft.Infrastructure.Osservatorio;
@@ -33,6 +37,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace GestiSoft.Infrastructure;
@@ -118,7 +123,25 @@ public static class DependencyInjection
         services.AddScoped<IStatisticheSuperAdminRepository, StatisticheSuperAdminRepository>();
         services.AddScoped<IImpostazioniGlobaliRepository, ImpostazioniGlobaliRepository>();
         services.AddScoped<INotificaRepository, NotificaRepository>();
+        services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddSingleton<IPasswordHasher<Utente>, PasswordHasher<Utente>>();
+
+        // Assistenza: foto dei ticket su disco (in produzione il volume gestisoft_allegati, vedi
+        // docker-compose.yml) ed email di avviso. Il default della cartella sta fuori dal repository,
+        // così in sviluppo le foto caricate per prova non finiscono in git.
+        var cartellaAllegati = configuration["Assistenza:CartellaAllegati"];
+        if (string.IsNullOrWhiteSpace(cartellaAllegati))
+        {
+            cartellaAllegati = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GestiSoft", "allegati-assistenza");
+        }
+
+        services.AddSingleton<IAllegatiStorage>(sp =>
+            new FileSystemAllegatiStorage(cartellaAllegati, sp.GetRequiredService<ILogger<FileSystemAllegatiStorage>>()));
+
+        services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
+        services.PostConfigure<EmailOptions>(o => o.IndirizzoApplicazione ??= configuration["Frontend:Origin"]);
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
 
         // Backend esterno "gestisoft" (licenze/abbonamenti, già in produzione): il legacy leggeva
         // l'URL da una env var letta a runtime chiamata letteralmente "gestisoft"; qui passa da

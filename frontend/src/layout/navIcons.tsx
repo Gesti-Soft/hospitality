@@ -259,3 +259,17 @@ export function IconChevronDown(props: IconProps) {
     </svg>
   )
 }
+
+export function IconAssistenza(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path
+        d="M3 4.2C3 3.5 3.5 3 4.2 3H13.8C14.5 3 15 3.5 15 4.2V11.3C15 12 14.5 12.5 13.8 12.5H7.5L4.6 15V12.5H4.2C3.5 12.5 3 12 3 11.3V4.2Z"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+      <path d="M6.5 7.8H11.5M6.5 5.8H9.5" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+    </svg>
+  )
+}

@@ -88,6 +88,12 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options, Cr
 
     public DbSet<Notifica> Notifiche => Set<Notifica>();
 
+    public DbSet<Ticket> Ticket => Set<Ticket>();
+
+    public DbSet<TicketMessaggio> TicketMessaggi => Set<TicketMessaggio>();
+
+    public DbSet<TicketAllegato> TicketAllegati => Set<TicketAllegato>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GestiSoftDbContext).Assembly);

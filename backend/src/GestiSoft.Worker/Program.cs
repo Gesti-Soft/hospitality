@@ -84,6 +84,15 @@ try
             .ForJob(puliziaLogJobKey)
             .WithIdentity("pulizia-log-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(24).RepeatForever()));
+
+        // Ticket di assistenza chiusi da oltre 12 mesi: messaggi e foto cancellati, restano numero e
+        // oggetto (conservazione GDPR, scelta dell'utente). Non urgente, un giro al giorno basta.
+        var anonimizzazioneTicketJobKey = new JobKey("anonimizzazione-ticket");
+        quartz.AddJob<AnonimizzazioneTicketJob>(options => options.WithIdentity(anonimizzazioneTicketJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(anonimizzazioneTicketJobKey)
+            .WithIdentity("anonimizzazione-ticket-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(24).RepeatForever()));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 

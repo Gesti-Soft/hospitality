@@ -28,6 +28,7 @@ import { ApiError } from '../api/client'
 import { fontDisplay, tokens } from '../theme'
 import { GestiSoftMark } from '../components/GestiSoftMark'
 import { PannelloNotifiche } from '../components/PannelloNotifiche'
+import { PannelloAssistenza } from '../components/assistenza/PannelloAssistenza'
 import { navItemsFlat, type NavSection } from './navItems'
 import { IconEsci, IconSuperAdmin } from './navIcons'
 import { useSezioniVisibili } from './useSezioniVisibili'
@@ -202,6 +203,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {!mobile && tabSezioni}
 
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <PannelloAssistenza />
           <PannelloNotifiche strutturaId={strutturaId} />
           <Box
             sx={{

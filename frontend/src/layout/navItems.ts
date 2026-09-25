@@ -1,5 +1,6 @@
 import type { ComponentType, SVGProps } from 'react'
 import {
+  IconAssistenza,
   IconBackup,
   IconCalendario,
   IconCamere,
@@ -48,6 +49,11 @@ export interface NavItem {
    * mostrarle nel menu.
    */
   richiedePermesso?: keyof PermessiStruttura | (keyof PermessiStruttura)[]
+  /**
+   * Voce riservata a chi lavora per il Cliente: il Super Admin entrato in una struttura non la vede
+   * (es. Assistenza, da cui aprirebbe un ticket a se stesso: i suoi sono nel pannello).
+   */
+  soloCliente?: boolean
 }
 
 export interface NavSection {
@@ -84,6 +90,7 @@ export const navSections: NavSection[] = [
       { label: 'Clienti', path: '/super-admin/clienti', icon: IconUtenti },
       { label: 'Backup', path: '/super-admin/backup', icon: IconBackup },
       { label: 'Log', path: '/super-admin/log', icon: IconLog },
+      { label: 'Assistenza', path: '/super-admin/assistenza', icon: IconAssistenza },
       { label: 'Impostazioni', path: '/super-admin/impostazioni', icon: IconImpostazioni },
     ],
   },
@@ -137,6 +144,7 @@ export const navSections: NavSection[] = [
       { label: 'Utenti', path: '/utenti', icon: IconUtenti },
       { label: 'Impostazioni', path: '/impostazioni', icon: IconImpostazioni },
       { label: 'Log', path: '/log', icon: IconLog },
+      { label: 'Assistenza', path: '/assistenza', icon: IconAssistenza, soloCliente: true },
     ],
   },
 ]

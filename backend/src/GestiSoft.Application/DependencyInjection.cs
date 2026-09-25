@@ -1,4 +1,5 @@
 using GestiSoft.Application.AlloggiatiWeb;
+using GestiSoft.Application.Assistenza;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Clienti;
@@ -72,6 +73,7 @@ public static class DependencyInjection
         services.AddScoped<StatisticheSuperAdminService>();
         services.AddScoped<ImpostazioniGlobaliService>();
         services.AddScoped<NotificaService>();
+        services.AddScoped<AssistenzaService>();
 
         return services;
     }

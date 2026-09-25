@@ -169,6 +169,47 @@ export async function apiInviaFile<T>(method: string, path: string, file: File):
   return (await response.json()) as T
 }
 
+/** Come `apiInviaFile`, ma con un FormData già composto: campi di testo e più file nella stessa richiesta. */
+export async function apiInviaForm<T>(method: string, path: string, corpo: FormData): Promise<T> {
+  const sessione = leggiSessione()
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      ...(sessione ? { Authorization: `Bearer ${sessione.token}` } : {}),
+    },
+    body: corpo,
+  })
+
+  if (response.status === 401 && sessione) {
+    cancellaSessione()
+    window.dispatchEvent(new Event(SESSIONE_SCADUTA_EVENT))
+    throw new ApiError(401, "Sessione scaduta, effettua di nuovo l'accesso.")
+  }
+
+  rinnovaSessioneSeNecessario(sessione)
+
+  if (!response.ok) {
+    // 413 arriva dal proxy prima ancora dell'Api, senza un ProblemDetails da leggere.
+    if (response.status === 413) {
+      throw new ApiError(413, 'Le foto allegate sono troppo pesanti: riducile o inviane meno per volta.')
+    }
+    const corpoErrore = await response.json().catch(() => null)
+    const messaggio =
+      (corpoErrore && typeof corpoErrore === 'object' && 'detail' in corpoErrore && typeof corpoErrore.detail === 'string' && corpoErrore.detail) ||
+      (corpoErrore && typeof corpoErrore === 'object' && 'title' in corpoErrore && typeof corpoErrore.title === 'string' && corpoErrore.title) ||
+      `Invio a ${path} non riuscito (${response.status}).`
+    throw new ApiError(response.status, messaggio, corpoErrore)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return (await response.json()) as T
+}
+
 /** Scarica un file binario (PDF/XML) autenticato e avvia il download nel browser. */
 export async function apiScaricaFile(path: string, nomeFile: string): Promise<void> {
   const sessione = leggiSessione()

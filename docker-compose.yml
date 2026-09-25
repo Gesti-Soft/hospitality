@@ -79,6 +79,21 @@ services:
       # Valorizzata solo durante il cambio di chiave: serve a leggere ciò che è ancora cifrato con
       # la chiave vecchia mentre l'avvio riscrive tutto con quella nuova. Vedi docs/deploy.md.
       Credenziali__ChiaveCifraturaPrecedente: ${CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE:-}
+      # Email di servizio (assistenza): senza host non parte nessuna email, il resto funziona lo
+      # stesso. Porta 587 con STARTTLS: la 465 (TLS implicito) non è supportata.
+      Email__Host: ${EMAIL_SMTP_HOST:-}
+      Email__Port: ${EMAIL_SMTP_PORT:-587}
+      Email__Utente: ${EMAIL_SMTP_UTENTE:-}
+      Email__Password: ${EMAIL_SMTP_PASSWORD:-}
+      Email__UsaTls: ${EMAIL_SMTP_TLS:-true}
+      Email__Mittente: ${EMAIL_MITTENTE:-}
+      Email__NomeMittente: ${EMAIL_NOME_MITTENTE:-GestiSoft}
+      Email__DestinatarioAssistenza: ${EMAIL_DESTINATARIO_ASSISTENZA:-}
+      # Foto allegate ai ticket di assistenza: su un volume a parte e non nel database, così alla
+      # chiusura del ticket si cancellano davvero e non finiscono nei backup.
+      Assistenza__CartellaAllegati: /var/lib/gestisoft/allegati
+    volumes:
+      - gestisoft_allegati:/var/lib/gestisoft/allegati
     ports:
       - "127.0.0.1:${API_HOST_PORT:-5080}:8080"
 
@@ -119,6 +134,11 @@ services:
       # Valorizzata solo durante il cambio di chiave: serve a leggere ciò che è ancora cifrato con
       # la chiave vecchia mentre l'avvio riscrive tutto con quella nuova. Vedi docs/deploy.md.
       Credenziali__ChiaveCifraturaPrecedente: ${CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE:-}
+      # Stesso volume delle foto dei ticket montato sull'Api: il job che anonimizza i ticket chiusi
+      # da oltre 12 mesi cancella anche le foto che alla chiusura non si erano potute cancellare.
+      Assistenza__CartellaAllegati: /var/lib/gestisoft/allegati
+    volumes:
+      - gestisoft_allegati:/var/lib/gestisoft/allegati
 
   worker-schedine:
     build:
@@ -169,3 +189,4 @@ services:
 volumes:
   gestisoft_postgres_data:
   gestisoft_pgbackrest_repo:
+  gestisoft_allegati:

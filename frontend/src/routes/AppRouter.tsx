@@ -26,6 +26,8 @@ import { SuperAdminClientiPage } from '../pages/super-admin/SuperAdminClientiPag
 import { SuperAdminImpostazioniPage } from '../pages/super-admin/SuperAdminImpostazioniPage'
 import { SuperAdminBackupPage } from '../pages/super-admin/SuperAdminBackupPage'
 import { SuperAdminLogPage } from '../pages/super-admin/SuperAdminLogPage'
+import { SuperAdminAssistenzaPage } from '../pages/super-admin/SuperAdminAssistenzaPage'
+import { AssistenzaPage } from '../pages/amministrazione/AssistenzaPage'
 import { ProtectedRoute } from './ProtectedRoute'
 import { RouteGuard } from './RouteGuard'
 import { MioAccountPage } from '../pages/MioAccountPage'
@@ -104,10 +106,12 @@ const router = createBrowserRouter([
       { path: '/utenti', element: <RouteGuard path="/utenti"><UtentiPage /></RouteGuard> },
       { path: '/impostazioni', element: <RouteGuard path="/impostazioni"><ImpostazioniPage /></RouteGuard> },
       { path: '/log', element: <RouteGuard path="/log"><LogPage /></RouteGuard> },
+      { path: '/assistenza', element: <RouteGuard path="/assistenza"><AssistenzaPage /></RouteGuard> },
       { path: '/super-admin', element: <RouteGuard path="/super-admin"><SuperAdminDashboardPage /></RouteGuard> },
       { path: '/super-admin/clienti', element: <RouteGuard path="/super-admin/clienti"><SuperAdminClientiPage /></RouteGuard> },
       { path: '/super-admin/backup', element: <RouteGuard path="/super-admin/backup"><SuperAdminBackupPage /></RouteGuard> },
       { path: '/super-admin/log', element: <RouteGuard path="/super-admin/log"><SuperAdminLogPage /></RouteGuard> },
+      { path: '/super-admin/assistenza', element: <RouteGuard path="/super-admin/assistenza"><SuperAdminAssistenzaPage /></RouteGuard> },
       { path: '/super-admin/impostazioni', element: <RouteGuard path="/super-admin/impostazioni"><SuperAdminImpostazioniPage /></RouteGuard> },
     ],
   },

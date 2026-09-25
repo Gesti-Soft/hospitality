@@ -48,7 +48,10 @@ export function useSezioniVisibili(): SezioniVisibiliRisultato {
       // servizio esterno concesso), o le cui voci richiedono tutte un permesso che l'utente non ha
       // (es. "Operativo" per un addetto pulizie), non deve comparire nemmeno come tab.
       voci: section.items.filter(
-        (item) => (!item.richiedeServizio || strutturaCorrente?.[item.richiedeServizio] !== false) && haPermesso(item.richiedePermesso),
+        (item) =>
+          (!item.richiedeServizio || strutturaCorrente?.[item.richiedeServizio] !== false) &&
+          haPermesso(item.richiedePermesso) &&
+          !(item.soloCliente && isSuperAdmin),
       ),
     }))
     .filter(({ voci }) => voci.length > 0)

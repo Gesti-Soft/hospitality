@@ -31,6 +31,10 @@ RUN apt-get update -qq \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --uid 5678 --create-home appuser
+# Cartella delle foto dei ticket di assistenza (volume gestisoft_allegati in docker-compose.yml): va
+# creata qui e data ad appuser, perché un volume nuovo prende proprietario e permessi dalla cartella
+# che trova nell'immagine: senza, sarebbe di root e l'Api non potrebbe scriverci.
+RUN mkdir -p /var/lib/gestisoft/allegati && chown appuser:appuser /var/lib/gestisoft/allegati
 COPY --from=build /app ./
 USER appuser
 ENV ASPNETCORE_URLS=http://+:8080
