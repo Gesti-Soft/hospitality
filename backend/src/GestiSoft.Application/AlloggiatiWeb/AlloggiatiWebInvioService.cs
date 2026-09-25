@@ -233,6 +233,69 @@ public class AlloggiatiWebInvioService(
         return await SalvaEsitoAsync(integrazione, 1, 1, null, esitoTentativo: null, cancellationToken);
     }
 
+    /// <summary>
+    /// Ricevuta PDF rilasciata dal portale per gli invii di una giornata, su richiesta
+    /// dell'operatore: prova che le schedine di quel giorno sono state acquisite. Non si conserva,
+    /// come PDF e XML delle fatture. Il portale la rende solo per gli ultimi 30 giorni, escluso
+    /// oggi (manuale WS_ALLOGGIATI, metodo Ricevuta): fuori da quella finestra si rifiuta subito,
+    /// con una spiegazione invece dell'errore del portale. Non trasmette nulla, ma lo scaricamento
+    /// va a log con l'operatore: è un documento della Polizia di Stato sugli ospiti della struttura.
+    /// </summary>
+    public async Task<byte[]> ScaricaRicevutaAsync(ICurrentUser currentUser, Guid strutturaId, DateTime data, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.StatePoliceRead, cancellationToken);
+        await concessioneGuard.EnsureAlloggiatiWebAsync(strutturaId, cancellationToken);
+
+        var giorno = data.Date;
+        var oggi = Pulizie.PulizieSoggiornoService.Oggi();
+        if (giorno >= oggi)
+        {
+            throw new ConflictException("La ricevuta di una giornata è disponibile dal giorno successivo.");
+        }
+
+        if (giorno < oggi.AddDays(-30))
+        {
+            throw new ConflictException("Il portale della Polizia di Stato rende le ricevute solo per gli ultimi 30 giorni.");
+        }
+
+        var integrazione = await integrazioni.GetByStrutturaIdAsync(strutturaId, cancellationToken);
+        if (integrazione is null
+            || string.IsNullOrWhiteSpace(integrazione.Utente)
+            || string.IsNullOrWhiteSpace(integrazione.Password)
+            || string.IsNullOrWhiteSpace(integrazione.WsKey))
+        {
+            throw new ConflictException("Credenziali Alloggiati Web non configurate.");
+        }
+
+        var tokenRisultato = await client.GenerateTokenAsync(integrazione.Utente, integrazione.Password, integrazione.WsKey, cancellationToken);
+        if (!tokenRisultato.Ok || tokenRisultato.Token is null)
+        {
+            throw new ConflictException(tokenRisultato.Errore ?? "Accesso al portale della Polizia di Stato non riuscito.");
+        }
+
+        var ricevuta = await client.RicevutaAsync(integrazione.Utente, tokenRisultato.Token, giorno, cancellationToken);
+        if (!ricevuta.Ok || ricevuta.Pdf is null)
+        {
+            // Il portale risponde con un codice, non con una frase: ERRORE_RECUPERO_RICEVUTA è la
+            // risposta a un giorno in cui non è partita nessuna schedina, e va detto così.
+            throw new ConflictException(ricevuta.Errore == "ERRORE_RECUPERO_RICEVUTA"
+                ? $"Nessuna ricevuta per il {giorno:dd/MM/yyyy}: in quel giorno non risultano schedine inviate alla Polizia di Stato."
+                : ricevuta.Errore ?? "Ricevuta non disponibile per la data indicata.");
+        }
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Info,
+            $"Ricevuta Alloggiati Web (Polizia di Stato) del {giorno:dd/MM/yyyy} scaricata.",
+            origine: "AlloggiatiWeb",
+            clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+            strutturaId: strutturaId,
+            categoria: "AlloggiatiWeb",
+            operatore: currentUser.Email,
+            cancellationToken: cancellationToken);
+
+        return ricevuta.Pdf;
+    }
+
     /// <summary>Vale la pena dire cosa manca solo su una schedina che si può ancora trasmettere: non inviata e non scaduta.</summary>
     private static bool SchedinaDaCorreggere(Ospite ospite, DateTime adessoUtc) =>
         ospite.Prenotazione is { } prenotazione

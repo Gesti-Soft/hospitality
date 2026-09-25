@@ -202,6 +202,9 @@ Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
 - **Permessi** separati e **pulizie durante il soggiorno** (sezione "Camere occupate" in Pulizie,
   14 test sulla regola), **notifica** "Pulizie di oggi" (7-14) e "di domani" (dalle 17).
 - Stato camera manuale: portare in "Occupata" ha gli stessi paletti del check-in e scrive nel log.
+- **Ricevuta Polizia di Stato**: pulsante nella pagina Polizia di Stato, metodo SOAP `Ricevuta` (PDF degli
+  invii di un giorno, ultimi 30 giorni escluso oggi, dal manuale WS_ALLOGGIATI). Scaricata al momento, non
+  conservata, download a log con l'operatore. **Mai provata contro il portale.**
 
 **Fatturazione a norma per il settore ricettivo** (17/09, seconda parte)
 - Normativa verificata sul web prima di scrivere: imposta di soggiorno riaddebitata **esclusa** dalla

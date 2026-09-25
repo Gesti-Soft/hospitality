@@ -4,6 +4,8 @@ public record AlloggiatiWebTokenRisultato(bool Ok, string? Token, string? Errore
 
 public record AlloggiatiWebInvioRisultato(bool Ok, string? ErroreCodice, string? ErroreDescrizione, string? ErroreDettaglio);
 
+public record AlloggiatiWebRicevutaRisultato(bool Ok, byte[]? Pdf, string? Errore);
+
 /// <summary>
 /// Client SOAP verso il servizio "Alloggiati Web" della Polizia di Stato — porta
 /// StatePoliceApiRepository.GetToken/SendSchedina del legacy (envelope SOAP 1.1 scritto a mano
@@ -17,4 +19,7 @@ public interface IAlloggiatiWebClient
     Task<AlloggiatiWebTokenRisultato> GenerateTokenAsync(string utente, string password, string wsKey, CancellationToken cancellationToken);
 
     Task<AlloggiatiWebInvioRisultato> SendAsync(string utente, string token, IReadOnlyList<string> schedine, CancellationToken cancellationToken);
+
+    /// <summary>Ricevuta PDF degli invii fatti in una data: il portale la tiene solo per gli ultimi 30 giorni, escluso quello corrente.</summary>
+    Task<AlloggiatiWebRicevutaRisultato> RicevutaAsync(string utente, string token, DateTime data, CancellationToken cancellationToken);
 }

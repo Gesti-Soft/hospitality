@@ -54,6 +54,14 @@ public class AlloggiatiWebSincronizzazioneController(AlloggiatiWebInvioService i
         return File(Encoding.UTF8.GetBytes(testo), "text/plain", $"schedine-alloggiati-web-{DateTime.UtcNow:yyyyMMdd}.txt");
     }
 
+    /// <summary>Ricevuta PDF del portale per gli invii del giorno indicato (ultimi 30 giorni, escluso oggi), scaricata al momento e non conservata.</summary>
+    [HttpGet("ricevuta")]
+    public async Task<IActionResult> Ricevuta(Guid strutturaId, [FromQuery] DateOnly data, CancellationToken cancellationToken)
+    {
+        var pdf = await invioService.ScaricaRicevutaAsync(currentUser, strutturaId, data.ToDateTime(TimeOnly.MinValue), cancellationToken);
+        return File(pdf, "application/pdf", $"ricevuta-alloggiati-web-{data:yyyyMMdd}.pdf");
+    }
+
     /// <summary>Esporta come file di testo UNA sola schedina, oltre al bulk.</summary>
     [HttpGet("schedine/{ospiteId:guid}/export")]
     public async Task<IActionResult> EsportaSingola(Guid strutturaId, Guid ospiteId, [FromQuery] int? anno, CancellationToken cancellationToken)

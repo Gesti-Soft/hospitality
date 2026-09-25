@@ -17,6 +17,7 @@ import { ApiError } from '../../api/client'
 import {
   esportaSchedinaAlloggiatiWebSingola,
   esportaSchedineAlloggiatiWeb,
+  scaricaRicevutaAlloggiatiWeb,
   useAlloggiatiWebConfig,
   useAnniAlloggiatiWeb,
   useInviaAlloggiatiWebOra,
@@ -30,6 +31,8 @@ import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 import { anniConAnnoCorrente, ANNO_CORRENTE } from '../../lib/anni'
 import { useMobile } from '../../lib/useMobile'
 import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
+import { CampoData } from '../../components/CampoData'
+import { aggiungiGiorni, formatoInputData } from '../../lib/date'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreDataOra = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -101,6 +104,24 @@ export function PoliziaPage() {
     }
   }
 
+  // Il portale rende le ricevute degli ultimi 30 giorni, escluso oggi: la giornata va chiusa prima.
+  const ieri = formatoInputData(aggiungiGiorni(new Date(), -1))
+  const primoGiornoRicevuta = formatoInputData(aggiungiGiorni(new Date(), -30))
+  const [dataRicevuta, setDataRicevuta] = useState(ieri)
+  const [scaricandoRicevuta, setScaricandoRicevuta] = useState(false)
+
+  async function scaricaRicevuta() {
+    if (!strutturaId || !dataRicevuta) return
+    setScaricandoRicevuta(true)
+    try {
+      await scaricaRicevutaAlloggiatiWeb(strutturaId, dataRicevuta)
+    } catch (err) {
+      toast.errore(err instanceof ApiError ? err.message : 'Download della ricevuta non riuscito.')
+    } finally {
+      setScaricandoRicevuta(false)
+    }
+  }
+
   async function esportaSingola(ospiteId: string) {
     if (!strutturaId) return
     try {
@@ -154,6 +175,33 @@ export function PoliziaPage() {
           <Button variant="outlined" onClick={esporta} disabled={(schedine.data ?? []).length === 0}>
             Esporta schedine del giorno
           </Button>
+        </Box>
+
+        <Box sx={{ borderTop: `1px solid ${tokens.surfaceBorder}`, pt: 2, mt: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box>
+            <Typography sx={{ fontWeight: 700, fontSize: 13.5 }}>Ricevuta della Polizia di Stato</Typography>
+            <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
+              Il PDF che attesta la ricezione delle schedine inviate in un giorno. Il portale lo rende disponibile dal giorno dopo e per 30
+              giorni: conviene scaricarlo e conservarlo.
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+            <CampoData
+              label="Giorno dell'invio"
+              size="small"
+              value={dataRicevuta}
+              onChange={setDataRicevuta}
+              min={primoGiornoRicevuta}
+              max={ieri}
+            />
+            <Button
+              variant="outlined"
+              onClick={scaricaRicevuta}
+              disabled={!dataRicevuta || scaricandoRicevuta || !config.data?.credenzialiConfigurate}
+            >
+              Scarica ricevuta
+            </Button>
+          </Box>
         </Box>
       </Box>
 

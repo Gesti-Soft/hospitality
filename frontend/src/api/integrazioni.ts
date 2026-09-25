@@ -282,6 +282,11 @@ export function esportaSchedinaAlloggiatiWebSingola(strutturaId: string, ospiteI
   return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/schedine/${ospiteId}/export?anno=${anno}`, `schedina-alloggiati-web.txt`)
 }
 
+/** `data` in formato "YYYY-MM-DD": ricevuta del portale per gli invii fatti in quel giorno. */
+export function scaricaRicevutaAlloggiatiWeb(strutturaId: string, data: string) {
+  return apiScaricaFile(`/strutture/${strutturaId}/alloggiati-web/ricevuta?data=${data}`, `ricevuta-alloggiati-web-${data}.pdf`)
+}
+
 /** Su richiesta esplicita, filtrato per anno selezionato (non più una finestra mobile di 30 giorni). */
 export function useSchedineAlloggiatiWeb(strutturaId: string | null, anno: number) {
   return useQuery({

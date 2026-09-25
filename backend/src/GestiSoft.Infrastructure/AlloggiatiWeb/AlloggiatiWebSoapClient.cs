@@ -5,7 +5,7 @@ using GestiSoft.Application.AlloggiatiWeb;
 namespace GestiSoft.Infrastructure.AlloggiatiWeb;
 
 /// <summary>
-/// Client SOAP 1.1 verso il servizio "Alloggiati Web" (GenerateToken/Send) — porta
+/// Client SOAP 1.1 verso il servizio "Alloggiati Web" (GenerateToken/Send/Ricevuta) — porta
 /// StatePoliceApiRepository del legacy, envelope scritto a mano con System.Xml.Linq invece delle
 /// stringhe interpolate + System.Security.SecurityElement.Escape del legacy (stesso risultato, più
 /// robusto per caratteri speciali nei valori). BaseAddress configurata via DI (AlloggiatiWeb:Endpoint).
@@ -83,6 +83,46 @@ public class AlloggiatiWebSoapClient(HttpClient http) : IAlloggiatiWebClient
         }
 
         return new AlloggiatiWebInvioRisultato(true, null, null, null);
+    }
+
+    public async Task<AlloggiatiWebRicevutaRisultato> RicevutaAsync(string utente, string token, DateTime data, CancellationToken cancellationToken)
+    {
+        // xs:dateTime a mezzanotte, senza fuso: è la data civile degli invii (esempio del manuale:
+        // 2021-12-10T00:00:00). Con una conversione a UTC diventerebbe il giorno prima.
+        var body = new XElement(Svc + "Ricevuta",
+            new XElement(Svc + "Utente", utente),
+            new XElement(Svc + "token", token),
+            new XElement(Svc + "Data", data.Date.ToString("yyyy-MM-dd'T'00:00:00", System.Globalization.CultureInfo.InvariantCulture)));
+
+        var risposta = await InviaAsync(body, "AlloggiatiService/Ricevuta", cancellationToken);
+        if (risposta is null)
+        {
+            return new AlloggiatiWebRicevutaRisultato(false, null, "Servizio Alloggiati Web non raggiungibile.");
+        }
+
+        var ricevutaResult = risposta.Descendants().FirstOrDefault(e => e.Name.LocalName == "RicevutaResult");
+        if (FiglioDiretto(ricevutaResult, "esito")?.Value == "false")
+        {
+            return new AlloggiatiWebRicevutaRisultato(
+                false,
+                null,
+                FiglioDiretto(ricevutaResult, "ErroreDes")?.Value ?? "Ricevuta non disponibile per la data indicata.");
+        }
+
+        var base64 = ValoreDiscendente(risposta, "PDF");
+        if (string.IsNullOrWhiteSpace(base64))
+        {
+            return new AlloggiatiWebRicevutaRisultato(false, null, "Nessuna ricevuta per la data indicata.");
+        }
+
+        try
+        {
+            return new AlloggiatiWebRicevutaRisultato(true, Convert.FromBase64String(base64), null);
+        }
+        catch (FormatException)
+        {
+            return new AlloggiatiWebRicevutaRisultato(false, null, "La ricevuta è arrivata in un formato non leggibile.");
+        }
     }
 
     private async Task<XDocument?> InviaAsync(XElement bodyContent, string soapAction, CancellationToken cancellationToken)
