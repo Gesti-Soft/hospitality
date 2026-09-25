@@ -18,4 +18,9 @@ public interface ITipologiaCameraRepository
     Task UpdateAsync(SettingTipologia entity, CancellationToken cancellationToken);
 
     Task DeleteAsync(SettingTipologia entity, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<FasciaEtaSupplemento>> ListFasceEtaAsync(Guid strutturaId, Guid tipologiaId, CancellationToken cancellationToken);
+
+    /// <summary>Sostituisce in blocco le fasce della tipologia: sono al massimo tre e si salvano sempre tutte insieme.</summary>
+    Task SostituisciFasceEtaAsync(Guid strutturaId, Guid tipologiaId, IReadOnlyList<FasciaEtaSupplemento> fasce, CancellationToken cancellationToken);
 }

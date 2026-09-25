@@ -14,7 +14,10 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
 import FormControlLabel from '@mui/material/FormControlLabel'
+import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment'
 import MenuItem from '@mui/material/MenuItem'
+import CloseIcon from '@mui/icons-material/CloseOutlined'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
@@ -63,6 +66,16 @@ export const COLORE_STATO: Record<StatoPrenotazione, string> = {
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
+/**
+ * Età di un bambino digitata a mano: solo cifre, e oltre 17 diventa 17, come fanno le frecce. Il max
+ * del campo ferma solo le frecce, non la tastiera. Null = tasto da ignorare (segno meno, decimali).
+ */
+function etaBambinoDigitata(valore: string): string | null {
+  if (valore === '') return ''
+  if (!/^\d+$/.test(valore)) return null
+  return String(Math.min(Number(valore), 17))
+}
+
 function messaggioConflitto(conflitto: DisponibilitaCameraDto): string {
   const dal = conflitto.checkIn ? formattatoreData.format(new Date(conflitto.checkIn)) : '?'
   const al = conflitto.checkOut ? formattatoreData.format(new Date(conflitto.checkOut)) : '?'
@@ -105,6 +118,9 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const [checkIn, setCheckIn] = useState(formatoInputData(modifica ? inizioGiornoLocale(new Date(modifica.checkIn!)) : creaIniziale!.checkIn))
   const [checkOut, setCheckOut] = useState(formatoInputData(modifica ? inizioGiornoLocale(new Date(modifica.checkOut!)) : creaIniziale!.checkOut))
   const [numeroOspiti, setNumeroOspiti] = useState<string>(String(modifica?.numeroOspiti ?? 2))
+  // Età all'arrivo dei bambini compresi negli ospiti, una per campo: il supplemento per persona in
+  // più può dipendere dall'età (fasce della tipologia).
+  const [etaBambini, setEtaBambini] = useState<string[]>(modifica?.etaBambini?.map(String) ?? [])
   const [importoTotale, setImportoTotale] = useState<string>(modifica?.importoTotale != null ? String(modifica.importoTotale) : '')
   // Finché l'operatore non tocca il campo a mano, "Importo totale" segue il preventivo — se cambi
   // camera/date/checkbox si aggiorna da solo, senza dover recliccare "Usa" ogni volta.
@@ -187,6 +203,14 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const checkOutDate = checkOut ? parsaInputData(checkOut) : null
   const dateValide = !!checkInDate && !!checkOutDate && checkOutDate > checkInDate
   const numeroOspitiNumero = Number(numeroOspiti) || 0
+  // Solo le età già scritte e valide entrano nel preventivo: un campo appena aggiunto e ancora vuoto
+  // non deve far fallire il calcolo. Al salvataggio decide il backend.
+  const etaBambiniValide = etaBambini
+    .filter((e) => e.trim() !== '')
+    .map(Number)
+    .filter((e) => Number.isInteger(e) && e >= 0 && e <= 17)
+  // Serve almeno un adulto: i bambini sono una parte degli ospiti.
+  const puoAggiungereBambino = etaBambini.length < numeroOspitiNumero - 1
 
   // Su una prenotazione esistente il prezzo pattuito è quello salvato (Importo totale): il
   // preventivo viene comunque ricalcolato per proporre l'aggiornamento, ma non lo sovrascrive da
@@ -197,6 +221,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     dateValide ? isoLocale(checkInDate!) : null,
     dateValide ? isoLocale(checkOutDate!) : null,
     numeroOspitiNumero,
+    etaBambiniValide,
     spesePuliziaAttiva,
     animaliPrevisti && animaliAttiva,
     cauzionePrevista && cauzioneAttiva,
@@ -217,11 +242,12 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     checkIn: string
     checkOut: string
     numeroOspiti: string
+    etaBambini: string[]
     spesePuliziaAttiva: boolean
     animaliAttiva: boolean
     cauzioneAttiva: boolean
   }
-  const snapshotInputPreventivo = (): InputPreventivo => ({ cameraId, checkIn, checkOut, numeroOspiti, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva })
+  const snapshotInputPreventivo = (): InputPreventivo => ({ cameraId, checkIn, checkOut, numeroOspiti, etaBambini, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva })
 
   // Su una prenotazione esistente il primo valore ricevuto è solo la "fotografia" di partenza (non
   // va proposto subito riaprendo il dialog): si propone l'aggiornamento solo quando il preventivo
@@ -242,7 +268,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     const nuovoListino = preventivo.data.totale
     if (preventivoPrecedenteRef.current === null) {
       preventivoPrecedenteRef.current = nuovoListino
-      inputPrecedenteRef.current = { cameraId, checkIn, checkOut, numeroOspiti, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva }
+      inputPrecedenteRef.current = { cameraId, checkIn, checkOut, numeroOspiti, etaBambini, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva }
       return
     }
     if (nuovoListino !== preventivoPrecedenteRef.current) {
@@ -251,7 +277,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       const proposto = Math.round((attuale + delta) * 100) / 100
       setPropostaImporto({ nuovoListino, proposto })
     }
-  }, [preventivo.data, modifica, cameraId, checkIn, checkOut, numeroOspiti, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva, importoTotale])
+  }, [preventivo.data, modifica, cameraId, checkIn, checkOut, numeroOspiti, etaBambini, spesePuliziaAttiva, animaliAttiva, cauzioneAttiva, importoTotale])
 
   function confermaAggiornaImporto() {
     if (propostaImporto === null) return
@@ -268,6 +294,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       setCheckIn(precedente.checkIn)
       setCheckOut(precedente.checkOut)
       setNumeroOspiti(precedente.numeroOspiti)
+      setEtaBambini(precedente.etaBambini)
       setSpesePuliziaAttiva(precedente.spesePuliziaAttiva)
       setAnimaliAttiva(precedente.animaliAttiva)
       setCauzioneAttiva(precedente.cauzioneAttiva)
@@ -339,6 +366,8 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       checkIn: isoLocale(checkInDate!),
       checkOut: isoLocale(checkOutDate!),
       numeroOspiti: numeroOspitiNumero || null,
+      // Un campo lasciato vuoto non è un bambino: si scarta invece di mandarlo come 0 anni.
+      etaBambini: etaBambini.filter((e) => e.trim() !== '').map(Number),
       tassaSoggiornoAttiva,
       spesePuliziaAttiva,
       animaliAttiva: animaliPrevisti && animaliAttiva,
@@ -521,6 +550,52 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
             disabled={inCorso || soloImporti}
             slotProps={{ htmlInput: { min: 1 } }}
           />
+        </Box>
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+            Bambini compresi negli ospiti, con l&apos;età all&apos;arrivo: il supplemento per persona in più può cambiare con l&apos;età.
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
+            {etaBambini.map((eta, i) => (
+              <TextField
+                key={i}
+                label={`Età bambino ${i + 1}`}
+                type="number"
+                size="small"
+                value={eta}
+                onChange={(e) => {
+                  const valore = etaBambinoDigitata(e.target.value)
+                  if (valore !== null) setEtaBambini(etaBambini.map((v, j) => (j === i ? valore : v)))
+                }}
+                disabled={inCorso || soloImporti}
+                sx={{ width: 150 }}
+                slotProps={{
+                  htmlInput: { min: 0, max: 17 },
+                  // Sempre ristretta: a campo vuoto l'etichetta finiva sotto la X per togliere il bambino.
+                  inputLabel: { shrink: true },
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          edge="end"
+                          aria-label={`Togli bambino ${i + 1}`}
+                          onClick={() => setEtaBambini(etaBambini.filter((_, j) => j !== i))}
+                          disabled={inCorso || soloImporti}
+                        >
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+            ))}
+            <Button size="small" onClick={() => setEtaBambini([...etaBambini, ''])} disabled={inCorso || soloImporti || !puoAggiungereBambino}>
+              Aggiungi bambino
+            </Button>
+          </Box>
         </Box>
 
         {(agenzia !== 'Diretta' || numeroAssegnato !== '') && (

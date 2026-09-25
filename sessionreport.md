@@ -205,6 +205,11 @@ Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
 - **Ricevuta Polizia di Stato**: pulsante nella pagina Polizia di Stato, metodo SOAP `Ricevuta` (PDF degli
   invii di un giorno, ultimi 30 giorni escluso oggi, dal manuale WS_ALLOGGIATI). Scaricata al momento, non
   conservata, download a log con l'operatore. **Mai provata contro il portale.**
+- **Supplemento per fasce d'età** (modello Booking, verificato sul web): fino a 3 fasce 0-17 per tipologia
+  con importo fisso a notte (tabella `fasce_eta_supplemento`, endpoint a parte come le pulizie); 18+ o età
+  fuori fascia = supplemento pieno. Età all'arrivo dei bambini su `Prenotazione.EtaBambini` (integer[]),
+  almeno un adulto. I posti inclusi vanno ai più grandi. Vale solo per il preventivo: le OTA calcolano il
+  loro. Migration `FasceEtaSupplemento` generata, **non applicata**; 17 test sulla regola.
 
 **Fatturazione a norma per il settore ricettivo** (17/09, seconda parte)
 - Normativa verificata sul web prima di scrivere: imposta di soggiorno riaddebitata **esclusa** dalla

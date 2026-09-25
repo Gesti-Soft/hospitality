@@ -367,6 +367,19 @@ public class CamereService(
             };
             await tipologie.AddAsync(nuova, cancellationToken);
             mappaTipologie[t.Id] = nuova.Id;
+
+            var fasce = await tipologie.ListFasceEtaAsync(strutturaOrigineId, t.Id, cancellationToken);
+            if (fasce.Count > 0)
+            {
+                await tipologie.SostituisciFasceEtaAsync(strutturaId, nuova.Id, fasce.Select(f => new FasciaEtaSupplemento
+                {
+                    StrutturaId = strutturaId,
+                    TipologiaId = nuova.Id,
+                    EtaMin = f.EtaMin,
+                    EtaMax = f.EtaMax,
+                    ImportoPerNotte = f.ImportoPerNotte,
+                }).ToList(), cancellationToken);
+            }
         }
 
         var camereOrigine = await camere.ListByStrutturaAsync(strutturaOrigineId, cancellationToken);

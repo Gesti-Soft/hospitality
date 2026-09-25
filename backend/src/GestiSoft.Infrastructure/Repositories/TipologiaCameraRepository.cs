@@ -45,4 +45,21 @@ public class TipologiaCameraRepository(GestiSoftDbContext db) : ITipologiaCamera
         db.TipologieCamera.Remove(entity);
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<FasciaEtaSupplemento>> ListFasceEtaAsync(Guid strutturaId, Guid tipologiaId, CancellationToken cancellationToken) =>
+        await db.FasceEtaSupplemento.AsNoTracking()
+            .Where(f => f.StrutturaId == strutturaId && f.TipologiaId == tipologiaId)
+            .OrderBy(f => f.EtaMin)
+            .ToListAsync(cancellationToken);
+
+    public async Task SostituisciFasceEtaAsync(Guid strutturaId, Guid tipologiaId, IReadOnlyList<FasciaEtaSupplemento> fasce, CancellationToken cancellationToken)
+    {
+        var esistenti = await db.FasceEtaSupplemento
+            .Where(f => f.StrutturaId == strutturaId && f.TipologiaId == tipologiaId)
+            .ToListAsync(cancellationToken);
+
+        db.FasceEtaSupplemento.RemoveRange(esistenti);
+        db.FasceEtaSupplemento.AddRange(fasce);
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }

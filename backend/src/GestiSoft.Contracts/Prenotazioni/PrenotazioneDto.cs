@@ -33,4 +33,6 @@ public record PrenotazioneDto(
     string? OspiteCognome,
     // L'ospite ha rinunciato alla pulizia / al cambio biancheria durante il soggiorno (vedi Prenotazione).
     bool RinunciaPulizia = false,
-    bool RinunciaBiancheria = false);
+    bool RinunciaBiancheria = false,
+    // Età all'arrivo dei bambini compresi in NumeroOspiti, per il supplemento per fascia d'età.
+    IReadOnlyList<int>? EtaBambini = null);

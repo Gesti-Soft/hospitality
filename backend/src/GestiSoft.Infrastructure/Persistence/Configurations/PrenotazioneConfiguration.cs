@@ -25,6 +25,8 @@ public class PrenotazioneConfiguration : IEntityTypeConfiguration<Prenotazione>
         // A differenza degli altri: default false, si applica solo se l'ospite porta un animale.
         builder.Property(p => p.AnimaliAttiva).HasDefaultValue(false);
         builder.Property(p => p.CauzioneAttiva).HasDefaultValue(true);
+        // Array vuoto sulle prenotazioni esistenti: senza default la colonna NOT NULL non si aggiunge.
+        builder.Property(p => p.EtaBambini).HasDefaultValueSql("'{}'");
 
         builder.HasIndex(p => new { p.StrutturaId, p.CheckIn, p.CheckOut });
 

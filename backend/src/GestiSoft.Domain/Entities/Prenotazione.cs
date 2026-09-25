@@ -57,6 +57,13 @@ public class Prenotazione : TenantEntity
 
     public int? NumeroOspiti { get; set; }
 
+    /// <summary>
+    /// Età all'arrivo dei bambini compresi in <see cref="NumeroOspiti"/>, una per bambino: servono
+    /// al supplemento per fascia d'età della tipologia. Si chiede l'età e non la data di nascita,
+    /// che al prezzo non serve e arriva comunque con la scheda ospiti al check-in. Vuota = tutti adulti.
+    /// </summary>
+    public List<int> EtaBambini { get; set; } = [];
+
     public bool StatePolice { get; set; }
 
     public bool PMS { get; set; }

@@ -27,7 +27,9 @@ public record CreaPrenotazioneRequest(
     bool TassaSoggiornoAttiva = true,
     bool SpesePuliziaAttiva = true,
     bool AnimaliAttiva = false,
-    bool CauzioneAttiva = true);
+    bool CauzioneAttiva = true,
+    // Età all'arrivo di ciascun bambino compreso in NumeroOspiti (vedi Prenotazione.EtaBambini).
+    IReadOnlyList<int>? EtaBambini = null);
 
 public record AggiornaPrenotazioneRequest(
     Guid? CameraId,
@@ -47,7 +49,9 @@ public record AggiornaPrenotazioneRequest(
     // Orario reale dell'arrivo, correggibile quando il check-in è stato registrato in ritardo: da
     // qui decorrono i termini della schedina alloggiati (vedi TerminiSchedina). Null = lascia
     // quello già registrato, così un salvataggio qualsiasi non lo azzera.
-    DateTime? CheckInEffettuatoAtUtc = null);
+    DateTime? CheckInEffettuatoAtUtc = null,
+    // Null = lascia quelle registrate, come sopra; una lista vuota le toglie.
+    IReadOnlyList<int>? EtaBambini = null);
 
 public record CheckOutRequest(bool RestituisciCauzione, decimal? ImportoCauzioneTrattenuta);
 
@@ -277,6 +281,7 @@ public class PrenotazioniService(
             CheckIn = request.CheckIn,
             CheckOut = request.CheckOut,
             NumeroOspiti = request.NumeroOspiti,
+            EtaBambini = ValidaEtaBambini(request.EtaBambini ?? [], request.NumeroOspiti),
             Anno = request.CheckIn.Year,
             // Una prenotazione appena creata è sempre Incompleta finché non viene collegata una
             // scheda ospiti (vedi OspitiService), fedele a OspitiLogic.AddOrUpdateOspiti del legacy.
@@ -381,6 +386,9 @@ public class PrenotazioniService(
             entity.CheckIn = request.CheckIn;
             entity.CheckOut = request.CheckOut;
             entity.NumeroOspiti = request.NumeroOspiti;
+            // Si ricontrollano anche quando non arrivano: diminuendo gli ospiti, le età già
+            // registrate potrebbero non starci più.
+            entity.EtaBambini = ValidaEtaBambini(request.EtaBambini ?? entity.EtaBambini, request.NumeroOspiti);
             entity.Anno = request.CheckIn.Year;
             // Spese di pulizia/Animali/Cauzione sono solo informativi: si correggono liberamente in
             // ogni momento senza altri effetti. Tassa di soggiorno invece pilota le schedine
@@ -762,6 +770,30 @@ public class PrenotazioniService(
 
         return await camere.GetAsync(cameraId, cancellationToken)
             ?? throw new NotFoundException("Camera non trovata.");
+    }
+
+    /// <summary>
+    /// Un'età per bambino, da 0 a 17 anni (dai 18 si è adulti, come per Booking), e almeno un
+    /// adulto nella prenotazione: i bambini sono una parte degli ospiti, non si aggiungono.
+    /// </summary>
+    public static List<int> ValidaEtaBambini(IReadOnlyList<int> etaBambini, int? numeroOspiti)
+    {
+        if (etaBambini.Count == 0)
+        {
+            return [];
+        }
+
+        if (etaBambini.Any(e => e is < 0 or > 17))
+        {
+            throw new ConflictException("L'età di un bambino va da 0 a 17 anni: dai 18 anni l'ospite è un adulto.");
+        }
+
+        if (numeroOspiti is not { } ospiti || etaBambini.Count >= ospiti)
+        {
+            throw new ConflictException("I bambini sono compresi nel numero di ospiti, e nella prenotazione serve almeno un adulto.");
+        }
+
+        return [.. etaBambini];
     }
 
     private async Task ValidaCameraECheckInOutAsync(Guid strutturaId, Guid cameraId, DateTime checkIn, DateTime checkOut, CancellationToken cancellationToken)

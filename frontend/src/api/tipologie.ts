@@ -84,6 +84,31 @@ export function useEliminaTipologia(strutturaId: string | null) {
  * TipologiaCameraRequest: quella la rimanda anche la pagina Servizi OTA con un elenco fisso di campi,
  * e un campo in più lì verrebbe azzerato a ogni suo salvataggio.
  */
+/** Fascia d'età del supplemento per persona in più: età comprese (0-17), importo fisso a notte, 0 = gratis. */
+export interface FasciaEtaSupplementoDto {
+  etaMin: number
+  etaMax: number
+  importoPerNotte: number
+}
+
+export function useFasceEtaTipologia(strutturaId: string | null, tipologiaId: string | null) {
+  return useQuery({
+    queryKey: ['tipologie-camera', strutturaId, tipologiaId, 'fasce-eta'],
+    queryFn: () => apiGet<FasciaEtaSupplementoDto[]>(`/strutture/${strutturaId}/tipologie-camera/${tipologiaId}/fasce-eta`),
+    enabled: !!strutturaId && !!tipologiaId,
+  })
+}
+
+/** Endpoint a parte, come le pulizie: il form generale della tipologia lo rimanda anche la pagina Servizi OTA. */
+export function useSalvaFasceEtaTipologia(strutturaId: string | null) {
+  const invalida = useInvalidaTipologie(strutturaId)
+  return useMutation({
+    mutationFn: ({ tipologiaId, fasce }: { tipologiaId: string; fasce: FasciaEtaSupplementoDto[] }) =>
+      apiPut<FasciaEtaSupplementoDto[]>(`/strutture/${strutturaId}/tipologie-camera/${tipologiaId}/fasce-eta`, fasce),
+    onSuccess: invalida,
+  })
+}
+
 export function useAggiornaPulizieTipologia(strutturaId: string | null) {
   const invalida = useInvalidaTipologie(strutturaId)
   return useMutation({

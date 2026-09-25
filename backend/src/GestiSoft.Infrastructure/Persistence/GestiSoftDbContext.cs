@@ -14,6 +14,8 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options, Cr
 
     public DbSet<SettingTipologia> TipologieCamera => Set<SettingTipologia>();
 
+    public DbSet<FasciaEtaSupplemento> FasceEtaSupplemento => Set<FasciaEtaSupplemento>();
+
     public DbSet<SettingRoom> Camere => Set<SettingRoom>();
 
     public DbSet<GestionePrezzo> PrezziCamera => Set<GestionePrezzo>();

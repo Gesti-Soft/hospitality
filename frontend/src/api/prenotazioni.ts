@@ -40,6 +40,8 @@ export interface PrenotazioneDto {
   /** L'ospite ha rinunciato alla pulizia / al cambio biancheria durante il soggiorno: si cambia con useAggiornaRinunceServizi. */
   rinunciaPulizia: boolean
   rinunciaBiancheria: boolean
+  /** Età all'arrivo dei bambini compresi in numeroOspiti: servono al supplemento per fascia d'età. */
+  etaBambini: number[] | null
 }
 
 export interface PrenotazioneRequest {
@@ -63,6 +65,8 @@ export interface PrenotazioneRequest {
   cauzioneAttiva: boolean
   /** Correzione dell'orario reale di arrivo (solo su soggiorni già iniziati). Omesso o null: resta quello registrato al check-in. */
   checkInEffettuatoAtUtc?: string | null
+  /** Un'età (0-17) per bambino, compresi in numeroOspiti. Lista vuota = tutti adulti. */
+  etaBambini: number[]
 }
 
 export interface PreventivoDto {
@@ -145,16 +149,18 @@ export function usePreventivo(
   checkIn: string | null,
   checkOut: string | null,
   numeroOspiti: number,
+  etaBambini: number[],
   spesePulizia: boolean,
   animali: boolean,
   cauzione: boolean,
   abilitato: boolean,
 ) {
+  const parametriEta = etaBambini.map((e) => `&etaBambini=${e}`).join('')
   return useQuery({
-    queryKey: ['preventivo', strutturaId, cameraId, checkIn, checkOut, numeroOspiti, spesePulizia, animali, cauzione],
+    queryKey: ['preventivo', strutturaId, cameraId, checkIn, checkOut, numeroOspiti, etaBambini.join(','), spesePulizia, animali, cauzione],
     queryFn: () =>
       apiGet<PreventivoDto>(
-        `/strutture/${strutturaId}/prezzi-camera/preventivo?cameraId=${cameraId}&checkIn=${checkIn}&checkOut=${checkOut}&numeroOspiti=${numeroOspiti}&spesePulizia=${spesePulizia}&animali=${animali}&cauzione=${cauzione}`,
+        `/strutture/${strutturaId}/prezzi-camera/preventivo?cameraId=${cameraId}&checkIn=${checkIn}&checkOut=${checkOut}&numeroOspiti=${numeroOspiti}${parametriEta}&spesePulizia=${spesePulizia}&animali=${animali}&cauzione=${cauzione}`,
       ),
     enabled: abilitato && !!strutturaId && !!cameraId && !!checkIn && !!checkOut && !!numeroOspiti,
     retry: false,

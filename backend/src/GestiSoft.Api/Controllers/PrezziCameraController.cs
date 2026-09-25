@@ -40,13 +40,29 @@ public class PrezziCameraController(PrezziCameraService service, ICurrentUser cu
         [FromQuery] DateTime checkIn,
         [FromQuery] DateTime checkOut,
         [FromQuery] int numeroOspiti,
+        [FromQuery] int[]? etaBambini,
         [FromQuery] bool spesePulizia = true,
         [FromQuery] bool animali = false,
         [FromQuery] bool cauzione = true,
         CancellationToken cancellationToken = default)
     {
-        var preventivo = await service.CalcolaPreventivoAsync(currentUser, strutturaId, cameraId, checkIn, checkOut, numeroOspiti, spesePulizia, animali, cauzione, cancellationToken);
+        var preventivo = await service.CalcolaPreventivoAsync(currentUser, strutturaId, cameraId, checkIn, checkOut, numeroOspiti, etaBambini ?? [], spesePulizia, animali, cauzione, cancellationToken);
         return Ok(new PreventivoDto(preventivo.Notti, preventivo.Totale));
+    }
+
+    /// <summary>Fasce d'età del supplemento per persona in più della tipologia (vedi FasciaEtaSupplemento).</summary>
+    [HttpGet("~/strutture/{strutturaId:guid}/tipologie-camera/{tipologiaId:guid}/fasce-eta")]
+    public async Task<IActionResult> FasceEta(Guid strutturaId, Guid tipologiaId, CancellationToken cancellationToken)
+    {
+        var fasce = await service.ListaFasceEtaAsync(currentUser, strutturaId, tipologiaId, cancellationToken);
+        return Ok(fasce.Select(f => new FasciaEtaSupplementoDto(f.EtaMin, f.EtaMax, f.ImportoPerNotte)));
+    }
+
+    [HttpPut("~/strutture/{strutturaId:guid}/tipologie-camera/{tipologiaId:guid}/fasce-eta")]
+    public async Task<IActionResult> SalvaFasceEta(Guid strutturaId, Guid tipologiaId, [FromBody] List<FasciaEtaSupplementoDto> request, CancellationToken cancellationToken)
+    {
+        var fasce = await service.SalvaFasceEtaAsync(currentUser, strutturaId, tipologiaId, request, cancellationToken);
+        return Ok(fasce.Select(f => new FasciaEtaSupplementoDto(f.EtaMin, f.EtaMax, f.ImportoPerNotte)));
     }
 
     private static PrezzoCameraDto ToDto(GestionePrezzo p) => new(
