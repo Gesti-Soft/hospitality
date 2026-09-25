@@ -41,4 +41,22 @@ public class PermessoStrutturaGuard(TenantAccessGuard accessGuard, IUtenteStrutt
             throw new ForbiddenException("Non hai i permessi necessari per questa operazione su questa struttura.");
         }
     }
+
+    /// <summary>Come <see cref="EnsureAsync"/> ma senza eccezione: per decidere cosa mostrare, non se consentire.</summary>
+    public async Task<bool> HaAsync(
+        ICurrentUser currentUser,
+        Guid strutturaId,
+        Func<UtenteStruttura, bool> haPermesso,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await EnsureAsync(currentUser, strutturaId, haPermesso, cancellationToken);
+            return true;
+        }
+        catch (ForbiddenException)
+        {
+            return false;
+        }
+    }
 }

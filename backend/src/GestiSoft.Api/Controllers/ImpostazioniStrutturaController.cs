@@ -38,5 +38,7 @@ public class ImpostazioniStrutturaController(ImpostazioniStrutturaService servic
         impostazioni.TassaSoggiornoPercentualeResidenti,
         impostazioni.TassaSoggiornoPercentualeMinori,
         impostazioni.TassaSoggiornoPercentualeAnziani,
-        impostazioni.ComuneAttivita);
+        impostazioni.ComuneAttivita,
+        impostazioni.IntervalloPuliziaGiorni,
+        impostazioni.IntervalloBiancheriaGiorni);
 }

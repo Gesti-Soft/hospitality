@@ -13,4 +13,6 @@ public record TipologiaCameraDto(
     int? IdCameraWubook,
     bool WubookAttiva,
     string? CodiceCameraWubook,
-    bool WubookSoloWoodoo);
+    bool WubookSoloWoodoo,
+    int? IntervalloPuliziaGiorni = null,
+    int? IntervalloBiancheriaGiorni = null);

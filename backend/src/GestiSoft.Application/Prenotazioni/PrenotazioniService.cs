@@ -166,15 +166,21 @@ public class PrenotazioniService(
             operatore: currentUser.Email,
             cancellationToken: cancellationToken);
 
+    // Arrivi e partenze li legge anche chi prepara le camere (stato camera), non solo chi gestisce le
+    // prenotazioni: il controller gli toglie importi e canale, che a lui non servono.
+    /// <summary>True se può vedere le prenotazioni per intero (importi, canale); false per chi le legge solo per preparare le camere.</summary>
+    public Task<bool> VedePrenotazioniCompleteAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken) =>
+        permessoGuard.HaAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
+
     public async Task<IReadOnlyList<Prenotazione>> ListaInArrivoAsync(ICurrentUser currentUser, Guid strutturaId, DateTime? daData, CancellationToken cancellationToken)
     {
-        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead || p.RoomStatusUpdate, cancellationToken);
         return await prenotazioni.ListInArrivoAsync(strutturaId, (daData ?? DateTime.UtcNow).Date, cancellationToken);
     }
 
     public async Task<IReadOnlyList<Prenotazione>> ListaInCorsoAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
-        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead || p.RoomStatusUpdate, cancellationToken);
         return await prenotazioni.ListInCorsoAsync(strutturaId, cancellationToken);
     }
 
@@ -532,7 +538,7 @@ public class PrenotazioniService(
 
     public async Task<Prenotazione> CheckInAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
     {
-        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.RoomStatusUpdate, cancellationToken);
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.CheckInOut, cancellationToken);
 
         var prenotazione = await GetOwnedAsync(strutturaId, prenotazioneId, cancellationToken);
         var camera = await GetCameraDellaPrenotazioneAsync(prenotazione, cancellationToken);
@@ -571,7 +577,7 @@ public class PrenotazioniService(
     /// </summary>
     public async Task<Prenotazione> CheckOutAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CheckOutRequest request, CancellationToken cancellationToken)
     {
-        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.RoomStatusUpdate, cancellationToken);
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.CheckInOut, cancellationToken);
 
         var prenotazione = await GetOwnedAsync(strutturaId, prenotazioneId, cancellationToken);
         var camera = await GetCameraDellaPrenotazioneAsync(prenotazione, cancellationToken);
@@ -634,9 +640,26 @@ public class PrenotazioniService(
             throw new ConflictException("La camera è attualmente occupata, non è possibile effettuare il check-in.");
         }
 
+        // Una camera occupata ha un ospite dentro: qualunque cambio di stato tocca il suo soggiorno
+        // (portarla in "Da pulire" lo chiude come un check-out). Serve quindi sempre il permesso di
+        // registrare arrivi e partenze, non basta quello delle pulizie.
+        if (camera.StateRoom == StatoCamera.Occupata || prenotazione.StatoPrenotazione == StatoPrenotazione.InCorso)
+        {
+            await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.CheckInOut, cancellationToken);
+        }
+
+        // Portare la camera su Occupata rimette la prenotazione in corso: è un check-in, o la
+        // riapertura di un soggiorno chiuso per errore. Resta come strumento per rimettere a posto a
+        // mano, ma con gli stessi paletti del check-in vero.
+        var stavaInCorso = prenotazione.StatoPrenotazione == StatoPrenotazione.InCorso;
         if (nuovoStato == StatoCamera.Occupata)
         {
+            await ControllaRimessaInCorsoAsync(currentUser, strutturaId, prenotazione, camera, cancellationToken);
+
             prenotazione.StatoPrenotazione = StatoPrenotazione.InCorso;
+            // Come nel check-in: registrato solo la prima volta. Riaprendo un soggiorno chiuso per
+            // errore non si deve far ripartire il termine della schedina, già iniziato davvero.
+            prenotazione.CheckInEffettuatoAtUtc ??= DateTime.UtcNow;
         }
         else if (nuovoStato == StatoCamera.DaPulire)
         {
@@ -649,7 +672,57 @@ public class PrenotazioniService(
 
         await camere.UpdateAsync(camera, cancellationToken);
         await prenotazioni.UpdateAsync(prenotazione, cancellationToken);
+
+        // Un soggiorno rimesso in corso a mano, fuori dal check-in normale, deve lasciare traccia:
+        // è proprio il caso che poi va ricostruito (chi l'ha riaperto, quando).
+        if (nuovoStato == StatoCamera.Occupata && !stavaInCorso)
+        {
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Prenotazione {prenotazione.NumeroPrenotazione ?? prenotazione.Id.ToString()} rimessa in corso a mano dallo stato camera (camera {camera.Nome}).",
+                origine: "Api",
+                clienteId: currentUser.ClienteId,
+                strutturaId: strutturaId,
+                categoria: "Prenotazioni",
+                operatore: currentUser.Email,
+                cancellationToken: cancellationToken);
+        }
+
         return camera;
+    }
+
+    /// <summary>
+    /// Paletti per rimettere in corso una prenotazione dallo stato camera, gli stessi del check-in:
+    /// il permesso di registrare gli arrivi (chi fa solo le pulizie non deve poterlo fare per
+    /// un'altra strada), nessuna prenotazione annullata, nessun arrivo futuro, nessun soggiorno già
+    /// finito, e la camera non occupata da un altro soggiorno in corso.
+    /// </summary>
+    private async Task ControllaRimessaInCorsoAsync(ICurrentUser currentUser, Guid strutturaId, Prenotazione prenotazione, SettingRoom camera, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.CheckInOut, cancellationToken);
+
+        if (prenotazione.StatoPrenotazione == StatoPrenotazione.Annullata)
+        {
+            throw new ConflictException("Questa prenotazione è annullata: non si può rimettere in corso. Se l'ospite è arrivato, crea una nuova prenotazione.");
+        }
+
+        var oggi = Pulizie.PulizieSoggiornoService.Oggi();
+        if (prenotazione.CheckIn is { } arrivo && arrivo.Date > oggi)
+        {
+            throw new ConflictException($"L'arrivo è previsto il {arrivo:dd/MM/yyyy}: il check-in si registra dal giorno dell'arrivo.");
+        }
+
+        if (prenotazione.CheckOut is { } partenza && partenza.Date < oggi)
+        {
+            throw new ConflictException($"Il soggiorno è finito il {partenza:dd/MM/yyyy}: non si può rimettere in corso. Se l'ospite è ancora in camera, prolunga prima la partenza.");
+        }
+
+        var altroInCorso = (await prenotazioni.ListInCorsoAsync(strutturaId, cancellationToken))
+            .FirstOrDefault(p => p.CameraId == camera.Id && p.Id != prenotazione.Id);
+        if (altroInCorso is not null)
+        {
+            throw new ConflictException($"In {camera.Nome} c'è già un soggiorno in corso (prenotazione {altroInCorso.NumeroPrenotazione ?? "senza numero"}): chiudi prima quello.");
+        }
     }
 
     /// <summary>

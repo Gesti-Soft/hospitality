@@ -9,7 +9,7 @@ import Popover from '@mui/material/Popover'
 import Typography from '@mui/material/Typography'
 import { tokens } from '../theme'
 import { IconNotifiche } from '../layout/navIcons'
-import { useContoNotificheNonLette, useNotifiche, useSegnaNotificaLetta, useSegnaTutteNotificheLette, type NotificaDto } from '../api/notifiche'
+import { TipoNotifica, useContoNotificheNonLette, useNotifiche, useSegnaNotificaLetta, useSegnaTutteNotificheLette, type NotificaDto } from '../api/notifiche'
 import { stato2Fa } from '../api/auth'
 import { useAuth } from '../auth/AuthContext'
 
@@ -146,7 +146,18 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
           ) : (
             <>
               {notificheVisibili.map((n) => (
-                <RigaNotifica key={n.id} notifica={n} onClick={() => segnaLetta.mutate(n.id)} />
+                <RigaNotifica
+                  key={n.id}
+                  notifica={n}
+                  onClick={() => {
+                    segnaLetta.mutate(n.id)
+                    // L'avviso delle pulizie porta dritto all'elenco delle camere da fare.
+                    if (n.tipo === TipoNotifica.PulizieDaFare) {
+                      setAncora(null)
+                      navigate('/pulizie')
+                    }
+                  }}
+                />
               ))}
               {altreDaCaricare && <Box ref={sentinellaRef} sx={{ height: 1 }} />}
             </>

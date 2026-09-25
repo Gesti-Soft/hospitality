@@ -1,5 +1,6 @@
 ﻿using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Pulizie;
 using GestiSoft.Domain.Entities;
 
 namespace GestiSoft.Application.Impostazioni;
@@ -16,7 +17,9 @@ public record AggiornaImpostazioniRequest(
     decimal? TassaSoggiornoPercentualeResidenti,
     decimal? TassaSoggiornoPercentualeMinori,
     decimal? TassaSoggiornoPercentualeAnziani,
-    string? ComuneAttivita);
+    string? ComuneAttivita,
+    int? IntervalloPuliziaGiorni = null,
+    int? IntervalloBiancheriaGiorni = null);
 
 public class ImpostazioniStrutturaService(
     IImpostazioniStrutturaRepository repository,
@@ -93,6 +96,8 @@ public class ImpostazioniStrutturaService(
         impostazioni.TassaSoggiornoPercentualeMinori = request.TassaSoggiornoPercentualeMinori;
         impostazioni.TassaSoggiornoPercentualeAnziani = request.TassaSoggiornoPercentualeAnziani;
         impostazioni.ComuneAttivita = request.ComuneAttivita;
+        impostazioni.IntervalloPuliziaGiorni = PulizieSoggiornoService.ValidaIntervallo(request.IntervalloPuliziaGiorni, ammettiZero: false);
+        impostazioni.IntervalloBiancheriaGiorni = PulizieSoggiornoService.ValidaIntervallo(request.IntervalloBiancheriaGiorni, ammettiZero: false);
         impostazioni.UpdatedAtUtc = DateTime.UtcNow;
 
         await repository.UpsertAsync(impostazioni, cancellationToken);

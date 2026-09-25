@@ -11,10 +11,22 @@ namespace GestiSoft.Application.Fatturazione;
 /// riscritta qui direttamente con System.Xml per non dipendere da quel pacchetto (di cui non è
 /// stata verificata la compatibilità/manutenzione su .NET 10).
 /// </summary>
+/// <summary>
+/// Il soggiorno a cui si riferisce una ricevuta di locazione breve: periodo, notti, ospiti e
+/// alloggio sono ciò che distingue una ricevuta d'affitto da una ricevuta generica. Le date sono
+/// date civili della prenotazione, senza conversioni di fuso: un arrivo del 10 resta il 10.
+/// </summary>
+public record DatiSoggiorno(DateTime? Arrivo, DateTime? Partenza, int? NumeroOspiti, string? Alloggio, string? NumeroPrenotazione)
+{
+    /// <summary>Notti, non giorni: dal 10 al 12 sono 2. Null se manca una delle due date.</summary>
+    public int? Notti => Arrivo is { } a && Partenza is { } p && p.Date > a.Date ? (p.Date - a.Date).Days : null;
+}
+
 public interface IFatturaDocumentGenerator
 {
     /// <param name="nomeStruttura">Il nome con cui la struttura è conosciuta, in testa al documento: i dati fiscali dell'emittente stanno sotto, ma chi riceve la fattura riconosce quello.</param>
-    byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, string? nomeStruttura);
+    /// <param name="soggiorno">Dati della prenotazione da cui nasce il documento, stampati sulla ricevuta di locazione breve. Null se il documento non ha una prenotazione collegata.</param>
+    byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, string? nomeStruttura, DatiSoggiorno? soggiorno = null);
 
     byte[] GeneraXmlSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda);
 

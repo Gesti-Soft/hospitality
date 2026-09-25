@@ -14,6 +14,7 @@ import { ApiError } from '../api/client'
 import { StatoCamera, useAggiornaCamera, useCreaCamera, useCreaCamereNumerate, type CameraDto, type CameraRequest } from '../api/camere'
 import type { TipologiaCameraDto } from '../api/tipologie'
 import { useMobile } from '../lib/useMobile'
+import { ConfirmDialog } from './ConfirmDialog'
 
 const ETICHETTA_STATO: Record<StatoCamera, string> = {
   [StatoCamera.Pronta]: 'Pronta',
@@ -45,6 +46,7 @@ export function CameraDialog({ strutturaId, camera, tipologie, tipologiaDiDefaul
   const [da, setDa] = useState('')
   const [a, setA] = useState('')
   const [errore, setErrore] = useState<string | null>(null)
+  const [confermaOccupata, setConfermaOccupata] = useState(false)
 
   const daNumero = Number(da)
   const aNumero = Number(a)
@@ -96,11 +98,25 @@ export function CameraDialog({ strutturaId, camera, tipologie, tipologiaDiDefaul
     }
 
     if (camera) {
+      // Da qui cambia solo lo stato della camera, non la prenotazione: su una camera occupata le due
+      // cose si scollegano, quindi si chiede conferma prima.
+      if (avvisoOccupata && !confermaOccupata) {
+        setConfermaOccupata(true)
+        return
+      }
+      setConfermaOccupata(false)
       aggiorna.mutate({ cameraId: camera.id, request }, { onSuccess: onClose, onError })
     } else {
       crea.mutate(request, { onSuccess: onClose, onError })
     }
   }
+
+  // Conferma solo se la camera è occupata e se ne cambia lo stato: c'è un ospite dentro. Su una
+  // camera libera si cambia liberamente, senza avvisi.
+  const avvisoOccupata =
+    camera && camera.stateRoom === StatoCamera.Occupata && stateRoom !== camera.stateRoom
+      ? "La camera risulta occupata da un ospite in soggiorno. Cambiarne lo stato da qui non registra il check-out: la prenotazione resta in corso e l'ospite risulta ancora in camera. Per una partenza usa il pulsante Check-out. Vuoi cambiare lo stato comunque?"
+      : null
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
@@ -188,6 +204,17 @@ export function CameraDialog({ strutturaId, camera, tipologie, tipologiaDiDefaul
           {camera ? 'Salva modifiche' : modalitaNumerate ? `Crea ${quantitaNumerate ?? ''} camere`.trim() : 'Crea camera'}
         </Button>
       </DialogActions>
+
+      {confermaOccupata && avvisoOccupata && (
+        <ConfirmDialog
+          titolo="Attenzione: camera occupata"
+          messaggio={avvisoOccupata}
+          testoConferma="Cambia stato"
+          inCorso={inCorso}
+          onConferma={salva}
+          onAnnulla={() => setConfermaOccupata(false)}
+        />
+      )}
     </Dialog>
   )
 }

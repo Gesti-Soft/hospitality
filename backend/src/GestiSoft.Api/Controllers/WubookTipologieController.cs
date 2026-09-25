@@ -62,7 +62,8 @@ public class WubookTipologieController(WubookCamereService service, ICurrentUser
     private static TipologiaCameraDto ToDto(SettingTipologia t) => new(
         t.Id, t.StrutturaId, t.TipologiaCamera, t.SpesePulizia, t.Animali, t.Cauzione,
         t.PrezzoDefault, t.NumeroImplementoPersona, t.Implemento,
-        t.IdCameraWubook, t.WubookAttiva, t.CodiceCameraWubook, t.WubookSoloWoodoo);
+        t.IdCameraWubook, t.WubookAttiva, t.CodiceCameraWubook, t.WubookSoloWoodoo,
+        t.IntervalloPuliziaGiorni, t.IntervalloBiancheriaGiorni);
 }
 
 public record AssociaCameraWubookRequest(int? IdCameraWubook);

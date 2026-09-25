@@ -13,10 +13,9 @@ public class NotificaRepository(GestiSoftDbContext db) : INotificaRepository
     public Task<Notifica?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         db.Notifiche.FirstOrDefaultAsync(n => n.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<Notifica>> ListaAsync(Guid strutturaId, bool soloNonLette, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Notifica>> ListaAsync(Guid strutturaId, bool soloNonLette, bool vedeStatoCamera, CancellationToken cancellationToken)
     {
-        var query = db.Notifiche.AsNoTracking()
-            .Where(n => n.StrutturaId == strutturaId && n.Stato == StatoNotifica.Confermata);
+        var query = Visibili(strutturaId, vedeStatoCamera).AsNoTracking();
 
         if (soloNonLette)
         {
@@ -26,8 +25,14 @@ public class NotificaRepository(GestiSoftDbContext db) : INotificaRepository
         return await query.OrderByDescending(n => n.CreatedAtUtc).Take(LimiteLista).ToListAsync(cancellationToken);
     }
 
-    public Task<int> ContaNonLetteAsync(Guid strutturaId, CancellationToken cancellationToken) =>
-        db.Notifiche.CountAsync(n => n.StrutturaId == strutturaId && n.Stato == StatoNotifica.Confermata && n.LettaAtUtc == null, cancellationToken);
+    public Task<int> ContaNonLetteAsync(Guid strutturaId, bool vedeStatoCamera, CancellationToken cancellationToken) =>
+        Visibili(strutturaId, vedeStatoCamera).CountAsync(n => n.LettaAtUtc == null, cancellationToken);
+
+    // Confermate della struttura, senza quelle riservate a chi ha "Stato camera" se l'utente non ce l'ha.
+    private IQueryable<Notifica> Visibili(Guid strutturaId, bool vedeStatoCamera) =>
+        db.Notifiche.Where(n => n.StrutturaId == strutturaId
+            && n.Stato == StatoNotifica.Confermata
+            && (vedeStatoCamera || !n.RichiedeStatoCamera));
 
     public Task<bool> EsisteChiaveDedupAsync(Guid strutturaId, string chiaveDedup, CancellationToken cancellationToken) =>
         db.Notifiche.AnyAsync(n => n.StrutturaId == strutturaId && n.ChiaveDedup == chiaveDedup, cancellationToken);
@@ -58,10 +63,12 @@ public class NotificaRepository(GestiSoftDbContext db) : INotificaRepository
                 && n.ScadenzaAttesaUtc != null && n.ScadenzaAttesaUtc <= adesso)
             .ToListAsync(cancellationToken);
 
-    public async Task SegnaTutteLetteAsync(Guid strutturaId, CancellationToken cancellationToken)
+    public async Task SegnaTutteLetteAsync(Guid strutturaId, bool vedeStatoCamera, CancellationToken cancellationToken)
     {
-        var nonLette = await db.Notifiche
-            .Where(n => n.StrutturaId == strutturaId && n.Stato == StatoNotifica.Confermata && n.LettaAtUtc == null)
+        // Solo quelle che l'utente vede: "Segna tutte come lette" di un contabile non deve spegnere
+        // l'avviso delle pulizie a chi le fa.
+        var nonLette = await Visibili(strutturaId, vedeStatoCamera)
+            .Where(n => n.LettaAtUtc == null)
             .ToListAsync(cancellationToken);
 
         var adesso = DateTime.UtcNow;

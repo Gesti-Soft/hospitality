@@ -45,6 +45,10 @@ export interface PermessiStruttura {
   financeWrite: boolean
   restaurantRead: boolean
   restaurantWrite: boolean
+  /** Mostra le pagine Camere e Tipologie (la sola lettura dei dati camere resta settingRoomRead). */
+  roomSetupRead: boolean
+  /** Registra check-in e check-out; senza, la pagina Check-in / Check-out è in sola lettura. */
+  checkInOut: boolean
 }
 
 export interface AssegnazioneStrutturaDto extends PermessiStruttura {

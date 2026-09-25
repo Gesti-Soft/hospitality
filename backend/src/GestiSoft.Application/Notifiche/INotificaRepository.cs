@@ -8,9 +8,9 @@ public interface INotificaRepository
     Task<Notifica?> GetAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>Notifiche Confermate (mai InAttesa) di una Struttura, più recenti prima.</summary>
-    Task<IReadOnlyList<Notifica>> ListaAsync(Guid strutturaId, bool soloNonLette, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Notifica>> ListaAsync(Guid strutturaId, bool soloNonLette, bool vedeStatoCamera, CancellationToken cancellationToken);
 
-    Task<int> ContaNonLetteAsync(Guid strutturaId, CancellationToken cancellationToken);
+    Task<int> ContaNonLetteAsync(Guid strutturaId, bool vedeStatoCamera, CancellationToken cancellationToken);
 
     Task<bool> EsisteChiaveDedupAsync(Guid strutturaId, string chiaveDedup, CancellationToken cancellationToken);
 
@@ -25,7 +25,8 @@ public interface INotificaRepository
     /// <summary>Cancellazioni Wubook la cui finestra di grazia è scaduta senza una prenotazione corrispondente — da rendere visibili.</summary>
     Task<IReadOnlyList<Notifica>> ListCancellazioniPendentiScaduteAsync(Guid strutturaId, DateTime adesso, CancellationToken cancellationToken);
 
-    Task SegnaTutteLetteAsync(Guid strutturaId, CancellationToken cancellationToken);
+    /// <summary>Solo le notifiche che l'utente vede (vedi Notifica.RichiedeStatoCamera).</summary>
+    Task SegnaTutteLetteAsync(Guid strutturaId, bool vedeStatoCamera, CancellationToken cancellationToken);
 
     Task SegnaLettePerPrenotazioneAsync(Guid strutturaId, TipoNotifica tipo, Guid prenotazioneId, CancellationToken cancellationToken);
 

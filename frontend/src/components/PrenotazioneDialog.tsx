@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ConfermaSchedinaSoggiornoBreve, isSoggiornoBreve } from './ConfermaSchedinaSoggiornoBreve'
+import { ProponiFatturaDopoCheckIn } from './ProponiFatturaDopoCheckIn'
+import { useAggiornaRinunceServizi } from '../api/pulizie'
 import Alert from '@mui/material/Alert'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
@@ -79,7 +81,8 @@ interface Props {
 export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipologie, onClose }: Props) {
   const mobile = useMobile()
   const puoScrivere = usePuoScrivere('reservationWrite')
-  const puoCambiareStatoCamera = usePuoScrivere('roomStatusUpdate')
+  const puoFareCheckInOut = usePuoScrivere('checkInOut')
+  const puoFatturare = usePuoScrivere('financeWrite')
   const modifica = stato.modo === 'modifica' ? stato.prenotazione : null
   const creaIniziale = stato.modo === 'crea' ? stato : null
 
@@ -130,6 +133,10 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const annulla = useAnnullaPrenotazione(strutturaId)
   const checkInMutation = useCheckIn(strutturaId)
   const [schedinaBreveDaInviare, setSchedinaBreveDaInviare] = useState(false)
+  // Dopo il check-in si propone la fattura (vedi ProponiFatturaDopoCheckIn); se c'è anche la domanda
+  // sulla schedina del soggiorno breve, viene dopo quella. Il dialog si chiude solo alla fine.
+  const [fatturaDaProporre, setFatturaDaProporre] = useState<PrenotazioneDto | null>(null)
+  const [fatturaInAttesa, setFatturaInAttesa] = useState<PrenotazioneDto | null>(null)
   // Orario reale dell'arrivo: si corregge solo su un soggiorno già iniziato, e serve a rimettere a
   // posto i termini della schedina alloggiati quando il check-in è stato registrato in ritardo.
   // Il campo datetime-local lavora in ora locale, il backend in UTC: conversione in entrambi i sensi.
@@ -137,6 +144,27 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     modifica?.checkInEffettuatoAtUtc ? perCampoDataOra(modifica.checkInEffettuatoAtUtc) : '',
   )
   const checkOutMutation = useCheckOut(strutturaId)
+  // Rinunce dell'ospite a pulizia e cambio biancheria: si salvano subito con un endpoint loro (non con
+  // "Salva modifiche"), perché si registrano quando l'ospite lo dice, spesso a soggiorno in corso.
+  const aggiornaRinunce = useAggiornaRinunceServizi(strutturaId)
+  const [rinunce, setRinunce] = useState({
+    rinunciaPulizia: modifica?.rinunciaPulizia ?? false,
+    rinunciaBiancheria: modifica?.rinunciaBiancheria ?? false,
+  })
+  function salvaRinunce(nuove: { rinunciaPulizia: boolean; rinunciaBiancheria: boolean }) {
+    if (!modifica) return
+    const precedenti = rinunce
+    setRinunce(nuove)
+    aggiornaRinunce.mutate(
+      { prenotazioneId: modifica.id, ...nuove },
+      {
+        onError: (err) => {
+          setRinunce(precedenti)
+          gestisciErrore(err)
+        },
+      },
+    )
+  }
 
   const cameraSelezionata = camere.find((c) => c.id === cameraId)
   // In modalità pool non c'è una camera scelta: la Tipologia selezionata nel filtro è l'unica fonte.
@@ -354,9 +382,15 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       // Per un soggiorno sotto le 24 ore la schedina ha 6 ore di tempo: si chiede subito se
       // trasmetterla, e il dialog si chiude solo dopo la risposta (altrimenti la domanda sparirebbe
       // insieme alla schermata).
-      onSuccess: () => {
+      onSuccess: (aggiornata) => {
+        const daFatturare = puoFatturare ? aggiornata : null
         if (isSoggiornoBreve(modifica.checkIn, modifica.checkOut)) {
           setSchedinaBreveDaInviare(true)
+          setFatturaInAttesa(daFatturare)
+          return
+        }
+        if (daFatturare) {
+          setFatturaDaProporre(daFatturare)
           return
         }
         onClose()
@@ -564,6 +598,40 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           </>
         )}
 
+        {puoScrivere &&
+          modifica &&
+          (modifica.statoPrenotazione === StatoPrenotazione.Incompleta || modifica.statoPrenotazione === StatoPrenotazione.InCorso) && (
+            <>
+              <Divider />
+              <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tokens.textSecondary }}>Servizi durante il soggiorno</Typography>
+              <Typography sx={{ fontSize: 12, color: tokens.textTertiary, mt: -1 }}>
+                Solo se è l&apos;ospite a chiederlo: la regola della struttura resta quella, e la scelta viene registrata nel log. Si
+                salva subito.
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={rinunce.rinunciaPulizia}
+                    onChange={(e) => salvaRinunce({ ...rinunce, rinunciaPulizia: e.target.checked })}
+                    disabled={inCorso || aggiornaRinunce.isPending}
+                  />
+                }
+                label="L'ospite rinuncia alla pulizia della camera"
+              />
+              <FormControlLabel
+                sx={{ mt: -1.5 }}
+                control={
+                  <Checkbox
+                    checked={rinunce.rinunciaBiancheria}
+                    onChange={(e) => salvaRinunce({ ...rinunce, rinunciaBiancheria: e.target.checked })}
+                    disabled={inCorso || aggiornaRinunce.isPending}
+                  />
+                }
+                label="L'ospite rinuncia al cambio biancheria"
+              />
+            </>
+          )}
+
         {modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && cauzionePrevista && cauzioneAttiva && (
           <>
             <Divider />
@@ -605,7 +673,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           Chiudi
         </Button>
         {/* Il check-in si può fare solo dal giorno dell'arrivo in poi, mai su una prenotazione futura. */}
-        {puoCambiareStatoCamera &&
+        {puoFareCheckInOut &&
           modifica &&
           modifica.statoPrenotazione === StatoPrenotazione.Incompleta &&
           isOggiOPrima(modifica.checkIn) && (
@@ -613,7 +681,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
               Check-in
             </Button>
           )}
-        {puoCambiareStatoCamera && modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && (
+        {puoFareCheckInOut && modifica && modifica.statoPrenotazione === StatoPrenotazione.InCorso && (
           <Button variant="contained" onClick={eseguiCheckOut} disabled={inCorso}>
             Check-out
           </Button>
@@ -673,9 +741,18 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           riferimento={[modifica.ospiteCognome, modifica.ospiteNome].filter(Boolean).join(' ') || modifica.numeroPrenotazione}
           onChiudi={() => {
             setSchedinaBreveDaInviare(false)
+            if (fatturaInAttesa) {
+              setFatturaDaProporre(fatturaInAttesa)
+              setFatturaInAttesa(null)
+              return
+            }
             onClose()
           }}
         />
+      )}
+
+      {fatturaDaProporre && (
+        <ProponiFatturaDopoCheckIn strutturaId={strutturaId} prenotazione={fatturaDaProporre} onChiudi={onClose} />
       )}
     </Dialog>
   )

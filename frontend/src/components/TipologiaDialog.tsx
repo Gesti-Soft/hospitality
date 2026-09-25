@@ -8,7 +8,7 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import TextField from '@mui/material/TextField'
 import { ApiError } from '../api/client'
-import { useCreaTipologia, useAggiornaTipologia, type TipologiaCameraDto, type TipologiaCameraRequest } from '../api/tipologie'
+import { useCreaTipologia, useAggiornaTipologia, useAggiornaPulizieTipologia, type TipologiaCameraDto, type TipologiaCameraRequest } from '../api/tipologie'
 import { useMobile } from '../lib/useMobile'
 
 interface Props {
@@ -26,11 +26,15 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
   const [spesePulizia, setSpesePulizia] = useState(tipologia?.spesePulizia != null ? String(tipologia.spesePulizia) : '')
   const [animali, setAnimali] = useState(tipologia?.animali != null ? String(tipologia.animali) : '')
   const [cauzione, setCauzione] = useState(tipologia?.cauzione != null ? String(tipologia.cauzione) : '')
+  // Vuoto = come la struttura, 0 = nessuna, N = ogni N giorni.
+  const [intervalloPulizia, setIntervalloPulizia] = useState(tipologia?.intervalloPuliziaGiorni != null ? String(tipologia.intervalloPuliziaGiorni) : '')
+  const [intervalloBiancheria, setIntervalloBiancheria] = useState(tipologia?.intervalloBiancheriaGiorni != null ? String(tipologia.intervalloBiancheriaGiorni) : '')
   const [errore, setErrore] = useState<string | null>(null)
 
   const crea = useCreaTipologia(strutturaId)
   const aggiorna = useAggiornaTipologia(strutturaId)
-  const inCorso = crea.isPending || aggiorna.isPending
+  const aggiornaPulizie = useAggiornaPulizieTipologia(strutturaId)
+  const inCorso = crea.isPending || aggiorna.isPending || aggiornaPulizie.isPending
 
   function salva() {
     if (nome.trim() === '') {
@@ -55,10 +59,22 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
 
     const onError = (err: unknown) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
 
+    // Le frequenze delle pulizie hanno un endpoint loro (vedi useAggiornaPulizieTipologia): si salvano
+    // dopo la tipologia, sull'id che la tipologia ha appena ricevuto o che aveva già.
+    const salvaPulizie = (tipologiaId: string) =>
+      aggiornaPulizie.mutate(
+        {
+          tipologiaId,
+          intervalloPuliziaGiorni: intervalloPulizia.trim() === '' ? null : Number(intervalloPulizia),
+          intervalloBiancheriaGiorni: intervalloBiancheria.trim() === '' ? null : Number(intervalloBiancheria),
+        },
+        { onSuccess: onClose, onError },
+      )
+
     if (tipologia) {
-      aggiorna.mutate({ tipologiaId: tipologia.id, request }, { onSuccess: onClose, onError })
+      aggiorna.mutate({ tipologiaId: tipologia.id, request }, { onSuccess: () => salvaPulizie(tipologia.id), onError })
     } else {
-      crea.mutate(request, { onSuccess: onClose, onError })
+      crea.mutate(request, { onSuccess: (creata) => salvaPulizie(creata.id), onError })
     }
   }
 
@@ -92,6 +108,29 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <TextField label="Spese pulizia (€)" type="number" value={spesePulizia} onChange={(e) => setSpesePulizia(e.target.value)} fullWidth disabled={inCorso} />
           <TextField label="Supplemento animali (€)" type="number" value={animali} onChange={(e) => setAnimali(e.target.value)} fullWidth disabled={inCorso} />
+        </Box>
+
+        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
+          <TextField
+            label="Pulizia durante il soggiorno ogni (giorni)"
+            type="number"
+            value={intervalloPulizia}
+            onChange={(e) => setIntervalloPulizia(e.target.value)}
+            fullWidth
+            disabled={inCorso}
+            slotProps={{ htmlInput: { min: 0, max: 30 } }}
+            helperText="Vuoto = come la struttura. 0 = nessuna"
+          />
+          <TextField
+            label="Cambio biancheria ogni (giorni)"
+            type="number"
+            value={intervalloBiancheria}
+            onChange={(e) => setIntervalloBiancheria(e.target.value)}
+            fullWidth
+            disabled={inCorso}
+            slotProps={{ htmlInput: { min: 0, max: 30 } }}
+            helperText="Vuoto = come la struttura. 0 = nessuno"
+          />
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>

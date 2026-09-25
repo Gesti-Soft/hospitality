@@ -85,6 +85,15 @@ try
             .WithIdentity("pulizia-log-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(24).RepeatForever()));
 
+        // Camere da pulire oggi e domani, solo per chi ha "Stato camera": il job gira ogni ora e decide da
+        // sé se è l'ora dell'avviso (dalle 7 per oggi, dalle 17 per domani), una notifica per giorno.
+        var pulizieNotificaJobKey = new JobKey("pulizie-notifica");
+        quartz.AddJob<PulizieNotificaJob>(options => options.WithIdentity(pulizieNotificaJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(pulizieNotificaJobKey)
+            .WithIdentity("pulizie-notifica-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(1).RepeatForever()));
+
         // Ticket di assistenza chiusi da oltre 12 mesi: messaggi e foto cancellati, restano numero e
         // oggetto (conservazione GDPR, scelta dell'utente). Non urgente, un giro al giorno basta.
         var anonimizzazioneTicketJobKey = new JobKey("anonimizzazione-ticket");

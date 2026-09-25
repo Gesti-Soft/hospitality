@@ -1,8 +1,9 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-17. Stato: web in produzione sulla VPS, Fase 2
+Ultimo aggiornamento: 2026-09-25. Stato: web in produzione sulla VPS, Fase 2
 della sincronizzazione col desktop ferma sul ramo `fase-2-sync-locale`; su `master`
-fatturazione (estero, PDF rifatto), Osservatorio corretto e una passata di design.
+assistenza (committata), e **non committati**: ricevuta di locazione breve, fattura proposta al
+check-in, permessi separati, pulizie durante il soggiorno e relative notifiche.
 
 > **Cap: 300 righe.** Questo file è caricato a ogni sessione, la sua dimensione è un
 > costo permanente di contesto. Voci nuove brevi: cosa è cambiato, perché, cosa resta
@@ -50,12 +51,23 @@ Ordine non di priorità. Dettagli e design già concordati: vedi archivio.
 - **L'arrivo in una giornata passata non arriva mai all'Osservatorio**: il recupero
   dell'arretrato manda solo partenze e chiusure. Fedele al legacy, ma è un dato che non
   raggiunge una PA. Cala Azzurra ha il cursore al 15/09.
-- **PDF della fattura da rifare**, con logo della struttura: oggi non esiste nessun campo dove
-  caricarlo, va deciso prima dove si conserva l'immagine.
+- **5 migration generate e mai applicate** (`AssistenzaTicket`, `RicevutaLocazioneBreve`,
+  `PermessiCamereCheckIn`, `PulizieDuranteSoggiorno`, `NotifichePulizie`): nessuna provata su un
+  database, e nessuna delle funzioni del 25/09 provata dal vivo (Docker spento). `PermessiCamereCheckIn`
+  contiene anche un `UPDATE` dei dati: da controllare prima del deploy.
+- **Deploy**: variabili `EMAIL_*` da aggiungere al `.env` della VPS (senza, i ticket funzionano ma
+  nessuna email parte; porta 587, la 465 non è supportata). Volume nuovo `gestisoft_allegati`.
+- **Ricevute modificate prima del 25/09** possono avere l'IVA nel totale: query per trovarle nei
+  messaggi della sessione (`TipoEmissione = 2` con aliquota o natura valorizzate); si correggono
+  riaprendole e salvando.
+- **Fattura emessa al check-in e soggiorno che poi cambia**: se è già allo SdI serve una nota di
+  credito, e il gestionale non guida l'operatore.
+- **Da decidere**: indirizzo dell'immobile per tipologia (oggi solo per struttura); la "Dicitura in
+  fattura" si stampa anche sulle ricevute; requisiti di pulizia della classificazione Regione
+  Siciliana non verificati; `GestiSoft.Domain` ha entità nuove ma `PackageVersion` non alzata (il
+  desktop per scelta non si aggiorna).
 - **Etichette in maiuscolo spaziato** in dodici punti dell'interfaccia: stesso tic ripetuto, da
   decidere in un giro a sé.
-- **PDF fattura: mai guardato con gli occhi.** Si genera (provato davvero, HTTP 200 e file
-  valido), ma i font incorporati impediscono di verificarne il contenuto da qui.
 - **Nel PDF non c'è una riga "nazione"**: per un cliente estero lo stato si legge già
   nell'indirizzo e nel comune, come nella fattura reale accettata. Da decidere se separarla.
 - **Lasciati fuori dal PDF di proposito**: unità di misura sulla riga (la quantità non sempre
@@ -128,6 +140,29 @@ alle PA sono irreversibili: mai inviare nulla senza richiesta esplicita.
   un feed a cartella (`C:\Code\GestiSoft\nuget-local`), versione attuale **1.1.0** —
   alzarla a ogni cambiamento di forma delle entità. Il locale non riceve credenziali:
   le colonne non esistono proprio nel `LocaleDbContext`.
+- **Ragionare da esperto di hotellerie** (richiesta esplicita dell'utente): proporre la soluzione
+  del settore, non solo eseguire; normativa sempre verificata sul web.
+- **Permessi (25/09)**: "Esegui check-in/out" (`CheckInOut`) separato da "Stato camera"
+  (`RoomStatusUpdate`, pulizie); "Pagine Camere e Tipologie" (`RoomSetupRead`) separato da "Consulta
+  dati camere" (`SettingRoomRead`). L'addetto pulizie vede Check-in/out in sola lettura, riceve gli
+  elenchi senza importi né canale e **non vede la pagina Ospiti** (documenti: minimizzazione GDPR).
+  Qualunque cambio di stato di una camera occupata chiede "Esegui check-in/out"; nel dialogo della
+  camera chiede anche conferma. Camere libere: nessun vincolo.
+- **Pulizie durante il soggiorno**: pulizia e cambio biancheria sono servizi distinti. Il più
+  specifico vince: rinuncia dell'ospite sulla prenotazione (registrata nel log), poi tipologia
+  (vuoto = struttura, 0 = nessuna), poi struttura (vuoto = nessuna, il valore iniziale). Si conta
+  dall'ultima fatta, non dalla prevista; mai il giorno dell'arrivo né quello della partenza.
+  Intervalli della tipologia su un endpoint a parte: la pagina OTA rimanda il form della tipologia
+  con un elenco fisso di campi e li azzererebbe.
+- **"Oggi" è la data civile italiana** (`PulizieSoggiornoService.Oggi()`), non `DateTime.UtcNow.Date`
+  che fino all'una/alle due di notte dà ancora ieri.
+- **Notifiche riservate**: `Notifica.RichiedeStatoCamera` le mostra solo a chi ha "Stato camera".
+- **Assistenza**: ticket solo per titolare e "gestione utenti"; email al Super Admin e al solo
+  titolare, mai agli operatori. Foto su volume Docker (non nel database né nei backup), cancellate
+  alla chiusura; ticket anonimizzati 12 mesi dopo la chiusura. Licenza scaduta: il Cliente scrive
+  all'email mostrata al login, non serve aprire ticket.
+- **Ricevuta di locazione breve**: marca da bollo di carta (riquadro sul PDF), mai la dicitura del
+  bollo virtuale; la cedolare secca non esenta le ricevute dal bollo.
 
 ## Pattern consolidati (riusare, non reinventare)
 
@@ -156,6 +191,18 @@ alle PA sono irreversibili: mai inviare nulla senza richiesta esplicita.
 
 Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
 
+**Assistenza, ricevute, check-in, permessi, housekeeping** (25/09)
+- **Assistenza** (commit `82267b6`): ticket con foto, pagina Cliente e pagina Super Admin, icona
+  nella barra, email SMTP (`System.Net.Mail`, nessuna dipendenza nuova), nginx `/api/` a 30 MB.
+- **Ricevuta**: il tipo non arrivava al frontend (si riapriva come fattura) e in modifica prendeva
+  l'IVA; ora riporta soggiorno (arrivo, partenza, notti, ospiti, alloggio), immobile, pagamento,
+  cedolare secca e riquadro per la marca. PDF generati e guardati con dati finti.
+- **Fattura dal check-in**: dopo il check-in "Vuoi generare la fattura?" (solo con Finanze in
+  scrittura); nella pagina Fatture anche i soggiorni in corso.
+- **Permessi** separati e **pulizie durante il soggiorno** (sezione "Camere occupate" in Pulizie,
+  14 test sulla regola), **notifica** "Pulizie di oggi" (7-14) e "di domani" (dalle 17).
+- Stato camera manuale: portare in "Occupata" ha gli stessi paletti del check-in e scrive nel log.
+
 **Fatturazione a norma per il settore ricettivo** (17/09, seconda parte)
 - Normativa verificata sul web prima di scrivere: imposta di soggiorno riaddebitata **esclusa** dalla
   base imponibile (art. 15 c.1 n.3 DPR 633/72, natura **N1** — chiarimento dell'Agenzia, non N2), bollo
@@ -181,71 +228,18 @@ Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
 - Restano fuori: corrispettivi telematici e documento commerciale (servono un registratore telematico o
   la procedura web dell'Agenzia, non pilotabile da software terzi) e l'invio diretto allo SDI.
 
-**PayTourist: portali, verifica token, credenziali cifrate** (17/09)
-- Dump di produzione importato in un database a parte per capire perché l'invio di APP. ZAGARA
-  falliva ogni sera: PayTourist risponde **200** con `{"message": "Incasso da portali online non
-  abilitato su questo ente."}` e la deserializzazione rigida lo trasformava in "servizio non
-  raggiungibile". Castellammare del Golfo non abilita nessun portale.
-- Portali scelti uno per uno (`paytourist_portali_attivi`): sullo stesso Comune Airbnb può riscuotere
-  e Booking no, e un interruttore unico dichiarava al Comune un incasso che non c'era. L'invio non
-  interroga più i portali ad ogni giro, usa l'elenco salvato. Nessuna prenotazione viene più
-  scartata. La pagina segnala i canali senza portale corrispondente (abbinamento per nome esatto).
-- Confermato sulla documentazione PayTourist che in `total_from_online_portal` va **l'imposta già
-  incassata dal portale**: quindi `TotalTax` era giusto.
-- Token verificato al salvataggio con `api/v1/structures` (l'unica chiamata che non vuole uno
-  structure_id): rifiutato non si salva, portale irraggiungibile si salva con avviso. Un carattere
-  non ASCII (una "è" incollata) ora si segnala invece di far fallire tutto come problema di rete.
-- Credenziale lasciata vuota non azzera più quella salvata, su tutte e tre le integrazioni.
-- Fattura elettronica: la sede dell'emittente scriveva il campo "Nazione" dei dati aziendali
-  ("ITALIA"), non l'ISO2 che era già lì accanto — l'XML non si generava, e per giunta la struttura
-  passava per estera, quindi CAP e provincia non venivano più controllati. Descrizione ora
-  obbligatoria anche lato Api e nella validazione, non solo nel dialogo.
-- **Credenziali cifrate a riposo** (AES-GCM, chiave in `CREDENZIALI_CHIAVE_CIFRATURA`, fuori dal
-  database perché il rischio è proprio il dump): token PayTourist e OTA, utenza Alloggiati Web,
-  password Osservatorio. I valori storici si rileggono in chiaro e vengono cifrati al primo avvio.
-  ⚠️ **Senza quella variabile l'Api non parte: va aggiunta al `.env` della VPS prima del deploy.**
-  Provato dal vivo: 13 credenziali cifrate al primo riavvio, e la rotazione provata sul database
-  di produzione importato in locale (lette con la chiave del server, riscritte con quella locale). Il cambio di chiave si fa
-  tenendo per un riavvio anche `CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE` (procedura in
-  `docs/deploy.md`); la chiave vecchia va conservata finché esistono backup anteriori alla
-  rotazione, o quelle copie non sarebbero più rileggibili.
-
-**Design e pannello Super Admin** (16/09, seconda parte)
-- Sfondo e bordi da caldi a freddi (`#FAF8F4` → `#F4F6F9`, `#E7E2D8` → `#E2E6EC`): il crema con
-  grigi freddi sopra faceva sembrare sporca l'interfaccia, e il bordo beige contornava ogni
-  riquadro. Ora l'arancione del marchio è l'unica cosa calda a schermo.
-- Importi e date fuori dal monospazio: nuovo token `stileImporto` (font del testo + cifre
-  tabulari). Le colonne restano incolonnate, i numeri non sembrano più un terminale. Il mono
-  resta ai codici veri. Caricato anche il peso 700 del mono, che il codice chiedeva senza averlo.
-- Super Admin → Clienti: barra di ricerca (cliente, struttura, partita IVA, email) e card
-  rifatte. **"Entra" sceglie il Cliente** su cui operare — la select Cliente in barra è stata
-  tolta, quella delle Strutture resta. Entrando, la sezione Super Admin sparisce dal menu e
-  nella barra arancione compare "Torna al pannello amministratore": per uscire davvero vanno
-  azzerati **sia** cliente **sia** struttura, o la prima struttura viene subito riselezionata.
-- PDF della fattura rifatto: nome della struttura in testa, identità fiscale sotto in piccolo,
-  documento a destra, "Fatturato a", tabella con la sola intestazione filettata, totali a destra
-  col totale staccato. Niente logo (non ne esiste uno) e niente piè di pagina — regime fiscale e
-  avvertenza SdI non interessano a chi riceve. Importi in euro all'italiana.
-- Dati aziendali: aliquota IVA e natura predefinite, più la **dicitura di legge** da stampare
-  quando l'IVA non si applica (la detta il commercialista, il software non la inventa). Due
-  migrazioni, applicate al Postgres locale.
-- Fattura nuova: descrizione vuota e obbligatoria, regime/aliquota/natura presi dai dati
-  aziendali invece che dai valori fissi RF01 e 10%.
-
-**Fatturazione verso l'estero e Osservatorio** (16/09)
-- Stati esteri selezionabili nei campi luogo: il backend cercava già il codice tra comuni e
-  stati, l'interfaccia offriva solo gli 11.283 comuni.
-- Fattura elettronica estero: la sede del cliente scriveva `Nazione` fissa a "IT". Ora nazione
-  dall'ISO2, CAP `00000`, provincia omessa, codice destinatario `XXXXXXX` se non ce n'è uno
-  vero; nel dialogo cliente i campi dell'estero si compilano da soli. Forma copiata da una
-  fattura reale già accettata: `Germania - 00000, Germania - DE`.
-- Controllo prima di generare l'XML: se manca un dato obbligatorio il file non si produce e si
-  dice cosa manca, invece di far scaricare qualcosa che lo SdI scarterebbe. Il PDF esce sempre.
-- Osservatorio: `<Stay>` non conteneva `HotelCode` e ogni invio veniva rifiutato — il parametro
-  arrivava al costruttore dell'XML e lì veniva ignorato, senza avvisi del compilatore. La
-  verifica connessione non poteva accorgersene: fa login e legge la data, non costruisce Stay.
-- Dati aziendali: aliquota IVA e natura predefinite, da cui parte ogni fattura nuova insieme al
-  regime fiscale (prima erano fissi RF01 e 10%). Descrizione fattura vuota e obbligatoria.
+**PayTourist, credenziali cifrate, design, fattura estero, Osservatorio** (16-17/09, condensate: testo in archivio)
+- PayTourist: portali scelti uno per uno (`paytourist_portali_attivi`), token verificato al salvataggio,
+  una credenziale lasciata vuota non azzera più quella salvata. In `total_from_online_portal` va
+  l'imposta già incassata dal portale (`TotalTax`).
+- **Credenziali cifrate a riposo** (AES-GCM, chiave in `CREDENZIALI_CHIAVE_CIFRATURA`, fuori dal database).
+  ⚠️ Senza quella variabile l'Api non parte. Cambio chiave con `..._PRECEDENTE` per un riavvio
+  (`docs/deploy.md`); la chiave vecchia si conserva finché esistono backup anteriori alla rotazione.
+- Design: palette fredda (l'arancione del marchio è l'unica cosa calda), importi con `stileImporto`
+  e non in monospazio. Super Admin → Clienti: "Entra" sceglie il Cliente; per uscire vanno azzerati
+  sia cliente sia struttura.
+- Fattura estero: nazione dall'ISO2, CAP `00000`, codice destinatario `XXXXXXX`; XML non generato se
+  manca un dato obbligatorio (il PDF sì). Osservatorio: `HotelCode` mancava in `<Stay>`.
 
 **Sincronizzazione col desktop**
 - Fase 1 desktop costruita e provata contro un Postgres vero (35 tabelle, `/health` su

@@ -8,6 +8,7 @@ import { StatoCamera, useCamere, useSegnaCameraPulita } from '../../api/camere'
 import { ApiError } from '../../api/client'
 import { fontDisplay, tokens } from '../../theme'
 import { useToast } from '../../toast/ToastContext'
+import { CamereOccupate } from '../../components/pulizie/CamereOccupate'
 
 export function PuliziePage() {
   const { strutturaId } = useStruttura()
@@ -26,6 +27,7 @@ export function PuliziePage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5 }}>Da pulire dopo la partenza</Typography>
 
       {camere.isLoading && <Skeleton variant="rounded" height={220} />}
 
@@ -69,6 +71,9 @@ export function PuliziePage() {
           ))}
         </Box>
       )}
+
+      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5, mt: 1.5 }}>Camere occupate</Typography>
+      <CamereOccupate strutturaId={strutturaId} />
     </Box>
   )
 }

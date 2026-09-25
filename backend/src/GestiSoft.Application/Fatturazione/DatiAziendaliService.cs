@@ -21,7 +21,9 @@ public record AggiornaDatiAziendaliRequest(
     string? Cap,
     string? Comune,
     string? Provincia,
-    string? Nazione);
+    string? Nazione,
+    string? IndirizzoImmobile = null,
+    bool CedolareSecca = false);
 
 /// <summary>
 /// Profilo fiscale emittente della struttura (una sola riga per Struttura) — porta
@@ -60,6 +62,8 @@ public class DatiAziendaliService(IDatiAziendaliRepository repository, PermessoS
         entity.Comune = request.Comune;
         entity.Provincia = request.Provincia;
         entity.Nazione = request.Nazione;
+        entity.IndirizzoImmobile = string.IsNullOrWhiteSpace(request.IndirizzoImmobile) ? null : request.IndirizzoImmobile.Trim();
+        entity.CedolareSecca = request.CedolareSecca;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await repository.UpsertAsync(entity, cancellationToken);

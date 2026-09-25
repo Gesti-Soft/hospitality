@@ -84,7 +84,7 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
     private static DatiFatturaDto ToDto(DatiFattura f) => new(
         f.Id, f.StrutturaId, f.DatiClienteId,
         f.Cliente is null ? null : !string.IsNullOrWhiteSpace(f.Cliente.Denominazione) ? f.Cliente.Denominazione : $"{f.Cliente.Nome} {f.Cliente.Cognome}".Trim(),
-        f.Progressivo, f.TipoDocumento, f.RegimeFiscale, f.NumeroDocumento, f.DataDocumento, f.Divisa,
+        f.Progressivo, f.TipoDocumento, f.RegimeFiscale, f.TipoEmissione, f.ModalitaPagamento, f.NumeroDocumento, f.DataDocumento, f.Divisa,
         f.Descrizione, f.Quantita, f.PrezzoUnitario, f.PrezzoTotale, f.ImportoTotale, f.AliquotaIva, f.Natura,
         f.ImpostaSoggiorno, f.ImportoBollo, f.Anno);
 

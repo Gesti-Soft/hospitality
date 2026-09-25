@@ -26,6 +26,9 @@ public class DatiFattura : TenantEntity
     /// </summary>
     public TipoEmissioneDocumento TipoEmissione { get; set; } = TipoEmissioneDocumento.Fattura;
 
+    /// <summary>Come ha pagato l'ospite. Stampato solo sulla ricevuta; null se non indicato.</summary>
+    public ModalitaPagamento? ModalitaPagamento { get; set; }
+
     /// <summary>Progressivo dentro la propria serie: fatture e ricevute contano separatamente.</summary>
     public int Progressivo { get; set; }
 

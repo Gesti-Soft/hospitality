@@ -43,4 +43,11 @@ public class Notifica : TenantEntity
     /// puntuale (nuova prenotazione, cancellazione) che non ne hanno bisogno.
     /// </summary>
     public string? ChiaveDedup { get; set; }
+
+    /// <summary>
+    /// Visibile solo a chi ha il permesso "Stato camera" (addetti pulizie, receptionist,
+    /// amministratori) oltre a titolare e Super Admin. Le altre notifiche le vede chiunque acceda
+    /// alla struttura; queste agli altri non servono.
+    /// </summary>
+    public bool RichiedeStatoCamera { get; set; }
 }

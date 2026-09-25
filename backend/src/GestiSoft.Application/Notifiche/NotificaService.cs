@@ -13,28 +13,33 @@ namespace GestiSoft.Application.Notifiche;
 /// job Quartz o dal polling Wubook) non hanno un ICurrentUser e non passano da nessun guard, stesso
 /// principio già usato per LogEventoService.
 /// </summary>
-public class NotificaService(INotificaRepository notifiche, IOspiteRepository ospiti, TenantAccessGuard accessGuard)
+public class NotificaService(INotificaRepository notifiche, IOspiteRepository ospiti, TenantAccessGuard accessGuard, PermessoStrutturaGuard permessoGuard)
 {
     private static readonly TimeSpan FinestraGraziaCancellazioneWubook = TimeSpan.FromMinutes(5);
 
     public async Task<IReadOnlyList<Notifica>> ListaAsync(ICurrentUser currentUser, Guid strutturaId, bool soloNonLette, CancellationToken cancellationToken)
     {
         await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
-        return await notifiche.ListaAsync(strutturaId, soloNonLette, cancellationToken);
+        return await notifiche.ListaAsync(strutturaId, soloNonLette, await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken), cancellationToken);
     }
 
     public async Task<int> ContaNonLetteAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
-        return await notifiche.ContaNonLetteAsync(strutturaId, cancellationToken);
+        return await notifiche.ContaNonLetteAsync(strutturaId, await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken), cancellationToken);
     }
+
+    /// <summary>Le notifiche delle pulizie (Notifica.RichiedeStatoCamera) le vede solo chi ha "Stato camera"; titolare e Super Admin sempre.</summary>
+    private Task<bool> VedeStatoCameraAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken) =>
+        permessoGuard.HaAsync(currentUser, strutturaId, p => p.RoomStatusUpdate, cancellationToken);
 
     public async Task SegnaLettaAsync(ICurrentUser currentUser, Guid strutturaId, Guid notificaId, CancellationToken cancellationToken)
     {
         await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
 
         var notifica = await notifiche.GetAsync(notificaId, cancellationToken);
-        if (notifica is null || notifica.StrutturaId != strutturaId)
+        if (notifica is null || notifica.StrutturaId != strutturaId
+            || (notifica.RichiedeStatoCamera && !await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken)))
         {
             throw new NotFoundException("Notifica non trovata.");
         }
@@ -49,11 +54,12 @@ public class NotificaService(INotificaRepository notifiche, IOspiteRepository os
     public async Task SegnaTutteLetteAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
-        await notifiche.SegnaTutteLetteAsync(strutturaId, cancellationToken);
+        await notifiche.SegnaTutteLetteAsync(strutturaId, await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken), cancellationToken);
     }
 
     /// <summary>Notifica idempotente per eventi generati periodicamente da un job (licenza/schedine): non duplica se già creata con la stessa chiave (es. stessa scadenza, stesso giorno).</summary>
-    public async Task<bool> CreaSeNonEsisteAsync(Guid strutturaId, TipoNotifica tipo, string chiaveDedup, string titolo, string messaggio, CancellationToken cancellationToken)
+    /// <param name="richiedeStatoCamera">Visibile solo a chi ha il permesso "Stato camera" (pulizie).</param>
+    public async Task<bool> CreaSeNonEsisteAsync(Guid strutturaId, TipoNotifica tipo, string chiaveDedup, string titolo, string messaggio, CancellationToken cancellationToken, bool richiedeStatoCamera = false)
     {
         if (await notifiche.EsisteChiaveDedupAsync(strutturaId, chiaveDedup, cancellationToken))
         {
@@ -67,6 +73,7 @@ public class NotificaService(INotificaRepository notifiche, IOspiteRepository os
             Titolo = titolo,
             Messaggio = messaggio,
             ChiaveDedup = chiaveDedup,
+            RichiedeStatoCamera = richiedeStatoCamera,
         }, cancellationToken);
         return true;
     }

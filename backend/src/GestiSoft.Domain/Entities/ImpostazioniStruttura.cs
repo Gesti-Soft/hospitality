@@ -58,4 +58,14 @@ public class ImpostazioniStruttura : TenantEntity
     /// </summary>
     public string? ComuneAttivita { get; set; }
 
+    /// <summary>
+    /// Ogni quanti giorni si pulisce una camera occupata durante il soggiorno (riassetto). Null =
+    /// nessuna pulizia intermedia: il valore iniziale, perché non si inventa un servizio che la
+    /// struttura non ha deciso. La tipologia può sostituirlo, vedi SettingTipologia.
+    /// </summary>
+    public int? IntervalloPuliziaGiorni { get; set; }
+
+    /// <summary>Come <see cref="IntervalloPuliziaGiorni"/>, per il cambio della biancheria: negli alberghi è un servizio distinto, con una sua frequenza.</summary>
+    public int? IntervalloBiancheriaGiorni { get; set; }
+
 }

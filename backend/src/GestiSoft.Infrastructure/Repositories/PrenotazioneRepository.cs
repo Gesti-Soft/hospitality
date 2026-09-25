@@ -151,6 +151,17 @@ public class PrenotazioneRepository(GestiSoftDbContext db) : IPrenotazioneReposi
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<int> ContaPartenzeAsync(Guid strutturaId, DateTime giorno, CancellationToken cancellationToken)
+    {
+        var data = DateTime.SpecifyKind(giorno.Date, DateTimeKind.Utc);
+        return await db.Prenotazioni.CountAsync(
+            p => p.StrutturaId == strutturaId
+                && p.CheckOut != null && p.CheckOut.Value.Date == data
+                && p.StatoPrenotazione != StatoPrenotazione.Annullata
+                && p.StatoPrenotazione != StatoPrenotazione.Completata,
+            cancellationToken);
+    }
+
     public async Task AddAsync(Prenotazione entity, CancellationToken cancellationToken)
     {
         db.Prenotazioni.Add(entity);

@@ -62,6 +62,8 @@ const PERMESSI_VUOTI: PermessiStruttura = {
   financeWrite: false,
   restaurantRead: false,
   restaurantWrite: false,
+  roomSetupRead: false,
+  checkInOut: false,
 }
 
 const TUTTI_PERMESSI: PermessiStruttura = Object.fromEntries(Object.keys(PERMESSI_VUOTI).map((k) => [k, true])) as unknown as PermessiStruttura
@@ -76,6 +78,8 @@ const PRESET_PERMESSI: Record<RuoloUtente, Partial<PermessiStruttura>> = {
     reservationWrite: true,
     roomStatusUpdate: true,
     settingRoomRead: true,
+    roomSetupRead: true,
+    checkInOut: true,
     statePoliceRead: true,
     statePoliceWrite: true,
   },
@@ -84,7 +88,7 @@ const PRESET_PERMESSI: Record<RuoloUtente, Partial<PermessiStruttura>> = {
   [RuoloUtente.Maintenance]: { roomStatusUpdate: true, settingRoomRead: true },
   [RuoloUtente.FnbManager]: { restaurantRead: true, restaurantWrite: true },
   [RuoloUtente.BookingAgent]: { bookingRead: true, bookingWrite: true, reservationRead: true, reservationWrite: true },
-  [RuoloUtente.NightAuditor]: { reservationRead: true, reservationWrite: true, financeRead: true, roomStatusUpdate: true },
+  [RuoloUtente.NightAuditor]: { reservationRead: true, reservationWrite: true, financeRead: true, roomStatusUpdate: true, checkInOut: true },
   [RuoloUtente.Marketing]: { bookingRead: true, reservationRead: true },
 }
 
@@ -94,13 +98,15 @@ const GRUPPI_PERMESSI: { titolo: string; voci: { chiave: keyof PermessiStruttura
     voci: [
       { chiave: 'reservationRead', etichetta: 'Consulta' },
       { chiave: 'reservationWrite', etichetta: 'Crea/modifica' },
-      { chiave: 'roomStatusUpdate', etichetta: 'Check-in/out, stato camera' },
+      { chiave: 'checkInOut', etichetta: 'Esegui check-in/out' },
+      { chiave: 'roomStatusUpdate', etichetta: 'Stato camera (pulizie), vede arrivi e partenze' },
     ],
   },
   {
     titolo: 'Camere e tariffe',
     voci: [
-      { chiave: 'settingRoomRead', etichetta: 'Consulta' },
+      { chiave: 'settingRoomRead', etichetta: 'Consulta dati camere' },
+      { chiave: 'roomSetupRead', etichetta: 'Pagine Camere e Tipologie' },
       { chiave: 'settingRoomWrite', etichetta: 'Crea/modifica' },
       { chiave: 'settingAgency', etichetta: 'Canali vendita' },
     ],

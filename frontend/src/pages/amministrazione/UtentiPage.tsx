@@ -46,7 +46,7 @@ function contaPermessi(a: AssegnazioneStrutturaDto): number {
   return [
     a.bookingRead, a.bookingWrite, a.reservationRead, a.reservationWrite, a.statePoliceRead, a.statePoliceWrite,
     a.statePoliceSettings, a.settingAgency, a.settingUser, a.settingRoomRead, a.settingRoomWrite, a.roomStatusUpdate,
-    a.financeRead, a.financeWrite, a.restaurantRead, a.restaurantWrite,
+    a.financeRead, a.financeWrite, a.restaurantRead, a.restaurantWrite, a.roomSetupRead, a.checkInOut,
   ].filter(Boolean).length
 }
 
@@ -115,7 +115,7 @@ export function UtentiPage() {
                 sottotitolo={a.nome || a.cognome ? `${a.nome ?? ''} ${a.cognome ?? ''}`.trim() : undefined}
                 azioneDestra={<Chip size="small" label={ETICHETTA_RUOLO[a.ruolo]} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />}
               />
-              <RigaCardMeta voci={[{ etichetta: 'Permessi attivi', valore: `${contaPermessi(a)}/16` }]} />
+              <RigaCardMeta voci={[{ etichetta: 'Permessi attivi', valore: `${contaPermessi(a)}/18` }]} />
               <AzioniCardElenco>
                 <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', assegnazione: a })}>
                   <EditIcon fontSize="small" />
@@ -164,7 +164,7 @@ export function UtentiPage() {
                     <Chip size="small" label={ETICHETTA_RUOLO[a.ruolo]} sx={{ bgcolor: tokens.blue600, color: '#fff', fontWeight: 700 }} />
                   </TableCell>
                   <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                    {contaPermessi(a)}/16
+                    {contaPermessi(a)}/18
                   </TableCell>
                   <TableCell align="right">
                     <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', assegnazione: a })}>

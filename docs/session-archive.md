@@ -2380,3 +2380,72 @@ Fase 9 completa e committata (commit `fe03934`). Fase 10 (migrazione dati) compl
 - Path assoluto hardcoded da NON riportare: il vecchio `OrderManagement` legge `comuni.txt`/`stati.txt`/`documenti.txt`/`tipo_alloggiato.txt` da `C:\GestiSoft\Hospitality\OrderManagement\` — nel nuovo sistema questi vanno incorporati come risorse embedded + seed migration EF Core.
 - Il client Wubook (XML-RPC) e i client Alloggiati Web/Osservatorio Turistico/PayTourist nel codice legacy sono già scritti con `HttpClient` puro, **senza dipendenza da RabbitMQ** — sono la parte più facilmente portabile as-is (vedi `OtaService.Data/Repositories/OtaService/OtaServiceApiRepository.cs` e `SyncStatePolice.Data/Repositories/Statepolice/StatePoliceApiRepository.cs` nel progetto legacy).
 - `OtaService.Web` (dentro il progetto legacy `OtaService`) ha già controller REST (`RoomsController`, `PricingPlansController`, `RestrictionsController`, `ConfigController`) che wrappano la logica Wubook — ottimo punto di partenza da portare quasi identico nella Fase 5.
+
+
+## Voci condensate dal session report il 2026-09-25 (testo integrale)
+
+**PayTourist: portali, verifica token, credenziali cifrate** (17/09)
+- Dump di produzione importato in un database a parte per capire perché l'invio di APP. ZAGARA
+  falliva ogni sera: PayTourist risponde **200** con `{"message": "Incasso da portali online non
+  abilitato su questo ente."}` e la deserializzazione rigida lo trasformava in "servizio non
+  raggiungibile". Castellammare del Golfo non abilita nessun portale.
+- Portali scelti uno per uno (`paytourist_portali_attivi`): sullo stesso Comune Airbnb può riscuotere
+  e Booking no, e un interruttore unico dichiarava al Comune un incasso che non c'era. L'invio non
+  interroga più i portali ad ogni giro, usa l'elenco salvato. Nessuna prenotazione viene più
+  scartata. La pagina segnala i canali senza portale corrispondente (abbinamento per nome esatto).
+- Confermato sulla documentazione PayTourist che in `total_from_online_portal` va **l'imposta già
+  incassata dal portale**: quindi `TotalTax` era giusto.
+- Token verificato al salvataggio con `api/v1/structures` (l'unica chiamata che non vuole uno
+  structure_id): rifiutato non si salva, portale irraggiungibile si salva con avviso. Un carattere
+  non ASCII (una "è" incollata) ora si segnala invece di far fallire tutto come problema di rete.
+- Credenziale lasciata vuota non azzera più quella salvata, su tutte e tre le integrazioni.
+- Fattura elettronica: la sede dell'emittente scriveva il campo "Nazione" dei dati aziendali
+  ("ITALIA"), non l'ISO2 che era già lì accanto — l'XML non si generava, e per giunta la struttura
+  passava per estera, quindi CAP e provincia non venivano più controllati. Descrizione ora
+  obbligatoria anche lato Api e nella validazione, non solo nel dialogo.
+- **Credenziali cifrate a riposo** (AES-GCM, chiave in `CREDENZIALI_CHIAVE_CIFRATURA`, fuori dal
+  database perché il rischio è proprio il dump): token PayTourist e OTA, utenza Alloggiati Web,
+  password Osservatorio. I valori storici si rileggono in chiaro e vengono cifrati al primo avvio.
+  ⚠️ **Senza quella variabile l'Api non parte: va aggiunta al `.env` della VPS prima del deploy.**
+  Provato dal vivo: 13 credenziali cifrate al primo riavvio, e la rotazione provata sul database
+  di produzione importato in locale (lette con la chiave del server, riscritte con quella locale). Il cambio di chiave si fa
+  tenendo per un riavvio anche `CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE` (procedura in
+  `docs/deploy.md`); la chiave vecchia va conservata finché esistono backup anteriori alla
+  rotazione, o quelle copie non sarebbero più rileggibili.
+
+**Design e pannello Super Admin** (16/09, seconda parte)
+- Sfondo e bordi da caldi a freddi (`#FAF8F4` → `#F4F6F9`, `#E7E2D8` → `#E2E6EC`): il crema con
+  grigi freddi sopra faceva sembrare sporca l'interfaccia, e il bordo beige contornava ogni
+  riquadro. Ora l'arancione del marchio è l'unica cosa calda a schermo.
+- Importi e date fuori dal monospazio: nuovo token `stileImporto` (font del testo + cifre
+  tabulari). Le colonne restano incolonnate, i numeri non sembrano più un terminale. Il mono
+  resta ai codici veri. Caricato anche il peso 700 del mono, che il codice chiedeva senza averlo.
+- Super Admin → Clienti: barra di ricerca (cliente, struttura, partita IVA, email) e card
+  rifatte. **"Entra" sceglie il Cliente** su cui operare — la select Cliente in barra è stata
+  tolta, quella delle Strutture resta. Entrando, la sezione Super Admin sparisce dal menu e
+  nella barra arancione compare "Torna al pannello amministratore": per uscire davvero vanno
+  azzerati **sia** cliente **sia** struttura, o la prima struttura viene subito riselezionata.
+- PDF della fattura rifatto: nome della struttura in testa, identità fiscale sotto in piccolo,
+  documento a destra, "Fatturato a", tabella con la sola intestazione filettata, totali a destra
+  col totale staccato. Niente logo (non ne esiste uno) e niente piè di pagina — regime fiscale e
+  avvertenza SdI non interessano a chi riceve. Importi in euro all'italiana.
+- Dati aziendali: aliquota IVA e natura predefinite, più la **dicitura di legge** da stampare
+  quando l'IVA non si applica (la detta il commercialista, il software non la inventa). Due
+  migrazioni, applicate al Postgres locale.
+- Fattura nuova: descrizione vuota e obbligatoria, regime/aliquota/natura presi dai dati
+  aziendali invece che dai valori fissi RF01 e 10%.
+
+**Fatturazione verso l'estero e Osservatorio** (16/09)
+- Stati esteri selezionabili nei campi luogo: il backend cercava già il codice tra comuni e
+  stati, l'interfaccia offriva solo gli 11.283 comuni.
+- Fattura elettronica estero: la sede del cliente scriveva `Nazione` fissa a "IT". Ora nazione
+  dall'ISO2, CAP `00000`, provincia omessa, codice destinatario `XXXXXXX` se non ce n'è uno
+  vero; nel dialogo cliente i campi dell'estero si compilano da soli. Forma copiata da una
+  fattura reale già accettata: `Germania - 00000, Germania - DE`.
+- Controllo prima di generare l'XML: se manca un dato obbligatorio il file non si produce e si
+  dice cosa manca, invece di far scaricare qualcosa che lo SdI scarterebbe. Il PDF esce sempre.
+- Osservatorio: `<Stay>` non conteneva `HotelCode` e ogni invio veniva rifiutato — il parametro
+  arrivava al costruttore dell'XML e lì veniva ignorato, senza avvisi del compilatore. La
+  verifica connessione non poteva accorgersene: fa login e legge la data, non costruisce Stay.
+- Dati aziendali: aliquota IVA e natura predefinite, da cui parte ogni fattura nuova insieme al
+  regime fiscale (prima erano fissi RF01 e 10%). Descrizione fattura vuota e obbligatoria.

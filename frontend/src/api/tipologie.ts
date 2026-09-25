@@ -16,6 +16,9 @@ export interface TipologiaCameraDto {
   wubookAttiva: boolean
   codiceCameraWubook: string | null
   wubookSoloWoodoo: boolean
+  /** Null = come la struttura, 0 = nessuna, N = ogni N giorni. Si salva con useAggiornaPulizieTipologia, non con il form generale. */
+  intervalloPuliziaGiorni: number | null
+  intervalloBiancheriaGiorni: number | null
 }
 
 export interface TipologiaCameraRequest {
@@ -72,6 +75,20 @@ export function useEliminaTipologia(strutturaId: string | null) {
   const invalida = useInvalidaTipologie(strutturaId)
   return useMutation({
     mutationFn: (tipologiaId: string) => apiDelete<void>(`/strutture/${strutturaId}/tipologie-camera/${tipologiaId}`),
+    onSuccess: invalida,
+  })
+}
+
+/**
+ * Frequenze di pulizia e cambio biancheria della tipologia. Endpoint a parte e non dentro
+ * TipologiaCameraRequest: quella la rimanda anche la pagina Servizi OTA con un elenco fisso di campi,
+ * e un campo in più lì verrebbe azzerato a ogni suo salvataggio.
+ */
+export function useAggiornaPulizieTipologia(strutturaId: string | null) {
+  const invalida = useInvalidaTipologie(strutturaId)
+  return useMutation({
+    mutationFn: ({ tipologiaId, intervalloPuliziaGiorni, intervalloBiancheriaGiorni }: { tipologiaId: string; intervalloPuliziaGiorni: number | null; intervalloBiancheriaGiorni: number | null }) =>
+      apiPut<void>(`/strutture/${strutturaId}/tipologie-camera/${tipologiaId}/pulizie`, { intervalloPuliziaGiorni, intervalloBiancheriaGiorni }),
     onSuccess: invalida,
   })
 }

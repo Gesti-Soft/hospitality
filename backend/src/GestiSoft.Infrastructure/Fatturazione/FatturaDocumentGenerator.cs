@@ -26,7 +26,7 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
 
     private static readonly CultureInfo Italiano = CultureInfo.GetCultureInfo("it-IT");
 
-    public byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, string? nomeStruttura)
+    public byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, string? nomeStruttura, DatiSoggiorno? soggiorno = null)
     {
         var intestazione = PrimoNonVuoto(nomeStruttura, azienda?.Denominazione, $"{azienda?.Nome} {azienda?.Cognome}") ?? "Fattura";
         var ricevuta = fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta;
@@ -81,13 +81,35 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                 {
                     col.Spacing(18);
 
-                    col.Item().Column(c =>
+                    col.Item().Row(riga =>
                     {
-                        c.Item().Text(fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta ? "Ricevuta rilasciata a" : "Fatturato a").FontSize(8.5f).FontColor(InchiostroTenue);
-                        c.Item().PaddingTop(2).Text(NomeCliente(cliente)).FontSize(11.5f).SemiBold();
-                        foreach (var riga in RigheCliente(cliente))
+                        riga.RelativeItem().Column(c =>
                         {
-                            c.Item().PaddingTop(1).Text(riga).FontSize(9).FontColor(InchiostroTenue);
+                            c.Item().Text(fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta ? "Ricevuta rilasciata a" : "Fatturato a").FontSize(8.5f).FontColor(InchiostroTenue);
+                            c.Item().PaddingTop(2).Text(NomeCliente(cliente)).FontSize(11.5f).SemiBold();
+                            foreach (var rigaCliente in RigheCliente(cliente))
+                            {
+                                c.Item().PaddingTop(1).Text(rigaCliente).FontSize(9).FontColor(InchiostroTenue);
+                            }
+                        });
+
+                        // La ricevuta d'affitto dice quale soggiorno paga: periodo, notti, ospiti e
+                        // alloggio, come nei modelli in uso per le locazioni brevi.
+                        var vociSoggiorno = ricevuta ? VociSoggiorno(soggiorno, azienda?.IndirizzoImmobile).ToList() : [];
+                        if (vociSoggiorno.Count > 0)
+                        {
+                            riga.ConstantItem(210).Column(c =>
+                            {
+                                c.Item().Text("Soggiorno").FontSize(8.5f).FontColor(InchiostroTenue);
+                                foreach (var (etichetta, valore) in vociSoggiorno)
+                                {
+                                    c.Item().PaddingTop(2).Row(r =>
+                                    {
+                                        r.ConstantItem(85).Text(etichetta).FontSize(9).FontColor(InchiostroTenue);
+                                        r.RelativeItem().Text(valore).FontSize(9);
+                                    });
+                                }
+                            });
                         }
                     });
 
@@ -124,7 +146,7 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                             table.Cell().Element(CellaRiga).Text("Imposta di soggiorno");
                             table.Cell().Element(CellaRiga).AlignRight().Text("1");
                             table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(tassa));
-                            table.Cell().Element(CellaRiga).AlignRight().Text("—");
+                            table.Cell().Element(CellaRiga).AlignRight().Text(ricevuta ? "" : "—");
                             table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(tassa));
                         }
                     });
@@ -143,6 +165,11 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
 
                         totali.Item().PaddingTop(5).BorderTop(1).BorderColor(Filetto).PaddingTop(6)
                             .Element(c => RigaTotale(c, "Totale", Valuta(fattura.ImportoTotale), true));
+
+                        if (ricevuta && fattura.ModalitaPagamento is { } pagamento)
+                        {
+                            totali.Item().PaddingTop(6).Element(c => RigaTotale(c, "Pagato con", EtichettaPagamento(pagamento), false));
+                        }
                     });
 
                     // La dicitura di legge vince sempre sul codice: il codice natura dice allo SdI
@@ -160,15 +187,34 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                     if (ricevuta)
                     {
                         col.Item().Text("Locazione breve — operazione fuori dal campo di applicazione dell'IVA. Documento non fiscale.").FontSize(8.5f).FontColor(InchiostroTenue);
+
+                        if (azienda?.CedolareSecca == true)
+                        {
+                            col.Item().Text("Il locatore ha optato per il regime della cedolare secca (art. 3 D.Lgs. 23/2011; art. 4 D.L. 50/2017).").FontSize(8.5f).FontColor(InchiostroTenue);
+                        }
                     }
 
                     if (fattura.ImpostaSoggiorno is > 0)
                     {
-                        col.Item().Text("Imposta di soggiorno esclusa dalla base imponibile ai sensi dell'art. 15 c.1 n.3 DPR 633/72.").FontSize(8.5f).FontColor(InchiostroTenue);
+                        col.Item().Text(ricevuta
+                            // Sulla ricevuta non c'è IVA da cui escluderla: quello che conta per l'ospite è
+                            // che quella somma va al Comune, non al locatore.
+                            ? "Imposta di soggiorno riscossa per conto del Comune: non fa parte del corrispettivo della locazione."
+                            : "Imposta di soggiorno esclusa dalla base imponibile ai sensi dell'art. 15 c.1 n.3 DPR 633/72.").FontSize(8.5f).FontColor(InchiostroTenue);
                     }
 
+                    // Sulla ricevuta di un privato il bollo è la marca di carta da incollare
+                    // sull'originale: la formula del bollo virtuale vale per la fattura elettronica
+                    // (o per chi ha l'autorizzazione dell'Agenzia), lì sarebbe falsa. Il riquadro
+                    // ricorda all'host che la marca serve e dove va.
+                    if (fattura.ImportoBollo is > 0 && ricevuta)
+                    {
+                        col.Item().PaddingTop(10).Width(95).Height(95).Border(1).BorderColor(Filetto)
+                            .AlignCenter().AlignMiddle().PaddingHorizontal(6)
+                            .Text($"Marca da bollo\nda {Valuta(fattura.ImportoBollo.Value)}").FontSize(8).FontColor(InchiostroTenue).AlignCenter();
+                    }
                     // Va stampata sul documento, non basta il blocco DatiBollo nell'XML.
-                    if (fattura.ImportoBollo is > 0)
+                    else if (fattura.ImportoBollo is > 0)
                     {
                         col.Item().Text(DicituraBollo).FontSize(8.5f).FontColor(InchiostroTenue);
                     }
@@ -223,6 +269,31 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         if (!string.IsNullOrWhiteSpace(a.PIva)) yield return $"P. IVA {a.PIva}";
         if (!string.IsNullOrWhiteSpace(a.CodiceFiscale) && a.CodiceFiscale != a.PIva) yield return $"C.F. {a.CodiceFiscale}";
     }
+
+    private static IEnumerable<(string Etichetta, string Valore)> VociSoggiorno(DatiSoggiorno? s, string? indirizzoImmobile)
+    {
+        // L'immobile si stampa anche senza prenotazione collegata: dice dove si è soggiornato.
+        if (!string.IsNullOrWhiteSpace(indirizzoImmobile)) yield return ("Immobile", indirizzoImmobile.Trim());
+
+        if (s is null) yield break;
+
+        if (s.Arrivo is { } arrivo) yield return ("Arrivo", arrivo.ToString("d MMMM yyyy", Italiano));
+        if (s.Partenza is { } partenza) yield return ("Partenza", partenza.ToString("d MMMM yyyy", Italiano));
+        if (s.Notti is { } notti) yield return ("Notti", notti.ToString(Italiano));
+        if (s.NumeroOspiti is { } ospiti and > 0) yield return ("Ospiti", ospiti.ToString(Italiano));
+        if (!string.IsNullOrWhiteSpace(s.Alloggio)) yield return ("Alloggio", s.Alloggio.Trim());
+        if (!string.IsNullOrWhiteSpace(s.NumeroPrenotazione)) yield return ("Prenotazione", s.NumeroPrenotazione.Trim());
+    }
+
+    private static string EtichettaPagamento(ModalitaPagamento m) => m switch
+    {
+        ModalitaPagamento.Contanti => "Contanti",
+        ModalitaPagamento.Bonifico => "Bonifico",
+        ModalitaPagamento.CartaDiPagamento => "Carta di pagamento",
+        ModalitaPagamento.Assegno => "Assegno",
+        ModalitaPagamento.PortaleOnline => "Portale di prenotazione",
+        _ => "—",
+    };
 
     private static string NomeCliente(DatiCliente? c) =>
         PrimoNonVuoto(c?.Denominazione, $"{c?.Nome} {c?.Cognome}") ?? "—";

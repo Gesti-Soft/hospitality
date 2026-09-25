@@ -15,6 +15,10 @@ export interface ImpostazioniStrutturaDto {
   tassaSoggiornoPercentualeMinori: number | null
   tassaSoggiornoPercentualeAnziani: number | null
   comuneAttivita: string | null
+  /** Pulizia della camera occupata ogni N giorni. Null = nessuna pulizia intermedia. */
+  intervalloPuliziaGiorni: number | null
+  /** Cambio biancheria ogni N giorni. Null = nessuno. */
+  intervalloBiancheriaGiorni: number | null
 }
 
 export type ImpostazioniStrutturaRequest = Omit<ImpostazioniStrutturaDto, 'strutturaId'>

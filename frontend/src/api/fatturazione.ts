@@ -55,6 +55,10 @@ export interface DatiAziendaliDto {
   comune: string | null
   provincia: string | null
   nazione: string | null
+  /** Indirizzo dell'immobile dato in locazione, stampato sulla ricevuta: spesso non è quello del locatore. */
+  indirizzoImmobile: string | null
+  /** Il locatore ha optato per la cedolare secca: la ricevuta lo dichiara. */
+  cedolareSecca: boolean
 }
 
 export type DatiAziendaliRequest = Omit<DatiAziendaliDto, 'strutturaId' | 'haLogo'>
@@ -201,6 +205,18 @@ export function useAggiornaDatiCliente(strutturaId: string | null) {
 export const TipoEmissioneDocumento = { Fattura: 1, Ricevuta: 2 } as const
 export type TipoEmissioneDocumento = (typeof TipoEmissioneDocumento)[keyof typeof TipoEmissioneDocumento]
 
+/** Come ha pagato l'ospite: si indica e si stampa solo sulla ricevuta di locazione breve. */
+export const ModalitaPagamento = { Contanti: 1, Bonifico: 2, CartaDiPagamento: 3, Assegno: 4, PortaleOnline: 5 } as const
+export type ModalitaPagamento = (typeof ModalitaPagamento)[keyof typeof ModalitaPagamento]
+
+export const ETICHETTA_MODALITA_PAGAMENTO: Record<ModalitaPagamento, string> = {
+  [ModalitaPagamento.Contanti]: 'Contanti',
+  [ModalitaPagamento.Bonifico]: 'Bonifico',
+  [ModalitaPagamento.CartaDiPagamento]: 'Carta di pagamento',
+  [ModalitaPagamento.Assegno]: 'Assegno',
+  [ModalitaPagamento.PortaleOnline]: 'Portale di prenotazione',
+}
+
 export interface DatiFatturaDto {
   id: string
   strutturaId: string
@@ -210,6 +226,7 @@ export interface DatiFatturaDto {
   tipoDocumento: TipoDocumentoFattura | null
   regimeFiscale: RegimeFiscale | null
   tipoEmissione: TipoEmissioneDocumento
+  modalitaPagamento: ModalitaPagamento | null
   numeroDocumento: number
   dataDocumento: string
   divisa: string | null
@@ -241,6 +258,7 @@ export interface CreaFatturaDaPrenotazioneRequest {
   impostaSoggiorno?: number | null
   /** Assente = fattura. */
   tipoEmissione?: TipoEmissioneDocumento
+  modalitaPagamento?: ModalitaPagamento | null
 }
 
 export interface AggiornaFatturaRequest {
@@ -254,6 +272,7 @@ export interface AggiornaFatturaRequest {
   natura: NaturaIva | null
   divisa: string | null
   impostaSoggiorno?: number | null
+  modalitaPagamento?: ModalitaPagamento | null
 }
 
 export function useFatture(strutturaId: string | null, anno: number) {

@@ -202,6 +202,8 @@ export function ImpostazioniGeneraliForm({
     dati.tassaSoggiornoPercentualeAnziani != null ? String(dati.tassaSoggiornoPercentualeAnziani) : '',
   )
   const [comuneAttivita, setComuneAttivita] = useState(dati.comuneAttivita ?? '')
+  const [intervalloPulizia, setIntervalloPulizia] = useState(dati.intervalloPuliziaGiorni != null ? String(dati.intervalloPuliziaGiorni) : '')
+  const [intervalloBiancheria, setIntervalloBiancheria] = useState(dati.intervalloBiancheriaGiorni != null ? String(dati.intervalloBiancheriaGiorni) : '')
   const toast = useToast()
   const aggiorna = useAggiornaImpostazioni(strutturaId)
   const suggerisciEta = useSuggerimentoEtaTassaPayTourist(strutturaId)
@@ -270,6 +272,8 @@ export function ImpostazioniGeneraliForm({
       tassaSoggiornoPercentualeMinori: tassaSoggiornoPercentualeMinori.trim() === '' ? null : Number(tassaSoggiornoPercentualeMinori),
       tassaSoggiornoPercentualeAnziani: tassaSoggiornoPercentualeAnziani.trim() === '' ? null : Number(tassaSoggiornoPercentualeAnziani),
       comuneAttivita: comuneAttivita.trim() === '' ? null : comuneAttivita.trim(),
+      intervalloPuliziaGiorni: intervalloPulizia.trim() === '' ? null : Number(intervalloPulizia),
+      intervalloBiancheriaGiorni: intervalloBiancheria.trim() === '' ? null : Number(intervalloBiancheria),
     }
 
     aggiorna.mutate(request, {
@@ -382,6 +386,38 @@ export function ImpostazioniGeneraliForm({
                 disabled={aggiorna.isPending}
                 fullWidth
                 helperText="Vuoto = 100% (esenzione piena)"
+              />
+            </Box>
+          </Box>
+
+          <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Pulizie durante il soggiorno</Typography>
+            <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+              Ogni quanti giorni si rifà una camera occupata. Si conta dall&apos;arrivo o dall&apos;ultima volta che è stata fatta; il
+              giorno della partenza non conta, perché c&apos;è la pulizia del check-out. Una tipologia può avere valori suoi, e
+              l&apos;ospite può rinunciare dalla sua prenotazione. Per gli alberghi verifica i requisiti della tua classificazione
+              regionale.
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
+              <TextField
+                label="Pulizia ogni (giorni)"
+                type="number"
+                value={intervalloPulizia}
+                onChange={(e) => setIntervalloPulizia(e.target.value)}
+                disabled={aggiorna.isPending}
+                fullWidth
+                slotProps={{ htmlInput: { min: 1, max: 30 } }}
+                helperText="Vuoto = nessuna pulizia intermedia. 1 = ogni giorno"
+              />
+              <TextField
+                label="Cambio biancheria ogni (giorni)"
+                type="number"
+                value={intervalloBiancheria}
+                onChange={(e) => setIntervalloBiancheria(e.target.value)}
+                disabled={aggiorna.isPending}
+                fullWidth
+                slotProps={{ htmlInput: { min: 1, max: 30 } }}
+                helperText="Vuoto = nessun cambio durante il soggiorno"
               />
             </Box>
           </Box>

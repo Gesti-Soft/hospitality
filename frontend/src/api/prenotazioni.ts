@@ -37,6 +37,9 @@ export interface PrenotazioneDto {
   /** Ospite capofamiglia, se la scheda alloggiati è già stata compilata (null altrimenti). */
   ospiteNome: string | null
   ospiteCognome: string | null
+  /** L'ospite ha rinunciato alla pulizia / al cambio biancheria durante il soggiorno: si cambia con useAggiornaRinunceServizi. */
+  rinunciaPulizia: boolean
+  rinunciaBiancheria: boolean
 }
 
 export interface PrenotazioneRequest {

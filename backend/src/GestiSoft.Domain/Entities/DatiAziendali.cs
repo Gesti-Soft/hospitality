@@ -63,4 +63,13 @@ public class DatiAziendali : TenantEntity
 
     public string? Nazione { get; set; }
 
+    /// <summary>
+    /// Indirizzo dell'immobile dato in locazione, stampato sulla ricevuta di locazione breve: spesso
+    /// non coincide con quello del locatore qui sopra. Una riga libera ("Via Roma 1, 90100 Palermo").
+    /// </summary>
+    public string? IndirizzoImmobile { get; set; }
+
+    /// <summary>Il locatore ha optato per la cedolare secca: la ricevuta lo dichiara.</summary>
+    public bool CedolareSecca { get; set; }
+
 }

@@ -54,4 +54,17 @@ public class UtenteStruttura
     public bool RestaurantRead { get; set; }
 
     public bool RestaurantWrite { get; set; }
+
+    /// <summary>
+    /// Mostra le pagine Camere e Tipologie. Distinto da <see cref="SettingRoomRead"/>, che resta la lettura
+    /// dei dati delle camere di cui hanno bisogno anche Pulizie, Calendario e Check-in: un addetto
+    /// pulizie legge le camere ma non deve vedere la configurazione della struttura.
+    /// </summary>
+    public bool RoomSetupRead { get; set; }
+
+    /// <summary>
+    /// Registra check-in e check-out. Distinto da <see cref="RoomStatusUpdate"/> (stato della camera,
+    /// pulizie): chi prepara le camere vede arrivi e partenze in sola lettura, senza registrarli.
+    /// </summary>
+    public bool CheckInOut { get; set; }
 }

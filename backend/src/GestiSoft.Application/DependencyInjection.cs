@@ -12,6 +12,7 @@ using GestiSoft.Application.Osservatorio;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.PayTourist;
 using GestiSoft.Application.Prenotazioni;
+using GestiSoft.Application.Pulizie;
 using GestiSoft.Application.Riferimenti;
 using GestiSoft.Application.Statistiche;
 using GestiSoft.Application.Strutture;
@@ -74,6 +75,7 @@ public static class DependencyInjection
         services.AddScoped<ImpostazioniGlobaliService>();
         services.AddScoped<NotificaService>();
         services.AddScoped<AssistenzaService>();
+        services.AddScoped<PulizieSoggiornoService>();
 
         return services;
     }

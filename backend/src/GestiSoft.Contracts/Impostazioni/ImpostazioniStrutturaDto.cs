@@ -13,4 +13,6 @@ public record ImpostazioniStrutturaDto(
     decimal? TassaSoggiornoPercentualeResidenti,
     decimal? TassaSoggiornoPercentualeMinori,
     decimal? TassaSoggiornoPercentualeAnziani,
-    string? ComuneAttivita);
+    string? ComuneAttivita,
+    int? IntervalloPuliziaGiorni = null,
+    int? IntervalloBiancheriaGiorni = null);

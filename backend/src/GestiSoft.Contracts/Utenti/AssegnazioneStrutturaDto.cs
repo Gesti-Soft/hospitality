@@ -26,4 +26,6 @@ public record AssegnazioneStrutturaDto(
     bool FinanceRead,
     bool FinanceWrite,
     bool RestaurantRead,
-    bool RestaurantWrite);
+    bool RestaurantWrite,
+    bool RoomSetupRead,
+    bool CheckInOut);

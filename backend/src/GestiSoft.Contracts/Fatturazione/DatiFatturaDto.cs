@@ -10,6 +10,8 @@ public record DatiFatturaDto(
     int Progressivo,
     TipoDocumentoFattura? TipoDocumento,
     RegimeFiscale? RegimeFiscale,
+    TipoEmissioneDocumento TipoEmissione,
+    ModalitaPagamento? ModalitaPagamento,
     int NumeroDocumento,
     DateTime DataDocumento,
     string? Divisa,

@@ -26,4 +26,10 @@ public enum TipoNotifica
     /// termine di legge (vedi TerminiSchedina) — per questo si segnala subito, non a scadenza.
     /// </summary>
     SchedinaDatiIncompleti = 10,
+
+    /// <summary>
+    /// Camere da pulire oggi o domani: partenze da rifare e pulizie o cambi biancheria nelle camere
+    /// occupate. La vede solo chi ha il permesso "Stato camera" (vedi Notifica.RichiedeStatoCamera).
+    /// </summary>
+    PulizieDaFare = 11,
 }

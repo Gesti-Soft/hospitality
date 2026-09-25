@@ -17,6 +17,8 @@ import {
   RegimeFiscale,
   TipoDocumentoFattura,
   TipoEmissioneDocumento,
+  ETICHETTA_MODALITA_PAGAMENTO,
+  type ModalitaPagamento,
   useAggiornaFattura,
   useCreaFattura,
   useDatiAziendali,
@@ -92,6 +94,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   const [divisa, setDivisa] = useState(modifica?.divisa ?? 'EUR')
   // L'imposta di soggiorno non entra nel prezzo del soggiorno: va in fattura su una riga sua,
   // esclusa dalla base imponibile ex art. 15, altrimenti pagherebbe un'IVA che non deve.
+  const [modalitaPagamento, setModalitaPagamento] = useState<string>(modifica?.modalitaPagamento != null ? String(modifica.modalitaPagamento) : '')
   const [impostaSoggiorno, setImpostaSoggiorno] = useState(modifica?.impostaSoggiorno != null ? String(modifica.impostaSoggiorno) : '')
   const [impostaSoggiornoAuto, setImpostaSoggiornoAuto] = useState(!modifica)
   const [errore, setErrore] = useState<string | null>(null)
@@ -188,6 +191,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
         natura: natura === '' ? null : (Number(natura) as NaturaIva),
         divisa: divisa.trim() === '' ? null : divisa.trim(),
         impostaSoggiorno: impostaSoggiorno.trim() === '' ? null : Number(impostaSoggiorno),
+        modalitaPagamento: ricevuta && modalitaPagamento !== '' ? (Number(modalitaPagamento) as ModalitaPagamento) : null,
       }
       aggiorna.mutate({ fatturaId: modifica.id, request }, { onSuccess: onClose, onError })
     } else {
@@ -202,6 +206,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
         natura: natura === '' ? null : (Number(natura) as NaturaIva),
         divisa: divisa.trim() === '' ? null : divisa.trim(),
         impostaSoggiorno: impostaSoggiorno.trim() === '' ? null : Number(impostaSoggiorno),
+        modalitaPagamento: ricevuta && modalitaPagamento !== '' ? (Number(modalitaPagamento) as ModalitaPagamento) : null,
         tipoEmissione,
       }
       crea.mutate(request, { onSuccess: onClose, onError })
@@ -211,7 +216,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   return (
     <>
       <Dialog open onClose={onClose} maxWidth="sm" fullWidth fullScreen={mobile}>
-      <DialogTitle>{modifica ? `Modifica fattura n. ${modifica.numeroDocumento}` : 'Nuova fattura da prenotazione'}</DialogTitle>
+      <DialogTitle>{modifica ? `Modifica ${ricevuta ? 'ricevuta' : 'fattura'} n. ${modifica.numeroDocumento}` : 'Nuova fattura da prenotazione'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
@@ -279,6 +284,24 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           >
             <MenuItem value={String(TipoEmissioneDocumento.Fattura)}>Fattura</MenuItem>
             <MenuItem value={String(TipoEmissioneDocumento.Ricevuta)}>Ricevuta (locazione breve)</MenuItem>
+          </TextField>
+        )}
+
+        {ricevuta && (
+          <TextField
+            select
+            label="Pagato con"
+            value={modalitaPagamento}
+            onChange={(e) => setModalitaPagamento(e.target.value)}
+            disabled={inCorso}
+            helperText="Viene stampato sulla ricevuta. Per un pagamento in contanti la ricevuta è obbligatoria."
+          >
+            <MenuItem value="">Non indicato</MenuItem>
+            {Object.entries(ETICHETTA_MODALITA_PAGAMENTO).map(([valore, etichetta]) => (
+              <MenuItem key={valore} value={valore}>
+                {etichetta}
+              </MenuItem>
+            ))}
           </TextField>
         )}
 

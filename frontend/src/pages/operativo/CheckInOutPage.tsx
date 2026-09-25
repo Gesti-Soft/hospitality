@@ -25,10 +25,12 @@ import { fontDisplay, fontMono, tokens } from '../../theme'
 import { isOggi, isOggiOPrima } from '../../lib/date'
 import { AzioniCardElenco, CardElenco, MessaggioVuotoElenco, RigaCardMeta, TestataCardElenco } from '../../components/CardElenco'
 import { OspiteDialog } from '../../components/OspiteDialog'
+import { ProponiFatturaDopoCheckIn } from '../../components/ProponiFatturaDopoCheckIn'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-/** Pagina dedicata per fare check-in/check-out in un clic, senza passare dal dialog di dettaglio prenotazione — stessi endpoint/permesso (roomStatusUpdate) già usati lì. */
+/** Pagina dedicata per fare check-in/check-out in un clic, senza passare dal dialog di dettaglio prenotazione — stessi endpoint/permesso (checkInOut) già usati lì; senza quel permesso la pagina è in sola lettura. */
 export function CheckInOutPage() {
   const { strutturaId } = useStruttura()
   const arriviProssimi = useArriviProssimi(strutturaId)
@@ -45,6 +47,14 @@ export function CheckInOutPage() {
   // Soggiorno sotto le 24 ore appena messo in corso: la schedina ha 6 ore di tempo, non 24, quindi
   // si chiede subito se trasmetterla invece di lasciarla al batch giornaliero (vedi il dialog).
   const [schedinaBreveDaInviare, setSchedinaBreveDaInviare] = useState<PrenotazioneDto | null>(null)
+  // Dopo il check-in si propone la fattura: da quel momento il soggiorno è fatturabile. Se prima c'è
+  // la domanda sulla schedina del soggiorno breve, la fattura aspetta che quella sia chiusa.
+  // Senza "Esegui check-in/out" la pagina è in sola lettura: chi prepara le camere vede arrivi e
+  // partenze del giorno, non li registra.
+  const puoFareCheckInOut = usePuoScrivere('checkInOut')
+  const puoFatturare = usePuoScrivere('financeWrite')
+  const [fatturaDaProporre, setFatturaDaProporre] = useState<PrenotazioneDto | null>(null)
+  const [fatturaInAttesa, setFatturaInAttesa] = useState<PrenotazioneDto | null>(null)
   const toast = useToast()
 
   const arriviOggi = (arriviProssimi.data ?? []).filter((p) => isOggi(p.checkIn))
@@ -58,10 +68,14 @@ export function CheckInOutPage() {
   function confermaCheckIn(p: PrenotazioneDto) {
     checkIn.mutate(p.id, {
       onError: gestisciErrore,
-      onSuccess: () => {
+      onSuccess: (aggiornata) => {
+        const daFatturare = puoFatturare ? aggiornata : null
         if (isSoggiornoBreve(p.checkIn, p.checkOut)) {
           setSchedinaBreveDaInviare(p)
+          setFatturaInAttesa(daFatturare)
+          return
         }
+        setFatturaDaProporre(daFatturare)
       },
     })
   }
@@ -103,7 +117,7 @@ export function CheckInOutPage() {
         {!caricamento && arriviOggi.length > 0 && (
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
             {arriviOggi.map((p) => (
-              <CardPrenotazione key={p.id} prenotazione={p} tipo="check-in" inCorso={checkIn.isPending} onAzione={() => setOspiteDaCompilare(p)} />
+              <CardPrenotazione key={p.id} prenotazione={p} tipo="check-in" inCorso={checkIn.isPending} onAzione={puoFareCheckInOut ? () => setOspiteDaCompilare(p) : undefined} />
             ))}
           </Box>
         )}
@@ -116,7 +130,7 @@ export function CheckInOutPage() {
         {!caricamento && partenzeDaFare.length > 0 && (
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
             {partenzeDaFare.map((p) => (
-              <CardPrenotazione key={p.id} prenotazione={p} tipo="check-out" inCorso={checkOut.isPending} onAzione={() => apriCheckOut(p)} />
+              <CardPrenotazione key={p.id} prenotazione={p} tipo="check-out" inCorso={checkOut.isPending} onAzione={puoFareCheckInOut ? () => apriCheckOut(p) : undefined} />
             ))}
           </Box>
         )}
@@ -136,8 +150,16 @@ export function CheckInOutPage() {
           strutturaId={strutturaId}
           prenotazioneId={schedinaBreveDaInviare.id}
           riferimento={[schedinaBreveDaInviare.ospiteCognome, schedinaBreveDaInviare.ospiteNome].filter(Boolean).join(' ') || schedinaBreveDaInviare.numeroPrenotazione}
-          onChiudi={() => setSchedinaBreveDaInviare(null)}
+          onChiudi={() => {
+            setSchedinaBreveDaInviare(null)
+            setFatturaDaProporre(fatturaInAttesa)
+            setFatturaInAttesa(null)
+          }}
         />
+      )}
+
+      {fatturaDaProporre && strutturaId && (
+        <ProponiFatturaDopoCheckIn strutturaId={strutturaId} prenotazione={fatturaDaProporre} onChiudi={() => setFatturaDaProporre(null)} />
       )}
 
       {ospiteDaCompilare && strutturaId && (
@@ -161,7 +183,8 @@ function CardPrenotazione({
   prenotazione: PrenotazioneDto
   tipo: 'check-in' | 'check-out'
   inCorso: boolean
-  onAzione: () => void
+  /** Assente = sola lettura (chi prepara le camere): niente pulsante e niente canale, che l'Api non gli manda. */
+  onAzione?: () => void
 }) {
   const ospite = [prenotazione.ospiteNome, prenotazione.ospiteCognome].filter(Boolean).join(' ')
   const inRitardo = tipo === 'check-out' && !isOggi(prenotazione.checkOut)
@@ -176,7 +199,7 @@ function CardPrenotazione({
       <RigaCardMeta
         voci={[
           { etichetta: 'Camera', valore: <span style={{ fontFamily: fontMono }}>{prenotazione.cameraNome ?? '—'}</span> },
-          { etichetta: 'Canale', valore: prenotazione.agenzia ?? 'Diretta' },
+          ...(onAzione ? [{ etichetta: 'Canale', valore: prenotazione.agenzia ?? 'Diretta' }] : []),
           { etichetta: 'Check-in', valore: prenotazione.checkIn ? formattatoreData.format(new Date(prenotazione.checkIn)) : '—' },
           { etichetta: 'Check-out', valore: prenotazione.checkOut ? formattatoreData.format(new Date(prenotazione.checkOut)) : '—' },
           // Quante persone si presentano al banco: serve per preparare la camera senza dover aprire
@@ -184,18 +207,20 @@ function CardPrenotazione({
           { etichetta: 'Ospiti', valore: prenotazione.numeroOspiti ?? '—' },
         ]}
       />
-      <AzioniCardElenco>
-        <Button
-          fullWidth
-          variant="contained"
-          color="primary"
-          startIcon={tipo === 'check-in' ? <LoginIcon /> : <LogoutIcon />}
-          onClick={onAzione}
-          disabled={inCorso}
-        >
-          {tipo === 'check-in' ? 'Check-in' : 'Check-out'}
-        </Button>
-      </AzioniCardElenco>
+      {onAzione && (
+        <AzioniCardElenco>
+          <Button
+            fullWidth
+            variant="contained"
+            color="primary"
+            startIcon={tipo === 'check-in' ? <LoginIcon /> : <LogoutIcon />}
+            onClick={onAzione}
+            disabled={inCorso}
+          >
+            {tipo === 'check-in' ? 'Check-in' : 'Check-out'}
+          </Button>
+        </AzioniCardElenco>
+      )}
     </CardElenco>
   )
 }

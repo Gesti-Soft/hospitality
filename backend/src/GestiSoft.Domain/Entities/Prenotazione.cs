@@ -106,4 +106,20 @@ public class Prenotazione : TenantEntity
     /// create manualmente/non da OTA.
     /// </summary>
     public int? IdPrenotazioneWubook { get; set; }
+
+    /// <summary>
+    /// L'ospite ha rinunciato alla pulizia durante il soggiorno. È una sua scelta, non una riduzione
+    /// del servizio: la regola della struttura resta quella, e la pagina Pulizie mostra la camera come
+    /// "rinunciata" invece di nasconderla. Chi l'ha registrata resta nel log.
+    /// </summary>
+    public bool RinunciaPulizia { get; set; }
+
+    /// <summary>Come <see cref="RinunciaPulizia"/>, per il cambio biancheria: spesso l'ospite rinuncia al riassetto ma vuole gli asciugamani.</summary>
+    public bool RinunciaBiancheria { get; set; }
+
+    /// <summary>Data civile dell'ultima pulizia intermedia fatta. La prossima si conta da qui, non dalla data prevista: una pulizia saltata sposta in avanti le successive.</summary>
+    public DateTime? UltimaPuliziaSoggiorno { get; set; }
+
+    /// <inheritdoc cref="UltimaPuliziaSoggiorno"/>
+    public DateTime? UltimoCambioBiancheria { get; set; }
 }

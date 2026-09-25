@@ -11,6 +11,9 @@ export const TipoNotifica = {
   CheckOutDimenticato: 7,
   SchedinaFuoriTermine: 8,
   InvioSchedineNonRiuscito: 9,
+  SchedinaDatiIncompleti: 10,
+  // Camere da pulire oggi o domani: la vede solo chi ha "Stato camera", e apre la pagina Pulizie.
+  PulizieDaFare: 11,
 } as const
 export type TipoNotifica = (typeof TipoNotifica)[keyof typeof TipoNotifica]
 

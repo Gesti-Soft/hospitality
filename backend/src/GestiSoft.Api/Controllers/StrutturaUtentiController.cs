@@ -21,7 +21,7 @@ public class StrutturaUtentiController(UtenteManagementService service, ICurrent
             a.BookingRead, a.BookingWrite, a.ReservationRead, a.ReservationWrite,
             a.StatePoliceRead, a.StatePoliceWrite, a.StatePoliceSettings,
             a.SettingAgency, a.SettingUser, a.SettingRoomRead, a.SettingRoomWrite, a.RoomStatusUpdate,
-            a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite)));
+            a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite, a.RoomSetupRead, a.CheckInOut)));
     }
 
     /// <summary>Tutti i propri permessi su questa struttura (non l'intero elenco) — usato dal frontend per decidere quali pagine/voci di menu mostrare, senza dover scaricare il roster completo.</summary>
@@ -33,7 +33,7 @@ public class StrutturaUtentiController(UtenteManagementService service, ICurrent
             p.BookingRead, p.BookingWrite, p.ReservationRead, p.ReservationWrite,
             p.StatePoliceRead, p.StatePoliceWrite, p.StatePoliceSettings,
             p.SettingAgency, p.SettingUser, p.SettingRoomRead, p.SettingRoomWrite, p.RoomStatusUpdate,
-            p.FinanceRead, p.FinanceWrite, p.RestaurantRead, p.RestaurantWrite));
+            p.FinanceRead, p.FinanceWrite, p.RestaurantRead, p.RestaurantWrite, p.RoomSetupRead, p.CheckInOut));
     }
 }
 
@@ -53,4 +53,6 @@ public record MioPermessoStrutturaDto(
     bool FinanceRead,
     bool FinanceWrite,
     bool RestaurantRead,
-    bool RestaurantWrite);
+    bool RestaurantWrite,
+    bool RoomSetupRead,
+    bool CheckInOut);

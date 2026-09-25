@@ -1,6 +1,8 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
@@ -18,7 +20,7 @@ import EditIcon from '@mui/icons-material/EditOutlined'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import CodeIcon from '@mui/icons-material/CodeOutlined'
 import { useStruttura } from '../../struttura/StrutturaContext'
-import { useStoricoPrenotazioni } from '../../api/prenotazioni'
+import { useArriviInCorso, useStoricoPrenotazioni } from '../../api/prenotazioni'
 import { ApiError } from '../../api/client'
 import {
   AliquotaIva,
@@ -68,6 +70,9 @@ export function FatturazionePage() {
   const fatture = useFatture(strutturaId, anno)
   const clienti = useDatiClienti(strutturaId)
   const storico = useStoricoPrenotazioni(strutturaId, anno)
+  // Si fattura dall'arrivo in poi: oltre ai soggiorni conclusi, anche quelli col check-in già fatto.
+  const inCorso = useArriviInCorso(strutturaId)
+  const prenotazioniFatturabili = [...(inCorso.data ?? []), ...(storico.data ?? [])]
 
   function segnalaErrore(err: unknown) {
     toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
@@ -99,7 +104,7 @@ export function FatturazionePage() {
           fatture={fatture.data}
           caricamento={fatture.isLoading}
           clienti={clienti.data ?? []}
-          prenotazioniDisponibili={storico.data ?? []}
+          prenotazioniDisponibili={prenotazioniFatturabili}
           onErrore={segnalaErrore}
         />
       )}
@@ -346,6 +351,8 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
   const [comune, setComune] = useState(dati.comune ?? '')
   const [provincia, setProvincia] = useState(dati.provincia ?? '')
   const [nazione, setNazione] = useState(dati.nazione ?? 'Italia')
+  const [indirizzoImmobile, setIndirizzoImmobile] = useState(dati.indirizzoImmobile ?? '')
+  const [cedolareSecca, setCedolareSecca] = useState(dati.cedolareSecca)
   const toast = useToast()
 
   const aggiorna = useAggiornaDatiAziendali(strutturaId)
@@ -369,6 +376,8 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
       comune: vuoto(comune),
       provincia: vuoto(provincia),
       nazione: vuoto(nazione),
+      indirizzoImmobile: vuoto(indirizzoImmobile),
+      cedolareSecca,
     }
 
     aggiorna.mutate(request, {
@@ -466,6 +475,23 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
         disabled={aggiorna.isPending}
         helperText="La frase che deve comparire in fattura quando l'IVA non si applica — chiedila al commercialista, viene stampata così com'è."
       />
+
+      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, mt: 1 }}>Ricevute di locazione breve</Typography>
+      <TextField
+        label="Indirizzo dell'immobile"
+        placeholder="Es. Via Roma 1, 90100 Palermo (PA)"
+        value={indirizzoImmobile}
+        onChange={(e) => setIndirizzoImmobile(e.target.value)}
+        disabled={aggiorna.isPending}
+        helperText="Dove si trova l'alloggio dato in locazione: viene stampato sulla ricevuta. Lascialo vuoto se coincide con l'indirizzo qui sopra e non vuoi ripeterlo."
+      />
+      <FormControlLabel
+        control={<Checkbox checked={cedolareSecca} onChange={(e) => setCedolareSecca(e.target.checked)} disabled={aggiorna.isPending} />}
+        label="Ho optato per la cedolare secca"
+      />
+      <Typography sx={{ fontSize: 12, color: tokens.textTertiary, mt: -1.5 }}>
+        La ricevuta riporta che il locatore è in regime di cedolare secca. Non cambia la marca da bollo: sopra 77,47 € resta dovuta.
+      </Typography>
 
       {puoScrivere && (
         <Box>

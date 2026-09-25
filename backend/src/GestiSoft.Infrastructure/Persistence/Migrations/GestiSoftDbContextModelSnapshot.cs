@@ -222,6 +222,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<string>("Cap")
                         .HasColumnType("text");
 
+                    b.Property<bool>("CedolareSecca")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("CodiceFiscale")
                         .HasColumnType("text");
 
@@ -241,6 +244,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Indirizzo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("IndirizzoImmobile")
                         .HasColumnType("text");
 
                     b.Property<string>("Iso2")
@@ -408,6 +414,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Link")
                         .HasColumnType("text");
+
+                    b.Property<int?>("ModalitaPagamento")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("Natura")
                         .HasColumnType("integer");
@@ -605,6 +614,12 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("IntervalloBiancheriaGiorni")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IntervalloPuliziaGiorni")
+                        .HasColumnType("integer");
+
                     b.Property<TimeOnly?>("OraInvioGiornaliero")
                         .HasColumnType("time without time zone");
 
@@ -731,6 +746,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("PrenotazioneId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("RichiedeStatoCamera")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("ScadenzaAttesaUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1229,6 +1247,12 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<bool>("PayTourist")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("RinunciaBiancheria")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RinunciaPulizia")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("SpesePuliziaAttiva")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1257,6 +1281,12 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("TotalTax")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("UltimaPuliziaSoggiorno")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UltimoCambioBiancheria")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1564,6 +1594,12 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("Implemento")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<int?>("IntervalloBiancheriaGiorni")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IntervalloPuliziaGiorni")
+                        .HasColumnType("integer");
 
                     b.Property<int>("NumeroImplementoPersona")
                         .HasColumnType("integer");
@@ -1933,6 +1969,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<bool>("BookingWrite")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("CheckInOut")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("FinanceRead")
                         .HasColumnType("boolean");
 
@@ -1949,6 +1988,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("RestaurantWrite")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RoomSetupRead")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("RoomStatusUpdate")

@@ -21,7 +21,9 @@ public record CreaFatturaDaPrenotazioneRequest(
     /// <summary>Imposta di soggiorno da riaddebitare in fattura come riga esclusa art. 15. Null la lascia fuori; il valore predefinito lo propone la prenotazione.</summary>
     decimal? ImpostaSoggiorno = null,
     /// <summary>Fattura (chi ha partita IVA) o ricevuta (locazione breve di un privato). Serie di numerazione distinte.</summary>
-    TipoEmissioneDocumento TipoEmissione = TipoEmissioneDocumento.Fattura);
+    TipoEmissioneDocumento TipoEmissione = TipoEmissioneDocumento.Fattura,
+    /// <summary>Come ha pagato l'ospite: si conserva e si stampa solo sulla ricevuta.</summary>
+    ModalitaPagamento? ModalitaPagamento = null);
 
 public record AggiornaFatturaRequest(
     Guid? DatiClienteId,
@@ -33,7 +35,8 @@ public record AggiornaFatturaRequest(
     AliquotaIva? AliquotaIva,
     NaturaIva? Natura,
     string? Divisa,
-    decimal? ImpostaSoggiorno = null);
+    decimal? ImpostaSoggiorno = null,
+    ModalitaPagamento? ModalitaPagamento = null);
 
 /// <summary>
 /// Fatture — porta FatturazioneViewModel del legacy (Sezione C del report Fase 4). La fattura
@@ -124,6 +127,7 @@ public class FatturazioneService(
                 Progressivo = progressivo,
                 NumeroDocumento = progressivo,
                 TipoEmissione = request.TipoEmissione,
+                ModalitaPagamento = ricevuta ? request.ModalitaPagamento : null,
                 // Una ricevuta di locazione breve è fuori dal campo IVA e non passa dallo SDI:
                 // aliquota, natura, regime e tipo documento sono codici del tracciato elettronico e
                 // su quel foglio non significano niente.
@@ -169,21 +173,29 @@ public class FatturazioneService(
             }
         }
 
+        // Stessa regola della creazione: il tipo di documento non cambia in modifica, e su una ricevuta
+        // aliquota, natura, regime e tipo documento non esistono. Senza, una ricevuta modificata
+        // prendeva l'IVA che il dialogo le rimandava e il totale cresceva.
+        var ricevuta = entity.TipoEmissione == TipoEmissioneDocumento.Ricevuta;
+        var aliquotaIva = ricevuta ? null : request.AliquotaIva;
+        var natura = ricevuta ? null : request.Natura;
+
         var prezzoTotale = request.Quantita * request.PrezzoUnitario;
-        var aliquotaPercentuale = request.AliquotaIva is { } aliquota ? (decimal)aliquota / 100m : 0m;
+        var aliquotaPercentuale = aliquotaIva is { } aliquota ? (decimal)aliquota / 100m : 0m;
 
         entity.DatiClienteId = request.DatiClienteId;
-        entity.TipoDocumento = request.TipoDocumento;
-        entity.RegimeFiscale = request.RegimeFiscale;
+        entity.ModalitaPagamento = ricevuta ? request.ModalitaPagamento : null;
+        entity.TipoDocumento = ricevuta ? null : request.TipoDocumento;
+        entity.RegimeFiscale = ricevuta ? null : request.RegimeFiscale;
         entity.Descrizione = request.Descrizione;
         entity.Quantita = request.Quantita;
         entity.PrezzoUnitario = request.PrezzoUnitario;
         entity.PrezzoTotale = prezzoTotale;
         entity.ImpostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno : null;
-        entity.ImportoBollo = CalcolaBollo(entity.TipoEmissione, request.Natura, prezzoTotale, request.ImpostaSoggiorno ?? 0);
+        entity.ImportoBollo = CalcolaBollo(entity.TipoEmissione, natura, prezzoTotale, request.ImpostaSoggiorno ?? 0);
         entity.ImportoTotale = Math.Round(prezzoTotale * (1 + aliquotaPercentuale), 2, MidpointRounding.AwayFromZero) + (request.ImpostaSoggiorno ?? 0);
-        entity.AliquotaIva = request.AliquotaIva;
-        entity.Natura = request.Natura;
+        entity.AliquotaIva = aliquotaIva;
+        entity.Natura = natura;
         entity.Divisa = string.IsNullOrWhiteSpace(request.Divisa) ? entity.Divisa : request.Divisa;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -195,7 +207,32 @@ public class FatturazioneService(
     {
         var (fattura, cliente, azienda) = await CaricaPerDocumentoAsync(currentUser, strutturaId, fatturaId, cancellationToken);
         var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken);
-        return documentGenerator.GeneraPdf(fattura, cliente, azienda, struttura?.Nome);
+        var soggiorno = await DatiSoggiornoAsync(fattura, strutturaId, cancellationToken);
+        return documentGenerator.GeneraPdf(fattura, cliente, azienda, struttura?.Nome, soggiorno);
+    }
+
+    /// <summary>
+    /// Solo per la ricevuta di locazione breve: è la ricevuta d'affitto che deve dire quale soggiorno
+    /// paga (periodo, notti, ospiti, alloggio). La fattura la descrive già la riga del documento.
+    /// </summary>
+    private async Task<DatiSoggiorno?> DatiSoggiornoAsync(DatiFattura fattura, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        if (fattura.TipoEmissione != TipoEmissioneDocumento.Ricevuta || fattura.PrenotazioneId is not { } prenotazioneId)
+        {
+            return null;
+        }
+
+        var prenotazione = await prenotazioni.GetAsync(prenotazioneId, cancellationToken);
+        if (prenotazione is null || prenotazione.StrutturaId != strutturaId)
+        {
+            return null;
+        }
+
+        var alloggio = !string.IsNullOrWhiteSpace(prenotazione.Camera?.Nome)
+            ? prenotazione.Camera!.Nome
+            : prenotazione.Tipologia?.TipologiaCamera;
+
+        return new DatiSoggiorno(prenotazione.CheckIn, prenotazione.CheckOut, prenotazione.NumeroOspiti, alloggio, prenotazione.NumeroPrenotazione);
     }
 
     public async Task<byte[]> GeneraXmlSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)

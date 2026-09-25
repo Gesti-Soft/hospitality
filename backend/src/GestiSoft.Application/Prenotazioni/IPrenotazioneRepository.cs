@@ -69,6 +69,9 @@ public interface IPrenotazioneRepository
     /// <summary>Prenotazioni In corso (check-in già fatto) il cui check-out previsto è nel passato, su tutte le Strutture — usata dal job di notifica "check-out dimenticato".</summary>
     Task<IReadOnlyList<Prenotazione>> ListCheckOutDimenticatoAsync(CancellationToken cancellationToken);
 
+    /// <summary>Partenze previste in quel giorno (data civile), non annullate e non già chiuse: camere da rifare.</summary>
+    Task<int> ContaPartenzeAsync(Guid strutturaId, DateTime giorno, CancellationToken cancellationToken);
+
     Task AddAsync(Prenotazione entity, CancellationToken cancellationToken);
 
     Task UpdateAsync(Prenotazione entity, CancellationToken cancellationToken);

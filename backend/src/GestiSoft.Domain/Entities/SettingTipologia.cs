@@ -38,4 +38,14 @@ public class SettingTipologia : TenantEntity
 
     /// <summary>"WooDoo CM only" per l'intero pool — si applica solo alla creazione (new_room).</summary>
     public bool WubookSoloWoodoo { get; set; }
+
+    /// <summary>
+    /// Pulizia durante il soggiorno per questa tipologia: null = come la struttura, 0 = nessuna, N =
+    /// ogni N giorni. Non passa dal form generale della tipologia (che la pagina OTA rimanda con un
+    /// elenco fisso di campi) ma da un endpoint suo, così nessun salvataggio altrui la azzera.
+    /// </summary>
+    public int? IntervalloPuliziaGiorni { get; set; }
+
+    /// <inheritdoc cref="IntervalloPuliziaGiorni"/>
+    public int? IntervalloBiancheriaGiorni { get; set; }
 }

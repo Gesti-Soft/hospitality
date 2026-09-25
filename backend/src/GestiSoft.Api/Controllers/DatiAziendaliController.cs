@@ -64,5 +64,5 @@ public class DatiAziendaliController(DatiAziendaliService service, ICurrentUser 
         d.StrutturaId, d.Iso2, d.PIva, d.CodiceFiscale, d.Denominazione, d.Nome, d.Cognome,
         d.RegimeFiscale, d.AliquotaIvaDefault, d.NaturaDefault, d.DicituraFattura,
         d.Logo is { Length: > 0 },
-        d.Indirizzo, d.NCivico, d.Cap, d.Comune, d.Provincia, d.Nazione);
+        d.Indirizzo, d.NCivico, d.Cap, d.Comune, d.Provincia, d.Nazione, d.IndirizzoImmobile, d.CedolareSecca);
 }

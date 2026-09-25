@@ -30,4 +30,7 @@ public record PrenotazioneDto(
     bool AnimaliAttiva,
     bool CauzioneAttiva,
     string? OspiteNome,
-    string? OspiteCognome);
+    string? OspiteCognome,
+    // L'ospite ha rinunciato alla pulizia / al cambio biancheria durante il soggiorno (vedi Prenotazione).
+    bool RinunciaPulizia = false,
+    bool RinunciaBiancheria = false);

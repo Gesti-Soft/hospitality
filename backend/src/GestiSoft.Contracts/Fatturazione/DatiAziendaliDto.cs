@@ -21,4 +21,6 @@ public record DatiAziendaliDto(
     string? Cap,
     string? Comune,
     string? Provincia,
-    string? Nazione);
+    string? Nazione,
+    string? IndirizzoImmobile,
+    bool CedolareSecca);

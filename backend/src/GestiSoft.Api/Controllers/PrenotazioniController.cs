@@ -34,6 +34,14 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
             _ => await service.ListaInArrivoAsync(currentUser, strutturaId, daData, cancellationToken),
         };
 
+        // Chi legge arrivi e partenze solo per preparare le camere (stato camera, senza "Prenotazioni:
+        // consulta") riceve date, camera e ospiti, non quanto pagano né da quale canale. Vale per ogni
+        // vista che non sia storico o periodo, che chiedono comunque il permesso pieno.
+        if (vista is not ("storico" or "periodo") && !await service.VedePrenotazioniCompleteAsync(currentUser, strutturaId, cancellationToken))
+        {
+            return Ok(prenotazioni.Select(ToDtoPerPulizie));
+        }
+
         return Ok(prenotazioni.Select(ToDto));
     }
 
@@ -114,9 +122,19 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
         return NoContent();
     }
 
+    private static PrenotazioneDto ToDtoPerPulizie(Prenotazione p) => ToDto(p) with
+    {
+        Agenzia = null,
+        ImportoPrenotazione = null,
+        ImportoPagato = null,
+        ImportoTotale = null,
+        TotalTax = null,
+    };
+
     private static PrenotazioneDto ToDto(Prenotazione p) => new(
         p.Id, p.StrutturaId, p.CameraId, p.Camera?.Nome, p.TipologiaId, p.Tipologia?.TipologiaCamera, p.Agenzia, p.NumeroPrenotazione,
         p.ImportoPrenotazione, p.ImportoPagato, p.ImportoTotale, p.CheckIn, p.CheckOut, p.CheckInEffettuatoAtUtc,
         p.NumeroOspiti, p.StatePolice, p.PMS, p.PayTourist, p.Anno, p.TotalTax, p.StatoPrenotazione,
-        p.TassaSoggiornoAttiva, p.SpesePuliziaAttiva, p.AnimaliAttiva, p.CauzioneAttiva, p.Ospite?.Nome, p.Ospite?.Cognome);
+        p.TassaSoggiornoAttiva, p.SpesePuliziaAttiva, p.AnimaliAttiva, p.CauzioneAttiva, p.Ospite?.Nome, p.Ospite?.Cognome,
+        p.RinunciaPulizia, p.RinunciaBiancheria);
 }
