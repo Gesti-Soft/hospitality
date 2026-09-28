@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPut } from './client'
 import { isoLocale } from '../lib/date'
 import type { TipoTrattamento } from './trattamenti'
+import type { ServizioPrenotazioneRichiesta } from './servizi'
+import type { SalvaPagamentoRequest } from './pagamenti'
 
 // Come StatoCamera in api/camere.ts: l'Api serializza gli enum come numeri, non come stringhe.
 export const StatoPrenotazione = { InCorso: 1, Incompleta: 2, Annullata: 3, Completata: 4 } as const
@@ -45,6 +47,8 @@ export interface PrenotazioneDto {
   etaBambini: number[] | null
   /** Null = solo pernottamento. */
   trattamento: TipoTrattamento | null
+  /** Richieste dell'ospite e indicazioni arrivate dall'OTA (trattamento, extra), in sola lettura. */
+  noteOta?: string | null
 }
 
 export interface PrenotazioneRequest {
@@ -72,6 +76,10 @@ export interface PrenotazioneRequest {
   etaBambini: number[]
   /** Null = solo pernottamento. Cambiandolo si ricopiano i prezzi dal listino di oggi. */
   trattamento: TipoTrattamento | null
+  /** Servizi extra. In modifica null = lascia quelli registrati; lista vuota = li toglie. */
+  servizi: ServizioPrenotazioneRichiesta[] | null
+  /** Solo in creazione: pagamenti già ricevuti (l'acconto preso al telefono). In modifica si usa il registro. */
+  pagamenti?: SalvaPagamentoRequest[] | null
 }
 
 export interface PreventivoDto {
@@ -162,11 +170,14 @@ export function usePreventivo(
   trattamento: TipoTrattamento | null = null,
   /** Su una prenotazione esistente: con lo stesso trattamento valgono i prezzi con cui è stato venduto. */
   prenotazioneId: string | null = null,
+  /** Servizi extra: quelli già venduti con la prenotazione tengono il loro prezzo. */
+  servizi: ServizioPrenotazioneRichiesta[] = [],
 ) {
   const parametriEta = etaBambini.map((e) => `&etaBambini=${e}`).join('')
-  const parametriTrattamento = `${trattamento ? `&trattamento=${trattamento}` : ''}${prenotazioneId ? `&prenotazioneId=${prenotazioneId}` : ''}`
+  const parametriServizi = servizi.map((s) => `&servizi=${s.rigaId ?? '-'}:${s.servizioId}:${s.quantita}:${s.dal}:${s.al ?? '-'}`).join('')
+  const parametriTrattamento = `${trattamento ? `&trattamento=${trattamento}` : ''}${prenotazioneId ? `&prenotazioneId=${prenotazioneId}` : ''}${parametriServizi}`
   return useQuery({
-    queryKey: ['preventivo', strutturaId, cameraId, checkIn, checkOut, numeroOspiti, etaBambini.join(','), spesePulizia, animali, cauzione, trattamento, prenotazioneId],
+    queryKey: ['preventivo', strutturaId, cameraId, checkIn, checkOut, numeroOspiti, etaBambini.join(','), spesePulizia, animali, cauzione, trattamento, prenotazioneId, parametriServizi],
     queryFn: () =>
       apiGet<PreventivoDto>(
         `/strutture/${strutturaId}/prezzi-camera/preventivo?cameraId=${cameraId}&checkIn=${checkIn}&checkOut=${checkOut}&numeroOspiti=${numeroOspiti}${parametriEta}&spesePulizia=${spesePulizia}&animali=${animali}&cauzione=${cauzione}${parametriTrattamento}`,
@@ -196,9 +207,38 @@ export function useVerificaDisponibilita(
   })
 }
 
+export interface CameraAssegnabileDto {
+  cameraId: string | null
+  nomeCamera: string | null
+}
+
+/** Camera che l'assegnazione automatica sceglierebbe adesso: null se la tipologia è piena per quelle date. */
+export function useCameraAssegnabile(
+  strutturaId: string | null,
+  tipologiaId: string | null,
+  checkIn: string | null,
+  checkOut: string | null,
+  escludiPrenotazioneId: string | null,
+  abilitato: boolean,
+) {
+  return useQuery({
+    queryKey: ['prenotazioni', strutturaId, 'camera-assegnabile', tipologiaId, checkIn, checkOut, escludiPrenotazioneId],
+    queryFn: () =>
+      apiGet<CameraAssegnabileDto>(
+        `/strutture/${strutturaId}/prenotazioni/camera-assegnabile?tipologiaId=${tipologiaId}&checkIn=${checkIn}&checkOut=${checkOut}${escludiPrenotazioneId ? `&escludiPrenotazioneId=${escludiPrenotazioneId}` : ''}`,
+      ),
+    enabled: abilitato && !!strutturaId && !!tipologiaId && !!checkIn && !!checkOut,
+    retry: false,
+  })
+}
+
 function useInvalidaPrenotazioni(strutturaId: string | null) {
   const queryClient = useQueryClient()
-  return () => queryClient.invalidateQueries({ queryKey: chiaviPrenotazioni(strutturaId) })
+  return () => {
+    queryClient.invalidateQueries({ queryKey: chiaviPrenotazioni(strutturaId) })
+    // I servizi di una prenotazione si leggono a parte: riaprendola devono essere quelli appena salvati.
+    queryClient.invalidateQueries({ queryKey: ['servizi', strutturaId, 'prenotazione'] })
+  }
 }
 
 export function useCreaPrenotazione(strutturaId: string | null) {

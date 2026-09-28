@@ -31,4 +31,10 @@ public class TrattamentoStruttura : TenantEntity
     /// breve, dove l'host non può servirla lui). Facoltativo.
     /// </summary>
     public string? EsercizioConvenzionato { get; set; }
+
+    /// <summary>
+    /// Il trattamento si consuma con un ticket (bar o ristorante convenzionato): sulle prenotazioni
+    /// che lo hanno compare "Stampa ticket".
+    /// </summary>
+    public bool StampaTicket { get; set; }
 }

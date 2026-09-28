@@ -19,7 +19,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import { ApiError } from '../api/client'
-import { useFatturaPerPrenotazione, type DatiFatturaDto } from '../api/fatturazione'
+import { nomeDocumento, testoDaFatturare, useDaFatturare, useFatturaPerPrenotazione, type DatiFatturaDto } from '../api/fatturazione'
 import type { PrenotazioneDto } from '../api/prenotazioni'
 import {
   Sesso,
@@ -54,6 +54,7 @@ export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenota
   const mobile = useMobile()
   const ospite = useOspite(strutturaId, prenotazione.id)
   const fattura = useFatturaPerPrenotazione(strutturaId, prenotazione.id)
+  const daFatturare = useDaFatturare(fattura.data ? strutturaId : null, prenotazione.id)
 
   return (
     <Dialog open onClose={onClose} maxWidth="md" fullWidth fullScreen={mobile}>
@@ -75,6 +76,7 @@ export function OspiteDialog({ strutturaId, prenotazione, onClose, onApriPrenota
           onGeneraFattura={onGeneraFattura}
           dopoSalvataggio={dopoSalvataggio}
           fatturaGenerata={fattura.data ?? null}
+          extraDaFatturare={testoDaFatturare(daFatturare.data)}
         />
       )}
     </Dialog>
@@ -171,6 +173,7 @@ function SchedaOspitiForm({
   onGeneraFattura,
   dopoSalvataggio,
   fatturaGenerata,
+  extraDaFatturare,
 }: {
   strutturaId: string
   prenotazione: PrenotazioneDto
@@ -180,6 +183,8 @@ function SchedaOspitiForm({
   onGeneraFattura?: () => void
   dopoSalvataggio?: () => void
   fatturaGenerata: DatiFatturaDto | null
+  /** Servizi addebitati dopo il documento, da mettere in un secondo: "2 servizi da fatturare (45,00 €)". */
+  extraDaFatturare: string | null
 }) {
   const mobile = useMobile()
   const puoScrivere = usePuoScrivere('reservationWrite')
@@ -499,11 +504,19 @@ function SchedaOspitiForm({
             </Button>
           )}
           {fatturaGenerata ? (
-            <Chip
-              size="small"
-              label={`Fattura generata — n. ${fatturaGenerata.numeroDocumento}/${fatturaGenerata.anno}`}
-              sx={{ bgcolor: tokens.ok600, color: '#fff', fontWeight: 700, alignSelf: 'center' }}
-            />
+            <>
+              <Chip
+                size="small"
+                label={extraDaFatturare ? `${nomeDocumento(fatturaGenerata)} — ${extraDaFatturare}` : `${nomeDocumento(fatturaGenerata)} generata`}
+                sx={{ bgcolor: extraDaFatturare ? tokens.wait600 : tokens.ok600, color: '#fff', fontWeight: 700, alignSelf: 'center' }}
+              />
+              {/* Secondo documento con i soli extra: la proposta salta quello che è già fatturato. */}
+              {extraDaFatturare && onGeneraFattura && puoFatturare && (
+                <Button onClick={onGeneraFattura} disabled={salva.isPending}>
+                  Fattura gli extra
+                </Button>
+              )}
+            </>
           ) : (
             onGeneraFattura &&
             puoFatturare && (

@@ -485,11 +485,21 @@ var datiClienteMap = new Dictionary<int, Guid>();
             NumeroDocumento = reader.GetInt32(3),
             DataDocumento = DateTime.SpecifyKind(reader.GetDateTime(4), DateTimeKind.Utc),
             Divisa = reader.IsDBNull(5) ? null : reader.GetString(5),
-            Descrizione = reader.IsDBNull(6) ? null : reader.GetString(6),
-            Quantita = reader.GetDecimal(7),
-            PrezzoUnitario = reader.GetDecimal(8),
-            AliquotaIva = reader.IsDBNull(9) ? null : (AliquotaIva)reader.GetInt32(9),
-            Natura = reader.IsDBNull(10) ? null : (NaturaIva)reader.GetInt32(10),
+            // Il legacy aveva una riga sola sulla testata: diventa la riga 1 del documento.
+            Righe =
+            [
+                new RigaFattura
+                {
+                    StrutturaId = strutturaId,
+                    Numero = 1,
+                    Descrizione = reader.IsDBNull(6) ? "" : reader.GetString(6),
+                    Quantita = reader.GetDecimal(7),
+                    PrezzoUnitario = reader.GetDecimal(8),
+                    PrezzoTotale = reader.GetDecimal(11),
+                    AliquotaIva = reader.IsDBNull(9) ? null : (AliquotaIva)reader.GetInt32(9),
+                    Natura = reader.IsDBNull(10) ? null : (NaturaIva)reader.GetInt32(10),
+                },
+            ],
             PrezzoTotale = reader.GetDecimal(11),
             ImportoTotale = reader.GetDecimal(12),
             Arrotondamento = reader.GetDecimal(13),

@@ -37,4 +37,6 @@ public record PrenotazioneDto(
     // Età all'arrivo dei bambini compresi in NumeroOspiti, per il supplemento per fascia d'età.
     IReadOnlyList<int>? EtaBambini = null,
     // Null = solo pernottamento.
-    TipoTrattamento? Trattamento = null);
+    TipoTrattamento? Trattamento = null,
+    // Richieste dell'ospite e altre indicazioni arrivate dall'OTA (vedi Prenotazione.NoteOta).
+    string? NoteOta = null);

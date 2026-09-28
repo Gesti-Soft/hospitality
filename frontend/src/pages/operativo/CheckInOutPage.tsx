@@ -1,21 +1,17 @@
 import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
-import Dialog from '@mui/material/Dialog'
-import DialogActions from '@mui/material/DialogActions'
-import DialogContent from '@mui/material/DialogContent'
-import DialogContentText from '@mui/material/DialogContentText'
-import DialogTitle from '@mui/material/DialogTitle'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import Skeleton from '@mui/material/Skeleton'
-import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import AddIcon from '@mui/icons-material/AddShoppingCartOutlined'
 import LoginIcon from '@mui/icons-material/LoginOutlined'
 import LogoutIcon from '@mui/icons-material/LogoutOutlined'
 import { useStruttura } from '../../struttura/StrutturaContext'
-import { useArriviInCorso, useArriviProssimi, useCheckIn, useCheckOut, type PrenotazioneDto } from '../../api/prenotazioni'
+import { useArriviInCorso, useArriviProssimi, useCheckIn, type PrenotazioneDto } from '../../api/prenotazioni'
+import { AddebitaServizioDialog } from '../../components/AddebitaServizioDialog'
+import { CheckOutDialog } from '../../components/CheckOutDialog'
+import { useServizi } from '../../api/servizi'
 import { ConfermaSchedinaSoggiornoBreve, isSoggiornoBreve } from '../../components/ConfermaSchedinaSoggiornoBreve'
 import { useCamere } from '../../api/camere'
 import { useTipologie } from '../../api/tipologie'
@@ -38,8 +34,12 @@ export function CheckInOutPage() {
   const camere = useCamere(strutturaId)
   const tipologie = useTipologie(strutturaId)
   const checkIn = useCheckIn(strutturaId)
-  const checkOut = useCheckOut(strutturaId)
   const [checkOutDaConfermare, setCheckOutDaConfermare] = useState<PrenotazioneDto | null>(null)
+  const [daAddebitare, setDaAddebitare] = useState<PrenotazioneDto | null>(null)
+  // L'addebito rapido c'è solo se si possono modificare le prenotazioni e la struttura vende qualcosa.
+  const puoAddebitare = usePuoScrivere('reservationWrite')
+  const servizi = useServizi(puoAddebitare ? strutturaId : null)
+  const addebitoDisponibile = puoAddebitare && (servizi.data ?? []).some((s) => s.attivo)
   // Il check-in si apre sulla scheda ospiti da compilare (Nome/Cognome veri, non un testo libero) —
   // ma il check-in vero e proprio scatta solo al salvataggio della scheda, mai chiudendo il dialog
   // senza salvare (altrimenti risulterebbe fatto anche annullando).
@@ -60,6 +60,8 @@ export function CheckInOutPage() {
   const arriviOggi = (arriviProssimi.data ?? []).filter((p) => isOggi(p.checkIn))
   // "Oggi o prima": una partenza dimenticata resta In corso e deve restare visibile finché non si fa il check-out.
   const partenzeDaFare = (arriviInCorso.data ?? []).filter((p) => isOggiOPrima(p.checkOut))
+  // Chi è in struttura e non parte oggi: è a loro che si addebitano SPA, bar, escursioni.
+  const inStruttura = (arriviInCorso.data ?? []).filter((p) => !isOggiOPrima(p.checkOut))
 
   function gestisciErrore(err: unknown) {
     toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
@@ -80,30 +82,13 @@ export function CheckInOutPage() {
     })
   }
 
-  // La cauzione va chiesta solo se è davvero prevista su questa prenotazione (tipologia della
-  // camera con un importo configurato E toggle "Cauzione" attivo) — altrimenti il check-out parte
-  // subito in un clic, senza far comparire un dialog per nulla.
-  function apriCheckOut(p: PrenotazioneDto) {
+  // La cauzione si chiede solo se è davvero prevista su questa prenotazione (tipologia della camera
+  // con un importo configurato E toggle "Cauzione" attivo). Il dialogo di check-out si apre sempre:
+  // mostra quanto resta da saldare, che si deve vedere prima di lasciar andare l'ospite.
+  function cauzionePrevista(p: PrenotazioneDto) {
     const tipologiaId = camere.data?.find((c) => c.id === p.cameraId)?.tipologiaId
     const cauzione = tipologie.data?.find((t) => t.id === tipologiaId)?.cauzione ?? 0
-    if (!p.cauzioneAttiva || cauzione <= 0) {
-      eseguiCheckOut(p, true, null)
-      return
-    }
-    setCheckOutDaConfermare(p)
-  }
-
-  function eseguiCheckOut(p: PrenotazioneDto, restituisciCauzione: boolean, importoCauzioneTrattenuta: number | null) {
-    checkOut.mutate(
-      { prenotazioneId: p.id, restituisciCauzione, importoCauzioneTrattenuta },
-      {
-        onSuccess: () => {
-          toast.successo(`Check-out effettuato${p.numeroPrenotazione ? ` — #${p.numeroPrenotazione}` : ''}.`)
-          setCheckOutDaConfermare(null)
-        },
-        onError: gestisciErrore,
-      },
-    )
+    return p.cauzioneAttiva && cauzione > 0
   }
 
   const caricamento = arriviProssimi.isLoading || arriviInCorso.isLoading || camere.isLoading || tipologie.isLoading
@@ -130,19 +115,47 @@ export function CheckInOutPage() {
         {!caricamento && partenzeDaFare.length > 0 && (
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
             {partenzeDaFare.map((p) => (
-              <CardPrenotazione key={p.id} prenotazione={p} tipo="check-out" inCorso={checkOut.isPending} onAzione={puoFareCheckInOut ? () => apriCheckOut(p) : undefined} />
+              <CardPrenotazione
+                key={p.id}
+                prenotazione={p}
+                tipo="check-out"
+                inCorso={false}
+                onAzione={puoFareCheckInOut ? () => setCheckOutDaConfermare(p) : undefined}
+                onAddebita={addebitoDisponibile ? () => setDaAddebitare(p) : undefined}
+              />
             ))}
           </Box>
         )}
       </Box>
 
-      {checkOutDaConfermare && (
+      {/* Solo se c'è qualcosa da addebitare: per chi non vende extra sarebbe un elenco in più. */}
+      {addebitoDisponibile && (
+        <Box>
+          <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15.5, mb: 1.75 }}>In struttura</Typography>
+          {caricamento && <Skeleton variant="rounded" height={140} />}
+          {!caricamento && inStruttura.length === 0 && <MessaggioVuotoElenco messaggio="Nessun altro ospite in struttura." />}
+          {!caricamento && inStruttura.length > 0 && (
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
+              {inStruttura.map((p) => (
+                <CardPrenotazione key={p.id} prenotazione={p} tipo="in-struttura" inCorso={false} onAddebita={() => setDaAddebitare(p)} />
+              ))}
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {checkOutDaConfermare && strutturaId && (
         <CheckOutDialog
+          strutturaId={strutturaId}
           prenotazione={checkOutDaConfermare}
-          inCorso={checkOut.isPending}
-          onConferma={(restituisci, importo) => eseguiCheckOut(checkOutDaConfermare, restituisci, importo)}
-          onAnnulla={() => setCheckOutDaConfermare(null)}
+          cauzionePrevista={cauzionePrevista(checkOutDaConfermare)}
+          onChiudi={() => setCheckOutDaConfermare(null)}
+          onCompletato={() => setCheckOutDaConfermare(null)}
         />
+      )}
+
+      {daAddebitare && strutturaId && (
+        <AddebitaServizioDialog strutturaId={strutturaId} prenotazione={daAddebitare} onChiudi={() => setDaAddebitare(null)} />
       )}
 
       {schedinaBreveDaInviare && (
@@ -179,18 +192,21 @@ function CardPrenotazione({
   tipo,
   inCorso,
   onAzione,
+  onAddebita,
 }: {
   prenotazione: PrenotazioneDto
-  tipo: 'check-in' | 'check-out'
+  tipo: 'check-in' | 'check-out' | 'in-struttura'
   inCorso: boolean
   /** Assente = sola lettura (chi prepara le camere): niente pulsante e niente canale, che l'Api non gli manda. */
   onAzione?: () => void
+  /** Addebito di un servizio extra sul conto (SPA, minibar…): solo a chi modifica le prenotazioni. */
+  onAddebita?: () => void
 }) {
   const ospite = [prenotazione.ospiteNome, prenotazione.ospiteCognome].filter(Boolean).join(' ')
   const inRitardo = tipo === 'check-out' && !isOggi(prenotazione.checkOut)
 
   return (
-    <CardElenco coloreAccento={tipo === 'check-in' ? tokens.ok600 : inRitardo ? tokens.orange600 : tokens.blue600}>
+    <CardElenco coloreAccento={tipo === 'check-in' ? tokens.ok600 : inRitardo ? tokens.orange600 : tipo === 'in-struttura' ? tokens.surfaceBorder : tokens.blue600}>
       <TestataCardElenco
         titolo={ospite || 'Ospite da registrare'}
         sottotitolo={prenotazione.numeroPrenotazione ? `#${prenotazione.numeroPrenotazione}` : undefined}
@@ -199,7 +215,7 @@ function CardPrenotazione({
       <RigaCardMeta
         voci={[
           { etichetta: 'Camera', valore: <span style={{ fontFamily: fontMono }}>{prenotazione.cameraNome ?? '—'}</span> },
-          ...(onAzione ? [{ etichetta: 'Canale', valore: prenotazione.agenzia ?? 'Diretta' }] : []),
+          ...(onAzione || onAddebita ? [{ etichetta: 'Canale', valore: prenotazione.agenzia ?? 'Diretta' }] : []),
           { etichetta: 'Check-in', valore: prenotazione.checkIn ? formattatoreData.format(new Date(prenotazione.checkIn)) : '—' },
           { etichetta: 'Check-out', valore: prenotazione.checkOut ? formattatoreData.format(new Date(prenotazione.checkOut)) : '—' },
           // Quante persone si presentano al banco: serve per preparare la camera senza dover aprire
@@ -207,74 +223,27 @@ function CardPrenotazione({
           { etichetta: 'Ospiti', valore: prenotazione.numeroOspiti ?? '—' },
         ]}
       />
-      {onAzione && (
+      {(onAzione || onAddebita) && (
         <AzioniCardElenco>
-          <Button
-            fullWidth
-            variant="contained"
-            color="primary"
-            startIcon={tipo === 'check-in' ? <LoginIcon /> : <LogoutIcon />}
-            onClick={onAzione}
-            disabled={inCorso}
-          >
-            {tipo === 'check-in' ? 'Check-in' : 'Check-out'}
-          </Button>
+          {onAddebita && (
+            <Button fullWidth={!onAzione} variant="outlined" startIcon={<AddIcon />} onClick={onAddebita} disabled={inCorso}>
+              Addebita
+            </Button>
+          )}
+          {onAzione && (
+            <Button
+              fullWidth
+              variant="contained"
+              color="primary"
+              startIcon={tipo === 'check-in' ? <LoginIcon /> : <LogoutIcon />}
+              onClick={onAzione}
+              disabled={inCorso}
+            >
+              {tipo === 'check-in' ? 'Check-in' : 'Check-out'}
+            </Button>
+          )}
         </AzioniCardElenco>
       )}
     </CardElenco>
-  )
-}
-
-/** Stessa scelta cauzione già presente nel dialog di dettaglio prenotazione, isolata qui per il check-out in un clic da questa pagina. */
-function CheckOutDialog({
-  prenotazione,
-  inCorso,
-  onConferma,
-  onAnnulla,
-}: {
-  prenotazione: PrenotazioneDto
-  inCorso: boolean
-  onConferma: (restituisciCauzione: boolean, importoCauzioneTrattenuta: number | null) => void
-  onAnnulla: () => void
-}) {
-  const [restituisciCauzione, setRestituisciCauzione] = useState(true)
-  const [importoCauzioneTrattenuta, setImportoCauzioneTrattenuta] = useState('')
-
-  return (
-    <Dialog open onClose={onAnnulla} maxWidth="xs" fullWidth>
-      <DialogTitle>Check-out{prenotazione.numeroPrenotazione ? ` — #${prenotazione.numeroPrenotazione}` : ''}</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <DialogContentText>Questa prenotazione prevede una cauzione.</DialogContentText>
-        <FormControlLabel
-          control={<Checkbox checked={restituisciCauzione} onChange={(e) => setRestituisciCauzione(e.target.checked)} disabled={inCorso} />}
-          label="Restituisci l'intera cauzione al cliente"
-        />
-        {!restituisciCauzione && (
-          <TextField
-            label="Importo cauzione trattenuta (€)"
-            type="number"
-            value={importoCauzioneTrattenuta}
-            onChange={(e) => setImportoCauzioneTrattenuta(e.target.value)}
-            disabled={inCorso}
-            autoFocus
-          />
-        )}
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button onClick={onAnnulla} disabled={inCorso}>
-          Annulla
-        </Button>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() =>
-            onConferma(restituisciCauzione, restituisciCauzione ? null : importoCauzioneTrattenuta.trim() === '' ? null : Number(importoCauzioneTrattenuta))
-          }
-          disabled={inCorso}
-        >
-          Conferma check-out
-        </Button>
-      </DialogActions>
-    </Dialog>
   )
 }

@@ -80,6 +80,20 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
             conflitto?.CheckOut));
     }
 
+    /// <summary>Camera che l'assegnazione automatica sceglierebbe adesso (preventivo e avviso nel form, prima del salvataggio).</summary>
+    [HttpGet("camera-assegnabile")]
+    public async Task<IActionResult> CameraAssegnabile(
+        Guid strutturaId,
+        [FromQuery] Guid tipologiaId,
+        [FromQuery] DateTime checkIn,
+        [FromQuery] DateTime checkOut,
+        [FromQuery] Guid? escludiPrenotazioneId,
+        CancellationToken cancellationToken)
+    {
+        var camera = await service.CameraAssegnabileAsync(currentUser, strutturaId, tipologiaId, checkIn, checkOut, escludiPrenotazioneId, cancellationToken);
+        return Ok(new CameraAssegnabileDto(camera?.Id, camera?.Nome));
+    }
+
     [HttpPost]
     public async Task<IActionResult> Crea(Guid strutturaId, [FromBody] CreaPrenotazioneRequest request, CancellationToken cancellationToken)
     {
@@ -131,6 +145,8 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
         TotalTax = null,
         // Serve al prezzo, non alle pulizie.
         EtaBambini = [],
+        // Richieste dell'ospite, a volte con dati di salute: all'addetto pulizie non servono.
+        NoteOta = null,
     };
 
     private static PrenotazioneDto ToDto(Prenotazione p) => new(
@@ -138,5 +154,5 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
         p.ImportoPrenotazione, p.ImportoPagato, p.ImportoTotale, p.CheckIn, p.CheckOut, p.CheckInEffettuatoAtUtc,
         p.NumeroOspiti, p.StatePolice, p.PMS, p.PayTourist, p.Anno, p.TotalTax, p.StatoPrenotazione,
         p.TassaSoggiornoAttiva, p.SpesePuliziaAttiva, p.AnimaliAttiva, p.CauzioneAttiva, p.Ospite?.Nome, p.Ospite?.Cognome,
-        p.RinunciaPulizia, p.RinunciaBiancheria, p.EtaBambini, p.Trattamento);
+        p.RinunciaPulizia, p.RinunciaBiancheria, p.EtaBambini, p.Trattamento, p.NoteOta);
 }

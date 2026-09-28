@@ -2,6 +2,7 @@
 using GestiSoft.Application.Fatturazione;
 using GestiSoft.Contracts.Fatturazione;
 using GestiSoft.Domain.Entities;
+using GestiSoft.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -39,6 +40,34 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
     {
         var fattura = await service.GetByPrenotazioneAsync(currentUser, strutturaId, prenotazioneId, cancellationToken);
         return fattura is null ? NotFound() : Ok(ToDto(fattura));
+    }
+
+    /// <summary>Cosa resta da fatturare della prenotazione (soggiorno, servizi extra addebitati dopo il documento).</summary>
+    [HttpGet("prenotazioni/{prenotazioneId:guid}/da-fatturare")]
+    public async Task<IActionResult> DaFatturare(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
+    {
+        var d = await service.DaFatturareAsync(currentUser, strutturaId, prenotazioneId, cancellationToken);
+        return Ok(new DaFatturareDto(d.SoggiornoFatturato, d.ServiziDaFatturare, d.ImportoServiziDaFatturare));
+    }
+
+    /// <summary>
+    /// Righe proposte per fatturare una o più prenotazioni (la prima è di chi paga): il soggiorno e i
+    /// servizi extra non ancora fatturati, l'imposta di soggiorno e gli avvisi. Non scrive nulla.
+    /// </summary>
+    [HttpGet("proposta")]
+    public async Task<IActionResult> Proposta(
+        Guid strutturaId,
+        [FromQuery] Guid[] prenotazioneIds,
+        [FromQuery] TipoEmissioneDocumento tipoEmissione = TipoEmissioneDocumento.Fattura,
+        CancellationToken cancellationToken = default)
+    {
+        var proposta = await service.ProponiAsync(currentUser, strutturaId, prenotazioneIds, tipoEmissione, cancellationToken);
+        return Ok(new PropostaFatturaDto(
+            proposta.Righe.Select(r => new RigaFatturaDto(
+                0, r.Descrizione ?? "", r.Quantita, r.PrezzoUnitario, CalcoloFattura.TotaleRiga(r.Quantita, r.PrezzoUnitario),
+                r.AliquotaIva, r.Natura, r.Tipo, r.PrenotazioneId, r.PrenotazioneServizioId)).ToList(),
+            proposta.ImpostaSoggiorno,
+            proposta.Avvisi));
     }
 
     [HttpPost]
@@ -85,8 +114,15 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
         f.Id, f.StrutturaId, f.DatiClienteId,
         f.Cliente is null ? null : !string.IsNullOrWhiteSpace(f.Cliente.Denominazione) ? f.Cliente.Denominazione : $"{f.Cliente.Nome} {f.Cliente.Cognome}".Trim(),
         f.Progressivo, f.TipoDocumento, f.RegimeFiscale, f.TipoEmissione, f.ModalitaPagamento, f.NumeroDocumento, f.DataDocumento, f.Divisa,
-        f.Descrizione, f.Quantita, f.PrezzoUnitario, f.PrezzoTotale, f.ImportoTotale, f.AliquotaIva, f.Natura,
-        f.ImpostaSoggiorno, f.ImportoBollo, f.Anno);
+        f.PrezzoTotale, CalcoloFattura.Imposta(f.Righe), f.ImportoTotale,
+        f.ImpostaSoggiorno, f.ImportoBollo, f.Anno,
+        f.Righe.OrderBy(r => r.Numero)
+            .Select(r => new RigaFatturaDto(r.Numero, r.Descrizione, r.Quantita, r.PrezzoUnitario, r.PrezzoTotale, r.AliquotaIva, r.Natura, r.Tipo, r.PrenotazioneId, r.PrenotazioneServizioId))
+            .ToList(),
+        // La prenotazione di chi paga per prima, poi le altre.
+        f.Prenotazioni.Select(p => p.PrenotazioneId)
+            .OrderBy(id => id == f.PrenotazioneId ? 0 : 1)
+            .ToList());
 
     private static DatiClienteDto ToDtoCliente(DatiCliente c) => new(
         c.Id, c.StrutturaId, c.Iso2, c.PIva, c.CodiceFiscale, c.Denominazione, c.Nome, c.Cognome,

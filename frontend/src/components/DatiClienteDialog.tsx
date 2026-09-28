@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Alert from '@mui/material/Alert'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
@@ -78,6 +79,9 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
   const aggiorna = useAggiornaDatiCliente(strutturaId)
   const inCorso = crea.isPending || aggiorna.isPending
   const stati = useStati()
+  // Un valore salvato che non è nell'elenco (scritto a mano prima) resta visibile invece di sparire.
+  const nomiStati = (stati.data ?? []).map((s) => s.descrizione)
+  const opzioniCittadinanza = cittadinanza && !nomiStati.includes(cittadinanza) ? [cittadinanza, ...nomiStati] : nomiStati
 
   // La Nazione (ISO2) si deduce dalla Cittadinanza: quel campo arriva dalla scheda ospiti, dove è
   // la descrizione di una riga della tabella Stati, che porta già l'acronimo giusto (REGNO UNITO
@@ -332,14 +336,24 @@ export function DatiClienteDialog({ strutturaId, cliente, clienteNonPersistito, 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TitoloSezione>Residenza</TitoloSezione>
           <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-            <TextField label="Indirizzo" value={indirizzo} onChange={(e) => setIndirizzo(e.target.value)} fullWidth disabled={inCorso} />
-            <TextField label="N. civico" value={nCivico} onChange={(e) => setNCivico(e.target.value)} sx={{ width: 110 }} disabled={inCorso} />
-            <TextField label="CAP" value={cap} onChange={(e) => setCap(e.target.value)} sx={{ width: 110 }} disabled={inCorso} />
+            {/* Dall'elenco degli Stati: dalla cittadinanza si ricava la Nazione (ISO2) della fattura elettronica. */}
+            <Autocomplete
+              fullWidth
+              disabled={inCorso}
+              loading={stati.isLoading}
+              options={opzioniCittadinanza}
+              value={cittadinanza || null}
+              onChange={(_, v) => setCittadinanza(v ?? '')}
+              renderInput={(params) => <TextField {...params} label="Cittadinanza" />}
+            />
+            <SelectComune label="Comune di residenza" value={luogoResidenza} onChange={setLuogoResidenza} onComuneSelezionato={onComuneResidenzaSelezionato} disabled={inCorso} />
+            {/* Sigla della provincia (es. PA): si compila scegliendo il comune, per l'estero resta vuota. */}
+            <TextField label="Provincia" value={provincia} onChange={(e) => setProvincia(e.target.value)} sx={{ width: mobile ? 'auto' : 120, flexShrink: 0 }} disabled={inCorso} />
           </Box>
           <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-            <SelectComune label="Comune di residenza" value={luogoResidenza} onChange={setLuogoResidenza} onComuneSelezionato={onComuneResidenzaSelezionato} disabled={inCorso} />
-            <TextField label="Provincia" value={provincia} onChange={(e) => setProvincia(e.target.value)} sx={{ width: 110 }} disabled={inCorso} />
-            <TextField label="Cittadinanza" value={cittadinanza} onChange={(e) => setCittadinanza(e.target.value)} fullWidth disabled={inCorso} />
+            <TextField label="CAP" value={cap} onChange={(e) => setCap(e.target.value)} sx={{ width: mobile ? 'auto' : 120, flexShrink: 0 }} disabled={inCorso} />
+            <TextField label="Indirizzo" value={indirizzo} onChange={(e) => setIndirizzo(e.target.value)} fullWidth disabled={inCorso} />
+            <TextField label="N. civico" value={nCivico} onChange={(e) => setNCivico(e.target.value)} sx={{ width: mobile ? 'auto' : 120, flexShrink: 0 }} disabled={inCorso} />
           </Box>
         </Box>
 

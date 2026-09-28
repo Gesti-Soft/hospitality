@@ -4,6 +4,7 @@ using GestiSoft.Application.Logging;
 using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
+using GestiSoft.Application.Trattamenti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -32,7 +33,8 @@ public class WubookPrenotazioniService(
     IStrutturaRepository strutture,
     PermessoStrutturaGuard permessoGuard,
     ILogEventoService logEventi,
-    NotificaService notificaService)
+    NotificaService notificaService,
+    ITrattamentoStrutturaRepository listiniTrattamento)
 {
     private enum EsitoBooking { Creata, Aggiornata, Annullata, Ignorata }
 
@@ -87,91 +89,177 @@ public class WubookPrenotazioniService(
     public async Task ImportaBookingRicevutoAsync(Guid strutturaId, WubookPrenotazione booking, string nomeCanale, CancellationToken cancellationToken) =>
         await ImportaBookingAsync(strutturaId, booking, nomeCanale, cancellationToken);
 
+    /// <summary>
+    /// Un ordine OTA diventa una prenotazione per camera (vedi OrdineOta), tutte con lo stesso rcode.
+    /// Le tipologie si risolvono tutte prima di scrivere: un ordine con una camera non associata non
+    /// deve restare registrato a metà.
+    /// </summary>
     private async Task<EsitoBooking> ImportaBookingAsync(Guid strutturaId, WubookPrenotazione booking, string nomeCanale, CancellationToken cancellationToken)
     {
-        if (!int.TryParse(booking.CameraIdWubookRaw, out var idCameraWubook))
-        {
-            throw new InvalidOperationException($"Id camera OTA non numerico: '{booking.CameraIdWubookRaw}'.");
-        }
-
-        var tipologia = await tipologie.GetByIdWubookAsync(strutturaId, idCameraWubook, cancellationToken)
-            ?? throw new InvalidOperationException($"Nessuna tipologia locale associata alla camera OTA {idCameraWubook}.");
-
-        var esistente = await prenotazioni.GetByIdPrenotazioneWubookAsync(strutturaId, booking.RCode, cancellationToken);
+        var camereOrdine = OrdineOta.Suddividi(booking);
+        var esistenti = await prenotazioni.ListByIdPrenotazioneWubookAsync(strutturaId, booking.RCode, cancellationToken);
 
         // Status 5 = prenotazione cancellata lato Wubook (vedi report Fase 5 sez. C).
         if (booking.Status == 5)
         {
-            if (esistente is null)
+            var annullate = 0;
+            foreach (var esistente in esistenti)
             {
-                return EsitoBooking.Ignorata;
+                if (await AnnullaDaOtaAsync(strutturaId, esistente, booking.RCode, nomeCanale, "annullata dall'OTA", cancellationToken))
+                {
+                    annullate++;
+                }
             }
 
-            // Se l'ospite ha già fatto check-in (camera occupata, presenza reale in struttura), una
-            // cancellazione OTA tardiva non va applicata in automatico: importi/stato potrebbero non
-            // riflettere più la realtà (es. saldo incassato in loco). Si lascia intatta e si segnala
-            // per una verifica manuale, invece di annullare/azzerare silenziosamente.
-            if (esistente.StatoPrenotazione == StatoPrenotazione.InCorso)
+            return annullate > 0 ? EsitoBooking.Annullata : EsitoBooking.Ignorata;
+        }
+
+        var tipologieCamere = new List<SettingTipologia>();
+        foreach (var camera in camereOrdine)
+        {
+            tipologieCamere.Add(await tipologie.GetByIdWubookAsync(strutturaId, camera.IdCameraWubook, cancellationToken)
+                ?? throw new InvalidOperationException($"Nessuna tipologia locale associata alla camera OTA {camera.IdCameraWubook}."));
+        }
+
+        var esito = EsitoBooking.Aggiornata;
+        foreach (var camera in camereOrdine)
+        {
+            var esitoCamera = await ImportaCameraAsync(
+                strutturaId, booking, camera, camereOrdine.Count, tipologieCamere[camera.Indice],
+                esistenti.FirstOrDefault(p => p.IndiceCameraOta == camera.Indice), nomeCanale, cancellationToken);
+            if (esitoCamera == EsitoBooking.Creata && camera.Indice == 0)
             {
-                var numeroVisualizzatoInCorso = esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8];
-                await logEventi.RegistraAsync(
-                    LivelloLog.Warning,
-                    $"L'OTA segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso} (rcode={booking.RCode}), ma risulta già In corso (check-in effettuato): nessuna modifica automatica, verificare manualmente.",
-                    origine: "Wubook",
-                    clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
-                    strutturaId: strutturaId,
-                    categoria: "Wubook",
-                    cancellationToken: cancellationToken);
-                await notificaService.CreaPerPrenotazioneSeNonEsisteAsync(
-                    strutturaId, TipoNotifica.PrenotazioneAnnullata, esistente.Id,
-                    "Cancellazione da verificare",
-                    $"L'OTA segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso}, ma l'ospite ha già fatto check-in: verificare manualmente.",
-                    cancellationToken);
-                return EsitoBooking.Ignorata;
+                esito = EsitoBooking.Creata;
             }
+        }
 
-            // Arrivati qui la prenotazione non era In corso (vedi controllo sopra), quindi il
-            // check-in non è mai avvenuto e la camera non è mai stata toccata da questa prenotazione
-            // — non c'è nulla da liberare. Se la camera risulta occupata/non pronta, è per un motivo
-            // indipendente (altro soggiorno in corso, blocco manuale) e non va alterato qui.
-            var numeroVisualizzato = esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8];
-            var canaleCancellata = esistente.Agenzia ?? nomeCanale;
+        // L'ospite ha tolto una camera dall'ordine sul portale: quella in più si annulla come una cancellazione.
+        foreach (var tolta in esistenti.Where(p => p.IndiceCameraOta >= camereOrdine.Count))
+        {
+            await AnnullaDaOtaAsync(strutturaId, tolta, booking.RCode, nomeCanale, "tolta dall'ordine dall'OTA", cancellationToken);
+        }
 
-            esistente.StatoPrenotazione = StatoPrenotazione.Annullata;
-            esistente.ImportoPrenotazione = 0;
-            esistente.ImportoPagato = 0;
-            esistente.ImportoTotale = 0;
-            esistente.UpdatedAtUtc = DateTime.UtcNow;
-            await prenotazioni.UpdateAsync(esistente, cancellationToken);
+        return esito;
+    }
 
+    /// <summary>
+    /// Annulla una prenotazione per conto dell'OTA. Una già in corso (check-in fatto) non si tocca:
+    /// si segnala per una verifica manuale. Restituisce true se l'ha annullata.
+    /// </summary>
+    private async Task<bool> AnnullaDaOtaAsync(Guid strutturaId, Prenotazione esistente, int rcode, string nomeCanale, string motivo, CancellationToken cancellationToken)
+    {
+        if (esistente.StatoPrenotazione == StatoPrenotazione.Annullata)
+        {
+            return false;
+        }
+
+        // Se l'ospite ha già fatto check-in (camera occupata, presenza reale in struttura), una
+        // cancellazione OTA tardiva non va applicata in automatico: importi/stato potrebbero non
+        // riflettere più la realtà (es. saldo incassato in loco). Si lascia intatta e si segnala
+        // per una verifica manuale, invece di annullare/azzerare silenziosamente.
+        if (esistente.StatoPrenotazione == StatoPrenotazione.InCorso)
+        {
+            var numeroVisualizzatoInCorso = esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8];
             await logEventi.RegistraAsync(
-                LivelloLog.Info,
-                $"Prenotazione #{numeroVisualizzato} annullata dall'OTA (rcode={booking.RCode}).",
+                LivelloLog.Warning,
+                $"L'OTA segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso} (rcode={rcode}), ma risulta già In corso (check-in effettuato): nessuna modifica automatica, verificare manualmente.",
                 origine: "Wubook",
                 clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                 strutturaId: strutturaId,
                 categoria: "Wubook",
                 cancellationToken: cancellationToken);
+            await notificaService.CreaPerPrenotazioneSeNonEsisteAsync(
+                strutturaId, TipoNotifica.PrenotazioneAnnullata, esistente.Id,
+                "Cancellazione da verificare",
+                $"L'OTA segnala come cancellata la prenotazione #{numeroVisualizzatoInCorso}, ma l'ospite ha già fatto check-in: verificare manualmente.",
+                cancellationToken);
+            return false;
+        }
 
-            // Non ancora una notifica visibile: Wubook, quando un operatore modifica una prenotazione
-            // da un canale OTA, manda la cancellazione del vecchio rcode e subito dopo una nuova
-            // prenotazione con i dati aggiornati — resta InAttesa per una breve finestra di grazia, in
-            // modo da poterla fondere con quella nuova (vedi RegistraNuovaOModificaWubookAsync) invece
-            // di notificare due volte la stessa modifica.
+        // Arrivati qui la prenotazione non era In corso (vedi controllo sopra), quindi il
+        // check-in non è mai avvenuto e la camera non è mai stata toccata da questa prenotazione
+        // — non c'è nulla da liberare. Se la camera risulta occupata/non pronta, è per un motivo
+        // indipendente (altro soggiorno in corso, blocco manuale) e non va alterato qui.
+        var numeroVisualizzato = esistente.NumeroPrenotazione ?? esistente.Id.ToString()[..8];
+        var canaleCancellata = esistente.Agenzia ?? nomeCanale;
+
+        esistente.StatoPrenotazione = StatoPrenotazione.Annullata;
+        // Come l'annullamento a mano: i soldi già ricevuti restano, un eventuale rimborso si registra.
+        esistente.ImportoPrenotazione = 0;
+        esistente.ImportoTotale = 0;
+        esistente.UpdatedAtUtc = DateTime.UtcNow;
+        await prenotazioni.UpdateAsync(esistente, cancellationToken);
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Info,
+            $"Prenotazione #{numeroVisualizzato}{DescriviCamera(esistente.IndiceCameraOta)} {motivo} (rcode={rcode}).",
+            origine: "Wubook",
+            clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+            strutturaId: strutturaId,
+            categoria: "Wubook",
+            cancellationToken: cancellationToken);
+
+        // Non ancora una notifica visibile: Wubook, quando un operatore modifica una prenotazione
+        // da un canale OTA, manda la cancellazione del vecchio rcode e subito dopo una nuova
+        // prenotazione con i dati aggiornati — resta InAttesa per una breve finestra di grazia, in
+        // modo da poterla fondere con quella nuova (vedi RegistraNuovaOModificaWubookAsync) invece
+        // di notificare due volte la stessa modifica. Solo per la prima camera dell'ordine: è quella
+        // con l'ospite, e la fusione si fa sull'ospite.
+        if (esistente.IndiceCameraOta == 0)
+        {
             await notificaService.RegistraCancellazioneWubookAsync(
                 strutturaId, esistente.Id, canaleCancellata,
                 "Prenotazione cancellata",
                 $"Prenotazione #{numeroVisualizzato} ({canaleCancellata}) cancellata dall'OTA.",
                 cancellationToken);
-
-            return EsitoBooking.Annullata;
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Note della prenotazione: in un ordine con più camere, prima di tutto a quale ordine appartiene,
+    /// così dalla seconda camera si ritrova la prima (e chi ha prenotato) e si sa che gli ospiti vanno
+    /// inseriti a parte. Poi quello che l'OTA ha mandato, uguale per tutte le camere.
+    /// </summary>
+    private static string? ComponiNoteCamera(WubookPrenotazione booking, CameraOrdineRisolta camera, int camereNellOrdine)
+    {
+        var note = TrattamentoOta.ComponiNote(booking.Extra);
+        if (camereNellOrdine <= 1)
+        {
+            return note;
+        }
+
+        var ordine = !string.IsNullOrWhiteSpace(booking.ChannelReservationCode) ? booking.ChannelReservationCode : booking.RCode.ToString();
+        var intestazione = camera.Indice == 0
+            ? $"Camera 1 di {camereNellOrdine} dell'ordine #{ordine}: le altre camere sono prenotazioni a parte con lo stesso numero."
+            : $"Camera {camera.Indice + 1} di {camereNellOrdine} dell'ordine #{ordine}: chi ha prenotato è sulla camera 1, gli ospiti di questa camera vanno inseriti a parte.";
+        var testo = note is null ? intestazione : $"{intestazione}\n{note}";
+        return testo.Length <= TrattamentoOta.LunghezzaMassimaNote ? testo : testo[..(TrattamentoOta.LunghezzaMassimaNote - 1)] + "…";
+    }
+
+    /// <summary>" (camera 2)" per le camere dopo la prima di un ordine, niente per la prima.</summary>
+    private static string DescriviCamera(int indice) => indice > 0 ? $" (camera {indice + 1})" : "";
+
+    private async Task<EsitoBooking> ImportaCameraAsync(
+        Guid strutturaId,
+        WubookPrenotazione booking,
+        CameraOrdineRisolta camera,
+        int camereNellOrdine,
+        SettingTipologia tipologia,
+        Prenotazione? esistente,
+        string nomeCanale,
+        CancellationToken cancellationToken)
+    {
+        // Nel log e nelle notifiche: "(camera 2 di 3)" solo se l'ordine ne ha più d'una.
+        var dellOrdine = camereNellOrdine > 1 ? $" (camera {camera.Indice + 1} di {camereNellOrdine})" : "";
 
         var nuova = esistente is null;
         var entity = esistente ?? new Prenotazione
         {
             StrutturaId = strutturaId,
             IdPrenotazioneWubook = booking.RCode,
+            IndiceCameraOta = camera.Indice,
             StatoPrenotazione = StatoPrenotazione.Incompleta,
         };
 
@@ -185,6 +273,7 @@ public class WubookPrenotazioniService(
         var primaNumeroOspiti = entity.NumeroOspiti;
         var primaTipologiaId = entity.TipologiaId;
         var primaCameraId = entity.CameraId;
+        var primaTrattamento = entity.Trattamento;
 
         // Non riassegnare se la camera già assegnata in precedenza (un aggiornamento di date su un
         // booking esistente) resta compatibile con le nuove date — evita di spostare inutilmente un
@@ -208,7 +297,7 @@ public class WubookPrenotazioniService(
                 var numeroVisualizzatoSenzaCamera = entity.NumeroPrenotazione ?? booking.RCode.ToString();
                 await logEventi.RegistraAsync(
                     LivelloLog.Warning,
-                    $"Prenotazione #{numeroVisualizzatoSenzaCamera} da {nomeCanale} (rcode={booking.RCode}): nessuna camera libera nel pool '{tipologia.TipologiaCamera}' per {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy} — registrata senza camera assegnata, serve assegnazione manuale.",
+                    $"Prenotazione #{numeroVisualizzatoSenzaCamera}{dellOrdine} da {nomeCanale} (rcode={booking.RCode}): nessuna camera libera nel pool '{tipologia.TipologiaCamera}' per {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy} — registrata senza camera assegnata, serve assegnazione manuale.",
                     origine: "Wubook",
                     clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                     strutturaId: strutturaId,
@@ -221,12 +310,20 @@ public class WubookPrenotazioniService(
         entity.Agenzia = nomeCanale;
         await AssicuraCanaleVenditaAsync(strutturaId, nomeCanale, cancellationToken);
         entity.NumeroPrenotazione = !string.IsNullOrWhiteSpace(booking.ChannelReservationCode) ? booking.ChannelReservationCode : booking.RCode.ToString();
-        entity.ImportoPrenotazione = booking.Importo;
-        entity.ImportoTotale = booking.Importo;
+        entity.ImportoPrenotazione = camera.Importo;
+        entity.ImportoTotale = camera.Importo;
         entity.CheckIn = booking.CheckIn;
         entity.CheckOut = booking.CheckOut;
-        entity.NumeroOspiti = booking.Adulti + booking.Bambini;
+        entity.NumeroOspiti = camera.NumeroOspiti;
         entity.Anno = booking.CheckIn.Year;
+        entity.NoteOta = ComponiNoteCamera(booking, camera, camereNellOrdine);
+        // L'ha comprato l'ospite sul portale: comanda l'OTA. Se però non dice nulla di riconoscibile
+        // (il caso più comune) resta quello che c'è, per esempio una colazione venduta al banco.
+        var trattamentoOta = TrattamentoOta.Riconosci(booking.Extra);
+        if (trattamentoOta.Indicato && trattamentoOta.Trattamento != entity.Trattamento)
+        {
+            await ImpostaTrattamentoOtaAsync(strutturaId, entity, trattamentoOta.Trattamento, nomeCanale, booking.RCode, cancellationToken);
+        }
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         if (nuova)
@@ -248,21 +345,27 @@ public class WubookPrenotazioniService(
             // non aveva più nessun modo di sapere quando e da dove fosse arrivata.
             await logEventi.RegistraAsync(
                 LivelloLog.Info,
-                $"Nuova prenotazione #{entity.NumeroPrenotazione} da {nomeCanale} (rcode={booking.RCode}): {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}, {entity.NumeroOspiti} ospiti, {booking.Importo:N2} €.",
+                $"Nuova prenotazione #{entity.NumeroPrenotazione}{dellOrdine} da {nomeCanale} (rcode={booking.RCode}): {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}, {entity.NumeroOspiti} ospiti, {camera.Importo:N2} €{(entity.Trattamento is { } trattamento ? $", {TrattamentiService.Nome(trattamento).ToLowerInvariant()}" : "")}.",
                 origine: "Wubook",
                 clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                 strutturaId: strutturaId,
                 categoria: "Wubook",
                 cancellationToken: cancellationToken);
 
-            await notificaService.RegistraNuovaOModificaWubookAsync(
-                strutturaId, entity.Id, nomeCanale,
-                booking.CustomerEmail, booking.CustomerName, booking.CustomerSurname,
-                titoloNuova: "Nuova prenotazione",
-                messaggioNuova: $"Nuova prenotazione da {nomeCanale}: {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}.",
-                titoloModifica: "Prenotazione modificata",
-                messaggioModifica: $"Prenotazione da {nomeCanale} modificata: ora {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}.",
-                cancellationToken);
+            // Una notifica per ordine, sulla prima camera: è quella con l'ospite, su cui si fonde
+            // un'eventuale cancellazione appena arrivata (vedi AnnullaDaOtaAsync).
+            if (camera.Indice == 0)
+            {
+                var camereTesto = camereNellOrdine > 1 ? $", {camereNellOrdine} camere" : "";
+                await notificaService.RegistraNuovaOModificaWubookAsync(
+                    strutturaId, entity.Id, nomeCanale,
+                    booking.CustomerEmail, booking.CustomerName, booking.CustomerSurname,
+                    titoloNuova: "Nuova prenotazione",
+                    messaggioNuova: $"Nuova prenotazione da {nomeCanale}: {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}{camereTesto}.",
+                    titoloModifica: "Prenotazione modificata",
+                    messaggioModifica: $"Prenotazione da {nomeCanale} modificata: ora {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}{camereTesto}.",
+                    cancellationToken);
+            }
         }
         else
         {
@@ -276,7 +379,7 @@ public class WubookPrenotazioniService(
             // recenti: su una prenotazione di settimane fa un "Nuova prenotazione" sarebbe fuorviante
             // (e per le prenotazioni importate prima che il centro notifiche esistesse, sbagliato).
             var arrivoRecente = entity.CreatedAtUtc >= DateTime.UtcNow.AddHours(-OreRecuperoArrivoNonNotificato);
-            if (arrivoRecente && await notificaService.RecuperaArrivoNonNotificatoAsync(
+            if (arrivoRecente && camera.Indice == 0 && await notificaService.RecuperaArrivoNonNotificatoAsync(
                 strutturaId, entity.Id, nomeCanale,
                 "Nuova prenotazione",
                 $"Nuova prenotazione da {nomeCanale}: {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}.",
@@ -317,6 +420,11 @@ public class WubookPrenotazioniService(
                 cambiamenti.Add($"tipologia ora '{tipologia.TipologiaCamera}'");
             }
 
+            if (primaTrattamento != entity.Trattamento)
+            {
+                cambiamenti.Add($"trattamento da {NomeTrattamento(primaTrattamento)} a {NomeTrattamento(entity.Trattamento)}");
+            }
+
             if (primaCameraId != entity.CameraId)
             {
                 cambiamenti.Add(entity.CameraId is null ? "camera assegnata rimossa (serve riassegnazione manuale)" : "camera assegnata cambiata");
@@ -327,7 +435,7 @@ public class WubookPrenotazioniService(
                 var riepilogo = string.Join(", ", cambiamenti);
                 await logEventi.RegistraAsync(
                     LivelloLog.Info,
-                    $"Prenotazione #{entity.NumeroPrenotazione} da {nomeCanale} (rcode={booking.RCode}) modificata dall'OTA: {riepilogo}.",
+                    $"Prenotazione #{entity.NumeroPrenotazione}{dellOrdine} da {nomeCanale} (rcode={booking.RCode}) modificata dall'OTA: {riepilogo}.",
                     origine: "Wubook",
                     clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                     strutturaId: strutturaId,
@@ -337,9 +445,16 @@ public class WubookPrenotazioniService(
                 await notificaService.RegistraModificaWubookAsync(
                     strutturaId, entity.Id, nomeCanale,
                     "Prenotazione modificata",
-                    $"Prenotazione #{entity.NumeroPrenotazione} ({nomeCanale}) modificata: {riepilogo}.",
+                    $"Prenotazione #{entity.NumeroPrenotazione}{dellOrdine} ({nomeCanale}) modificata: {riepilogo}.",
                     cancellationToken);
             }
+        }
+
+        // L'OTA dà solo chi ha prenotato: è l'ospite della prima camera. Nelle altre stanno altre
+        // persone (l'altra famiglia): scriverci il suo nome finirebbe su una schedina sbagliata.
+        if (camera.Indice > 0)
+        {
+            return nuova ? EsitoBooking.Creata : EsitoBooking.Aggiornata;
         }
 
         var ospite = await ospiti.GetByPrenotazioneAsync(entity.Id, cancellationToken);
@@ -355,7 +470,7 @@ public class WubookPrenotazioniService(
         ospite.Cittadinanza = booking.CustomerCountry;
         ospite.LuogoResidenza = booking.CustomerCity;
         ospite.Permanenza = (booking.CheckOut.Date - booking.CheckIn.Date).Days;
-        ospite.TipoOspite = booking.Adulti + booking.Bambini > 1 ? "CAPO FAMIGLIA" : "OSPITE SINGOLO";
+        ospite.TipoOspite = camera.NumeroOspiti > 1 ? "CAPO FAMIGLIA" : "OSPITE SINGOLO";
         ospite.UpdatedAtUtc = DateTime.UtcNow;
         await ospiti.SaveChangesAsync(cancellationToken);
 
@@ -377,4 +492,33 @@ public class WubookPrenotazioniService(
 
         await canaliVendita.AddAsync(new SettingAgenzia { StrutturaId = strutturaId, Descrizione = nomeCanale }, cancellationToken);
     }
+
+    /// <summary>
+    /// Come la scelta a mano, i prezzi del trattamento si copiano dal listino. A differenza della scelta
+    /// a mano, un trattamento che la struttura non ha attivo si registra lo stesso (l'ospite l'ha già
+    /// pagato e va servito), senza prezzi e con un avviso a log.
+    /// </summary>
+    private async Task ImpostaTrattamentoOtaAsync(Guid strutturaId, Prenotazione entity, TipoTrattamento? trattamento, string nomeCanale, int rcode, CancellationToken cancellationToken)
+    {
+        var listino = trattamento is { } tipo ? await listiniTrattamento.GetAsync(strutturaId, tipo, cancellationToken) : null;
+        var prezzi = listino is { Attivo: true } ? TrattamentiService.PrezziDa(listino) : null;
+        entity.Trattamento = trattamento;
+        entity.TrattamentoPrezzoAdulto = prezzi?.PrezzoAdulto;
+        entity.TrattamentoPrezzoBambino = prezzi?.PrezzoBambino;
+        entity.TrattamentoEtaMassimaBambini = prezzi?.EtaMassimaBambini;
+
+        if (trattamento is { } venduto && prezzi is null)
+        {
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Prenotazione #{entity.NumeroPrenotazione} da {nomeCanale} (rcode={rcode}): l'OTA ha venduto \"{TrattamentiService.Nome(venduto)}\", che in Impostazioni → Servizi non è attivo. Registrato sulla prenotazione senza prezzi.",
+                origine: "Wubook",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "Wubook",
+                cancellationToken: cancellationToken);
+        }
+    }
+
+    private static string NomeTrattamento(TipoTrattamento? tipo) => tipo is { } t ? TrattamentiService.Nome(t).ToLowerInvariant() : "solo pernottamento";
 }

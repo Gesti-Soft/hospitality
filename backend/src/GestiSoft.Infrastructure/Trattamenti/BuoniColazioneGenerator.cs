@@ -55,7 +55,7 @@ public class BuoniColazioneGenerator : IBuoniColazioneGenerator
         // Bordo tratteggiato non disponibile: un filetto chiaro basta come guida per il taglio.
         cella.Border(1).BorderColor(Filetto).Padding(12).Column(c =>
         {
-            c.Item().Text("Buono colazione").FontSize(13).SemiBold();
+            c.Item().Text(dati.Titolo).FontSize(13).SemiBold();
             c.Item().PaddingTop(2).Text(dati.EsercizioConvenzionato ?? dati.NomeStruttura).FontSize(10);
             c.Item().PaddingTop(8).Text($"Valido il {giorno.ToString("dddd d MMMM yyyy", Italiano)}").FontSize(10.5f).SemiBold();
             c.Item().PaddingTop(2).Text("Per una persona").FontSize(9).FontColor(InchiostroTenue);

@@ -30,7 +30,10 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
     {
         var intestazione = PrimoNonVuoto(nomeStruttura, azienda?.Denominazione, $"{azienda?.Nome} {azienda?.Cognome}") ?? "Fattura";
         var ricevuta = fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta;
-        var imposta = Math.Round(fattura.ImportoTotale - fattura.PrezzoTotale - (fattura.ImpostaSoggiorno ?? 0), 2, MidpointRounding.AwayFromZero);
+        var righe = fattura.Righe.OrderBy(r => r.Numero).ToList();
+        var riepiloghi = CalcoloFattura.Riepiloghi(righe);
+        var imposta = riepiloghi.Sum(r => r.Imposta);
+        var nature = righe.Where(r => r.Natura is not null).Select(r => r.Natura!.Value).Distinct().ToList();
 
         var documento = Document.Create(container =>
         {
@@ -133,11 +136,14 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                             header.Cell().Element(CellaTestata).AlignRight().Text("Importo");
                         });
 
-                        table.Cell().Element(CellaRiga).Text(fattura.Descrizione ?? "—");
-                        table.Cell().Element(CellaRiga).AlignRight().Text(fattura.Quantita.ToString("0.##", Italiano));
-                        table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(fattura.PrezzoUnitario));
-                        table.Cell().Element(CellaRiga).AlignRight().Text(ricevuta ? "" : fattura.AliquotaIva is { } iva ? $"{(int)iva}%" : "—");
-                        table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(fattura.PrezzoTotale));
+                        foreach (var r in righe)
+                        {
+                            table.Cell().Element(CellaRiga).Text(r.Descrizione);
+                            table.Cell().Element(CellaRiga).AlignRight().Text(r.Quantita.ToString("0.##", Italiano));
+                            table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(r.PrezzoUnitario));
+                            table.Cell().Element(CellaRiga).AlignRight().Text(ricevuta ? "" : r.AliquotaIva is { } iva ? $"{(int)iva}%" : r.Natura is { } n ? CodiceNatura(n) : "—");
+                            table.Cell().Element(CellaRiga).AlignRight().Text(Valuta(r.PrezzoTotale));
+                        }
 
                         // Riga a sé anche sulla carta: chi legge deve vedere che quella somma non ha
                         // IVA e perché, non trovarsela confusa nel prezzo del soggiorno.
@@ -156,7 +162,19 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                         totali.Item().Element(c => RigaTotale(c, ricevuta ? "Corrispettivo" : "Imponibile", Valuta(fattura.PrezzoTotale), false));
                         if (!ricevuta)
                         {
-                            totali.Item().Element(c => RigaTotale(c, "Imposta", Valuta(imposta), false));
+                            // Con più aliquote il riepilogo dice quanta IVA per ciascuna, come nel file per lo SdI.
+                            var conIva = riepiloghi.Where(r => r.AliquotaIva is not null).ToList();
+                            if (conIva.Count > 1)
+                            {
+                                foreach (var r in conIva)
+                                {
+                                    totali.Item().Element(c => RigaTotale(c, $"IVA {(int)r.AliquotaIva!.Value}% su {Valuta(r.Imponibile)}", Valuta(r.Imposta), false));
+                                }
+                            }
+                            else
+                            {
+                                totali.Item().Element(c => RigaTotale(c, "Imposta", Valuta(imposta), false));
+                            }
                         }
                         if (fattura.ImpostaSoggiorno is { } tassaTotale and > 0)
                         {
@@ -179,9 +197,11 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                     {
                         col.Item().Text(azienda.DicituraFattura!.Trim()).FontSize(8.5f).FontColor(InchiostroTenue);
                     }
-                    else if (fattura.Natura is { } natura)
+                    else if (!ricevuta && nature.Count > 0)
                     {
-                        col.Item().Text($"Operazione non soggetta a IVA — natura {CodiceNatura(natura)}.").FontSize(8.5f).FontColor(InchiostroTenue);
+                        col.Item().Text(righe.All(r => r.Natura is not null)
+                            ? $"Operazione non soggetta a IVA — natura {string.Join(", ", nature.Select(CodiceNatura))}."
+                            : $"Righe senza IVA — natura {string.Join(", ", nature.Select(CodiceNatura))}.").FontSize(8.5f).FontColor(InchiostroTenue);
                     }
 
                     if (ricevuta)
@@ -320,8 +340,7 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         XNamespace p = "http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2";
         XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
 
-        var imponibile = fattura.PrezzoTotale;
-        var imposta = Math.Round(fattura.ImportoTotale - fattura.PrezzoTotale, 2, MidpointRounding.AwayFromZero);
+        var righe = fattura.Righe.OrderBy(r => r.Numero).ToList();
         var clienteEstero = Estero(cliente?.Iso2);
 
         var datiTrasmissione = new XElement("DatiTrasmissione",
@@ -367,21 +386,25 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                         new XElement("ImportoBollo", bollo.ToString("0.00", CultureInfo.InvariantCulture)))
                     : null));
 
-        var dettaglioLinee = new XElement("DettaglioLinee",
-            new XElement("NumeroLinea", 1),
-            new XElement("Descrizione", fattura.Descrizione ?? string.Empty),
-            new XElement("Quantita", fattura.Quantita.ToString("0.00", CultureInfo.InvariantCulture)),
-            new XElement("PrezzoUnitario", fattura.PrezzoUnitario.ToString("0.00000", CultureInfo.InvariantCulture)),
-            new XElement("PrezzoTotale", fattura.PrezzoTotale.ToString("0.00", CultureInfo.InvariantCulture)),
-            fattura.AliquotaIva is { } aliquota ? new XElement("AliquotaIVA", ((int)aliquota).ToString(CultureInfo.InvariantCulture)) : null,
-            fattura.Natura is { } natura ? new XElement("Natura", CodiceNatura(natura)) : null);
+        // Una riga per voce, ognuna con la sua aliquota: AliquotaIVA è obbligatoria, e dove l'IVA non c'è
+        // vale 0.00 accanto alla natura. Il formato vuole due decimali ("10.00"): "10" non passa.
+        var dettaglioLinee = righe.Select((r, i) => new XElement("DettaglioLinee",
+            new XElement("NumeroLinea", i + 1),
+            new XElement("Descrizione", r.Descrizione),
+            new XElement("Quantita", r.Quantita.ToString("0.00", CultureInfo.InvariantCulture)),
+            new XElement("PrezzoUnitario", r.PrezzoUnitario.ToString("0.00000", CultureInfo.InvariantCulture)),
+            new XElement("PrezzoTotale", r.PrezzoTotale.ToString("0.00", CultureInfo.InvariantCulture)),
+            new XElement("AliquotaIVA", Aliquota(r.AliquotaIva)),
+            r.Natura is { } natura ? new XElement("Natura", CodiceNatura(natura)) : null)).ToList();
 
-        var datiRiepilogo = new XElement("DatiRiepilogo",
-            fattura.AliquotaIva is { } aliquotaRiepilogo ? new XElement("AliquotaIVA", ((int)aliquotaRiepilogo).ToString(CultureInfo.InvariantCulture)) : null,
-            fattura.Natura is { } naturaRiepilogo ? new XElement("Natura", CodiceNatura(naturaRiepilogo)) : null,
-            new XElement("ImponibileImporto", imponibile.ToString("0.00", CultureInfo.InvariantCulture)),
-            new XElement("Imposta", imposta.ToString("0.00", CultureInfo.InvariantCulture)),
-            new XElement("EsigibilitaIVA", "I"));
+        // Un riepilogo per aliquota (o natura), con l'IVA calcolata sul totale del gruppo: la stessa
+        // regola di CalcoloFattura, che dà il totale salvato sulla fattura.
+        var datiRiepilogo = CalcoloFattura.Riepiloghi(righe).Select(r => new XElement("DatiRiepilogo",
+            new XElement("AliquotaIVA", Aliquota(r.AliquotaIva)),
+            r.Natura is { } natura ? new XElement("Natura", CodiceNatura(natura)) : null,
+            new XElement("ImponibileImporto", r.Imponibile.ToString("0.00", CultureInfo.InvariantCulture)),
+            new XElement("Imposta", r.Imposta.ToString("0.00", CultureInfo.InvariantCulture)),
+            new XElement("EsigibilitaIVA", "I"))).ToList();
 
         // L'imposta di soggiorno è una somma anticipata in nome e per conto del cliente verso il
         // Comune: esclusa dalla base imponibile ex art. 15 c.1 n.3 DPR 633/72, quindi riga a sé con
@@ -389,7 +412,7 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         // pagherebbe un'IVA che non deve.
         var rigaImpostaSoggiorno = fattura.ImpostaSoggiorno is { } impostaSoggiorno and > 0
             ? new XElement("DettaglioLinee",
-                new XElement("NumeroLinea", 2),
+                new XElement("NumeroLinea", righe.Count + 1),
                 new XElement("Descrizione", DescrizioneImpostaSoggiorno),
                 new XElement("Quantita", "1.00"),
                 new XElement("PrezzoUnitario", impostaSoggiorno.ToString("0.00000", CultureInfo.InvariantCulture)),
@@ -455,12 +478,15 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
             }
         }
 
-        // Descrizione della riga: obbligatoria nel tracciato. Finora la pretendeva solo il dialogo
-        // dell'interfaccia, quindi una fattura creata altrove usciva con l'elemento vuoto e lo SDI
-        // la scartava giorni dopo.
-        if (string.IsNullOrWhiteSpace(fattura.Descrizione))
+        // Descrizione di ogni riga: obbligatoria nel tracciato. Una fattura creata altrove, o di prima
+        // delle righe, poteva uscire con l'elemento vuoto e lo SDI la scartava giorni dopo.
+        if (fattura.Righe.Count == 0)
         {
-            motivi.Add("manca la descrizione della fattura");
+            motivi.Add("la fattura non ha righe");
+        }
+        else if (fattura.Righe.Any(r => string.IsNullOrWhiteSpace(r.Descrizione)))
+        {
+            motivi.Add("manca la descrizione di una riga della fattura");
         }
 
         if (cliente is null)
@@ -597,6 +623,10 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         !string.IsNullOrWhiteSpace(cliente?.CodiceDestinatario)
             ? cliente.CodiceDestinatario.Trim()
             : estero ? CodiceDestinatarioEstero : CodiceDestinatarioItaliano;
+
+    /// <summary>Aliquota come la vuole il tracciato: due decimali, 0.00 dove l'IVA non c'è.</summary>
+    private static string Aliquota(AliquotaIva? aliquota) =>
+        (aliquota is { } a ? (int)a : 0).ToString("0.00", CultureInfo.InvariantCulture);
 
     private static string CodiceNatura(NaturaIva natura) => natura switch
     {

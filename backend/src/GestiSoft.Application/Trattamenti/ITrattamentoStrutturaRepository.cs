@@ -10,4 +10,6 @@ public interface ITrattamentoStrutturaRepository
     Task<TrattamentoStruttura?> GetAsync(Guid strutturaId, TipoTrattamento tipo, CancellationToken cancellationToken);
 
     Task UpsertAsync(TrattamentoStruttura entity, CancellationToken cancellationToken);
+
+    Task AddRangeAsync(IEnumerable<TrattamentoStruttura> entities, CancellationToken cancellationToken);
 }

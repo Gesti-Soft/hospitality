@@ -376,9 +376,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("AliquotaIva")
-                        .HasColumnType("integer");
-
                     b.Property<int>("Anno")
                         .HasColumnType("integer");
 
@@ -394,9 +391,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("DatiClienteId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("Descrizione")
-                        .HasColumnType("text");
 
                     b.Property<string>("Divisa")
                         .HasColumnType("text");
@@ -419,9 +413,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<int?>("ModalitaPagamento")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("Natura")
-                        .HasColumnType("integer");
-
                     b.Property<int>("NumeroDocumento")
                         .HasColumnType("integer");
 
@@ -432,16 +423,8 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<decimal>("PrezzoUnitario")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
                     b.Property<int>("Progressivo")
                         .HasColumnType("integer");
-
-                    b.Property<decimal>("Quantita")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
 
                     b.Property<int?>("RegimeFiscale")
                         .HasColumnType("integer");
@@ -583,6 +566,39 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.HasIndex("TipologiaId");
 
                     b.ToTable("fasce_eta_supplemento", (string)null);
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.FatturaPrenotazione", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DatiFatturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PrenotazioneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PrenotazioneId");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.HasIndex("DatiFatturaId", "PrenotazioneId")
+                        .IsUnique();
+
+                    b.ToTable("fatture_prenotazioni", (string)null);
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.GestionePrezzo", b =>
@@ -1095,6 +1111,56 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("osservatorio_invii", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.PagamentoPrenotazione", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("Importo")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int?>("Metodo")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Nota")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("PrenotazioneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RegistratoDa")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PrenotazioneId");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.HasIndex("StrutturaId", "Data");
+
+                    b.ToTable("pagamenti_prenotazione", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.PayTouristIntegrazione", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1284,6 +1350,13 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<int>("IndiceCameraOta")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NoteOta")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
                     b.Property<int?>("NumeroOspiti")
                         .HasColumnType("integer");
 
@@ -1362,13 +1435,73 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TipologiaId");
 
-                    b.HasIndex("StrutturaId", "IdPrenotazioneWubook")
+                    b.HasIndex("StrutturaId", "CheckIn", "CheckOut");
+
+                    b.HasIndex("StrutturaId", "IdPrenotazioneWubook", "IndiceCameraOta")
                         .IsUnique()
                         .HasFilter("\"IdPrenotazioneWubook\" IS NOT NULL");
 
-                    b.HasIndex("StrutturaId", "CheckIn", "CheckOut");
-
                     b.ToTable("prenotazioni", (string)null);
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.PrenotazioneServizio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AggiuntoDa")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateOnly?>("Al")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Dal")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Modalita")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Origine")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("PrenotazioneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("PrezzoUnitario")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Quantita")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ServizioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PrenotazioneId");
+
+                    b.HasIndex("ServizioId");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.ToTable("prenotazioni_servizi", (string)null);
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.RestrizioneSoggiornoCamera", b =>
@@ -1523,6 +1656,72 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("tipi_alloggiato", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.RigaFattura", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("AliquotaIva")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DatiFatturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Descrizione")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int?>("Natura")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Numero")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("PrenotazioneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PrenotazioneServizioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("PrezzoTotale")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("PrezzoUnitario")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("Quantita")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatiFatturaId");
+
+                    b.HasIndex("PrenotazioneId");
+
+                    b.HasIndex("PrenotazioneServizioId");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.ToTable("righe_fattura", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.RinnovoLicenza", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1549,6 +1748,52 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.HasIndex("StrutturaId");
 
                     b.ToTable("rinnovi_licenza", (string)null);
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.ServizioStruttura", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("AliquotaIva")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Attivo")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Eliminato")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Modalita")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Natura")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("Prezzo")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.ToTable("servizi_struttura", (string)null);
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.SettingAgenzia", b =>
@@ -2000,6 +2245,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<bool>("StampaTicket")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("StrutturaId")
                         .HasColumnType("uuid");
 
@@ -2363,6 +2611,27 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.FatturaPrenotazione", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.DatiFattura", null)
+                        .WithMany("Prenotazioni")
+                        .HasForeignKey("DatiFatturaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.Prenotazione", null)
+                        .WithMany()
+                        .HasForeignKey("PrenotazioneId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.GestionePrezzo", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.SettingRoom", "Camera")
@@ -2486,6 +2755,21 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.PagamentoPrenotazione", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.Prenotazione", null)
+                        .WithMany()
+                        .HasForeignKey("PrenotazioneId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.PayTouristIntegrazione", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
@@ -2557,6 +2841,27 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Navigation("Tipologia");
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.PrenotazioneServizio", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.Prenotazione", null)
+                        .WithMany()
+                        .HasForeignKey("PrenotazioneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.ServizioStruttura", null)
+                        .WithMany()
+                        .HasForeignKey("ServizioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.RestrizioneSoggiornoCamera", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.SettingRoom", "Camera")
@@ -2574,7 +2879,31 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Navigation("Camera");
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.RigaFattura", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.DatiFattura", null)
+                        .WithMany("Righe")
+                        .HasForeignKey("DatiFatturaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.RinnovoLicenza", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.ServizioStruttura", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
                         .WithMany()
@@ -2758,6 +3087,13 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("GestiSoft.Domain.Entities.DatiCliente", b =>
                 {
                     b.Navigation("Fatture");
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.DatiFattura", b =>
+                {
+                    b.Navigation("Prenotazioni");
+
+                    b.Navigation("Righe");
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.Ospite", b =>

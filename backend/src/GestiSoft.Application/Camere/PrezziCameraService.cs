@@ -1,9 +1,11 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Prenotazioni;
+using GestiSoft.Application.Servizi;
 using GestiSoft.Application.Trattamenti;
 using GestiSoft.Application.Wubook;
 using GestiSoft.Contracts.Camere;
+using GestiSoft.Contracts.Servizi;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -29,7 +31,8 @@ public class PrezziCameraService(
     WubookPrezziService prezziOta,
     WubookLicenzaService licenzaOta,
     IPrenotazioneRepository prenotazioni,
-    TrattamentiService trattamenti)
+    TrattamentiService trattamenti,
+    ServiziService serviziExtra)
 {
     public async Task<IReadOnlyList<GestionePrezzo>> ListaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -286,6 +289,7 @@ public class PrezziCameraService(
         bool cauzioneAttiva,
         TipoTrattamento? trattamento,
         Guid? prenotazioneId,
+        IReadOnlyList<ServizioPrenotazioneRichiesta> servizi,
         CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
@@ -358,6 +362,12 @@ public class PrezziCameraService(
             if (spesePuliziaAttiva) totale += tipologia.SpesePulizia ?? 0m;
             if (cauzioneAttiva) totale += tipologia.Cauzione ?? 0m;
         }
+
+        // Stessa regola del salvataggio: quelli già sulla prenotazione al prezzo con cui sono stati venduti.
+        var righeServizi = await serviziExtra.RisolviRigheAsync(
+            strutturaId, prenotazione?.StrutturaId == strutturaId ? prenotazione.Id : null, servizi, checkIn, checkOut,
+            OrigineServizio.ConLaPrenotazione, aggiuntoDa: null, cancellationToken);
+        totale += righeServizi.Sum(ServiziService.Importo);
 
         return new PreventivoResult(notti, totale);
     }

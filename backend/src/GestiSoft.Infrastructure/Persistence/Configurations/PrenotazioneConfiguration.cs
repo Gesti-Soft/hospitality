@@ -17,6 +17,7 @@ public class PrenotazioneConfiguration : IEntityTypeConfiguration<Prenotazione>
         builder.Property(p => p.TotalTax).HasPrecision(18, 2);
         builder.Property(p => p.TrattamentoPrezzoAdulto).HasPrecision(18, 2);
         builder.Property(p => p.TrattamentoPrezzoBambino).HasPrecision(18, 2);
+        builder.Property(p => p.NoteOta).HasMaxLength(4000);
 
         // Default true a livello DB (non solo nell'initializer C#, che EF non traduce da solo in
         // HasDefaultValue): senza questo, la migration avrebbe backfillato false sulle prenotazioni
@@ -33,7 +34,8 @@ public class PrenotazioneConfiguration : IEntityTypeConfiguration<Prenotazione>
         builder.HasIndex(p => new { p.StrutturaId, p.CheckIn, p.CheckOut });
 
         // Chiave di deduplica per il pull da Wubook — filtrato perché le prenotazioni non-OTA hanno IdPrenotazioneWubook null.
-        builder.HasIndex(p => new { p.StrutturaId, p.IdPrenotazioneWubook })
+        // Con l'indice della camera: un ordine con più camere è una prenotazione per camera, stesso rcode.
+        builder.HasIndex(p => new { p.StrutturaId, p.IdPrenotazioneWubook, p.IndiceCameraOta })
             .IsUnique()
             .HasFilter("\"IdPrenotazioneWubook\" IS NOT NULL");
 

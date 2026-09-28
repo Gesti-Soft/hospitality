@@ -59,6 +59,12 @@ const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', mont
 
 type Tab_ = 'fatture' | 'dati-aziendali' | 'clienti'
 
+/** La prima riga del documento, e quante altre ce ne sono: una fattura può avere soggiorno, servizi e più prenotazioni. */
+function descrizioneFattura(f: DatiFatturaDto): string {
+  const prima = f.righe[0]?.descrizione ?? '—'
+  return f.righe.length > 1 ? `${prima} (+${f.righe.length - 1} righe)` : prima
+}
+
 export function FatturazionePage() {
   const { strutturaId } = useStruttura()
   const [tab, setTab] = useState<Tab_>('fatture')
@@ -72,7 +78,15 @@ export function FatturazionePage() {
   const storico = useStoricoPrenotazioni(strutturaId, anno)
   // Si fattura dall'arrivo in poi: oltre ai soggiorni conclusi, anche quelli col check-in già fatto.
   const inCorso = useArriviInCorso(strutturaId)
-  const prenotazioniFatturabili = [...(inCorso.data ?? []), ...(storico.data ?? [])]
+  // Solo quelle che non sono ancora in un documento. Un soggiorno si può fatturare l'anno dopo (check-out
+  // a fine dicembre): si guardano anche le fatture dell'anno successivo e di quello in corso. Gli extra
+  // addebitati dopo la fattura si fatturano da "Fattura gli extra" sulla prenotazione.
+  const fattureAnnoDopo = useFatture(strutturaId, anno + 1)
+  const fattureAnnoCorrente = useFatture(strutturaId, ANNO_CORRENTE)
+  const giaFatturate = new Set(
+    [...(fatture.data ?? []), ...(fattureAnnoDopo.data ?? []), ...(fattureAnnoCorrente.data ?? [])].flatMap((f) => f.prenotazioneIds),
+  )
+  const prenotazioniFatturabili = [...(inCorso.data ?? []), ...(storico.data ?? [])].filter((p) => !giaFatturate.has(p.id))
 
   function segnalaErrore(err: unknown) {
     toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
@@ -171,7 +185,7 @@ function TabFatture({
   const fattureFiltrate = (fatture ?? [])
     .filter(
       (f) =>
-        (!testoRicerca || [String(f.numeroDocumento), f.clienteNome, f.descrizione].some((campo) => campo?.toString().toLowerCase().includes(testoRicerca))) &&
+        (!testoRicerca || [String(f.numeroDocumento), f.clienteNome, ...f.righe.map((r) => r.descrizione)].some((campo) => campo?.toString().toLowerCase().includes(testoRicerca))) &&
         nelRangeData(f.dataDocumento, dataDa, dataA),
     )
     .sort((a, b) => b.progressivo - a.progressivo)
@@ -220,7 +234,7 @@ function TabFatture({
               <RigaCardMeta
                 voci={[
                   { etichetta: 'Data', valore: formattatoreData.format(new Date(f.dataDocumento)) },
-                  { etichetta: 'Descrizione', valore: f.descrizione ?? '—' },
+                  { etichetta: 'Descrizione', valore: descrizioneFattura(f) },
                 ]}
               />
               <AzioniCardElenco>
@@ -277,7 +291,7 @@ function TabFatture({
                   </TableCell>
                   <TableCell sx={{ ...stileImporto }}>{formattatoreData.format(new Date(f.dataDocumento))}</TableCell>
                   <TableCell>{f.clienteNome ?? '—'}</TableCell>
-                  <TableCell>{f.descrizione ?? '—'}</TableCell>
+                  <TableCell>{descrizioneFattura(f)}</TableCell>
                   <TableCell align="right" sx={{ ...stileImporto, fontWeight: 700 }}>
                     {formattatoreValuta.format(f.importoTotale)}
                   </TableCell>

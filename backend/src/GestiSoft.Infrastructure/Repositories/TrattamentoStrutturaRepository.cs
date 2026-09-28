@@ -26,4 +26,10 @@ public class TrattamentoStrutturaRepository(GestiSoftDbContext db) : ITrattament
 
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task AddRangeAsync(IEnumerable<TrattamentoStruttura> entities, CancellationToken cancellationToken)
+    {
+        db.TrattamentiStruttura.AddRange(entities);
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }

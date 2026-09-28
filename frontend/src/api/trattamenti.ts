@@ -3,13 +3,14 @@ import { apiGet, apiPut, apiScaricaFile } from './client'
 import type { TipoVariazionePrezzo } from './tipologie'
 
 // Come gli altri enum: l'Api li serializza come numeri.
-export const TipoTrattamento = { Colazione: 1, MezzaPensione: 2, PensioneCompleta: 3 } as const
+export const TipoTrattamento = { Colazione: 1, MezzaPensione: 2, PensioneCompleta: 3, AllInclusive: 4 } as const
 export type TipoTrattamento = (typeof TipoTrattamento)[keyof typeof TipoTrattamento]
 
 export const NOME_TRATTAMENTO: Record<TipoTrattamento, string> = {
   [TipoTrattamento.Colazione]: 'Colazione',
   [TipoTrattamento.MezzaPensione]: 'Mezza pensione',
   [TipoTrattamento.PensioneCompleta]: 'Pensione completa',
+  [TipoTrattamento.AllInclusive]: 'All inclusive',
 }
 
 /** Listino di un trattamento della struttura, a persona e a notte. Prezzo bambini null = pagano come gli adulti. */
@@ -21,8 +22,10 @@ export interface TrattamentoStrutturaDto {
   tipoPrezzoBambini: TipoVariazionePrezzo
   /** Fino a questa età compresa si paga il prezzo bambini. */
   etaMassimaBambini: number | null
-  /** Chi serve la colazione, stampato sui buoni (es. il bar convenzionato). */
+  /** Chi serve il trattamento, stampato sui ticket (es. il bar o il ristorante convenzionato). */
   esercizioConvenzionato: string | null
+  /** Sulle prenotazioni con questo trattamento compare "Stampa ticket". */
+  stampaTicket: boolean
 }
 
 export function useTrattamenti(strutturaId: string | null) {
@@ -48,6 +51,6 @@ export function useSalvaTrattamento(strutturaId: string | null) {
 export function scaricaBuoniColazione(strutturaId: string, prenotazioneId: string, numeroPrenotazione: string | null) {
   return apiScaricaFile(
     `/strutture/${strutturaId}/prenotazioni/${prenotazioneId}/buoni-colazione`,
-    `buoni-colazione${numeroPrenotazione ? `-${numeroPrenotazione}` : ''}.pdf`,
+    `ticket${numeroPrenotazione ? `-${numeroPrenotazione}` : ''}.pdf`,
   )
 }

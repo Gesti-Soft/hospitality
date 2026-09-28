@@ -39,13 +39,13 @@ public interface IPrenotazioneRepository
     Task<IReadOnlyList<string?>> ListaNumeriDiretteAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
 
     /// <summary>Somma ImportoPagato delle prenotazioni non annullate dell'anno — usata dal riepilogo cassa di Fase 4.</summary>
-    Task<decimal> SommaImportoPagatoAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
+
 
     /// <summary>Somma ImportoPagato delle prenotazioni non annullate dall'inizio fino all'anno indicato incluso — per la cassa cumulata, che non deve includere gli acconti degli anni successivi a quello selezionato.</summary>
-    Task<decimal> SommaImportoPagatoFinoAdAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken);
+
 
     /// <summary>Anni con almeno un incasso (prenotazione non annullata con ImportoPagato &gt; 0) — per il selettore Anno del riepilogo cassa.</summary>
-    Task<IReadOnlyList<int>> ListaAnniConIncassoAsync(Guid strutturaId, CancellationToken cancellationToken);
+
 
     /// <summary>
     /// Anni con almeno una prenotazione non annullata — per il selettore Anno delle schermate
@@ -64,7 +64,8 @@ public interface IPrenotazioneRepository
     /// <summary>Prenotazioni non annullate di una camera che si sovrappongono al periodo — usata dalla sincronizzazione disponibilità Wubook di Fase 5.</summary>
     Task<IReadOnlyList<Prenotazione>> ListOccupazioneAsync(Guid strutturaId, Guid cameraId, DateTime dataInizio, DateTime dataFine, CancellationToken cancellationToken);
 
-    Task<Prenotazione?> GetByIdPrenotazioneWubookAsync(Guid strutturaId, int idPrenotazioneWubook, CancellationToken cancellationToken);
+    /// <summary>Le prenotazioni nate da un ordine OTA, una per camera, in ordine di camera.</summary>
+    Task<IReadOnlyList<Prenotazione>> ListByIdPrenotazioneWubookAsync(Guid strutturaId, int idPrenotazioneWubook, CancellationToken cancellationToken);
 
     /// <summary>Prenotazioni In corso (check-in già fatto) il cui check-out previsto è nel passato, su tutte le Strutture — usata dal job di notifica "check-out dimenticato".</summary>
     Task<IReadOnlyList<Prenotazione>> ListCheckOutDimenticatoAsync(CancellationToken cancellationToken);

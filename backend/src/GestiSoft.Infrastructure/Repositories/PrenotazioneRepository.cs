@@ -75,23 +75,6 @@ public class PrenotazioneRepository(GestiSoftDbContext db) : IPrenotazioneReposi
             .Select(p => p.NumeroPrenotazione)
             .ToListAsync(cancellationToken);
 
-    public Task<decimal> SommaImportoPagatoAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken) =>
-        db.Prenotazioni
-            .Where(p => p.StrutturaId == strutturaId && p.Anno == anno && p.StatoPrenotazione != StatoPrenotazione.Annullata)
-            .SumAsync(p => p.ImportoPagato ?? 0, cancellationToken);
-
-    public Task<decimal> SommaImportoPagatoFinoAdAnnoAsync(Guid strutturaId, int anno, CancellationToken cancellationToken) =>
-        db.Prenotazioni
-            .Where(p => p.StrutturaId == strutturaId && p.Anno <= anno && p.StatoPrenotazione != StatoPrenotazione.Annullata)
-            .SumAsync(p => p.ImportoPagato ?? 0, cancellationToken);
-
-    public async Task<IReadOnlyList<int>> ListaAnniConIncassoAsync(Guid strutturaId, CancellationToken cancellationToken) =>
-        await db.Prenotazioni.AsNoTracking()
-            .Where(p => p.StrutturaId == strutturaId && p.StatoPrenotazione != StatoPrenotazione.Annullata && p.ImportoPagato > 0)
-            .Select(p => p.Anno)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
     public async Task<IReadOnlyList<int>> ListaAnniConPrenotazioniAsync(Guid strutturaId, CancellationToken cancellationToken) =>
         await db.Prenotazioni.AsNoTracking()
             .Where(p => p.StrutturaId == strutturaId && p.StatoPrenotazione != StatoPrenotazione.Annullata)
@@ -140,8 +123,11 @@ public class PrenotazioneRepository(GestiSoftDbContext db) : IPrenotazioneReposi
             .ToListAsync(cancellationToken);
     }
 
-    public Task<Prenotazione?> GetByIdPrenotazioneWubookAsync(Guid strutturaId, int idPrenotazioneWubook, CancellationToken cancellationToken) =>
-        db.Prenotazioni.FirstOrDefaultAsync(p => p.StrutturaId == strutturaId && p.IdPrenotazioneWubook == idPrenotazioneWubook, cancellationToken);
+    public async Task<IReadOnlyList<Prenotazione>> ListByIdPrenotazioneWubookAsync(Guid strutturaId, int idPrenotazioneWubook, CancellationToken cancellationToken) =>
+        await db.Prenotazioni
+            .Where(p => p.StrutturaId == strutturaId && p.IdPrenotazioneWubook == idPrenotazioneWubook)
+            .OrderBy(p => p.IndiceCameraOta)
+            .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<Prenotazione>> ListCheckOutDimenticatoAsync(CancellationToken cancellationToken)
     {

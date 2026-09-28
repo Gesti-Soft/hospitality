@@ -11,7 +11,7 @@ namespace GestiSoft.Application.Trattamenti;
 public record PrezziTrattamento(decimal PrezzoAdulto, decimal? PrezzoBambino, int? EtaMassimaBambini);
 
 /// <summary>
-/// Trattamenti della struttura (colazione, mezza pensione, pensione completa): listino a persona e
+/// Trattamenti della struttura (colazione, mezza pensione, pensione completa, all inclusive): listino a persona e
 /// a notte, e regola di calcolo dell'importo di una prenotazione. Il prezzo dei trattamenti si somma
 /// a quello della camera, che resta il solo pernottamento.
 /// </summary>
@@ -25,9 +25,10 @@ public class TrattamentiService(
     GestioneUtentiGuard gestioneUtentiGuard)
 {
     /// <summary>
-    /// Buoni colazione di una prenotazione con trattamento: uno per ospite per ogni mattina, cioè
-    /// dal giorno dopo l'arrivo al giorno della partenza (la colazione segue la notte). Per la
-    /// locazione breve, dove la colazione la serve un bar convenzionato e non l'host.
+    /// Ticket del trattamento di una prenotazione, se il suo listino ha "Stampa ticket": uno per ospite
+    /// per giorno. La colazione segue la notte (dal giorno dopo l'arrivo a quello della partenza), gli
+    /// altri trattamenti vanno con i giorni delle notti (la cena della mezza pensione è la sera
+    /// dell'arrivo, non quella della partenza). Per il bar o ristorante convenzionato.
     /// </summary>
     public async Task<byte[]> BuoniColazioneAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
     {
@@ -39,9 +40,15 @@ public class TrattamentiService(
             throw new NotFoundException("Prenotazione non trovata.");
         }
 
-        if (prenotazione.Trattamento is null)
+        if (prenotazione.Trattamento is not { } tipo)
         {
-            throw new ConflictException("La prenotazione è solo pernottamento: non ci sono buoni colazione da stampare.");
+            throw new ConflictException("La prenotazione è solo pernottamento: non ci sono ticket da stampare.");
+        }
+
+        var listino = await trattamenti.GetAsync(strutturaId, tipo, cancellationToken);
+        if (listino is not { StampaTicket: true })
+        {
+            throw new ConflictException($"\"{Nome(tipo)}\" non ha i ticket: attiva \"Stampa ticket\" in Impostazioni, scheda Servizi.");
         }
 
         if (prenotazione is not { CheckIn: { } arrivo, CheckOut: { } partenza } || partenza.Date <= arrivo.Date)
@@ -49,23 +56,26 @@ public class TrattamentiService(
             throw new ConflictException("Mancano le date del soggiorno.");
         }
 
-        var mattine = new List<DateTime>();
-        for (var giorno = arrivo.Date.AddDays(1); giorno <= partenza.Date; giorno = giorno.AddDays(1))
+        var (primo, ultimo) = tipo == TipoTrattamento.Colazione
+            ? (arrivo.Date.AddDays(1), partenza.Date)
+            : (arrivo.Date, partenza.Date.AddDays(-1));
+        var giorni = new List<DateTime>();
+        for (var giorno = primo; giorno <= ultimo; giorno = giorno.AddDays(1))
         {
-            mattine.Add(giorno);
+            giorni.Add(giorno);
         }
 
         var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)
             ?? throw new NotFoundException("Struttura non trovata.");
-        var colazione = await trattamenti.GetAsync(strutturaId, TipoTrattamento.Colazione, cancellationToken);
 
         return buoniGenerator.Genera(new DatiBuoniColazione(
             struttura.Nome,
-            colazione?.EsercizioConvenzionato,
+            listino.EsercizioConvenzionato,
             prenotazione.NumeroPrenotazione,
             prenotazione.Camera?.Nome,
             Math.Max(1, prenotazione.NumeroOspiti ?? 1),
-            mattine));
+            giorni,
+            $"Ticket {Nome(tipo).ToLowerInvariant()}"));
     }
 
     /// <summary>Lo legge anche chi fa le prenotazioni, per scegliere il trattamento: non solo chi imposta i prezzi.</summary>
@@ -91,6 +101,7 @@ public class TrattamentiService(
         entity.TipoPrezzoBambini = request.TipoPrezzoBambini;
         entity.EtaMassimaBambini = request.PrezzoBambini is null ? null : request.EtaMassimaBambini;
         entity.EsercizioConvenzionato = string.IsNullOrWhiteSpace(request.EsercizioConvenzionato) ? null : request.EsercizioConvenzionato.Trim();
+        entity.StampaTicket = request.StampaTicket;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await trattamenti.UpsertAsync(entity, cancellationToken);
@@ -150,11 +161,25 @@ public class TrattamentiService(
             ? new PrezziTrattamento(adulto, prenotazione.TrattamentoPrezzoBambino, prenotazione.TrattamentoEtaMassimaBambini)
             : null;
 
+    /// <summary>
+    /// I quattro trattamenti che ogni struttura ha fin dalla creazione, non offerti e senza prezzo:
+    /// si attivano da Impostazioni → Servizi. Non si cancellano (vedi i servizi extra per quelli liberi).
+    /// </summary>
+    public static IEnumerable<TrattamentoStruttura> BaseDellaStruttura(Guid strutturaId) =>
+        Enum.GetValues<TipoTrattamento>().Select(tipo => new TrattamentoStruttura
+        {
+            StrutturaId = strutturaId,
+            Tipo = tipo,
+            Attivo = false,
+            PrezzoPerPersona = 0m,
+        });
+
     public static string Nome(TipoTrattamento tipo) => tipo switch
     {
         TipoTrattamento.Colazione => "Colazione",
         TipoTrattamento.MezzaPensione => "Mezza pensione",
         TipoTrattamento.PensioneCompleta => "Pensione completa",
+        TipoTrattamento.AllInclusive => "All inclusive",
         _ => tipo.ToString(),
     };
 

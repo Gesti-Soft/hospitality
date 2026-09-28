@@ -375,7 +375,7 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         return int.TryParse(testo, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
     }
 
-    private static WubookPrenotazione LeggiPrenotazione(XElement s) => new(
+    internal static WubookPrenotazione LeggiPrenotazione(XElement s) => new(
         RCode: MembroInt(s, "reservation_code") is var rc && rc != 0 ? rc : MembroInt(s, "id"),
         ChannelReservationCode: MembroStringa(s, "channel_reservation_code"),
         CameraIdWubookRaw: MembroStringa(s, "id_room") ?? MembroStringa(s, "rooms") ?? "0",
@@ -390,7 +390,140 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         CustomerSurname: MembroStringa(s, "customer_surname"),
         CustomerEmail: MembroStringa(s, "customer_mail") is { } mail && mail != "--" ? mail : null,
         CustomerCountry: MembroStringa(s, "customer_country"),
-        CustomerCity: MembroStringa(s, "customer_city"));
+        CustomerCity: MembroStringa(s, "customer_city"),
+        Extra: LeggiDatiExtra(s),
+        Camere: LeggiCamere(s));
+
+    /// <summary>
+    /// Camere dell'ordine da `booked_rooms` (una struttura per camera prenotata, anche due dello stesso
+    /// tipo), altrimenti dall'elenco `rooms`. Gli ospiti da `rooms_occupancies`, abbinati per id nello
+    /// stesso ordine: due camere dello stesso tipo hanno due voci.
+    /// </summary>
+    private static IReadOnlyList<CameraOrdineOta> LeggiCamere(XElement s)
+    {
+        var occupazioni = ElementiArray(MembroValore(s, "rooms_occupancies"))
+            .Select(v => v.Element("struct"))
+            .OfType<XElement>()
+            .Select(st => (Id: MembroInt(st, "id"), Occupazione: MembroInt(st, "occupancy")))
+            .ToList();
+
+        var prenotate = ElementiArray(MembroValore(s, "booked_rooms"))
+            .Select(v => v.Element("struct"))
+            .OfType<XElement>()
+            .Select(st => (
+                Id: MembroInt(st, "room_id"),
+                Prezzo: ElementiArray(MembroValore(st, "roomdays"))
+                    .Select(v => v.Element("struct"))
+                    .OfType<XElement>()
+                    .Sum(giorno => MembroDecimal(giorno, "price"))))
+            .Where(c => c.Id > 0)
+            .ToList();
+
+        if (prenotate.Count == 0)
+        {
+            var elenco = MembroStringa(s, "rooms") ?? "";
+            foreach (var id in elenco.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!int.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var valore))
+                {
+                    return [];
+                }
+
+                prenotate.Add((valore, 0m));
+            }
+        }
+
+        var usate = new bool[occupazioni.Count];
+        return prenotate.Select(c =>
+        {
+            var indice = Enumerable.Range(0, occupazioni.Count).FirstOrDefault(i => !usate[i] && occupazioni[i].Id == c.Id, -1);
+            int? occupazione = null;
+            if (indice >= 0)
+            {
+                usate[indice] = true;
+                occupazione = occupazioni[indice].Occupazione > 0 ? occupazioni[indice].Occupazione : null;
+            }
+
+            return new CameraOrdineOta(c.Id, c.Prezzo, occupazione);
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Campi fuori dallo standard (vedi DatiExtraOta). La forma di `ancillary` cambia da portale a
+    /// portale e non è documentata: si prende ogni `ancillary` ovunque compaia (prenotazione, camera,
+    /// giorno) e lo si appiattisce in coppie chiave/valore, invece di presumerne la struttura.
+    /// `channel_data` non si legge: porta le informazioni della carta virtuale.
+    /// </summary>
+    private static DatiExtraOta LeggiDatiExtra(XElement s)
+    {
+        var boards = MembroValore(s, "boards")?.Element("struct") is { } boardsStruct
+            ? boardsStruct.Elements("member").Select(m => m.Element("value")?.Value?.Trim() ?? "").Where(v => v != "").ToList()
+            : [];
+
+        var extra = ElementiArray(MembroValore(s, "addons_list"))
+            .Select(v => v.Element("struct"))
+            .Where(st => st is not null)
+            .Select(st => new ExtraOta(
+                MembroStringa(st!, "name") ?? "",
+                MembroInt(st!, "req") is var req && req > 0 ? req : MembroInt(st!, "number"),
+                MembroDecimal(st!, "price")))
+            .ToList();
+
+        var ancillary = new List<KeyValuePair<string, string>>();
+        foreach (var valore in s.Descendants("member")
+                     .Where(m => m.Element("name")?.Value == "ancillary" && !m.Ancestors("member").Any(a => a.Element("name")?.Value == "channel_data"))
+                     .Select(m => m.Element("value"))
+                     .OfType<XElement>())
+        {
+            Appiattisci(valore, "", ancillary);
+        }
+
+        var note = MembroStringa(s, "customer_notes");
+        return new DatiExtraOta(boards, extra, ancillary, string.IsNullOrWhiteSpace(note) || note.Trim() == "--" ? null : note);
+    }
+
+    private static void Appiattisci(XElement valore, string percorso, List<KeyValuePair<string, string>> risultato)
+    {
+        var tipizzato = valore.Elements().FirstOrDefault();
+        switch (tipizzato?.Name.LocalName)
+        {
+            case null:
+                Aggiungi(percorso, valore.Value, risultato);
+                break;
+            case "struct":
+                foreach (var membro in tipizzato.Elements("member"))
+                {
+                    var nome = membro.Element("name")?.Value ?? "";
+                    if (membro.Element("value") is { } interno)
+                    {
+                        Appiattisci(interno, percorso == "" ? nome : $"{percorso}.{nome}", risultato);
+                    }
+                }
+                break;
+            case "array":
+                foreach (var elemento in ElementiArray(valore))
+                {
+                    Appiattisci(elemento, percorso, risultato);
+                }
+                break;
+            case "nil":
+                break;
+            default:
+                Aggiungi(percorso, tipizzato.Value, risultato);
+                break;
+        }
+    }
+
+    private static void Aggiungi(string chiave, string valore, List<KeyValuePair<string, string>> risultato)
+    {
+        if (!string.IsNullOrWhiteSpace(valore))
+        {
+            risultato.Add(new KeyValuePair<string, string>(chiave, valore.Trim()));
+        }
+    }
+
+    private static XElement? MembroValore(XElement structEl, string nome) =>
+        structEl.Elements("member").FirstOrDefault(m => m.Element("name")?.Value == nome)?.Element("value");
 
     // --- Trasporto/parsing XML-RPC ---
 

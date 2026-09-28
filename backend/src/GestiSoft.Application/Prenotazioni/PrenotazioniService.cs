@@ -4,8 +4,12 @@ using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Logging;
 using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Ospiti;
+using GestiSoft.Application.Pagamenti;
+using GestiSoft.Application.Servizi;
 using GestiSoft.Application.Trattamenti;
 using GestiSoft.Application.Wubook;
+using GestiSoft.Contracts.Pagamenti;
+using GestiSoft.Contracts.Servizi;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -32,7 +36,11 @@ public record CreaPrenotazioneRequest(
     // Età all'arrivo di ciascun bambino compreso in NumeroOspiti (vedi Prenotazione.EtaBambini).
     IReadOnlyList<int>? EtaBambini = null,
     // Null = solo pernottamento.
-    TipoTrattamento? Trattamento = null);
+    TipoTrattamento? Trattamento = null,
+    // Servizi extra venduti con la prenotazione (escursioni, parcheggio…).
+    IReadOnlyList<ServizioPrenotazioneRichiesta>? Servizi = null,
+    // Pagamenti già ricevuti (l'acconto preso al telefono). ImportoPagato ne è la somma.
+    IReadOnlyList<SalvaPagamentoRequest>? Pagamenti = null);
 
 public record AggiornaPrenotazioneRequest(
     Guid? CameraId,
@@ -56,7 +64,9 @@ public record AggiornaPrenotazioneRequest(
     // Null = lascia quelle registrate, come sopra; una lista vuota le toglie.
     IReadOnlyList<int>? EtaBambini = null,
     // Null = solo pernottamento: a differenza delle età il dialog lo manda sempre.
-    TipoTrattamento? Trattamento = null);
+    TipoTrattamento? Trattamento = null,
+    // Null = lascia quelli registrati (le liste del calendario non li caricano); una lista vuota li toglie.
+    IReadOnlyList<ServizioPrenotazioneRichiesta>? Servizi = null);
 
 public record CheckOutRequest(bool RestituisciCauzione, decimal? ImportoCauzioneTrattenuta);
 
@@ -80,7 +90,9 @@ public class PrenotazioniService(
     AssegnazioneCameraService assegnazioneCamera,
     WubookDisponibilitaService disponibilitaOta,
     WubookLicenzaService licenzaOta,
-    TrattamentiService trattamenti)
+    TrattamentiService trattamenti,
+    ServiziService serviziExtra,
+    PagamentiService pagamenti)
 {
     /// <summary>
     /// Spinge subito la disponibilità aggiornata su Wubook per il periodo appena toccato (creazione,
@@ -215,6 +227,41 @@ public class PrenotazioniService(
         return occupazioni.FirstOrDefault(p => p.Id != (escludiPrenotazioneId ?? Guid.Empty));
     }
 
+    /// <summary>
+    /// Camera che il salvataggio con assegnazione automatica sceglierebbe adesso, con la stessa regola
+    /// di <see cref="AggiornaAsync"/>: su una prenotazione esistente resta la sua camera se è della
+    /// tipologia e libera, altrimenti la prima libera. Serve al form per il preventivo (il prezzo può
+    /// essere per camera) e per avvisare subito se la tipologia è piena. Null = nessuna camera libera.
+    /// Indicativa: al salvataggio la ricerca si rifà.
+    /// </summary>
+    public async Task<SettingRoom?> CameraAssegnabileAsync(
+        ICurrentUser currentUser,
+        Guid strutturaId,
+        Guid tipologiaId,
+        DateTime checkIn,
+        DateTime checkOut,
+        Guid? escludiPrenotazioneId,
+        CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
+        if (checkOut.Date <= checkIn.Date)
+        {
+            throw new ConflictException("La data di check-out deve essere successiva al check-in.");
+        }
+
+        if (escludiPrenotazioneId is { } prenotazioneId
+            && await prenotazioni.GetAsync(prenotazioneId, cancellationToken) is { CameraId: { } cameraAttualeId } prenotazione
+            && prenotazione.StrutturaId == strutturaId
+            && await camere.GetAsync(cameraAttualeId, cancellationToken) is { } cameraAttuale
+            && cameraAttuale.TipologiaId == tipologiaId
+            && !await prenotazioni.EsisteSovrapposizioneAsync(strutturaId, cameraAttualeId, checkIn, checkOut, prenotazioneId, cancellationToken))
+        {
+            return cameraAttuale;
+        }
+
+        return await assegnazioneCamera.TrovaCameraLiberaAsync(strutturaId, tipologiaId, checkIn, checkOut, escludiPrenotazioneId, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Prenotazione>> ListaStoricoAsync(ICurrentUser currentUser, Guid strutturaId, int anno, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationRead, cancellationToken);
@@ -282,7 +329,8 @@ public class PrenotazioniService(
             Agenzia = request.Agenzia,
             NumeroPrenotazione = numeroPrenotazione,
             ImportoPrenotazione = request.ImportoPrenotazione,
-            ImportoPagato = request.ImportoPagato,
+            // La somma dei pagamenti, scritta da PagamentiService dopo la creazione.
+            ImportoPagato = null,
             ImportoTotale = request.ImportoTotale,
             CheckIn = request.CheckIn,
             CheckOut = request.CheckOut,
@@ -301,8 +349,21 @@ public class PrenotazioniService(
             PayTourist = tassaDisattivata || !struttura.PayTouristAbilitato,
         };
         await ImpostaTrattamentoAsync(strutturaId, entity, request.Trattamento, cancellationToken);
+        // Prima del salvataggio: un servizio non offerto deve bloccare la creazione, non lasciarla a metà.
+        var righeServizi = await serviziExtra.RisolviRigheAsync(
+            strutturaId, prenotazioneId: null, request.Servizi ?? [], request.CheckIn, request.CheckOut,
+            OrigineServizio.ConLaPrenotazione, currentUser.Email, cancellationToken);
+        PagamentiService.ValidaPerNuova(request.Pagamenti ?? []);
 
         await prenotazioni.AddAsync(entity, cancellationToken);
+        if (righeServizi.Count > 0)
+        {
+            await serviziExtra.SalvaRigheAsync(strutturaId, entity.Id, righeServizi, cancellationToken);
+        }
+        if (request.Pagamenti is { Count: > 0 } pagamentiIniziali)
+        {
+            await pagamenti.RegistraPerNuovaAsync(currentUser, entity, pagamentiIniziali, cancellationToken);
+        }
         await SincronizzaDisponibilitaOtaAsync(strutturaId, request.CheckIn, request.CheckOut, cancellationToken);
         await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione creata (camera {cameraId}, {request.CheckIn:dd/MM/yyyy}–{request.CheckOut:dd/MM/yyyy}).", cancellationToken);
         return entity;
@@ -338,6 +399,9 @@ public class PrenotazioniService(
         var animaliPrima = entity.AnimaliAttiva;
         var cauzionePrima = entity.CauzioneAttiva;
         var trattamentoPrima = entity.Trattamento;
+        // Valorizzati solo se la richiesta porta i servizi (vedi AggiornaPrenotazioneRequest.Servizi).
+        IReadOnlyList<PrenotazioneServizio>? serviziPrima = null;
+        List<PrenotazioneServizio>? righeServizi = null;
         var importoPrenotazionePrima = entity.ImportoPrenotazione;
         var importoTotalePrima = entity.ImportoTotale;
         var importoPagatoPrima = entity.ImportoPagato;
@@ -440,14 +504,28 @@ public class PrenotazioniService(
             {
                 await ImpostaTrattamentoAsync(strutturaId, entity, request.Trattamento, cancellationToken);
             }
+
+        }
+
+        // Anche a soggiorno chiuso: il minibar scoperto al check-out va addebitato. Le date restano
+        // quelle del soggiorno, che su una prenotazione completata non cambiano più.
+        if (request.Servizi is { } servizi && entity is { CheckIn: { } arrivo, CheckOut: { } partenza })
+        {
+            serviziPrima = await serviziExtra.ListaDellaPrenotazioneSistemaAsync(strutturaId, entity.Id, cancellationToken);
+            righeServizi = await serviziExtra.RisolviRigheAsync(
+                strutturaId, entity.Id, servizi, arrivo, partenza, ServiziService.OrigineNuove(entity.StatoPrenotazione), currentUser.Email, cancellationToken);
         }
 
         entity.ImportoPrenotazione = request.ImportoPrenotazione;
-        entity.ImportoPagato = request.ImportoPagato;
+        // ImportoPagato non si scrive più a mano: è la somma del registro pagamenti (PagamentiService).
         entity.ImportoTotale = request.ImportoTotale;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await prenotazioni.UpdateAsync(entity, cancellationToken);
+        if (righeServizi is not null)
+        {
+            await serviziExtra.SalvaRigheAsync(strutturaId, entity.Id, righeServizi, cancellationToken);
+        }
 
         if (!completata && checkInPrima is not null && checkOutPrima is not null && entity.CheckIn is not null && entity.CheckOut is not null)
         {
@@ -476,6 +554,10 @@ public class PrenotazioniService(
         if (trattamentoPrima != entity.Trattamento)
         {
             modificheEconomiche.Add($"Trattamento {NomeTrattamento(trattamentoPrima)}→{NomeTrattamento(entity.Trattamento)}");
+        }
+        if (serviziPrima is not null && righeServizi is not null && ServiziService.Descrivi(serviziPrima) != ServiziService.Descrivi(righeServizi))
+        {
+            modificheEconomiche.Add($"Servizi {ServiziService.Descrivi(serviziPrima)}→{ServiziService.Descrivi(righeServizi)}");
         }
         if (importoPrenotazionePrima != entity.ImportoPrenotazione)
         {
@@ -515,8 +597,9 @@ public class PrenotazioniService(
         // che è invece legittimamente occupata da qualcun altro.
         var eraInCorso = entity.StatoPrenotazione == StatoPrenotazione.InCorso;
 
+        // I soldi già ricevuti restano: una caparra trattenuta è un incasso vero. Se si restituiscono,
+        // si registra un rimborso nel registro pagamenti.
         entity.ImportoPrenotazione = 0;
-        entity.ImportoPagato = 0;
         entity.ImportoTotale = 0;
         entity.StatoPrenotazione = StatoPrenotazione.Annullata;
         entity.UpdatedAtUtc = DateTime.UtcNow;

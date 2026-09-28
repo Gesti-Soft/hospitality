@@ -28,14 +28,14 @@ public class TrattamentiController(TrattamentiService service, ICurrentUser curr
         return Ok(ToDto(trattamento));
     }
 
-    /// <summary>PDF dei buoni colazione della prenotazione, generato al volo e non conservato.</summary>
+    /// <summary>PDF dei ticket del trattamento della prenotazione, generato al volo e non conservato.</summary>
     [HttpGet("~/strutture/{strutturaId:guid}/prenotazioni/{prenotazioneId:guid}/buoni-colazione")]
     public async Task<IActionResult> BuoniColazione(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
     {
         var pdf = await service.BuoniColazioneAsync(currentUser, strutturaId, prenotazioneId, cancellationToken);
-        return File(pdf, "application/pdf", "buoni-colazione.pdf");
+        return File(pdf, "application/pdf", "ticket.pdf");
     }
 
     private static TrattamentoStrutturaDto ToDto(TrattamentoStruttura t) => new(
-        t.Tipo, t.Attivo, t.PrezzoPerPersona, t.PrezzoBambini, t.TipoPrezzoBambini, t.EtaMassimaBambini, t.EsercizioConvenzionato);
+        t.Tipo, t.Attivo, t.PrezzoPerPersona, t.PrezzoBambini, t.TipoPrezzoBambini, t.EtaMassimaBambini, t.EsercizioConvenzionato, t.StampaTicket);
 }

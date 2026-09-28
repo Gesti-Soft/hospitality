@@ -14,7 +14,7 @@ import { fontDisplay, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { SceltaEuroPercentuale } from './SceltaEuroPercentuale'
 
-const TIPI: TipoTrattamento[] = [TipoTrattamento.Colazione, TipoTrattamento.MezzaPensione, TipoTrattamento.PensioneCompleta]
+const TIPI: TipoTrattamento[] = [TipoTrattamento.Colazione, TipoTrattamento.MezzaPensione, TipoTrattamento.PensioneCompleta, TipoTrattamento.AllInclusive]
 
 /**
  * Trattamenti della struttura: prezzo a persona e a notte, che si somma a quello della camera.
@@ -27,10 +27,13 @@ export function TrattamentiStruttura({ strutturaId, puoScrivere }: { strutturaId
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 760 }}>
-      <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
-        Prezzi a persona e a notte, in aggiunta al prezzo della camera. Si scelgono nella prenotazione; il prezzo resta quello del momento
-        in cui la prenotazione è stata fatta. Non vengono inviati all&apos;OTA.
-      </Typography>
+      <Box>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 17 }}>Trattamenti</Typography>
+        <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary, mt: 0.5 }}>
+          Prezzi a persona e a notte, in aggiunta al prezzo della camera. Uno per prenotazione; il prezzo resta quello del momento in cui
+          la prenotazione è stata fatta. Non vengono inviati all&apos;OTA.
+        </Typography>
+      </Box>
       {TIPI.map((tipo) => (
         <SchedaTrattamento
           // Nasce a listino già caricato (sopra si aspetta il caricamento) e poi tiene il suo stato:
@@ -66,6 +69,7 @@ function SchedaTrattamento({
   const [tipoPrezzoBambini, setTipoPrezzoBambini] = useState<TipoVariazionePrezzo>(salvato?.tipoPrezzoBambini ?? TipoVariazionePrezzo.Euro)
   const [etaMassima, setEtaMassima] = useState(salvato?.etaMassimaBambini != null ? String(salvato.etaMassimaBambini) : '')
   const [esercizio, setEsercizio] = useState(salvato?.esercizioConvenzionato ?? '')
+  const [stampaTicket, setStampaTicket] = useState(salvato?.stampaTicket ?? false)
   const disabilitato = !puoScrivere || salva.isPending
 
   function salvaScheda() {
@@ -82,6 +86,7 @@ function SchedaTrattamento({
         tipoPrezzoBambini,
         etaMassimaBambini: etaMassima.trim() === '' ? null : Number(etaMassima),
         esercizioConvenzionato: esercizio.trim() === '' ? null : esercizio.trim(),
+        stampaTicket,
       },
       {
         onSuccess: () => toast.successo(`${NOME_TRATTAMENTO[tipo]} salvato.`),
@@ -146,14 +151,18 @@ function SchedaTrattamento({
         Prezzo bambini facoltativo: vuoto = pagano come gli adulti. 0 = gratis (es. fino a 2 anni).
       </Typography>
 
-      {tipo === TipoTrattamento.Colazione && (
+      <FormControlLabel
+        control={<Checkbox checked={stampaTicket} onChange={(e) => setStampaTicket(e.target.checked)} disabled={disabilitato} />}
+        label="Stampa ticket"
+      />
+      {(stampaTicket || tipo === TipoTrattamento.Colazione) && (
         <TextField
-          label="Bar o esercizio convenzionato (facoltativo)"
+          label={tipo === TipoTrattamento.Colazione ? 'Bar o esercizio convenzionato (facoltativo)' : 'Ristorante o esercizio convenzionato (facoltativo)'}
           size="small"
           value={esercizio}
           onChange={(e) => setEsercizio(e.target.value)}
           disabled={disabilitato}
-          helperText="Se la colazione la serve un bar convenzionato: compare sui buoni colazione da consegnare all'ospite."
+          helperText="Se il trattamento lo serve un esercizio convenzionato: compare sui ticket da consegnare all'ospite."
         />
       )}
 

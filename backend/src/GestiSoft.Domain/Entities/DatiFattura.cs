@@ -10,9 +10,9 @@ namespace GestiSoft.Domain.Entities;
 public class DatiFattura : TenantEntity
 {
     /// <summary>
-    /// Prenotazione da cui è nata questa fattura — null per le fatture create prima dell'introduzione
-    /// di questo campo (nessuno storico da recuperare, il legame andava già perso). Usata per mostrare
-    /// "Fattura generata" sulla scheda ospiti di una prenotazione già fatturata.
+    /// Prenotazione di chi paga (la prima di <see cref="Prenotazioni"/>) — null per le fatture create
+    /// prima dell'introduzione di questo campo (nessuno storico da recuperare, il legame andava già
+    /// perso). Da qui la ricevuta prende i dati del soggiorno.
     /// </summary>
     public Guid? PrenotazioneId { get; set; }
 
@@ -42,18 +42,19 @@ public class DatiFattura : TenantEntity
 
     public string? Divisa { get; set; }
 
-    public string? Descrizione { get; set; }
+    /// <summary>
+    /// Le righe del documento, ognuna con la sua aliquota o natura. Prima di questa tabella la fattura
+    /// aveva una riga sola sulla testata: la migration l'ha spostata qui come riga 1.
+    /// </summary>
+    public List<RigaFattura> Righe { get; set; } = [];
 
-    public decimal Quantita { get; set; }
+    /// <summary>Le prenotazioni fatturate (una o più: vedi FatturaPrenotazione).</summary>
+    public List<FatturaPrenotazione> Prenotazioni { get; set; } = [];
 
-    public decimal PrezzoUnitario { get; set; }
-
-    public AliquotaIva? AliquotaIva { get; set; }
-
-    public NaturaIva? Natura { get; set; }
-
+    /// <summary>Imponibile: somma dei totali delle righe, senza IVA né imposta di soggiorno.</summary>
     public decimal PrezzoTotale { get; set; }
 
+    /// <summary>Da pagare: imponibile + IVA di ogni aliquota + imposta di soggiorno.</summary>
     public decimal ImportoTotale { get; set; }
 
     public decimal Arrotondamento { get; set; }

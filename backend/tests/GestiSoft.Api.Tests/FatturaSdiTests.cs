@@ -49,14 +49,22 @@ public class FatturaSdiTests
         NumeroDocumento = 1,
         DataDocumento = new DateTime(2026, 9, 17),
         Divisa = "EUR",
-        Descrizione = descrizione,
-        Quantita = 2,
-        PrezzoUnitario = 100,
+        Righe = [Riga(1, descrizione ?? "", 2, 100, AliquotaIva.Iva10)],
         PrezzoTotale = 200,
         ImportoTotale = 220,
-        AliquotaIva = AliquotaIva.Iva10,
         TipoDocumento = TipoDocumentoFattura.TD01_Fattura,
         RegimeFiscale = RegimeFiscale.RF01_Ordinario,
+    };
+
+    private static RigaFattura Riga(int numero, string descrizione, decimal quantita, decimal prezzo, AliquotaIva? aliquota, NaturaIva? natura = null) => new()
+    {
+        Numero = numero,
+        Descrizione = descrizione,
+        Quantita = quantita,
+        PrezzoUnitario = prezzo,
+        PrezzoTotale = quantita * prezzo,
+        AliquotaIva = aliquota,
+        Natura = natura,
     };
 
     /// <summary>
@@ -129,6 +137,77 @@ public class FatturaSdiTests
         Assert.Equal("N1", riepiloghi[1].Element("Natura")!.Value);
     }
 
+    /// <summary>
+    /// Il totale della fattura comprende l'imposta di soggiorno (FatturazioneService la somma):
+    /// l'IVA del riepilogo va calcolata senza, altrimenti 200 € al 10% con 12 € di imposta davano
+    /// 32 € di IVA invece di 20, e lo SdI scarta una fattura con imposta incoerente con l'imponibile.
+    /// </summary>
+    [Fact]
+    public void ImpostaDiSoggiorno_NonEntraNellIva()
+    {
+        var fattura = Fattura();
+        fattura.ImpostaSoggiorno = 12.00m;
+        fattura.ImportoTotale = 232.00m;
+
+        using var stream = new MemoryStream(new FatturaDocumentGenerator().GeneraXmlSdi(fattura, Cliente(), Azienda()));
+        var xml = XDocument.Load(stream);
+
+        var riepilogoIva = xml.Descendants("DatiRiepilogo").First();
+        Assert.Equal("200.00", riepilogoIva.Element("ImponibileImporto")!.Value);
+        Assert.Equal("20.00", riepilogoIva.Element("Imposta")!.Value);
+    }
+
+    /// <summary>
+    /// Alloggio al 10% e SPA al 22% sulla stessa fattura: una riga ciascuno e un riepilogo per
+    /// aliquota, con l'IVA calcolata sul totale di ogni aliquota. L'aliquota ha due decimali: "10"
+    /// senza decimali non rispetta il tracciato.
+    /// </summary>
+    [Fact]
+    public void DueAliquote_DueRighe_DueRiepiloghi()
+    {
+        var fattura = Fattura();
+        fattura.Righe.Add(Riga(2, "SPA del 02/09 (2 persone)", 2, 45, AliquotaIva.Iva22));
+
+        using var stream = new MemoryStream(new FatturaDocumentGenerator().GeneraXmlSdi(fattura, Cliente(), Azienda()));
+        var xml = XDocument.Load(stream);
+
+        var righe = xml.Descendants("DettaglioLinee").ToList();
+        Assert.Equal(["1", "2"], righe.Select(r => r.Element("NumeroLinea")!.Value));
+        Assert.Equal(["10.00", "22.00"], righe.Select(r => r.Element("AliquotaIVA")!.Value));
+
+        var riepiloghi = xml.Descendants("DatiRiepilogo").ToList();
+        Assert.Equal(2, riepiloghi.Count);
+        Assert.Equal(("22.00", "90.00", "19.80"), (riepiloghi[0].Element("AliquotaIVA")!.Value, riepiloghi[0].Element("ImponibileImporto")!.Value, riepiloghi[0].Element("Imposta")!.Value));
+        Assert.Equal(("10.00", "200.00", "20.00"), (riepiloghi[1].Element("AliquotaIVA")!.Value, riepiloghi[1].Element("ImponibileImporto")!.Value, riepiloghi[1].Element("Imposta")!.Value));
+    }
+
+    /// <summary>Riga senza IVA (forfettario): AliquotaIVA è obbligatoria e vale 0.00, accanto alla natura.</summary>
+    [Fact]
+    public void RigaConNatura_HaAliquotaZero()
+    {
+        var fattura = Fattura();
+        fattura.Righe = [Riga(1, "Soggiorno", 1, 200, null, NaturaIva.N2_2_NonSoggetteAltriCasi)];
+
+        using var stream = new MemoryStream(new FatturaDocumentGenerator().GeneraXmlSdi(fattura, Cliente(), Azienda()));
+        var xml = XDocument.Load(stream);
+
+        var riga = xml.Descendants("DettaglioLinee").Single();
+        Assert.Equal("0.00", riga.Element("AliquotaIVA")!.Value);
+        Assert.Equal("N2.2", riga.Element("Natura")!.Value);
+    }
+
+    [Fact]
+    public void FatturaConPiuRigheEAliquote_ProduceUnPdfValido()
+    {
+        var fattura = Fattura();
+        fattura.Righe.Add(Riga(2, "SPA del 02/09", 2, 45, AliquotaIva.Iva22));
+        fattura.ImpostaSoggiorno = 12m;
+
+        var pdf = new FatturaDocumentGenerator().GeneraPdf(fattura, Cliente(), Azienda(), "Hotel di prova");
+
+        Assert.Equal("%PDF", Encoding.ASCII.GetString(pdf, 0, 4));
+    }
+
     [Fact]
     public void SenzaImpostaDiSoggiorno_LaFatturaHaUnaRigaSola()
     {
@@ -167,7 +246,7 @@ public class FatturaSdiTests
         ricevuta.TipoEmissione = TipoEmissioneDocumento.Ricevuta;
         ricevuta.TipoDocumento = null;
         ricevuta.RegimeFiscale = null;
-        ricevuta.AliquotaIva = null;
+        ricevuta.Righe[0].AliquotaIva = null;
         ricevuta.ImpostaSoggiorno = 18m;
         ricevuta.ImportoBollo = 2.00m;
 

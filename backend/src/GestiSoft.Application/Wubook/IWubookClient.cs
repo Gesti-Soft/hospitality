@@ -22,7 +22,30 @@ public record WubookPrenotazione(
     string? CustomerSurname,
     string? CustomerEmail,
     string? CustomerCountry,
-    string? CustomerCity);
+    string? CustomerCity,
+    DatiExtraOta? Extra = null,
+    // Una per camera dell'ordine, nell'ordine in cui l'OTA le elenca (vedi OrdineOta).
+    IReadOnlyList<CameraOrdineOta>? Camere = null);
+
+/// <summary>
+/// Una camera di un ordine OTA: id della camera OTA, somma dei prezzi per notte (`booked_rooms`, 0 se
+/// l'OTA non li manda) e ospiti (`rooms_occupancies`, null se non indicati).
+/// </summary>
+public record CameraOrdineOta(int IdCameraWubook, decimal PrezzoNotti, int? Occupazione);
+
+/// <summary>
+/// Quello che una prenotazione OTA porta oltre ai dati standard, così come arriva: trattamento per
+/// camera (`boards`: bb, hb, fb, ai, nb — lo compila solo il booking engine dell'OTA), extra
+/// acquistati (`addons_list`), informazioni non standard del portale (`ancillary`, a coppie
+/// chiave/valore appiattite) e richieste dell'ospite (`customer_notes`). Vedi TrattamentoOta.
+/// </summary>
+public record DatiExtraOta(
+    IReadOnlyList<string> Boards,
+    IReadOnlyList<ExtraOta> Extra,
+    IReadOnlyList<KeyValuePair<string, string>> Ancillary,
+    string? NoteCliente);
+
+public record ExtraOta(string Nome, int Quantita, decimal Prezzo);
 
 public record WubookCanale(int Id, string Nome);
 

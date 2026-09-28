@@ -1,23 +1,37 @@
-﻿using GestiSoft.Application.Auth;
+using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
+using GestiSoft.Application.Camere;
 using GestiSoft.Application.Riferimenti;
+using GestiSoft.Application.Servizi;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
 namespace GestiSoft.Application.Fatturazione;
 
-public record CreaFatturaDaPrenotazioneRequest(
-    Guid PrenotazioneId,
-    TipoDocumentoFattura? TipoDocumento,
-    RegimeFiscale? RegimeFiscale,
+/// <summary>
+/// Una riga del documento. Tipo, PrenotazioneId e PrenotazioneServizioId dicono da dove viene (il
+/// soggiorno, un servizio extra) e impediscono di fatturarla due volte; una riga scritta a mano è Altro.
+/// Su una fattura ogni riga vuole l'aliquota o la natura; su una ricevuta nessuna delle due.
+/// </summary>
+public record RigaFatturaRichiesta(
     string? Descrizione,
     decimal Quantita,
-    decimal? PrezzoUnitario,
+    decimal PrezzoUnitario,
     AliquotaIva? AliquotaIva,
     NaturaIva? Natura,
+    TipoRigaFattura Tipo = TipoRigaFattura.Altro,
+    Guid? PrenotazioneId = null,
+    Guid? PrenotazioneServizioId = null);
+
+public record CreaFatturaDaPrenotazioneRequest(
+    /// <summary>Le prenotazioni fatturate: la prima è di chi paga, e il documento è intestato a lui.</summary>
+    IReadOnlyList<Guid> PrenotazioneIds,
+    TipoDocumentoFattura? TipoDocumento,
+    RegimeFiscale? RegimeFiscale,
     string? Divisa,
+    IReadOnlyList<RigaFatturaRichiesta> Righe,
     /// <summary>Imposta di soggiorno da riaddebitare in fattura come riga esclusa art. 15. Null la lascia fuori; il valore predefinito lo propone la prenotazione.</summary>
     decimal? ImpostaSoggiorno = null,
     /// <summary>Fattura (chi ha partita IVA) o ricevuta (locazione breve di un privato). Serie di numerazione distinte.</summary>
@@ -29,14 +43,16 @@ public record AggiornaFatturaRequest(
     Guid? DatiClienteId,
     TipoDocumentoFattura? TipoDocumento,
     RegimeFiscale? RegimeFiscale,
-    string? Descrizione,
-    decimal Quantita,
-    decimal PrezzoUnitario,
-    AliquotaIva? AliquotaIva,
-    NaturaIva? Natura,
     string? Divisa,
+    IReadOnlyList<RigaFatturaRichiesta> Righe,
     decimal? ImpostaSoggiorno = null,
     ModalitaPagamento? ModalitaPagamento = null);
+
+/// <summary>Righe proposte per fatturare una o più prenotazioni, con quello che l'operatore deve sapere.</summary>
+/// <inheritdoc cref="GestiSoft.Contracts.Fatturazione.DaFatturareDto"/>
+public record DaFatturare(bool SoggiornoFatturato, int ServiziDaFatturare, decimal ImportoServiziDaFatturare);
+
+public record PropostaFattura(IReadOnlyList<RigaFatturaRichiesta> Righe, decimal ImpostaSoggiorno, IReadOnlyList<string> Avvisi);
 
 /// <summary>
 /// Fatture — porta FatturazioneViewModel del legacy (Sezione C del report Fase 4). La fattura
@@ -47,6 +63,12 @@ public record AggiornaFatturaRequest(
 /// completa a mano sul DatiCliente, TODO per una fase dedicata se serve.
 /// A differenza del legacy (dove Progressivo non veniva mai valorizzato, vedi report Sez. E.1-2),
 /// qui è un vero contatore per (StrutturaId, Anno), con retry su conflitto di concorrenza.
+/// <para>
+/// Il documento ha più righe, ognuna con la sua aliquota o natura, e può fatturare più prenotazioni
+/// (due famiglie, paga una). Il soggiorno di una prenotazione e ognuno dei suoi servizi extra si
+/// fatturano una volta sola: dopo una fattura al check-in, una seconda può contenere solo gli
+/// extra addebitati dopo.
+/// </para>
 /// </summary>
 public class FatturazioneService(
     IDatiFatturaRepository fatture,
@@ -57,7 +79,9 @@ public class FatturazioneService(
     IRiferimentiRepository riferimenti,
     IStrutturaRepository strutture,
     IFatturaDocumentGenerator documentGenerator,
-    PermessoStrutturaGuard permessoGuard)
+    PermessoStrutturaGuard permessoGuard,
+    IServizioStrutturaRepository servizi,
+    ITipologiaCameraRepository tipologie)
 {
     private const int MassimiTentativiProgressivo = 5;
 
@@ -88,31 +112,42 @@ public class FatturazioneService(
         return fattura is { } f && f.StrutturaId == strutturaId ? f : null;
     }
 
+    /// <summary>
+    /// Stessa regola della proposta: soggiorno e ogni servizio extra si fatturano una volta sola. Serve
+    /// a mostrare "2 servizi da fatturare" accanto al documento già emesso, per farne un secondo.
+    /// </summary>
+    public async Task<DaFatturare> DaFatturareAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+        var prenotazione = (await CaricaPrenotazioniAsync(strutturaId, [prenotazioneId], cancellationToken))[0];
+
+        var giaFatturate = await fatture.ListRigheFatturateAsync(strutturaId, [prenotazione.Id], escludiFatturaId: null, cancellationToken);
+        var daFatturare = (await servizi.ListByPrenotazioneAsync(strutturaId, prenotazione.Id, cancellationToken))
+            .Where(riga => !giaFatturate.Any(r => r.PrenotazioneServizioId == riga.Id))
+            .ToList();
+
+        return new DaFatturare(
+            giaFatturate.Any(r => r.PrenotazioneId == prenotazione.Id && r.Tipo == TipoRigaFattura.Soggiorno),
+            daFatturare.Count,
+            daFatturare.Sum(ServiziService.Importo));
+    }
+
     public async Task<DatiFattura> CreaDaPrenotazioneAsync(ICurrentUser currentUser, Guid strutturaId, CreaFatturaDaPrenotazioneRequest request, CancellationToken cancellationToken)
     {
-        EsigiDescrizione(request.Descrizione);
-
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceWrite, cancellationToken);
 
-        var prenotazione = await prenotazioni.GetAsync(request.PrenotazioneId, cancellationToken)
-            ?? throw new NotFoundException("Prenotazione non trovata.");
-        if (prenotazione.StrutturaId != strutturaId)
-        {
-            throw new NotFoundException("Prenotazione non trovata.");
-        }
+        var elencoPrenotazioni = await CaricaPrenotazioniAsync(strutturaId, request.PrenotazioneIds, cancellationToken);
+        var principale = elencoPrenotazioni[0];
 
-        var capofila = await ospiti.GetByPrenotazioneAsync(prenotazione.Id, cancellationToken)
-            ?? throw new ConflictException("La prenotazione non ha ancora una scheda ospiti: compilala prima di fatturare.");
-
-        var (cliente, _) = await RisolviOCreaClienteAsync(strutturaId, capofila, cancellationToken);
+        var capofila = await ospiti.GetByPrenotazioneAsync(principale.Id, cancellationToken)
+            ?? throw new ConflictException("La prenotazione di chi paga non ha ancora una scheda ospiti: compilala prima di fatturare.");
 
         var ricevuta = request.TipoEmissione == TipoEmissioneDocumento.Ricevuta;
-        var prezzoUnitario = request.PrezzoUnitario ?? prenotazione.ImportoTotale ?? 0;
-        var prezzoTotale = request.Quantita * prezzoUnitario;
-        var aliquotaPercentuale = !ricevuta && request.AliquotaIva is { } aliquota ? (decimal)aliquota / 100m : 0m;
-        // L'imposta di soggiorno entra nel totale da pagare ma non nell'imponibile: l'ospite la versa
-        // insieme al resto, il Comune la incassa tramite la struttura.
-        var importoTotale = Math.Round(prezzoTotale * (1 + aliquotaPercentuale), 2, MidpointRounding.AwayFromZero) + (request.ImpostaSoggiorno ?? 0);
+        var righe = await CostruisciRigheAsync(strutturaId, ricevuta, request.Righe, elencoPrenotazioni, fatturaId: null, cancellationToken);
+        VerificaRegimeSenzaIva(ricevuta, request.RegimeFiscale, righe);
+        var impostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno.Value : 0m;
+
+        var (cliente, _) = await RisolviOCreaClienteAsync(strutturaId, capofila, cancellationToken);
 
         var anno = DateTime.UtcNow.Year;
         for (var tentativo = 0; tentativo < MassimiTentativiProgressivo; tentativo++)
@@ -122,7 +157,7 @@ public class FatturazioneService(
             var candidata = new DatiFattura
             {
                 StrutturaId = strutturaId,
-                PrenotazioneId = prenotazione.Id,
+                PrenotazioneId = principale.Id,
                 DatiClienteId = cliente.Id,
                 Progressivo = progressivo,
                 NumeroDocumento = progressivo,
@@ -135,17 +170,12 @@ public class FatturazioneService(
                 RegimeFiscale = ricevuta ? null : request.RegimeFiscale,
                 DataDocumento = DateTime.UtcNow.Date,
                 Divisa = string.IsNullOrWhiteSpace(request.Divisa) ? "EUR" : request.Divisa,
-                Descrizione = request.Descrizione,
-                ImpostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno : null,
-                ImportoBollo = CalcolaBollo(request.TipoEmissione, request.Natura, prezzoTotale, request.ImpostaSoggiorno ?? 0),
-                Quantita = request.Quantita,
-                PrezzoUnitario = prezzoUnitario,
-                PrezzoTotale = prezzoTotale,
-                ImportoTotale = importoTotale,
-                AliquotaIva = ricevuta ? null : request.AliquotaIva,
-                Natura = ricevuta ? null : request.Natura,
+                Righe = righe.Select(Copia).ToList(),
+                Prenotazioni = elencoPrenotazioni.Select(p => new FatturaPrenotazione { StrutturaId = strutturaId, PrenotazioneId = p.Id }).ToList(),
+                ImpostaSoggiorno = impostaSoggiorno > 0 ? impostaSoggiorno : null,
                 Anno = anno,
             };
+            ApplicaTotali(candidata, impostaSoggiorno);
 
             if (await fatture.TryAddAsync(candidata, cancellationToken))
             {
@@ -158,8 +188,6 @@ public class FatturazioneService(
 
     public async Task<DatiFattura> AggiornaAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, AggiornaFatturaRequest request, CancellationToken cancellationToken)
     {
-        EsigiDescrizione(request.Descrizione);
-
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceWrite, cancellationToken);
 
         var entity = await GetOwnedAsync(strutturaId, fatturaId, cancellationToken);
@@ -174,33 +202,151 @@ public class FatturazioneService(
         }
 
         // Stessa regola della creazione: il tipo di documento non cambia in modifica, e su una ricevuta
-        // aliquota, natura, regime e tipo documento non esistono. Senza, una ricevuta modificata
-        // prendeva l'IVA che il dialogo le rimandava e il totale cresceva.
+        // aliquota, natura, regime e tipo documento non esistono. Le prenotazioni fatturate restano
+        // quelle scelte alla creazione.
         var ricevuta = entity.TipoEmissione == TipoEmissioneDocumento.Ricevuta;
-        var aliquotaIva = ricevuta ? null : request.AliquotaIva;
-        var natura = ricevuta ? null : request.Natura;
-
-        var prezzoTotale = request.Quantita * request.PrezzoUnitario;
-        var aliquotaPercentuale = aliquotaIva is { } aliquota ? (decimal)aliquota / 100m : 0m;
+        var collegate = await CaricaPrenotazioniAsync(strutturaId, entity.Prenotazioni.Select(p => p.PrenotazioneId).ToList(), cancellationToken, obbligatorie: false);
+        var righe = await CostruisciRigheAsync(strutturaId, ricevuta, request.Righe, collegate, entity.Id, cancellationToken);
+        VerificaRegimeSenzaIva(ricevuta, request.RegimeFiscale, righe);
+        var impostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno.Value : 0m;
 
         entity.DatiClienteId = request.DatiClienteId;
         entity.ModalitaPagamento = ricevuta ? request.ModalitaPagamento : null;
         entity.TipoDocumento = ricevuta ? null : request.TipoDocumento;
         entity.RegimeFiscale = ricevuta ? null : request.RegimeFiscale;
-        entity.Descrizione = request.Descrizione;
-        entity.Quantita = request.Quantita;
-        entity.PrezzoUnitario = request.PrezzoUnitario;
-        entity.PrezzoTotale = prezzoTotale;
-        entity.ImpostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno : null;
-        entity.ImportoBollo = CalcolaBollo(entity.TipoEmissione, natura, prezzoTotale, request.ImpostaSoggiorno ?? 0);
-        entity.ImportoTotale = Math.Round(prezzoTotale * (1 + aliquotaPercentuale), 2, MidpointRounding.AwayFromZero) + (request.ImpostaSoggiorno ?? 0);
-        entity.AliquotaIva = aliquotaIva;
-        entity.Natura = natura;
+        entity.ImpostaSoggiorno = impostaSoggiorno > 0 ? impostaSoggiorno : null;
         entity.Divisa = string.IsNullOrWhiteSpace(request.Divisa) ? entity.Divisa : request.Divisa;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
+        await fatture.SostituisciRigheAsync(entity, righe.Select(Copia).ToList(), cancellationToken);
+        ApplicaTotali(entity, impostaSoggiorno);
         await fatture.UpdateAsync(entity, cancellationToken);
         return entity;
+    }
+
+    /// <summary>
+    /// Righe da proporre per fatturare le prenotazioni scelte: il soggiorno (l'importo totale meno i
+    /// servizi extra, che vanno su righe loro con la loro aliquota, e meno la cauzione, che è un
+    /// deposito e non un corrispettivo) e ogni servizio extra. Solo quello che non è già in un'altra
+    /// fattura. Gli importi sono quelli della prenotazione, con l'IVA in aggiunta come sempre fatto
+    /// finora (scelta dell'utente); l'operatore può cambiarli prima di emettere.
+    /// </summary>
+    public async Task<PropostaFattura> ProponiAsync(
+        ICurrentUser currentUser,
+        Guid strutturaId,
+        IReadOnlyList<Guid> prenotazioneIds,
+        TipoEmissioneDocumento tipoEmissione,
+        CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceWrite, cancellationToken);
+        var elencoPrenotazioni = await CaricaPrenotazioniAsync(strutturaId, prenotazioneIds, cancellationToken);
+        var ricevuta = tipoEmissione == TipoEmissioneDocumento.Ricevuta;
+        var azienda = await aziende.GetByStrutturaIdAsync(strutturaId, cancellationToken);
+        var (aliquotaPredefinita, naturaPredefinita) = ricevuta ? (null, null) : (azienda?.AliquotaIvaDefault, azienda?.NaturaDefault);
+        // Il form dei dati aziendali mostra la natura solo con lo 0%: con un'aliquota vera una natura
+        // rimasta salvata non vale.
+        if (aliquotaPredefinita is { } predefinita && predefinita != AliquotaIva.Iva0)
+        {
+            naturaPredefinita = null;
+        }
+
+        // Forfettari e minimi non applicano l'IVA: 0% N2.2 su ogni riga, anche sui servizi che hanno
+        // un'aliquota loro (pensata per chi è in regime ordinario).
+        var senzaIva = !ricevuta && RegimeSenzaIva(azienda?.RegimeFiscale);
+        if (senzaIva)
+        {
+            (aliquotaPredefinita, naturaPredefinita) = (AliquotaIva.Iva0, NaturaIva.N2_2_NonSoggetteAltriCasi);
+        }
+        var giaFatturate = await fatture.ListRigheFatturateAsync(strutturaId, elencoPrenotazioni.Select(p => p.Id).ToList(), escludiFatturaId: null, cancellationToken);
+
+        var righe = new List<RigaFatturaRichiesta>();
+        var avvisi = new List<string>();
+        decimal impostaSoggiorno = 0;
+
+        foreach (var prenotazione in elencoPrenotazioni)
+        {
+            var numero = prenotazione.NumeroPrenotazione is { Length: > 0 } n ? $"#{n}" : "senza numero";
+            var righeServizio = await servizi.ListByPrenotazioneAsync(strutturaId, prenotazione.Id, cancellationToken);
+            var totaleServizi = righeServizio.Sum(ServiziService.Importo);
+
+            if (giaFatturate.FirstOrDefault(r => r.PrenotazioneId == prenotazione.Id && r.Tipo == TipoRigaFattura.Soggiorno) is { } soggiornoFatturato)
+            {
+                avvisi.Add($"Prenotazione {numero}: il soggiorno è già nella {NomeDocumento(soggiornoFatturato)}.");
+            }
+            else
+            {
+                var cauzione = prenotazione.CauzioneAttiva ? await CauzioneAsync(prenotazione, cancellationToken) : 0m;
+                var importo = (prenotazione.ImportoTotale ?? 0) - totaleServizi - cauzione;
+                if (cauzione > 0)
+                {
+                    avvisi.Add($"Prenotazione {numero}: la cauzione di {cauzione:0.00} € non è in fattura, è un deposito. Se è stata trattenuta, aggiungi una riga.");
+                }
+
+                if (importo <= 0)
+                {
+                    avvisi.Add($"Prenotazione {numero}: l'importo del soggiorno risulta {importo:0.00} €. Controlla l'importo totale della prenotazione.");
+                }
+
+                righe.Add(new RigaFatturaRichiesta(
+                    DescrizioneSoggiorno(prenotazione), 1, Math.Max(importo, 0), aliquotaPredefinita, naturaPredefinita,
+                    TipoRigaFattura.Soggiorno, prenotazione.Id));
+
+                if (prenotazione.TassaSoggiornoAttiva && prenotazione.TotalTax is > 0)
+                {
+                    impostaSoggiorno += prenotazione.TotalTax.Value;
+                }
+            }
+
+            var serviziGiaFatturati = 0;
+            foreach (var riga in righeServizio)
+            {
+                if (giaFatturate.Any(r => r.PrenotazioneServizioId == riga.Id))
+                {
+                    serviziGiaFatturati++;
+                    continue;
+                }
+
+                var listino = await servizi.GetAsync(strutturaId, riga.ServizioId, cancellationToken);
+                var (aliquota, natura) = ricevuta
+                    ? (null, null)
+                    : senzaIva || listino is { AliquotaIva: null, Natura: null } or null
+                        ? (aliquotaPredefinita, naturaPredefinita)
+                        : (listino.AliquotaIva, listino.Natura);
+                var notti = riga.Al is { } al ? al.DayNumber - riga.Dal.DayNumber : 0;
+                var quantita = riga.Quantita * (ServiziService.PerNotte(riga.Modalita) ? notti : 1);
+                righe.Add(new RigaFatturaRichiesta(
+                    DescrizioneServizio(riga, notti), quantita, riga.PrezzoUnitario, aliquota, natura,
+                    TipoRigaFattura.Servizio, prenotazione.Id, riga.Id));
+            }
+
+            if (serviziGiaFatturati > 0)
+            {
+                avvisi.Add($"Prenotazione {numero}: {serviziGiaFatturati} servizi extra sono già in un'altra fattura.");
+            }
+        }
+
+        if (ricevuta && righe.Any(r => r.Tipo == TipoRigaFattura.Servizio))
+        {
+            avvisi.Add("Nella ricevuta di locazione breve va il canone: i servizi extra (escursioni, SPA…) non fanno parte della locazione. Senti il commercialista prima di includerli.");
+        }
+
+        return new PropostaFattura(righe, impostaSoggiorno, avvisi);
+    }
+
+    /// <summary>
+    /// Regimi che non applicano l'IVA in fattura: forfettario (art. 1, commi 54-89, L. 190/2014) e
+    /// contribuenti minimi. Ogni riga va a 0% con natura N2.2.
+    /// </summary>
+    public static bool RegimeSenzaIva(RegimeFiscale? regime) =>
+        regime is RegimeFiscale.RF19_Forfettario or RegimeFiscale.RF02_ContribuentiMinimi;
+
+    /// <summary>Un forfettario che addebita l'IVA emette una fattura sbagliata: si ferma qui, non allo SdI.</summary>
+    private static void VerificaRegimeSenzaIva(bool ricevuta, RegimeFiscale? regime, IEnumerable<RigaFattura> righe)
+    {
+        if (!ricevuta && RegimeSenzaIva(regime) && righe.Any(r => r.AliquotaIva is { } a && a != AliquotaIva.Iva0))
+        {
+            throw new ConflictException("In regime forfettario o dei minimi non si applica l'IVA: tutte le righe vanno a 0% con natura N2.2.");
+        }
     }
 
     public async Task<byte[]> GeneraPdfAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
@@ -268,44 +414,226 @@ public class FatturazioneService(
         return (fattura, cliente, azienda);
     }
 
-    /// <summary>Sopra questa soglia le somme non soggette a IVA scontano il bollo (art. 13 Tariffa DPR 642/72).</summary>
-    private const decimal SogliaBollo = 77.47m;
-
-    private const decimal ImportoBolloVirtuale = 2.00m;
-
-    /// <summary>
-    /// IVA e bollo sono alternativi (art. 6 Tabella B DPR 642/72): dove c'è IVA il bollo non si paga
-    /// mai, dove non c'è si paga sopra 77,47 €. La soglia si misura sulla sola parte <b>non</b>
-    /// soggetta, non sul totale della fattura: in una fattura mista — soggiorno con IVA al 10% più
-    /// imposta di soggiorno esclusa art. 15 — conta solo la seconda. In pratica un hotel in regime
-    /// ordinario non lo paga quasi mai, un forfettario quasi sempre.
-    /// <para>
-    /// La riga del soggiorno si considera fuori dall'IVA quando porta una Natura: è la convenzione
-    /// dello SDI, dove o c'è un'aliquota o c'è il motivo per cui non c'è.
-    /// </para>
-    /// </summary>
-    public static decimal? CalcolaBollo(TipoEmissioneDocumento tipoEmissione, NaturaIva? natura, decimal prezzoTotale, decimal impostaSoggiorno)
+    /// <summary>Totali e bollo dalle righe: <see cref="CalcoloFattura"/>, la stessa regola di PDF e XML.</summary>
+    private static void ApplicaTotali(DatiFattura fattura, decimal impostaSoggiorno)
     {
-        // Una ricevuta di locazione breve è interamente fuori dal campo IVA: non ha una natura da
-        // esporre, ma l'intero importo concorre alla soglia.
-        var fuoriCampoIva = tipoEmissione == TipoEmissioneDocumento.Ricevuta || natura is not null;
-        var nonSoggetto = (fuoriCampoIva ? prezzoTotale : 0m) + impostaSoggiorno;
-        return nonSoggetto > SogliaBollo ? ImportoBolloVirtuale : null;
+        fattura.PrezzoTotale = CalcoloFattura.Imponibile(fattura.Righe);
+        fattura.ImportoTotale = CalcoloFattura.Totale(fattura.Righe, impostaSoggiorno);
+        fattura.ImportoBollo = CalcoloFattura.Bollo(fattura.TipoEmissione, fattura.Righe, impostaSoggiorno);
     }
 
+    private const int LunghezzaMassimaDescrizione = 1000;
+
     /// <summary>
-    /// La descrizione della riga è obbligatoria nel tracciato della fattura elettronica: vuota
-    /// produce un file che lo SDI scarta giorni dopo, quando di quella fattura non si ricorda più
-    /// niente. Finora la pretendeva solo il dialogo dell'interfaccia, e bastava creare o modificare
-    /// la fattura da un altro punto perché il controllo sparisse.
+    /// Le righe del documento, controllate. La descrizione è obbligatoria nel tracciato della fattura
+    /// elettronica: vuota produce un file che lo SDI scarta giorni dopo. Su una fattura ogni riga vuole
+    /// l'aliquota o la natura (mai tutte e due); su una ricevuta nessuna. Il soggiorno di una
+    /// prenotazione e ogni suo servizio extra non possono stare in due documenti.
     /// </summary>
-    private static void EsigiDescrizione(string? descrizione)
+    private async Task<List<RigaFattura>> CostruisciRigheAsync(
+        Guid strutturaId,
+        bool ricevuta,
+        IReadOnlyList<RigaFatturaRichiesta> richieste,
+        IReadOnlyList<Prenotazione> prenotazioniDocumento,
+        Guid? fatturaId,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(descrizione))
+        if (richieste is not { Count: > 0 })
         {
-            throw new ConflictException("La descrizione della fattura è obbligatoria: senza, la fattura elettronica verrebbe scartata.");
+            throw new ConflictException("Il documento deve avere almeno una riga.");
         }
+
+        var idPrenotazioni = prenotazioniDocumento.Select(p => p.Id).ToHashSet();
+        var giaFatturate = await fatture.ListRigheFatturateAsync(strutturaId, idPrenotazioni.ToList(), fatturaId, cancellationToken);
+        var righe = new List<RigaFattura>();
+
+        foreach (var (richiesta, indice) in richieste.Select((r, i) => (r, i)))
+        {
+            var numero = indice + 1;
+            var descrizione = richiesta.Descrizione?.Trim() ?? "";
+            if (descrizione == "")
+            {
+                throw new ConflictException($"Riga {numero}: la descrizione è obbligatoria, senza la fattura elettronica verrebbe scartata.");
+            }
+
+            if (descrizione.Length > LunghezzaMassimaDescrizione)
+            {
+                throw new ConflictException($"Riga {numero}: la descrizione può avere al massimo {LunghezzaMassimaDescrizione} caratteri.");
+            }
+
+            if (richiesta.Quantita <= 0)
+            {
+                throw new ConflictException($"Riga {numero}: la quantità deve essere maggiore di zero.");
+            }
+
+            if (!Enum.IsDefined(richiesta.Tipo)
+                || richiesta.AliquotaIva is { } a && !Enum.IsDefined(a)
+                || richiesta.Natura is { } n && !Enum.IsDefined(n))
+            {
+                throw new ConflictException($"Riga {numero}: dati non riconosciuti.");
+            }
+
+            var (aliquota, natura) = ricevuta ? (null, null) : CalcoloFattura.AliquotaENatura(richiesta.AliquotaIva, richiesta.Natura, $"Riga {numero}");
+
+            if (richiesta.PrenotazioneId is { } prenotazioneId && !idPrenotazioni.Contains(prenotazioneId))
+            {
+                throw new ConflictException($"Riga {numero}: la prenotazione non è tra quelle del documento.");
+            }
+
+            if (richiesta.Tipo == TipoRigaFattura.Soggiorno)
+            {
+                if (richiesta.PrenotazioneId is not { } soggiornoDi)
+                {
+                    throw new ConflictException($"Riga {numero}: una riga di soggiorno deve dire di quale prenotazione è.");
+                }
+
+                var doppione = giaFatturate.FirstOrDefault(r => r.PrenotazioneId == soggiornoDi && r.Tipo == TipoRigaFattura.Soggiorno);
+                if (doppione is not null || righe.Any(r => r.Tipo == TipoRigaFattura.Soggiorno && r.PrenotazioneId == soggiornoDi))
+                {
+                    throw new ConflictException($"Riga {numero}: il soggiorno di questa prenotazione è già fatturato{(doppione is null ? "" : $" nella {NomeDocumento(doppione)}")}.");
+                }
+            }
+
+            if (richiesta.Tipo == TipoRigaFattura.Servizio)
+            {
+                if (richiesta.PrenotazioneServizioId is not { } servizioId || richiesta.PrenotazioneId is not { } servizioDi)
+                {
+                    throw new ConflictException($"Riga {numero}: una riga di servizio extra deve dire quale servizio fattura.");
+                }
+
+                var dellaPrenotazione = await servizi.ListByPrenotazioneAsync(strutturaId, servizioDi, cancellationToken);
+                if (dellaPrenotazione.All(r => r.Id != servizioId))
+                {
+                    throw new ConflictException($"Riga {numero}: il servizio extra non è di questa prenotazione.");
+                }
+
+                var doppione = giaFatturate.FirstOrDefault(r => r.PrenotazioneServizioId == servizioId);
+                if (doppione is not null || righe.Any(r => r.PrenotazioneServizioId == servizioId))
+                {
+                    throw new ConflictException($"Riga {numero}: questo servizio extra è già fatturato{(doppione is null ? "" : $" nella {NomeDocumento(doppione)}")}.");
+                }
+            }
+
+            righe.Add(new RigaFattura
+            {
+                StrutturaId = strutturaId,
+                Numero = numero,
+                Descrizione = descrizione,
+                Quantita = richiesta.Quantita,
+                PrezzoUnitario = richiesta.PrezzoUnitario,
+                PrezzoTotale = CalcoloFattura.TotaleRiga(richiesta.Quantita, richiesta.PrezzoUnitario),
+                AliquotaIva = aliquota,
+                Natura = natura,
+                Tipo = richiesta.Tipo,
+                PrenotazioneId = richiesta.PrenotazioneId,
+                PrenotazioneServizioId = richiesta.Tipo == TipoRigaFattura.Servizio ? richiesta.PrenotazioneServizioId : null,
+            });
+        }
+
+        if (CalcoloFattura.Imponibile(righe) < 0)
+        {
+            throw new ConflictException("Il totale delle righe non può essere negativo.");
+        }
+
+        return righe;
     }
+
+    private static RigaFattura Copia(RigaFattura r) => new()
+    {
+        StrutturaId = r.StrutturaId,
+        Numero = r.Numero,
+        Descrizione = r.Descrizione,
+        Quantita = r.Quantita,
+        PrezzoUnitario = r.PrezzoUnitario,
+        PrezzoTotale = r.PrezzoTotale,
+        AliquotaIva = r.AliquotaIva,
+        Natura = r.Natura,
+        Tipo = r.Tipo,
+        PrenotazioneId = r.PrenotazioneId,
+        PrenotazioneServizioId = r.PrenotazioneServizioId,
+    };
+
+    /// <summary>
+    /// Le prenotazioni del documento, nell'ordine dato (la prima è di chi paga), tutte della struttura.
+    /// Una annullata si può fatturare: una caparra trattenuta è un corrispettivo.
+    /// </summary>
+    private async Task<List<Prenotazione>> CaricaPrenotazioniAsync(Guid strutturaId, IReadOnlyList<Guid> ids, CancellationToken cancellationToken, bool obbligatorie = true)
+    {
+        if (obbligatorie && ids is not { Count: > 0 })
+        {
+            throw new ConflictException("Scegli almeno una prenotazione da fatturare.");
+        }
+
+        if (ids.Distinct().Count() != ids.Count)
+        {
+            throw new ConflictException("La stessa prenotazione compare due volte.");
+        }
+
+        var elenco = new List<Prenotazione>();
+        foreach (var id in ids)
+        {
+            var prenotazione = await prenotazioni.GetAsync(id, cancellationToken);
+            if (prenotazione is null || prenotazione.StrutturaId != strutturaId)
+            {
+                throw new NotFoundException("Prenotazione non trovata.");
+            }
+
+            elenco.Add(prenotazione);
+        }
+
+        return elenco;
+    }
+
+    private async Task<decimal> CauzioneAsync(Prenotazione prenotazione, CancellationToken cancellationToken)
+    {
+        var tipologia = prenotazione.Tipologia
+            ?? (prenotazione.Camera?.TipologiaId is { } tipologiaId ? await tipologie.GetAsync(tipologiaId, cancellationToken) : null);
+        return tipologia?.Cauzione ?? 0m;
+    }
+
+    private static string DescrizioneSoggiorno(Prenotazione p)
+    {
+        var parti = new List<string>();
+        if (p is { CheckIn: { } arrivo, CheckOut: { } partenza })
+        {
+            var notti = (partenza.Date - arrivo.Date).Days;
+            parti.Add($"Soggiorno dal {arrivo:dd/MM/yyyy} al {partenza:dd/MM/yyyy} ({notti} {(notti == 1 ? "notte" : "notti")})");
+        }
+        else
+        {
+            parti.Add("Soggiorno");
+        }
+
+        if (p.Trattamento is { } trattamento)
+        {
+            parti[0] += $" con {Trattamenti.TrattamentiService.Nome(trattamento).ToLowerInvariant()}";
+        }
+
+        var alloggio = !string.IsNullOrWhiteSpace(p.Camera?.Nome) ? p.Camera!.Nome : p.Tipologia?.TipologiaCamera;
+        if (!string.IsNullOrWhiteSpace(alloggio))
+        {
+            parti.Add(alloggio.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(p.NumeroPrenotazione))
+        {
+            parti.Add($"prenotazione #{p.NumeroPrenotazione}");
+        }
+
+        return string.Join(" — ", parti);
+    }
+
+    private static string DescrizioneServizio(PrenotazioneServizio r, int notti)
+    {
+        var quando = r.Al is { } al ? $"dal {r.Dal:dd/MM} al {al:dd/MM}" : $"del {r.Dal:dd/MM/yyyy}";
+        var dettaglio = ServiziService.PerNotte(r.Modalita)
+            ? $" ({r.Quantita} × {notti} {(notti == 1 ? "notte" : "notti")})"
+            : r.Quantita > 1 ? $" ({r.Quantita} {(r.Modalita == ModalitaPrezzoServizio.APersona ? "persone" : "unità")})" : "";
+        return $"{r.Nome} {quando}{dettaglio}";
+    }
+
+    private static string NomeDocumento(RigaFatturata r) =>
+        $"{(r.TipoEmissione == TipoEmissioneDocumento.Ricevuta ? "ricevuta" : "fattura")} n. {r.NumeroDocumento}/{r.Anno}";
 
     private static string CostruisciCustomerKey(Ospite capofila) =>
         $"{capofila.NumeroDocumento}-{capofila.Nome}-{capofila.Cognome}-{capofila.DataNascita:yyyyMMdd}";

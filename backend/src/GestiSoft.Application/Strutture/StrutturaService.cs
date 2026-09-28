@@ -1,5 +1,6 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Trattamenti;
 using GestiSoft.Application.Utenti;
 using GestiSoft.Application.Wubook;
 using GestiSoft.Domain.Entities;
@@ -22,7 +23,8 @@ public record AggiornaLicenzaStrutturaRequest(DateTime? ScadenzaLicenza, bool Ri
 public class StrutturaService(
     IStrutturaRepository repository,
     IUtenteRepository utenti,
-    IRinnovoLicenzaRepository rinnoviLicenza)
+    IRinnovoLicenzaRepository rinnoviLicenza,
+    ITrattamentoStrutturaRepository trattamenti)
 {
     /// <summary>
     /// Il Super Admin vede tutte le Strutture (anche disattivate o a licenza scaduta, o filtrate per
@@ -87,6 +89,7 @@ public class StrutturaService(
         // e commento lì): una Struttura nuova non deve avere nulla di attivo finché il Super Admin
         // non lo concede esplicitamente, anche se il Cliente ne ha già altre abilitate.
         await repository.AddAsync(struttura, cancellationToken);
+        await trattamenti.AddRangeAsync(TrattamentiService.BaseDellaStruttura(struttura.Id), cancellationToken);
 
         // Nessuna assegnazione UtenteStruttura automatica qui, su richiesta esplicita: un utente può
         // lavorare in una Struttura e non in un'altra, anche dello stesso Cliente — chi deve avere

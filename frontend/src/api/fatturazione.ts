@@ -230,30 +230,64 @@ export interface DatiFatturaDto {
   numeroDocumento: number
   dataDocumento: string
   divisa: string | null
-  descrizione: string | null
-  quantita: number
-  prezzoUnitario: number
+  /** Imponibile: somma delle righe, senza IVA né imposta di soggiorno. */
   prezzoTotale: number
+  /** IVA di tutte le aliquote. */
+  imposta: number
   importoTotale: number
-  aliquotaIva: AliquotaIva | null
-  natura: NaturaIva | null
   /** Imposta di soggiorno riaddebitata: in fattura è una riga a sé, esclusa art. 15 (natura N1). */
   impostaSoggiorno: number | null
   /** Bollo virtuale da 2 €, calcolato dal server sulle sole somme non soggette a IVA sopra 77,47 €. */
   importoBollo: number | null
   anno: number
+  righe: RigaFatturaDto[]
+  /** Le prenotazioni fatturate: la prima è di chi paga. */
+  prenotazioneIds: string[]
+}
+
+/** Da dove viene una riga: il soggiorno o un servizio extra si fatturano una volta sola; una riga a mano è Altro. */
+export const TipoRigaFattura = { Soggiorno: 1, Servizio: 2, Altro: 3 } as const
+export type TipoRigaFattura = (typeof TipoRigaFattura)[keyof typeof TipoRigaFattura]
+
+/** Una riga del documento (o proposta dalla prenotazione, con numero 0). Aliquota 0% sempre insieme alla natura. */
+export interface RigaFatturaDto {
+  numero: number
+  descrizione: string
+  quantita: number
+  prezzoUnitario: number
+  prezzoTotale: number
+  aliquotaIva: AliquotaIva | null
+  natura: NaturaIva | null
+  tipo: TipoRigaFattura
+  prenotazioneId: string | null
+  prenotazioneServizioId: string | null
+}
+
+export interface RigaFatturaRichiesta {
+  descrizione: string
+  quantita: number
+  prezzoUnitario: number
+  aliquotaIva: AliquotaIva | null
+  natura: NaturaIva | null
+  tipo: TipoRigaFattura
+  prenotazioneId: string | null
+  prenotazioneServizioId: string | null
+}
+
+export interface PropostaFatturaDto {
+  righe: RigaFatturaDto[]
+  impostaSoggiorno: number
+  /** Da mostrare all'operatore: cauzione esclusa, soggiorno o servizi già fatturati, servizi in una ricevuta. */
+  avvisi: string[]
 }
 
 export interface CreaFatturaDaPrenotazioneRequest {
-  prenotazioneId: string
+  /** La prima è la prenotazione di chi paga: il documento è intestato a lui. */
+  prenotazioneIds: string[]
   tipoDocumento: TipoDocumentoFattura | null
   regimeFiscale: RegimeFiscale | null
-  descrizione: string | null
-  quantita: number
-  prezzoUnitario: number | null
-  aliquotaIva: AliquotaIva | null
-  natura: NaturaIva | null
   divisa: string | null
+  righe: RigaFatturaRichiesta[]
   /** Omessa o zero: l'imposta di soggiorno non viene riaddebitata in fattura. */
   impostaSoggiorno?: number | null
   /** Assente = fattura. */
@@ -265,14 +299,26 @@ export interface AggiornaFatturaRequest {
   datiClienteId: string | null
   tipoDocumento: TipoDocumentoFattura | null
   regimeFiscale: RegimeFiscale | null
-  descrizione: string | null
-  quantita: number
-  prezzoUnitario: number
-  aliquotaIva: AliquotaIva | null
-  natura: NaturaIva | null
   divisa: string | null
+  righe: RigaFatturaRichiesta[]
   impostaSoggiorno?: number | null
   modalitaPagamento?: ModalitaPagamento | null
+}
+
+/**
+ * Righe proposte per fatturare le prenotazioni scelte: il soggiorno e i servizi extra non ancora
+ * fatturati, l'imposta di soggiorno e gli avvisi. Non scrive nulla.
+ */
+export function usePropostaFattura(strutturaId: string | null, prenotazioneIds: string[], tipoEmissione: TipoEmissioneDocumento, abilitata: boolean) {
+  return useQuery({
+    queryKey: ['fatture', strutturaId, 'proposta', prenotazioneIds.join(','), tipoEmissione],
+    queryFn: () =>
+      apiGet<PropostaFatturaDto>(
+        `/strutture/${strutturaId}/fatture/proposta?${prenotazioneIds.map((id) => `prenotazioneIds=${id}`).join('&')}&tipoEmissione=${tipoEmissione}`,
+      ),
+    enabled: abilitata && !!strutturaId && prenotazioneIds.length > 0,
+    retry: false,
+  })
 }
 
 export function useFatture(strutturaId: string | null, anno: number) {
@@ -311,6 +357,44 @@ export function useCreaFattura(strutturaId: string | null) {
 }
 
 /** L'eventuale fattura già generata per una prenotazione — null se non ancora fatturata (o se l'operatore non ha il permesso di consultare le fatture). */
+/** "Fattura n. 12/2026" o "Ricevuta n. 3/2026": due serie diverse, il nome giusto conta. */
+export function nomeDocumento(f: Pick<DatiFatturaDto, 'tipoEmissione' | 'numeroDocumento' | 'anno'>): string {
+  return `${f.tipoEmissione === TipoEmissioneDocumento.Ricevuta ? 'Ricevuta' : 'Fattura'} n. ${f.numeroDocumento}/${f.anno}`
+}
+
+/** Cosa resta da fatturare di una prenotazione: soggiorno già in un documento, servizi extra non ancora. */
+export interface DaFatturareDto {
+  soggiornoFatturato: boolean
+  serviziDaFatturare: number
+  importoServiziDaFatturare: number
+}
+
+/** "2 servizi da fatturare (45,00 €)", o null se non manca nulla. */
+export function testoDaFatturare(d: DaFatturareDto | null | undefined): string | null {
+  if (!d || d.serviziDaFatturare === 0) return null
+  const importo = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(d.importoServiziDaFatturare)
+  return `${d.serviziDaFatturare} ${d.serviziDaFatturare === 1 ? 'servizio' : 'servizi'} da fatturare (${importo})`
+}
+
+/**
+ * Stessa chiave di partenza del documento della prenotazione: emettere una fattura la ricarica.
+ * Chi non vede le finanze riceve null (403).
+ */
+export function useDaFatturare(strutturaId: string | null, prenotazioneId: string | null) {
+  return useQuery({
+    queryKey: ['fattura-per-prenotazione', strutturaId, prenotazioneId, 'da-fatturare'],
+    queryFn: async () => {
+      try {
+        return await apiGet<DaFatturareDto>(`/strutture/${strutturaId}/fatture/prenotazioni/${prenotazioneId}/da-fatturare`)
+      } catch (err) {
+        if (err instanceof ApiError && (err.status === 404 || err.status === 403)) return null
+        throw err
+      }
+    },
+    enabled: !!strutturaId && !!prenotazioneId,
+  })
+}
+
 export function useFatturaPerPrenotazione(strutturaId: string | null, prenotazioneId: string | null) {
   return useQuery({
     queryKey: ['fattura-per-prenotazione', strutturaId, prenotazioneId],

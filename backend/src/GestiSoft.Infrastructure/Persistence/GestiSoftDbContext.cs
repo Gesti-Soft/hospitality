@@ -17,6 +17,11 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options, Cr
     public DbSet<FasciaEtaSupplemento> FasceEtaSupplemento => Set<FasciaEtaSupplemento>();
 
     public DbSet<TrattamentoStruttura> TrattamentiStruttura => Set<TrattamentoStruttura>();
+    public DbSet<ServizioStruttura> ServiziStruttura => Set<ServizioStruttura>();
+    public DbSet<PrenotazioneServizio> PrenotazioniServizi => Set<PrenotazioneServizio>();
+    public DbSet<PagamentoPrenotazione> PagamentiPrenotazione => Set<PagamentoPrenotazione>();
+    public DbSet<RigaFattura> RigheFattura => Set<RigaFattura>();
+    public DbSet<FatturaPrenotazione> FatturePrenotazioni => Set<FatturaPrenotazione>();
 
     public DbSet<SettingRoom> Camere => Set<SettingRoom>();
 

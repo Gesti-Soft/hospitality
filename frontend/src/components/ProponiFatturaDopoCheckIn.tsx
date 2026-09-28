@@ -13,10 +13,19 @@ import { FatturaDialog } from './FatturaDialog'
 export function ProponiFatturaDopoCheckIn({
   strutturaId,
   prenotazione,
+  evento = 'check-in',
+  extra,
   onChiudi,
 }: {
   strutturaId: string
   prenotazione: PrenotazioneDto
+  /** Anche dopo il check-out, se il soggiorno non è stato fatturato prima. */
+  evento?: 'check-in' | 'check-out'
+  /**
+   * Il soggiorno è già fatturato ma restano servizi addebitati dopo: si propone un secondo documento
+   * con i soli extra (la proposta della fattura salta quello che è già in un documento).
+   */
+  extra?: { documento: string; daFatturare: string }
   onChiudi: () => void
 }) {
   const [fase, setFase] = useState<'domanda' | 'fattura'>('domanda')
@@ -25,8 +34,12 @@ export function ProponiFatturaDopoCheckIn({
     const ospite = [prenotazione.ospiteNome, prenotazione.ospiteCognome].filter(Boolean).join(' ')
     return (
       <ConfirmDialog
-        titolo="Vuoi generare la fattura?"
-        messaggio={`Check-in registrato${ospite ? ` per ${ospite}` : ''}. Puoi emettere adesso la fattura o la ricevuta del soggiorno, oppure farlo più tardi dalla pagina Fatture o dalla scheda ospiti.`}
+        titolo={extra ? 'Vuoi fatturare gli extra?' : 'Vuoi generare la fattura?'}
+        messaggio={
+          extra
+            ? `${evento === 'check-out' ? 'Check-out' : 'Check-in'} registrato${ospite ? ` per ${ospite}` : ''}. La ${extra.documento} non comprende tutto: ${extra.daFatturare}, addebitati dopo. Puoi emetterli adesso in un secondo documento, oppure più tardi dalla prenotazione o dalla scheda ospiti.`
+            : `${evento === 'check-out' ? 'Check-out' : 'Check-in'} registrato${ospite ? ` per ${ospite}` : ''}. Puoi emettere adesso la fattura o la ricevuta del soggiorno, oppure farlo più tardi dalla pagina Fatture o dalla scheda ospiti.`
+        }
         testoConferma="Sì, genera"
         pericoloso={false}
         onConferma={() => setFase('fattura')}

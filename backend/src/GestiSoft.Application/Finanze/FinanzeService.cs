@@ -1,5 +1,6 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Pagamenti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Domain.Entities;
 
@@ -22,7 +23,7 @@ public class FinanzeService(
     ISpesaRepository spese,
     IEntrataRepository entrate,
     ICauzioneRepository cauzioni,
-    IPrenotazioneRepository prenotazioni,
+    IPagamentoPrenotazioneRepository pagamenti,
     PermessoStrutturaGuard permessoGuard)
 {
     public async Task<IReadOnlyList<Spesa>> ListaSpeseAsync(ICurrentUser currentUser, Guid strutturaId, int? anno, CancellationToken cancellationToken)
@@ -141,7 +142,7 @@ public class FinanzeService(
         var anniSpese = await spese.ListaAnniConDatiAsync(strutturaId, cancellationToken);
         var anniEntrate = await entrate.ListaAnniConDatiAsync(strutturaId, cancellationToken);
         var anniCauzioni = await cauzioni.ListaAnniConDatiAsync(strutturaId, cancellationToken);
-        var anniIncassi = await prenotazioni.ListaAnniConIncassoAsync(strutturaId, cancellationToken);
+        var anniIncassi = await pagamenti.ListaAnniAsync(strutturaId, cancellationToken);
 
         return anniSpese.Concat(anniEntrate).Concat(anniCauzioni).Concat(anniIncassi)
             .Distinct()
@@ -150,7 +151,9 @@ public class FinanzeService(
     }
 
     /// <summary>
-    /// Cassa = incassi prenotazioni non annullate + cauzioni trattenute + entrate − spese. `Saldo` è
+    /// Cassa = incassi delle prenotazioni (pagamenti meno rimborsi, per data del pagamento: un acconto
+    /// di dicembre per gennaio conta a dicembre; anche di prenotazioni poi annullate, se i soldi non
+    /// sono stati restituiti) + cauzioni trattenute + entrate − spese. `Saldo` è
     /// il netto del solo anno richiesto (utile per confrontare un anno con l'altro); `CassaAttuale` è
     /// invece cumulativo su tutta la storia della Struttura, senza filtro anno — quanto dovrebbe
     /// esserci realmente in cassa ad oggi, da quando la struttura ha iniziato a operare (porta
@@ -160,7 +163,7 @@ public class FinanzeService(
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
 
-        var incassoPrenotazioni = await prenotazioni.SommaImportoPagatoAnnoAsync(strutturaId, anno, cancellationToken);
+        var incassoPrenotazioni = await pagamenti.SommaAnnoAsync(strutturaId, anno, cancellationToken);
         var cauzioniAnno = await cauzioni.ListByStrutturaAsync(strutturaId, anno, cancellationToken);
         var totaleCauzioni = cauzioniAnno.Sum(c => c.ImportoCauzione ?? 0);
         var totaleEntrate = (await entrate.ListAsync(strutturaId, anno, cancellationToken)).Sum(e => e.ImportoEntrata);
@@ -170,7 +173,7 @@ public class FinanzeService(
         // La cassa è cumulata: tutto quello che è entrato e uscito dall'inizio FINO all'anno
         // selezionato incluso, mai gli anni successivi (altrimenti guardando il 2025 ci finirebbero
         // dentro gli acconti delle prenotazioni 2026, soldi che a quella data non c'erano ancora).
-        var incassoFinoAdAnno = await prenotazioni.SommaImportoPagatoFinoAdAnnoAsync(strutturaId, anno, cancellationToken);
+        var incassoFinoAdAnno = await pagamenti.SommaFinoAdAnnoAsync(strutturaId, anno, cancellationToken);
         var cauzioniFinoAdAnno = await cauzioni.SommaFinoAdAnnoAsync(strutturaId, anno, cancellationToken);
         var entrateFinoAdAnno = await entrate.SommaFinoAdAnnoAsync(strutturaId, anno, cancellationToken);
         var speseFinoAdAnno = await spese.SommaFinoAdAnnoAsync(strutturaId, anno, cancellationToken);

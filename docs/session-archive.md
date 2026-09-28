@@ -2449,3 +2449,63 @@ Fase 9 completa e committata (commit `fe03934`). Fase 10 (migrazione dati) compl
   verifica connessione non poteva accorgersene: fa login e legge la data, non costruisce Stay.
 - Dati aziendali: aliquota IVA e natura predefinite, da cui parte ogni fattura nuova insieme al
   regime fiscale (prima erano fissi RF01 e 10%). Descrizione fattura vuota e obbligatoria.
+
+---
+
+## Voci spostate dal session report il 2026-09-28
+
+Testo originale, spostato per stare nel limite di 300 righe.
+
+**Fatturazione a norma per il settore ricettivo** (17/09, seconda parte)
+- Normativa verificata sul web prima di scrivere: imposta di soggiorno riaddebitata **esclusa** dalla
+  base imponibile (art. 15 c.1 n.3 DPR 633/72, natura **N1** — chiarimento dell'Agenzia, non N2), bollo
+  di 2 € solo sulle somme **non** soggette a IVA sopra 77,47 € (alternatività IVA/bollo, art. 6 Tabella B
+  DPR 642/72), forfettari obbligati alla fattura elettronica dal 2024, locazione breve di un privato
+  senza P.IVA = ricevuta non fiscale con bollo. Fonti nei messaggi della sessione.
+- **Imposta di soggiorno in fattura**: riga a sé con natura N1 e riepilogo separato nell'XML, riga e
+  spiegazione nel PDF, campo nel dialogo precompilato dalla prenotazione (`TotalTax`). Prima l'interfaccia
+  consigliava di sommarla al prezzo del soggiorno: le faceva pagare l'IVA.
+- **Imposta di bollo**: calcolata sulla sola parte non soggetta (un hotel ordinario non la paga quasi mai,
+  un forfettario quasi sempre), blocco `DatiBollo` nell'XML e dicitura di legge sul PDF.
+- **Ricevuta per locazione breve**: nuovo `TipoEmissione` su `DatiFattura`, **numerazione separata** dalle
+  fatture (l'indice unico ora comprende la serie), niente XML né aliquota/natura, PDF con "Ricevuta" e la
+  dicitura "fuori campo IVA". Nella migration il default è 1 = Fattura: con lo 0 generato da EF le fatture
+  esistenti sarebbero finite in una serie fantasma e i numeri sarebbero ripartiti da 1.
+- **CIN: aggiunto e poi tolto.** Era finito nel piano come voce di conformità senza verificare dove la
+  norma lo pretende: obbligatorio negli annunci, all'esterno della struttura e in dichiarazione dei
+  redditi (RB24/RB25, 730 rigo B12), **non** in fattura. Resta il fatto che è per unità immobiliare,
+  mentre nel software ci sarebbe stato un campo solo per Struttura: Cala Azzurra ha tre appartamenti e
+  presumibilmente tre CIN. Se un domani serve, va sulla Tipologia.
+- Le migration del CIN restano in sequenza (crea → sposta → elimina): erano già state applicate in
+  locale, e una migration applicata si annulla con un'altra, non si riscrive.
+- Restano fuori: corrispettivi telematici e documento commerciale (servono un registratore telematico o
+  la procedura web dell'Agenzia, non pilotabile da software terzi) e l'invio diretto allo SDI.
+
+**PayTourist, credenziali cifrate, design, fattura estero, Osservatorio** (16-17/09, condensate: testo in archivio)
+- PayTourist: portali scelti uno per uno (`paytourist_portali_attivi`), token verificato al salvataggio,
+  una credenziale lasciata vuota non azzera più quella salvata. In `total_from_online_portal` va
+  l'imposta già incassata dal portale (`TotalTax`).
+- **Credenziali cifrate a riposo** (AES-GCM, chiave in `CREDENZIALI_CHIAVE_CIFRATURA`, fuori dal database).
+  ⚠️ Senza quella variabile l'Api non parte. Cambio chiave con `..._PRECEDENTE` per un riavvio
+  (`docs/deploy.md`); la chiave vecchia si conserva finché esistono backup anteriori alla rotazione.
+- Design: palette fredda (l'arancione del marchio è l'unica cosa calda), importi con `stileImporto`
+  e non in monospazio. Super Admin → Clienti: "Entra" sceglie il Cliente; per uscire vanno azzerati
+  sia cliente sia struttura.
+- Fattura estero: nazione dall'ISO2, CAP `00000`, codice destinatario `XXXXXXX`; XML non generato se
+  manca un dato obbligatorio (il PDF sì). Osservatorio: `HotelCode` mancava in `<Stay>`.
+
+**Ultime sessioni sul web**
+- Il nome del fornitore OTA sparito da ogni testo a schermo.
+- Schedine controllate prima dell'invio, non dopo il rifiuto del portale; termini di
+  legge rispettati, invio della singola schedina, destinazione dedotta dalla camera.
+- Invii alle PA: tentativi limitati con attesa crescente, niente più retry al minuto.
+- Osservatorio: basta centinaia di log identici ogni sera; solo la giornata da chiudere è
+  trasmissibile, letta dal servizio e non dalla cache locale.
+- La scelta della Struttura del Super Admin sopravvive al ricaricamento della pagina.
+- Piani prezzo OTA: percentuale ed euro erano scambiati.
+- Numero prenotazione non più riassegnato, e visibile sulle dirette.
+- Prenotazioni OTA: arrivi, modifiche ed errori lasciano traccia.
+- Login senza "password dimenticata", e ognuno sa a chi rivolgersi.
+- Sicurezza accessi: blocco dopo 5 tentativi, 2FA con app authenticator, export tracciato;
+  log del Cliente limitato alla struttura selezionata.
+- Fattura: nazione ISO2 dedotta dalla cittadinanza. Cassa cumulata fino all'anno scelto.

@@ -1,6 +1,8 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
+using GestiSoft.Application.Exceptions;
 using GestiSoft.Contracts.Camere;
+using GestiSoft.Contracts.Servizi;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -47,11 +49,32 @@ public class PrezziCameraController(PrezziCameraService service, ICurrentUser cu
         [FromQuery] bool cauzione = true,
         [FromQuery] TipoTrattamento? trattamento = null,
         [FromQuery] Guid? prenotazioneId = null,
+        // Servizi extra come "idRiga:idServizio:quantità:dal:al" (idRiga e al "-" se mancano), uno per parametro.
+        [FromQuery] string[]? servizi = null,
         CancellationToken cancellationToken = default)
     {
+        var richieste = (servizi ?? []).Select(LeggiServizio).ToList();
         var preventivo = await service.CalcolaPreventivoAsync(
-            currentUser, strutturaId, cameraId, checkIn, checkOut, numeroOspiti, etaBambini ?? [], spesePulizia, animali, cauzione, trattamento, prenotazioneId, cancellationToken);
+            currentUser, strutturaId, cameraId, checkIn, checkOut, numeroOspiti, etaBambini ?? [], spesePulizia, animali, cauzione, trattamento, prenotazioneId, richieste, cancellationToken);
         return Ok(new PreventivoDto(preventivo.Notti, preventivo.Totale));
+    }
+
+    private static ServizioPrenotazioneRichiesta LeggiServizio(string valore)
+    {
+        var parti = valore.Split(':');
+        if (parti.Length == 5
+            && (parti[0] == "-" || Guid.TryParse(parti[0], out _))
+            && Guid.TryParse(parti[1], out var servizioId)
+            && int.TryParse(parti[2], out var quantita)
+            && DateOnly.TryParseExact(parti[3], "yyyy-MM-dd", out var dal)
+            && (parti[4] == "-" || DateOnly.TryParseExact(parti[4], "yyyy-MM-dd", out _)))
+        {
+            Guid? rigaId = parti[0] == "-" ? null : Guid.Parse(parti[0]);
+            DateOnly? al = parti[4] == "-" ? null : DateOnly.ParseExact(parti[4], "yyyy-MM-dd");
+            return new ServizioPrenotazioneRichiesta(rigaId, servizioId, quantita, dal, al);
+        }
+
+        throw new ConflictException("Servizio del preventivo non valido.");
     }
 
     /// <summary>Fasce d'età del supplemento per persona in più della tipologia (vedi FasciaEtaSupplemento).</summary>

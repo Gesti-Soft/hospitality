@@ -80,6 +80,14 @@ public class Prenotazione : TenantEntity
     /// <inheritdoc cref="TrattamentoPrezzoBambino"/>
     public int? TrattamentoEtaMassimaBambini { get; set; }
 
+    /// <summary>
+    /// Quello che l'OTA ha mandato oltre ai dati standard: richieste dell'ospite, trattamento, extra
+    /// acquistati, informazioni aggiuntive del portale. Riscritto a ogni modifica dall'OTA, mai
+    /// modificabile a mano. Può contenere dati particolari (allergie, esigenze di salute): non va nei
+    /// log né all'addetto pulizie; i numeri di carta vengono tolti prima di salvarlo.
+    /// </summary>
+    public string? NoteOta { get; set; }
+
     public bool StatePolice { get; set; }
 
     public bool PMS { get; set; }
@@ -129,6 +137,13 @@ public class Prenotazione : TenantEntity
     /// create manualmente/non da OTA.
     /// </summary>
     public int? IdPrenotazioneWubook { get; set; }
+
+    /// <summary>
+    /// Posizione della camera nell'ordine OTA (0 = la prima). Un ordine con più camere diventa una
+    /// prenotazione per camera, tutte con lo stesso <see cref="IdPrenotazioneWubook"/>: è quello che le
+    /// lega tra loro, e con questo indice fa da chiave di deduplica. 0 per le prenotazioni non OTA.
+    /// </summary>
+    public int IndiceCameraOta { get; set; }
 
     /// <summary>
     /// L'ospite ha rinunciato alla pulizia durante il soggiorno. È una sua scelta, non una riduzione
