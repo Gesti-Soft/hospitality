@@ -21,7 +21,6 @@ import {
   type ServizioStrutturaDto,
 } from '../api/servizi'
 import { AliquotaIva, type NaturaIva } from '../api/fatturazione'
-import { useMobile } from '../lib/useMobile'
 import { fontDisplay, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -57,25 +56,26 @@ export function ServiziExtraStruttura({ strutturaId, puoScrivere }: { strutturaI
   if (servizi.isLoading) return <Skeleton variant="rounded" height={120} />
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 760 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 17 }}>Servizi extra</Typography>
-        <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary, mt: 0.5 }}>
-          Escursioni, parcheggio, transfer e tutto quello che vendi oltre al soggiorno. Nella prenotazione se ne possono aggiungere più
-          d&apos;uno; il prezzo resta quello del momento in cui è stato aggiunto. Non vengono inviati all&apos;OTA.
-        </Typography>
       </Box>
 
-      {servizi.data?.map((s) => <SchedaServizio key={s.id} strutturaId={strutturaId} salvato={s} puoScrivere={puoScrivere} />)}
-      {nuove.map((chiave) => (
-        <SchedaServizio
-          key={`nuovo-${chiave}`}
-          strutturaId={strutturaId}
-          salvato={null}
-          puoScrivere={puoScrivere}
-          onChiudi={() => setNuove((n) => n.filter((c) => c !== chiave))}
-        />
-      ))}
+      {/* Stessa griglia dei trattamenti: tante schede per riga quante ne stanno. */}
+      {((servizi.data?.length ?? 0) > 0 || nuove.length > 0) && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 380px), 1fr))', gap: 2, alignItems: 'start' }}>
+          {servizi.data?.map((s) => <SchedaServizio key={s.id} strutturaId={strutturaId} salvato={s} puoScrivere={puoScrivere} />)}
+          {nuove.map((chiave) => (
+            <SchedaServizio
+              key={`nuovo-${chiave}`}
+              strutturaId={strutturaId}
+              salvato={null}
+              puoScrivere={puoScrivere}
+              onChiudi={() => setNuove((n) => n.filter((c) => c !== chiave))}
+            />
+          ))}
+        </Box>
+      )}
 
       {servizi.data?.length === 0 && nuove.length === 0 && (
         <Typography sx={{ fontSize: 13, color: tokens.textSecondary }}>Nessun servizio extra.</Typography>
@@ -111,7 +111,6 @@ function SchedaServizio({
   /** Solo per una scheda nuova: la toglie dopo il salvataggio (compare nell'elenco) o se si rinuncia. */
   onChiudi?: () => void
 }) {
-  const mobile = useMobile()
   const toast = useToast()
   const crea = useCreaServizio(strutturaId)
   const aggiorna = useAggiornaServizio(strutturaId)
@@ -168,7 +167,8 @@ function SchedaServizio({
 
   return (
     <Box sx={{ border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 1.5, alignItems: mobile ? 'stretch' : 'center' }}>
+      {/* Un campo per riga, come nei trattamenti: le schede sono affiancate e strette. */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <TextField
           label="Nome"
           size="small"
@@ -177,7 +177,7 @@ function SchedaServizio({
           disabled={disabilitato}
           placeholder="Es. Escursione in barca"
           slotProps={{ htmlInput: { maxLength: 100 } }}
-          sx={{ flex: 2 }}
+          fullWidth
         />
         <TextField
           label="Prezzo (€)"
@@ -187,9 +187,9 @@ function SchedaServizio({
           onChange={(e) => setPrezzo(e.target.value)}
           disabled={disabilitato}
           slotProps={{ htmlInput: { min: 0 } }}
-          sx={{ flex: 1 }}
+          fullWidth
         />
-        <TextField select label="Si conta" size="small" value={modalita} onChange={(e) => setModalita(Number(e.target.value) as ModalitaPrezzoServizio)} disabled={disabilitato} sx={{ flex: 1.3 }}>
+        <TextField select label="Si conta" size="small" value={modalita} onChange={(e) => setModalita(Number(e.target.value) as ModalitaPrezzoServizio)} disabled={disabilitato} fullWidth>
           {MODALITA.map((m) => (
             <MenuItem key={m} value={m}>
               {NOME_MODALITA[m]}
@@ -208,7 +208,7 @@ function SchedaServizio({
         disabled={disabilitato}
         helperText="Es. SPA o parcheggio per soli ospiti: spesso 10% come l'alloggio; aperti anche agli esterni: 22%. Chiedi al commercialista."
         slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
-        sx={{ maxWidth: mobile ? undefined : 360 }}
+        fullWidth
       >
         <MenuItem value="">Come la struttura (aliquota predefinita)</MenuItem>
         {ALIQUOTE_POSITIVE.map((a) => (

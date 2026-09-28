@@ -9,7 +9,6 @@ import Typography from '@mui/material/Typography'
 import { ApiError } from '../api/client'
 import { TipoVariazionePrezzo } from '../api/tipologie'
 import { NOME_TRATTAMENTO, TipoTrattamento, useSalvaTrattamento, useTrattamenti, type TrattamentoStrutturaDto } from '../api/trattamenti'
-import { useMobile } from '../lib/useMobile'
 import { fontDisplay, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { SceltaEuroPercentuale } from './SceltaEuroPercentuale'
@@ -26,25 +25,28 @@ export function TrattamentiStruttura({ strutturaId, puoScrivere }: { strutturaId
   if (trattamenti.isLoading) return <Skeleton variant="rounded" height={260} />
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 760 }}>
-      <Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ maxWidth: 760 }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 17 }}>Trattamenti</Typography>
         <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary, mt: 0.5 }}>
           Prezzi a persona e a notte, in aggiunta al prezzo della camera. Uno per prenotazione; il prezzo resta quello del momento in cui
           la prenotazione è stata fatta. Non vengono inviati all&apos;OTA.
         </Typography>
       </Box>
-      {TIPI.map((tipo) => (
-        <SchedaTrattamento
-          // Nasce a listino già caricato (sopra si aspetta il caricamento) e poi tiene il suo stato:
-          // salvarne una non deve cancellare quello che si sta scrivendo nelle altre.
-          key={tipo}
-          strutturaId={strutturaId}
-          tipo={tipo}
-          salvato={trattamenti.data?.find((t) => t.tipo === tipo) ?? null}
-          puoScrivere={puoScrivere}
-        />
-      ))}
+      {/* Tante schede per riga quante ne stanno (4 su uno schermo largo, una sul telefono). */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 380px), 1fr))', gap: 2, alignItems: 'start' }}>
+        {TIPI.map((tipo) => (
+          <SchedaTrattamento
+            // Nasce a listino già caricato (sopra si aspetta il caricamento) e poi tiene il suo stato:
+            // salvarne una non deve cancellare quello che si sta scrivendo nelle altre.
+            key={tipo}
+            strutturaId={strutturaId}
+            tipo={tipo}
+            salvato={trattamenti.data?.find((t) => t.tipo === tipo) ?? null}
+            puoScrivere={puoScrivere}
+          />
+        ))}
+      </Box>
     </Box>
   )
 }
@@ -60,7 +62,6 @@ function SchedaTrattamento({
   salvato: TrattamentoStrutturaDto | null
   puoScrivere: boolean
 }) {
-  const mobile = useMobile()
   const toast = useToast()
   const salva = useSalvaTrattamento(strutturaId)
   const [attivo, setAttivo] = useState(salvato?.attivo ?? false)
@@ -108,7 +109,8 @@ function SchedaTrattamento({
         />
       </Box>
 
-      <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 1.5, alignItems: mobile ? 'stretch' : 'center' }}>
+      {/* Un campo per riga: le schede sono affiancate e strette, in riga le etichette si tagliavano. */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <TextField
           label="Prezzo a persona (€/notte)"
           type="number"
@@ -117,11 +119,11 @@ function SchedaTrattamento({
           onChange={(e) => setPrezzo(e.target.value)}
           disabled={disabilitato}
           slotProps={{ htmlInput: { min: 0 } }}
-          sx={{ flex: 1 }}
+          fullWidth
         />
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flex: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <TextField
-            label={inPercentuale ? 'Bambini (% dell’adulto)' : 'Bambini (€/notte)'}
+            label={inPercentuale ? 'Bambini a notte (% dell’adulto)' : 'Bambini a notte (€)'}
             type="number"
             size="small"
             value={prezzoBambini}
@@ -144,7 +146,7 @@ function SchedaTrattamento({
           }}
           disabled={disabilitato || prezzoBambini.trim() === ''}
           slotProps={{ htmlInput: { min: 0, max: 17 } }}
-          sx={{ width: mobile ? 'auto' : 150 }}
+          fullWidth
         />
       </Box>
       <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
@@ -155,9 +157,9 @@ function SchedaTrattamento({
         control={<Checkbox checked={stampaTicket} onChange={(e) => setStampaTicket(e.target.checked)} disabled={disabilitato} />}
         label="Stampa ticket"
       />
-      {(stampaTicket || tipo === TipoTrattamento.Colazione) && (
+      {stampaTicket && (
         <TextField
-          label={tipo === TipoTrattamento.Colazione ? 'Bar o esercizio convenzionato (facoltativo)' : 'Ristorante o esercizio convenzionato (facoltativo)'}
+          label="Esercizio convenzionato (facoltativo)"
           size="small"
           value={esercizio}
           onChange={(e) => setEsercizio(e.target.value)}
