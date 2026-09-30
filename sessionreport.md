@@ -1,9 +1,9 @@
 # Session report — Migrazione GestiSoft a Web
 
-Ultimo aggiornamento: 2026-09-28. Stato: web in produzione sulla VPS, Fase 2
+Ultimo aggiornamento: 2026-09-30. Stato: web in produzione sulla VPS, Fase 2
 della sincronizzazione col desktop ferma sul ramo `fase-2-sync-locale`. Su `master` il lavoro del
-25/09 e del 28/09 (servizi extra, pagamenti, check-out, ordini OTA multi-camera, fattura a righe,
-ticket, forfettario) è committato ma **non deployato**; il 28/09 è provato solo in parte nel browser.
+25/09, 28/09 e 30/09 (servizi extra, pagamenti, check-out, fattura a righe, forfettario, servizi e
+trattamenti dal sito web) è committato ma **non deployato**; 28/09 e 30/09 provati solo in parte.
 
 > **Cap: 300 righe.** Questo file è caricato a ogni sessione, la sua dimensione è un
 > costo permanente di contesto. Voci nuove brevi: cosa è cambiato, perché, cosa resta
@@ -51,6 +51,9 @@ per scelta, ma finché non esiste la Fase 1 non è chiusa. Serve un PC pulito pe
 
 Ordine non di priorità. Dettagli e design già concordati: vedi archivio.
 
+- **Servizi e trattamenti dal sito web (30/09) mai provati con una prenotazione vera** via WuBook: non è
+  verificato che `ancillary` torni con le chiavi del sito né che `boards` sia valorizzato. La migration
+  `CodiceServizioSitoWeb` (colonna nullable) si applica all'avvio dell'Api: non ancora in nessun ambiente.
 - **Portali online PayTourist: mai provati contro un ente che li abilita davvero.** Castellammare
   non ne ha, quindi la scelta dei portali è stata verificata solo nella parte che dice "non ce ne
   sono". Da riprovare su un Comune convenzionato.
@@ -227,6 +230,12 @@ alle PA sono irreversibili: mai inviare nulla senza richiesta esplicita.
   propria; il backend rifiuta righe con IVA (verificato sul web, Agenzia Entrate).
 - **Ticket dei trattamenti**: spunta "Stampa ticket" sui quattro trattamenti fissi (niente trattamenti creati
   dall'utente, scelta sua); l'OTA non la tocca. Colazione: mattine dopo le notti; gli altri: giorni delle notti.
+- **Sito web della struttura (30/09)**: vende servizi extra e trattamenti e li manda in `ancillary`: `servizi`
+  = "CODICE:QUANTITÀ:PREZZO" separati da ";" (`ServiziSitoWeb`), `trattamento_codice` (bb/hb/fb/ai/nb, letto dopo
+  `boards` e prima del testo) e i prezzi del trattamento, che si copiano al posto del listino. Il servizio si
+  riconosce dall'**Identificativo** (`ServizioStruttura.Codice`, facoltativo, univoco); righe con autore "sito
+  web", le sole che l'import aggiorna. Il totale WuBook li comprende già: non si tocca.
+- **Notifica di cancellazione OTA** dopo 5 minuti (finestra per fonderla con la modifica): voluta, confermata il 30/09.
 
 ## Pattern consolidati (riusare, non reinventare)
 
@@ -255,27 +264,16 @@ alle PA sono irreversibili: mai inviare nulla senza richiesta esplicita.
 
 Una riga per sessione, dalla più recente. I dettagli sono nell'archivio.
 
+**Servizi e trattamenti venduti dal sito web** (30/09, commit `c9aee69`, `03ee341`)
+- Identificativo dei servizi extra; import WuBook che aggiunge i servizi del sito e riconosce il trattamento
+  dal codice, con i prezzi pagati sul sito. 287 test verdi.
+
 **Prenotazioni, extra, pagamenti, fatture** (28/09)
-- Dialogo prenotazione a tab (Soggiorno / Trattamento e servizi / Pagamenti), importi fissi in basso, assegnazione
-  automatica con preventivo e avviso di tipologia piena (`camera-assegnabile`), "Adulti" separati dai bambini.
-- Trattamento e note dall'OTA; all inclusive; servizi extra con listino, date e addebiti; ordini OTA multi-camera
-  (prima persi). Registro pagamenti, check-out con saldo, "Addebita" e sezione "In struttura" in Check-in/out.
-- Bug corretti: IVA dell'XML con imposta di soggiorno; aliquota "10" → "10.00"; AliquotaIVA mancante con la natura.
-- Fattura a righe e multi-prenotazione, aliquota IVA sui servizi extra. 269 test verdi.
-- Poi: ticket sui trattamenti, N2.2 automatico per il forfettario, "Fattura gli extra" (`da-fatturare`), etichetta
-  Fattura/Ricevuta anche nel dialogo prenotazione, cliente con Cittadinanza a select, spaziatura dei tab.
+- Dialogo a tab, servizi extra e trattamenti, ordini OTA multi-camera, registro pagamenti, check-out con saldo,
+  fattura a righe e multi-prenotazione, ticket, forfettario, "Fattura gli extra"; bug IVA dell'XML. Testo in archivio.
 
-**Assistenza, ricevute, check-in, permessi, housekeeping, prezzi** (25/09, commit `82267b6`…`c559e57`)
-- Ticket di assistenza con foto ed email SMTP; ricevuta di locazione breve completa (tipo, soggiorno,
-  immobile, pagamento, cedolare, marca); "Vuoi generare la fattura?" dopo il check-in.
-- Permessi separati, pulizie durante il soggiorno (14 test) e notifiche pulizie; stato camera manuale
-  con i paletti del check-in.
-- Ricevuta della Polizia di Stato (SOAP `Ricevuta`, ultimi 30 giorni escluso oggi, non conservata).
-- Prezzo per occupazione (età bambini, fasce, riduzione, € o %; 20+ test); prezzi all'OTA a ogni
-  salvataggio (**mai provato contro WuBook**); trattamenti con buoni colazione PDF.
-
-**Fatturazione a norma, PayTourist, credenziali cifrate, ultime sessioni di settembre** (fino al 17/09):
-testo in `docs/session-archive.md`, voci spostate il 28/09. Le decisioni ancora in vigore sono sopra.
+**Fino al 25/09** (fatturazione a norma, PayTourist, credenziali cifrate, assistenza, ricevute, permessi,
+pulizie, prezzi per occupazione): testo in `docs/session-archive.md`. Le decisioni in vigore sono sopra.
 
 **Sincronizzazione col desktop**
 - Fase 1 desktop costruita e provata contro un Postgres vero; pacchetto `GestiSoft.Domain` anticipato.

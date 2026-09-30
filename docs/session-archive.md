@@ -2509,3 +2509,24 @@ Testo originale, spostato per stare nel limite di 300 righe.
 - Sicurezza accessi: blocco dopo 5 tentativi, 2FA con app authenticator, export tracciato;
   log del Cliente limitato alla struttura selezionata.
 - Fattura: nazione ISO2 dedotta dalla cittadinanza. Cassa cumulata fino all'anno scelto.
+
+## Voci spostate dal session report il 2026-09-30
+
+**Assistenza, ricevute, check-in, permessi, housekeeping, prezzi** (25/09, commit `82267b6`…`c559e57`)
+- Ticket di assistenza con foto ed email SMTP; ricevuta di locazione breve completa (tipo, soggiorno,
+  immobile, pagamento, cedolare, marca); "Vuoi generare la fattura?" dopo il check-in.
+- Permessi separati, pulizie durante il soggiorno (14 test) e notifiche pulizie; stato camera manuale
+  con i paletti del check-in.
+- Ricevuta della Polizia di Stato (SOAP `Ricevuta`, ultimi 30 giorni escluso oggi, non conservata).
+- Prezzo per occupazione (età bambini, fasce, riduzione, € o %; 20+ test); prezzi all'OTA a ogni
+  salvataggio (**mai provato contro WuBook**); trattamenti con buoni colazione PDF.
+
+**Prenotazioni, extra, pagamenti, fatture** (28/09)
+- Dialogo prenotazione a tab (Soggiorno / Trattamento e servizi / Pagamenti), importi fissi in basso, assegnazione
+  automatica con preventivo e avviso di tipologia piena (`camera-assegnabile`), "Adulti" separati dai bambini.
+- Trattamento e note dall'OTA; all inclusive; servizi extra con listino, date e addebiti; ordini OTA multi-camera
+  (prima persi). Registro pagamenti, check-out con saldo, "Addebita" e sezione "In struttura" in Check-in/out.
+- Bug corretti: IVA dell'XML con imposta di soggiorno; aliquota "10" → "10.00"; AliquotaIVA mancante con la natura.
+- Fattura a righe e multi-prenotazione, aliquota IVA sui servizi extra. 269 test verdi.
+- Poi: ticket sui trattamenti, N2.2 automatico per il forfettario, "Fattura gli extra" (`da-fatturare`), etichetta
+  Fattura/Ricevuta anche nel dialogo prenotazione, cliente con Cittadinanza a select, spaziatura dei tab.
