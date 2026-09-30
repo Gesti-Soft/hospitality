@@ -12,6 +12,7 @@ public class ServizioStrutturaConfiguration : IEntityTypeConfiguration<ServizioS
         builder.ConfigureTenant();
 
         builder.Property(s => s.Nome).HasMaxLength(100).IsRequired();
+        builder.Property(s => s.Codice).HasMaxLength(30);
         builder.Property(s => s.Prezzo).HasPrecision(18, 2);
     }
 }

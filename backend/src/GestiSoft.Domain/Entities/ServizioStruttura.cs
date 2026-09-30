@@ -12,6 +12,13 @@ public class ServizioStruttura : TenantEntity
 {
     public string Nome { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Identificativo stabile (es. "SPA"), lo stesso del servizio sul sito web della struttura: le
+    /// prenotazioni del sito arrivano da WuBook con i servizi indicati per codice (vedi
+    /// ServiziSitoWeb), e da qui si sa di quale servizio si tratta. Facoltativo, univoco per struttura.
+    /// </summary>
+    public string? Codice { get; set; }
+
     public decimal Prezzo { get; set; }
 
     public ModalitaPrezzoServizio Modalita { get; set; } = ModalitaPrezzoServizio.APersona;

@@ -4,6 +4,7 @@ using GestiSoft.Application.Logging;
 using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
+using GestiSoft.Application.Servizi;
 using GestiSoft.Application.Trattamenti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -34,7 +35,8 @@ public class WubookPrenotazioniService(
     PermessoStrutturaGuard permessoGuard,
     ILogEventoService logEventi,
     NotificaService notificaService,
-    ITrattamentoStrutturaRepository listiniTrattamento)
+    ITrattamentoStrutturaRepository listiniTrattamento,
+    IServizioStrutturaRepository serviziStruttura)
 {
     private enum EsitoBooking { Creata, Aggiornata, Annullata, Ignorata }
 
@@ -338,6 +340,7 @@ public class WubookPrenotazioniService(
             entity.PMS = struttura is null || !struttura.OsservatorioAbilitato;
             entity.PayTourist = struttura is null || !struttura.PayTouristAbilitato;
             await prenotazioni.AddAsync(entity, cancellationToken);
+            await ImportaServiziSitoAsync(strutturaId, entity, booking, camera.Indice, nomeCanale, cancellationToken);
 
             // L'arrivo di una prenotazione da OTA va sempre a log, non solo quando qualcosa va
             // storto: prima era l'unico evento Wubook a non lasciare traccia (cancellazione e
@@ -370,6 +373,7 @@ public class WubookPrenotazioniService(
         else
         {
             await prenotazioni.UpdateAsync(entity, cancellationToken);
+            var serviziCambiati = await ImportaServiziSitoAsync(strutturaId, entity, booking, camera.Indice, nomeCanale, cancellationToken);
 
             // Rete di sicurezza per l'arrivo mai segnalato. I passi dell'import non sono in
             // transazione (prima la prenotazione, poi la notifica, poi l'ospite, ciascuno con il
@@ -428,6 +432,11 @@ public class WubookPrenotazioniService(
             if (primaCameraId != entity.CameraId)
             {
                 cambiamenti.Add(entity.CameraId is null ? "camera assegnata rimossa (serve riassegnazione manuale)" : "camera assegnata cambiata");
+            }
+
+            if (serviziCambiati is not null)
+            {
+                cambiamenti.Add(serviziCambiati);
             }
 
             if (cambiamenti.Count > 0)
@@ -518,6 +527,93 @@ public class WubookPrenotazioniService(
                 categoria: "Wubook",
                 cancellationToken: cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Servizi extra venduti dal sito web (vedi ServiziSitoWeb), sulla prima camera dell'ordine: il
+    /// servizio si riconosce dal codice, il prezzo è quello pagato sul sito (come ogni vendita, copiato
+    /// sulla riga). Il loro importo è già nel totale che manda WuBook, quindi il totale non cambia; la
+    /// fattura li separa dal soggiorno. Tocca solo le righe che ha aggiunto lui: quelle aggiunte a mano
+    /// restano. Un servizio a notte vale per una notte, così l'importo resta quantità × prezzo come sul
+    /// sito. Ritorna la descrizione del cambiamento, null se non è cambiato nulla.
+    /// </summary>
+    private async Task<string?> ImportaServiziSitoAsync(
+        Guid strutturaId, Prenotazione entity, WubookPrenotazione booking, int indiceCamera, string nomeCanale, CancellationToken cancellationToken)
+    {
+        if (indiceCamera > 0 || entity.CheckIn is not { } checkIn)
+        {
+            return null;
+        }
+
+        var venduti = ServiziSitoWeb.Leggi(booking.Extra);
+        var esistenti = await serviziStruttura.ListByPrenotazioneAsync(strutturaId, entity.Id, cancellationToken);
+        var dalSito = esistenti.Where(r => r.AggiuntoDa == ServiziSitoWeb.AggiuntoDa).ToList();
+        if (venduti.Count == 0 && dalSito.Count == 0)
+        {
+            return null;
+        }
+
+        var listino = await serviziStruttura.ListByStrutturaAsync(strutturaId, cancellationToken);
+        var arrivo = DateOnly.FromDateTime(checkIn);
+        var daRiusare = dalSito.ToList();
+        var nuove = new List<PrenotazioneServizio>();
+        var sconosciuti = new List<string>();
+        foreach (var venduto in venduti)
+        {
+            var servizio = listino.FirstOrDefault(s => s.Codice == venduto.Codice);
+            if (servizio is null)
+            {
+                sconosciuti.Add(venduto.Codice);
+                continue;
+            }
+
+            // Stessa riga (stesso Id) solo a parità di servizio e prezzo: il salvataggio di una riga
+            // esistente aggiorna quantità e date, non il prezzo con cui è stata venduta.
+            var riga = daRiusare.FirstOrDefault(r => r.ServizioId == servizio.Id && r.PrezzoUnitario == venduto.PrezzoUnitario);
+            if (riga is not null)
+            {
+                daRiusare.Remove(riga);
+            }
+
+            nuove.Add(new PrenotazioneServizio
+            {
+                Id = riga?.Id ?? Guid.NewGuid(),
+                CreatedAtUtc = riga?.CreatedAtUtc ?? DateTime.UtcNow,
+                StrutturaId = strutturaId,
+                PrenotazioneId = entity.Id,
+                ServizioId = servizio.Id,
+                Nome = riga?.Nome ?? servizio.Nome,
+                Modalita = riga?.Modalita ?? servizio.Modalita,
+                PrezzoUnitario = venduto.PrezzoUnitario,
+                Quantita = Math.Min(venduto.Quantita, ServiziService.QuantitaMassima),
+                Dal = arrivo,
+                Al = ServiziService.PerNotte(riga?.Modalita ?? servizio.Modalita) ? arrivo.AddDays(1) : null,
+                Origine = OrigineServizio.ConLaPrenotazione,
+                AggiuntoDa = ServiziSitoWeb.AggiuntoDa,
+            });
+        }
+
+        if (sconosciuti.Count > 0)
+        {
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Prenotazione #{entity.NumeroPrenotazione} da {nomeCanale} (rcode={booking.RCode}): il sito ha venduto servizi con codice {string.Join(", ", sconosciuti)}, che nessun servizio in Impostazioni → Servizi ha. Non aggiunti alla prenotazione: il loro importo è comunque nel totale, va separato a mano.",
+                origine: "Wubook",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "Wubook",
+                cancellationToken: cancellationToken);
+        }
+
+        static string Chiave(PrenotazioneServizio r) => $"{r.ServizioId}|{r.Quantita}|{r.PrezzoUnitario}";
+        if (dalSito.Select(Chiave).Order().SequenceEqual(nuove.Select(Chiave).Order()))
+        {
+            return null;
+        }
+
+        var righe = esistenti.Where(r => r.AggiuntoDa != ServiziSitoWeb.AggiuntoDa).Concat(nuove).ToList();
+        await serviziStruttura.SostituisciDellaPrenotazioneAsync(strutturaId, entity.Id, righe, cancellationToken);
+        return $"servizi dal sito ora {ServiziService.Descrivi(nuove)}";
     }
 
     private static string NomeTrattamento(TipoTrattamento? tipo) => tipo is { } t ? TrattamentiService.Nome(t).ToLowerInvariant() : "solo pernottamento";

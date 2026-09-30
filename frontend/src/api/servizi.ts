@@ -46,6 +46,8 @@ export interface ServizioStrutturaDto {
   /** Con cui si fattura; entrambe null = quella predefinita della struttura. 0% sempre con la natura. */
   aliquotaIva: AliquotaIva | null
   natura: NaturaIva | null
+  /** Lo stesso del servizio sul sito web: così le prenotazioni del sito arrivano con i servizi già aggiunti. */
+  codice: string | null
 }
 
 export interface SalvaServizioRequest {
@@ -55,6 +57,7 @@ export interface SalvaServizioRequest {
   attivo: boolean
   aliquotaIva: AliquotaIva | null
   natura: NaturaIva | null
+  codice: string | null
 }
 
 /**

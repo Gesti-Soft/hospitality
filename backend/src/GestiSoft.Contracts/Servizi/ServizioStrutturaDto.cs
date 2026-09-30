@@ -3,10 +3,11 @@ using GestiSoft.Domain.Enums;
 namespace GestiSoft.Contracts.Servizi;
 
 /// <summary>Servizio extra del listino della struttura (escursione, parcheggio, transfer…).</summary>
-/// AliquotaIva e Natura entrambe null = quella predefinita della struttura.
-public record ServizioStrutturaDto(Guid Id, string Nome, decimal Prezzo, ModalitaPrezzoServizio Modalita, bool Attivo, AliquotaIva? AliquotaIva = null, NaturaIva? Natura = null);
+/// AliquotaIva e Natura entrambe null = quella predefinita della struttura. Codice: lo stesso del
+/// servizio sul sito web, null se non venduto dal sito.
+public record ServizioStrutturaDto(Guid Id, string Nome, decimal Prezzo, ModalitaPrezzoServizio Modalita, bool Attivo, AliquotaIva? AliquotaIva = null, NaturaIva? Natura = null, string? Codice = null);
 
-public record SalvaServizioRequest(string Nome, decimal Prezzo, ModalitaPrezzoServizio Modalita, bool Attivo, AliquotaIva? AliquotaIva = null, NaturaIva? Natura = null);
+public record SalvaServizioRequest(string Nome, decimal Prezzo, ModalitaPrezzoServizio Modalita, bool Attivo, AliquotaIva? AliquotaIva = null, NaturaIva? Natura = null, string? Codice = null);
 
 /// <summary>
 /// Servizio extra venduto con una prenotazione, con nome e prezzo copiati al momento dell'aggiunta.

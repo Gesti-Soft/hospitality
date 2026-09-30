@@ -3,6 +3,7 @@ using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Fatturazione;
 using GestiSoft.Application.Logging;
 using GestiSoft.Application.Prenotazioni;
+using GestiSoft.Application.Wubook;
 using GestiSoft.Contracts.Servizi;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -36,10 +37,10 @@ public class ServiziService(
     public async Task<ServizioStruttura> CreaAsync(ICurrentUser currentUser, Guid strutturaId, SalvaServizioRequest request, CancellationToken cancellationToken)
     {
         await EnsurePuoModificareAsync(currentUser, strutturaId, cancellationToken);
-        var nome = await ValidaAsync(strutturaId, servizioId: null, request, cancellationToken);
+        var (nome, codice) = await ValidaAsync(strutturaId, servizioId: null, request, cancellationToken);
 
         var entity = new ServizioStruttura { StrutturaId = strutturaId };
-        Copia(entity, nome, request);
+        Copia(entity, nome, codice, request);
         await servizi.UpsertAsync(entity, cancellationToken);
         return entity;
     }
@@ -48,9 +49,9 @@ public class ServiziService(
     {
         await EnsurePuoModificareAsync(currentUser, strutturaId, cancellationToken);
         var entity = await GetNonEliminatoAsync(strutturaId, servizioId, cancellationToken);
-        var nome = await ValidaAsync(strutturaId, servizioId, request, cancellationToken);
+        var (nome, codice) = await ValidaAsync(strutturaId, servizioId, request, cancellationToken);
 
-        Copia(entity, nome, request);
+        Copia(entity, nome, codice, request);
         entity.UpdatedAtUtc = DateTime.UtcNow;
         await servizi.UpsertAsync(entity, cancellationToken);
         return entity;
@@ -295,7 +296,7 @@ public class ServiziService(
         return entity is { Eliminato: false } ? entity : throw new NotFoundException("Servizio non trovato.");
     }
 
-    private async Task<string> ValidaAsync(Guid strutturaId, Guid? servizioId, SalvaServizioRequest request, CancellationToken cancellationToken)
+    private async Task<(string Nome, string? Codice)> ValidaAsync(Guid strutturaId, Guid? servizioId, SalvaServizioRequest request, CancellationToken cancellationToken)
     {
         var nome = request.Nome?.Trim() ?? "";
         if (nome == "")
@@ -329,18 +330,31 @@ public class ServiziService(
             CalcoloFattura.AliquotaENatura(request.AliquotaIva, request.Natura, $"Servizio \"{nome}\"");
         }
 
+        // Maiuscolo: "spa" e "SPA" sono lo stesso codice, come sul sito.
+        var codice = string.IsNullOrWhiteSpace(request.Codice) ? null : request.Codice.Trim().ToUpperInvariant();
+        if (codice is not null && !ServiziSitoWeb.FormatoCodice().IsMatch(codice))
+        {
+            throw new ConflictException("L'identificativo va da 2 a 30 caratteri tra lettere, cifre, _ e - (es. SPA).");
+        }
+
         var altri = await servizi.ListByStrutturaAsync(strutturaId, cancellationToken);
         if (altri.Any(s => s.Id != servizioId && string.Equals(s.Nome, nome, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ConflictException($"Esiste già un servizio \"{nome}\".");
         }
 
-        return nome;
+        if (codice is not null && altri.FirstOrDefault(s => s.Id != servizioId && s.Codice == codice) is { } conStessoCodice)
+        {
+            throw new ConflictException($"L'identificativo {codice} è già di \"{conStessoCodice.Nome}\": ogni servizio ha il suo.");
+        }
+
+        return (nome, codice);
     }
 
-    private static void Copia(ServizioStruttura entity, string nome, SalvaServizioRequest request)
+    private static void Copia(ServizioStruttura entity, string nome, string? codice, SalvaServizioRequest request)
     {
         entity.Nome = nome;
+        entity.Codice = codice;
         entity.Prezzo = request.Prezzo;
         entity.Modalita = request.Modalita;
         entity.Attivo = request.Attivo;

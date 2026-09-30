@@ -120,6 +120,7 @@ function SchedaServizio({
   const [modalita, setModalita] = useState<ModalitaPrezzoServizio>(salvato?.modalita ?? ModalitaPrezzoServizio.APersona)
   const [attivo, setAttivo] = useState(salvato?.attivo ?? true)
   const [iva, setIva] = useState(salvato ? codiceIva(salvato.aliquotaIva, salvato.natura) : '')
+  const [codice, setCodice] = useState(salvato?.codice ?? '')
   const [confermaElimina, setConfermaElimina] = useState(false)
   const inCorso = crea.isPending || aggiorna.isPending || elimina.isPending
   const disabilitato = !puoScrivere || inCorso
@@ -137,7 +138,14 @@ function SchedaServizio({
       toast.errore(`Indica il prezzo di "${nome.trim()}".`)
       return
     }
-    const richiesta = { nome: nome.trim(), prezzo: Number(prezzo), modalita, attivo, ...daCodiceIva(iva) }
+    const richiesta = {
+      nome: nome.trim(),
+      prezzo: Number(prezzo),
+      modalita,
+      attivo,
+      ...daCodiceIva(iva),
+      codice: codice.trim() === '' ? null : codice.trim().toUpperCase(),
+    }
     if (salvato) {
       aggiorna.mutate({ id: salvato.id, ...richiesta }, { onSuccess: () => toast.successo(`${richiesta.nome} salvato.`), onError: gestisciErrore })
     } else {
@@ -196,6 +204,18 @@ function SchedaServizio({
             </MenuItem>
           ))}
         </TextField>
+        {/* Le prenotazioni del sito web arrivano da WuBook con i servizi indicati per identificativo. */}
+        <TextField
+          label="Identificativo"
+          size="small"
+          value={codice}
+          onChange={(e) => setCodice(e.target.value.toUpperCase())}
+          disabled={disabilitato}
+          placeholder="Es. SPA"
+          helperText="Facoltativo. Se vendi il servizio anche dal tuo sito web, usa lo stesso identificativo: le prenotazioni del sito arrivano con il servizio già aggiunto."
+          slotProps={{ htmlInput: { maxLength: 30 }, inputLabel: { shrink: true } }}
+          fullWidth
+        />
       </Box>
 
       {/* L'aliquota dipende da com'è offerto il servizio (accessorio all'alloggio o autonomo): la decide il commercialista. */}

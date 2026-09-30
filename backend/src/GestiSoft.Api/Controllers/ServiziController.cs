@@ -57,5 +57,5 @@ public class ServiziController(ServiziService service, ICurrentUser currentUser)
         return Ok(new ServizioPrenotazioneDto(r.Id, r.ServizioId, r.Nome, r.Modalita, r.PrezzoUnitario, r.Quantita, r.Dal, r.Al, r.Origine, r.AggiuntoDa, r.CreatedAtUtc));
     }
 
-    private static ServizioStrutturaDto ToDto(ServizioStruttura s) => new(s.Id, s.Nome, s.Prezzo, s.Modalita, s.Attivo, s.AliquotaIva, s.Natura);
+    private static ServizioStrutturaDto ToDto(ServizioStruttura s) => new(s.Id, s.Nome, s.Prezzo, s.Modalita, s.Attivo, s.AliquotaIva, s.Natura, s.Codice);
 }
