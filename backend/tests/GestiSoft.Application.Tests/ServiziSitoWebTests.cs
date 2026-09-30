@@ -1,3 +1,4 @@
+using GestiSoft.Application.Trattamenti;
 using GestiSoft.Application.Wubook;
 
 namespace GestiSoft.Application.Tests;
@@ -60,5 +61,32 @@ public class ServiziSitoWebTests
         var riga = Assert.Single(ServiziSitoWeb.Leggi(Dati(("servizi", "SPA:1:50.00;SPA:2:50.00"))));
 
         Assert.Equal(3, riga.Quantita);
+    }
+
+    [Fact]
+    public void PrezziTrattamento_AdultoEBambini()
+    {
+        var prezzi = ServiziSitoWeb.LeggiPrezziTrattamento(Dati(
+            ("trattamento_codice", "hb"),
+            ("trattamento_prezzo_adulto", "30.00"),
+            ("trattamento_prezzo_bambino", "15.00"),
+            ("trattamento_eta_bambini", "12")));
+
+        Assert.Equal(new PrezziTrattamento(30.00m, 15.00m, 12), prezzi);
+    }
+
+    [Fact]
+    public void PrezzoBambiniSenzaEta_ValeSoloLAdulto()
+    {
+        var prezzi = ServiziSitoWeb.LeggiPrezziTrattamento(Dati(("trattamento_prezzo_adulto", "10.50"), ("trattamento_prezzo_bambino", "5.00")));
+
+        Assert.Equal(new PrezziTrattamento(10.50m, null, null), prezzi);
+    }
+
+    [Fact]
+    public void SenzaPrezzoAdulto_NessunPrezzo()
+    {
+        Assert.Null(ServiziSitoWeb.LeggiPrezziTrattamento(Dati(("trattamento_codice", "bb"))));
+        Assert.Null(ServiziSitoWeb.LeggiPrezziTrattamento(Dati(("trattamento_prezzo_adulto", "dieci"))));
     }
 }

@@ -322,9 +322,14 @@ public class WubookPrenotazioniService(
         // L'ha comprato l'ospite sul portale: comanda l'OTA. Se però non dice nulla di riconoscibile
         // (il caso più comune) resta quello che c'è, per esempio una colazione venduta al banco.
         var trattamentoOta = TrattamentoOta.Riconosci(booking.Extra);
-        if (trattamentoOta.Indicato && trattamentoOta.Trattamento != entity.Trattamento)
+        // Venduto dal sito web: i prezzi pagati arrivano con la prenotazione e valgono al posto del
+        // listino, anche quando cambiano a parità di trattamento.
+        var prezziSito = trattamentoOta.Trattamento is not null ? ServiziSitoWeb.LeggiPrezziTrattamento(booking.Extra) : null;
+        if (trattamentoOta.Indicato
+            && (trattamentoOta.Trattamento != entity.Trattamento
+                || prezziSito is not null && prezziSito != TrattamentiService.PrezziDellaPrenotazione(entity)))
         {
-            await ImpostaTrattamentoOtaAsync(strutturaId, entity, trattamentoOta.Trattamento, nomeCanale, booking.RCode, cancellationToken);
+            await ImpostaTrattamentoOtaAsync(strutturaId, entity, trattamentoOta.Trattamento, prezziSito, nomeCanale, booking.RCode, cancellationToken);
         }
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -503,14 +508,19 @@ public class WubookPrenotazioniService(
     }
 
     /// <summary>
-    /// Come la scelta a mano, i prezzi del trattamento si copiano dal listino. A differenza della scelta
-    /// a mano, un trattamento che la struttura non ha attivo si registra lo stesso (l'ospite l'ha già
-    /// pagato e va servito), senza prezzi e con un avviso a log.
+    /// Come la scelta a mano, i prezzi del trattamento si copiano dal listino; se la prenotazione arriva
+    /// dal sito web con i prezzi a cui l'ha venduto (prezziVenduti), valgono quelli, così le modifiche
+    /// successive ricalcolano con quanto l'ospite ha pagato davvero. A differenza della scelta a mano,
+    /// un trattamento che la struttura non ha attivo si registra lo stesso (l'ospite l'ha già pagato e
+    /// va servito), senza prezzi e con un avviso a log.
     /// </summary>
-    private async Task ImpostaTrattamentoOtaAsync(Guid strutturaId, Prenotazione entity, TipoTrattamento? trattamento, string nomeCanale, int rcode, CancellationToken cancellationToken)
+    private async Task ImpostaTrattamentoOtaAsync(
+        Guid strutturaId, Prenotazione entity, TipoTrattamento? trattamento, PrezziTrattamento? prezziVenduti, string nomeCanale, int rcode, CancellationToken cancellationToken)
     {
-        var listino = trattamento is { } tipo ? await listiniTrattamento.GetAsync(strutturaId, tipo, cancellationToken) : null;
-        var prezzi = listino is { Attivo: true } ? TrattamentiService.PrezziDa(listino) : null;
+        var listino = trattamento is { } tipo && prezziVenduti is null ? await listiniTrattamento.GetAsync(strutturaId, tipo, cancellationToken) : null;
+        var prezzi = trattamento is null
+            ? null
+            : prezziVenduti ?? (listino is { Attivo: true } ? TrattamentiService.PrezziDa(listino) : null);
         entity.Trattamento = trattamento;
         entity.TrattamentoPrezzoAdulto = prezzi?.PrezzoAdulto;
         entity.TrattamentoPrezzoBambino = prezzi?.PrezzoBambino;

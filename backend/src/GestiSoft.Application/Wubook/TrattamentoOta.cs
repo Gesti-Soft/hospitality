@@ -75,6 +75,13 @@ public static class TrattamentoOta
             return PiuAmpio(daBoards);
         }
 
+        // Il sito web della struttura manda il codice in ancillary (vedi ServiziSitoWeb): è un dato
+        // strutturato come boards, vale prima del testo (dove "Colazione" da sola non basterebbe).
+        if (ServiziSitoWeb.CodiceTrattamento(dati) is { } codiceSito && DaCodiceBoard(codiceSito) is { Indicato: true } daSito)
+        {
+            return daSito;
+        }
+
         // Un extra comprato è un acquisto: niente controllo delle negazioni.
         var daExtra = dati.Extra
             .Select(e => Normalizza(e.Nome))

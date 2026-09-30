@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using GestiSoft.Application.Trattamenti;
 
 namespace GestiSoft.Application.Wubook;
 
@@ -17,6 +18,13 @@ public static partial class ServiziSitoWeb
 {
     public const string ChiaveAncillary = "servizi";
 
+    /// <summary>Codice WuBook del trattamento venduto (bb, hb, fb, ai; nb = solo pernottamento): vedi TrattamentoOta.</summary>
+    public const string ChiaveCodiceTrattamento = "trattamento_codice";
+
+    private const string ChiavePrezzoAdulto = "trattamento_prezzo_adulto";
+    private const string ChiavePrezzoBambino = "trattamento_prezzo_bambino";
+    private const string ChiaveEtaBambini = "trattamento_eta_bambini";
+
     /// <summary>Autore delle righe aggiunte dall'import: le distingue da quelle aggiunte a mano, che l'import non tocca.</summary>
     public const string AggiuntoDa = "sito web";
 
@@ -24,13 +32,46 @@ public static partial class ServiziSitoWeb
     [GeneratedRegex("^[A-Z0-9][A-Z0-9_-]{1,29}$")]
     public static partial Regex FormatoCodice();
 
+    public static string? CodiceTrattamento(DatiExtraOta? dati) => Valore(dati, ChiaveCodiceTrattamento);
+
+    /// <summary>
+    /// Prezzi a persona e a notte a cui il sito ha venduto il trattamento, null se non li manda (o
+    /// non sono leggibili). Il prezzo bambini vale solo insieme all'età massima, come nel listino.
+    /// </summary>
+    public static PrezziTrattamento? LeggiPrezziTrattamento(DatiExtraOta? dati)
+    {
+        if (!Decimale(Valore(dati, ChiavePrezzoAdulto), out var adulto))
+        {
+            return null;
+        }
+
+        var bambino = Decimale(Valore(dati, ChiavePrezzoBambino), out var prezzoBambino) ? prezzoBambino : (decimal?)null;
+        var eta = int.TryParse(Valore(dati, ChiaveEtaBambini), NumberStyles.None, CultureInfo.InvariantCulture, out var anni) && anni <= 17
+            ? anni
+            : (int?)null;
+        return bambino is not null && eta is not null
+            ? new PrezziTrattamento(adulto, bambino, eta)
+            : new PrezziTrattamento(adulto, null, null);
+    }
+
+    private static string? Valore(DatiExtraOta? dati, string chiave) =>
+        dati?.Ancillary.FirstOrDefault(a => string.Equals(a.Key, chiave, StringComparison.OrdinalIgnoreCase)).Value;
+
+    private static bool Decimale(string? testo, out decimal valore)
+    {
+        valore = 0;
+        return testo is not null
+            && decimal.TryParse(testo.Trim(), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out valore)
+            && valore >= 0;
+    }
+
     /// <summary>
     /// Le righe riconoscibili della chiave "servizi"; una parte che non rispetta il formato si scarta
     /// (un portale potrebbe usare la stessa chiave per altro). Lo stesso codice due volte si somma.
     /// </summary>
     public static IReadOnlyList<ServizioSitoWeb> Leggi(DatiExtraOta? dati)
     {
-        var valore = dati?.Ancillary.FirstOrDefault(a => string.Equals(a.Key, ChiaveAncillary, StringComparison.OrdinalIgnoreCase)).Value;
+        var valore = Valore(dati, ChiaveAncillary);
         if (string.IsNullOrWhiteSpace(valore))
         {
             return [];

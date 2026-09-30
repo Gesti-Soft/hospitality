@@ -156,4 +156,35 @@ public class TrattamentoOtaTests
         var note = TrattamentoOta.ComponiNote(Dati(note: new string('a', 5000)));
         Assert.Equal(TrattamentoOta.LunghezzaMassimaNote, note!.Length);
     }
+
+    [Fact]
+    public void CodiceDelSitoWeb_ColazioneAncheSenzaFraseEsplicita()
+    {
+        // Il testo "Colazione" da solo non basta, il codice del sito sì.
+        var dati = Dati(ancillary: [("trattamento", "Colazione"), ("trattamento_codice", "bb")]);
+
+        Assert.Equal(new TrattamentoOtaRiconosciuto(true, TipoTrattamento.Colazione), TrattamentoOta.Riconosci(dati));
+    }
+
+    [Fact]
+    public void CodiceDelSitoWeb_SoloPernottamentoEsplicito()
+    {
+        Assert.Equal(new TrattamentoOtaRiconosciuto(true, null), TrattamentoOta.Riconosci(Dati(ancillary: [("trattamento_codice", "nb")])));
+    }
+
+    [Fact]
+    public void Boards_VinconoSulCodiceDelSito()
+    {
+        var dati = Dati(boards: ["fb"], ancillary: [("trattamento_codice", "bb")]);
+
+        Assert.Equal(new TrattamentoOtaRiconosciuto(true, TipoTrattamento.PensioneCompleta), TrattamentoOta.Riconosci(dati));
+    }
+
+    [Fact]
+    public void CodiceDelSitoSconosciuto_SiPassaAlTesto()
+    {
+        var dati = Dati(ancillary: [("trattamento_codice", "xx"), ("trattamento", "Mezza pensione")]);
+
+        Assert.Equal(new TrattamentoOtaRiconosciuto(true, TipoTrattamento.MezzaPensione), TrattamentoOta.Riconosci(dati));
+    }
 }
