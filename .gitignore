@@ -17,6 +17,9 @@ docker-compose.env
 # Conteggio delle versioni installate, tenuto da deploy/update.sh sul server
 deploy/.versione-installata
 
+# Report delle sessioni di lavoro: solo locale
+sessionreport.md
+
 # Backup DB (contengono dati reali dei clienti, mai da versionare)
 docker/postgres/dumps/
 docker/postgres/logs/
