@@ -10,6 +10,10 @@ cd "$REPO_ROOT"
 echo "=== git pull ==="
 git pull
 
+# Versione installata: all'avvio l'Api notifica l'aggiornamento a tutte le strutture, una volta
+# per commit (un pull senza novità o un riavvio non la ripetono).
+export GESTISOFT_VERSIONE="$(git rev-parse --short HEAD)"
+
 echo "=== build immagini ==="
 docker compose build
 

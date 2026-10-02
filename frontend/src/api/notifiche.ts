@@ -14,6 +14,8 @@ export const TipoNotifica = {
   SchedinaDatiIncompleti: 10,
   // Camere da pulire oggi o domani: la vede solo chi ha "Stato camera", e apre la pagina Pulizie.
   PulizieDaFare: 11,
+  // Nuova versione del gestionale installata: a tutte le strutture, con data e ora.
+  GestionaleAggiornato: 12,
 } as const
 export type TipoNotifica = (typeof TipoNotifica)[keyof typeof TipoNotifica]
 

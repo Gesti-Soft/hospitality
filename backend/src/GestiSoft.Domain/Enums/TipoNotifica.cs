@@ -32,4 +32,7 @@ public enum TipoNotifica
     /// occupate. La vede solo chi ha il permesso "Stato camera" (vedi Notifica.RichiedeStatoCamera).
     /// </summary>
     PulizieDaFare = 11,
+
+    /// <summary>Installata una nuova versione del gestionale (deploy/update.sh): a tutte le strutture, con data e ora.</summary>
+    GestionaleAggiornato = 12,
 }

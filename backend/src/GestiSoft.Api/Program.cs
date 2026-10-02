@@ -5,6 +5,7 @@ using GestiSoft.Api.Auth;
 using GestiSoft.Api.Middleware;
 using GestiSoft.Application;
 using GestiSoft.Application.Auth;
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Contracts.Health;
 using GestiSoft.Infrastructure;
 using GestiSoft.Infrastructure.Auth;
@@ -149,6 +150,24 @@ using (var startupScope = app.Services.CreateScope())
     // risalva quella configurazione a mano.
     var credenzialiSeeder = startupScope.ServiceProvider.GetRequiredService<CredenzialiCifraturaSeeder>();
     await credenzialiSeeder.SeedAsync();
+
+    // Nuova versione installata (GESTISOFT_VERSIONE = commit, valorizzata da deploy/update.sh):
+    // lo si dice a tutte le strutture. Senza variabile (sviluppo, avvio a mano) non si notifica.
+    // Una notifica non riuscita non deve impedire all'Api di partire.
+    var versione = app.Configuration["GESTISOFT_VERSIONE"];
+    if (!string.IsNullOrWhiteSpace(versione))
+    {
+        try
+        {
+            var notificaService = startupScope.ServiceProvider.GetRequiredService<NotificaService>();
+            var notificate = await notificaService.NotificaAggiornamentoGestionaleAsync(versione.Trim(), DateTime.UtcNow, CancellationToken.None);
+            app.Logger.LogInformation("Versione {Versione}: notifica di aggiornamento a {Strutture} strutture.", versione, notificate);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Notifica di aggiornamento del gestionale non riuscita (versione {Versione}).", versione);
+        }
+    }
 }
 
 // Configure the HTTP request pipeline.

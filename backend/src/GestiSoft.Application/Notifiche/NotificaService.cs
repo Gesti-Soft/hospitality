@@ -13,9 +13,38 @@ namespace GestiSoft.Application.Notifiche;
 /// job Quartz o dal polling Wubook) non hanno un ICurrentUser e non passano da nessun guard, stesso
 /// principio già usato per LogEventoService.
 /// </summary>
-public class NotificaService(INotificaRepository notifiche, IOspiteRepository ospiti, TenantAccessGuard accessGuard, PermessoStrutturaGuard permessoGuard)
+public class NotificaService(
+    INotificaRepository notifiche,
+    IOspiteRepository ospiti,
+    IStrutturaRepository strutture,
+    TenantAccessGuard accessGuard,
+    PermessoStrutturaGuard permessoGuard)
 {
     private static readonly TimeSpan FinestraGraziaCancellazioneWubook = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Nuova versione del gestionale installata: una notifica a ogni struttura attiva, con data e ora
+    /// italiane. Chiamata all'avvio dell'Api con la versione (commit) passata da deploy/update.sh;
+    /// la chiave di deduplica con la versione fa sì che un semplice riavvio non la ripeta.
+    /// Ritorna quante strutture l'hanno ricevuta.
+    /// </summary>
+    public async Task<int> NotificaAggiornamentoGestionaleAsync(string versione, DateTime adessoUtc, CancellationToken cancellationToken)
+    {
+        var italia = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
+        var adesso = TimeZoneInfo.ConvertTimeFromUtc(adessoUtc, italia);
+        var messaggio = $"Il gestionale è stato aggiornato il {adesso:dd/MM/yyyy} alle {adesso:HH:mm}.";
+
+        var notificate = 0;
+        foreach (var struttura in await strutture.ListByClienteAsync(null, includiInattive: false, cancellationToken))
+        {
+            if (await CreaSeNonEsisteAsync(struttura.Id, TipoNotifica.GestionaleAggiornato, $"aggiornamento:{versione}", "Gestionale aggiornato", messaggio, cancellationToken))
+            {
+                notificate++;
+            }
+        }
+
+        return notificate;
+    }
 
     public async Task<IReadOnlyList<Notifica>> ListaAsync(ICurrentUser currentUser, Guid strutturaId, bool soloNonLette, CancellationToken cancellationToken)
     {
