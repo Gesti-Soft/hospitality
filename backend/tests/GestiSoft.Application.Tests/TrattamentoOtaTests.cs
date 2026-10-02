@@ -118,29 +118,64 @@ public class TrattamentoOtaTests
     }
 
     [Fact]
-    public void Note_RiportanoRichiesteTrattamentoExtraEAncillary()
+    public void Note_SoloRichiesteEOraDiArrivo()
     {
         var note = TrattamentoOta.ComponiNote(Dati(
             boards: ["bb"],
             extra: [new ExtraOta("Parcheggio", 3, 15m)],
-            ancillary: [("remarks", "Arrivo tardi")],
+            ancillary: [("remarks", "Arrivo tardi"), ("ora_arrivo", "15:00"), ("animale", "si")],
             note: "Culla in camera"));
 
-        Assert.Equal(
-            "Richieste dell'ospite: Culla in camera\nTrattamento: colazione\nExtra: Parcheggio x3, 15,00 €\nremarks: Arrivo tardi",
-            note);
+        Assert.Equal("Richieste dell'ospite: Culla in camera\nOra di arrivo: 15:00\nAnimale: sì", note);
+    }
+
+    [Fact]
+    public void Note_SenzaAnimale_NessunaRiga()
+    {
+        var note = TrattamentoOta.ComponiNote(Dati(ancillary: [("ora_arrivo", "15:00"), ("animale", "no")]));
+
+        Assert.Equal("Ora di arrivo: 15:00", note);
+    }
+
+    [Fact]
+    public void Note_SenzaIlBloccoDiDettagliDelSito()
+    {
+        var note = TrattamentoOta.ComponiNote(Dati(
+            ancillary: [("ora_arrivo", "15:00")],
+            note: "Sono Bellissima\n\n--- Dettagli prenotazione (sito web) ---\nOspiti: 2\nAnimale: sì (supplemento 100 €)\nOra di arrivo: 15:00"));
+
+        Assert.Equal("Richieste dell'ospite: Sono Bellissima\nOra di arrivo: 15:00", note);
+    }
+
+    [Fact]
+    public void Note_SoloIlBloccoDelSito_NessunaRichiesta()
+    {
+        var note = TrattamentoOta.ComponiNote(Dati(note: "--- Dettagli prenotazione (sito web) ---\nOspiti: 2"));
+
+        Assert.Null(note);
     }
 
     [Fact]
     public void Note_SenzaDatiDiCarta()
     {
-        var note = TrattamentoOta.ComponiNote(Dati(ancillary: [
-            ("vcc_number", "4111111111111111"),
-            ("card_expiry", "12/28"),
-            ("remarks", "Pagato con 4111 1111 1111 1111"),
-        ]));
+        var note = TrattamentoOta.ComponiNote(Dati(note: "Pagato con 4111 1111 1111 1111"));
 
-        Assert.Equal("remarks: Pagato con [numero rimosso]", note);
+        Assert.Equal("Richieste dell'ospite: Pagato con [numero rimosso]", note);
+    }
+
+    [Theory]
+    [InlineData("si", true)]
+    [InlineData("Sì", true)]
+    [InlineData("no", false)]
+    public void Animale_DalSitoWeb(string valore, bool atteso)
+    {
+        Assert.Equal(atteso, ServiziSitoWeb.Animale(Dati(ancillary: [("animale", valore)])));
+    }
+
+    [Fact]
+    public void Animale_NonIndicatoDaiPortali()
+    {
+        Assert.Null(ServiziSitoWeb.Animale(Dati(ancillary: [("remarks", "Arrivo tardi")])));
     }
 
     [Fact]

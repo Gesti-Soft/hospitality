@@ -49,6 +49,8 @@ export interface PrenotazioneDto {
   trattamento: TipoTrattamento | null
   /** Richieste dell'ospite e indicazioni arrivate dall'OTA (trattamento, extra), in sola lettura. */
   noteOta?: string | null
+  /** Arrivata dall'OTA (anche dal sito web): si annulla solo dall'OTA. */
+  daOta?: boolean
 }
 
 export interface PrenotazioneRequest {
@@ -261,7 +263,9 @@ export function useAggiornaPrenotazione(strutturaId: string | null) {
 export function useAnnullaPrenotazione(strutturaId: string | null) {
   const invalida = useInvalidaPrenotazioni(strutturaId)
   return useMutation({
-    mutationFn: (prenotazioneId: string) => apiPost<PrenotazioneDto>(`/strutture/${strutturaId}/prenotazioni/${prenotazioneId}/annulla`),
+    // anchePerOta: annulla anche una prenotazione arrivata dall'OTA (solo titolare o amministratore).
+    mutationFn: ({ prenotazioneId, anchePerOta = false }: { prenotazioneId: string; anchePerOta?: boolean }) =>
+      apiPost<PrenotazioneDto>(`/strutture/${strutturaId}/prenotazioni/${prenotazioneId}/annulla${anchePerOta ? '?anchePerOta=true' : ''}`),
     onSuccess: invalida,
   })
 }

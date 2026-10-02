@@ -23,7 +23,7 @@ public record TrattamentoOtaRiconosciuto(bool Indicato, TipoTrattamento? Trattam
 /// è da quel testo che lo ricava anche il channel manager stesso. Per questo si legge in modo
 /// prudente: prima `boards`, poi gli extra acquistati, poi il testo, e solo frasi esplicite; una frase
 /// con una negazione o un "a pagamento" non vale ("Breakfast costs EUR 10" non è colazione inclusa).
-/// Nel dubbio non si riconosce nulla: l'operatore legge comunque tutto nelle note.
+/// Nel dubbio non si riconosce nulla.
 /// Le richieste dell'ospite non contano: "vorremmo la colazione" non è un acquisto.
 /// </summary>
 public static class TrattamentoOta
@@ -54,9 +54,6 @@ public static class TrattamentoOta
     ];
 
     private static readonly string[] ParoleColazione = ["breakfast", "colazione", "fruhstuck", "petit-dejeuner", "petit dejeuner", "desayuno"];
-
-    // Chiavi delle informazioni non standard che possono portare dati di pagamento: non si salvano mai.
-    private static readonly string[] ChiaviPagamento = ["card", "vcc", "cvv", "cvc", "expir", "carta", "scadenza", "payment", "iban"];
 
     private static readonly Regex NumeroCarta = new(@"\b(?:\d[ -]?){12,18}\d\b", RegexOptions.Compiled);
 
@@ -130,9 +127,10 @@ public static class TrattamentoOta
     }
 
     /// <summary>
-    /// Testo leggibile per l'operatore con tutto quello che l'OTA ha mandato oltre ai dati standard.
-    /// Senza chiavi di pagamento e con i numeri lunghi quanto una carta tolti (PCI-DSS: nemmeno per
-    /// sbaglio). Null se non c'è niente da mostrare.
+    /// Testo per l'operatore: solo le richieste dell'ospite, l'ora di arrivo e l'animale se c'è (scelta dell'utente: il
+    /// resto, trattamento, servizi, ospiti, è già nei campi della prenotazione). Dalle richieste si
+    /// toglie il blocco di dettagli che il sito web vi accoda, e i numeri lunghi quanto una carta
+    /// (PCI-DSS: nemmeno per sbaglio). Null se non c'è niente da mostrare.
     /// </summary>
     public static string? ComponiNote(DatiExtraOta? dati)
     {
@@ -142,31 +140,21 @@ public static class TrattamentoOta
         }
 
         var righe = new List<string>();
-        if (!string.IsNullOrWhiteSpace(dati.NoteCliente))
+        var richieste = ServiziSitoWeb.SenzaDettagliSito(dati.NoteCliente);
+        if (!string.IsNullOrWhiteSpace(richieste))
         {
-            righe.Add($"Richieste dell'ospite: {dati.NoteCliente.Trim()}");
+            righe.Add($"Richieste dell'ospite: {richieste}");
         }
 
-        foreach (var board in dati.Boards.Select(b => b.Trim().ToLowerInvariant()).Where(b => b != "").Distinct())
+        if (ServiziSitoWeb.OraArrivo(dati) is { } oraArrivo)
         {
-            righe.Add($"Trattamento: {NomeBoard(board)}");
+            righe.Add($"Ora di arrivo: {oraArrivo}");
         }
 
-        foreach (var extra in dati.Extra.Where(e => !string.IsNullOrWhiteSpace(e.Nome)))
+        // Solo se c'è: resta scritto anche se la spunta "Animali" della prenotazione si perde.
+        if (ServiziSitoWeb.Animale(dati) == true)
         {
-            var quantita = extra.Quantita > 1 ? $" x{extra.Quantita}" : "";
-            var prezzo = extra.Prezzo > 0 ? $", {extra.Prezzo.ToString("N2", CultureInfo.GetCultureInfo("it-IT"))} €" : "";
-            righe.Add($"Extra: {extra.Nome.Trim()}{quantita}{prezzo}");
-        }
-
-        foreach (var (chiave, valore) in dati.Ancillary.Distinct())
-        {
-            if (string.IsNullOrWhiteSpace(valore) || ChiaviPagamento.Any(c => chiave.Contains(c, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
-
-            righe.Add(string.IsNullOrWhiteSpace(chiave) ? valore.Trim() : $"{chiave}: {valore.Trim()}");
+            righe.Add("Animale: sì");
         }
 
         if (righe.Count == 0)
@@ -185,18 +173,8 @@ public static class TrattamentoOta
         "fb" => new(true, TipoTrattamento.PensioneCompleta),
         "ai" => new(true, TipoTrattamento.AllInclusive),
         "nb" => new(true, null),
-        // Codici sconosciuti: restano nelle note.
+        // Codici sconosciuti: non si riconoscono.
         _ => TrattamentoOtaRiconosciuto.NonIndicato,
-    };
-
-    private static string NomeBoard(string codice) => codice switch
-    {
-        "bb" => "colazione",
-        "hb" => "mezza pensione",
-        "fb" => "pensione completa",
-        "ai" => "all inclusive",
-        "nb" => "solo pernottamento",
-        _ => codice,
     };
 
     private static TipoTrattamento? TipoDaNome(string nome)

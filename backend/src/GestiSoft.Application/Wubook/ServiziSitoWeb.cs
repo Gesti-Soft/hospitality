@@ -32,7 +32,47 @@ public static partial class ServiziSitoWeb
     [GeneratedRegex("^[A-Z0-9][A-Z0-9_-]{1,29}$")]
     public static partial Regex FormatoCodice();
 
+    private const string ChiaveOraArrivo = "ora_arrivo";
+    private const string ChiaveAnimale = "animale";
+
+    /// <summary>
+    /// Intestazione del blocco di dettagli (ospiti, trattamento, animale…) che il sito accoda alle
+    /// richieste dell'ospite per chi legge su WuBook: qui quei dati arrivano già in `ancillary`.
+    /// </summary>
+    private const string IntestazioneDettagliSito = "Dettagli prenotazione (sito web)";
+
     public static string? CodiceTrattamento(DatiExtraOta? dati) => Valore(dati, ChiaveCodiceTrattamento);
+
+    /// <summary>Ora di arrivo indicata sul sito ("15:00"), null se assente.</summary>
+    public static string? OraArrivo(DatiExtraOta? dati) =>
+        Valore(dati, ChiaveOraArrivo) is { } ora && !string.IsNullOrWhiteSpace(ora) ? ora.Trim() : null;
+
+    /// <summary>Se l'ospite ha dichiarato un animale sul sito; null se il dato non c'è (prenotazioni dai portali).</summary>
+    public static bool? Animale(DatiExtraOta? dati) => Valore(dati, ChiaveAnimale)?.Trim().ToLowerInvariant() switch
+    {
+        "si" or "sì" => true,
+        "no" => false,
+        _ => null,
+    };
+
+    /// <summary>Le richieste dell'ospite senza il blocco di dettagli accodato dal sito (vedi sopra).</summary>
+    public static string? SenzaDettagliSito(string? note)
+    {
+        if (note is null)
+        {
+            return null;
+        }
+
+        var indice = note.IndexOf(IntestazioneDettagliSito, StringComparison.OrdinalIgnoreCase);
+        if (indice >= 0)
+        {
+            // Il blocco parte dall'inizio della riga dell'intestazione ("--- Dettagli … ---").
+            var inizioRiga = note.LastIndexOf('\n', indice) + 1;
+            note = note[..inizioRiga];
+        }
+
+        return note.Trim();
+    }
 
     /// <summary>
     /// Prezzi a persona e a notte a cui il sito ha venduto il trattamento, null se non li manda (o

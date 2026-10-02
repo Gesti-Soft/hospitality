@@ -221,6 +221,8 @@ function CardPrenotazione({
           // Quante persone si presentano al banco: serve per preparare la camera senza dover aprire
           // la prenotazione.
           { etichetta: 'Ospiti', valore: prenotazione.numeroOspiti ?? '—' },
+          // Anche per chi prepara la camera: pulizia più accurata dopo la partenza, ciotole all'arrivo.
+          { etichetta: 'Animali', valore: prenotazione.animaliAttiva ? 'Sì' : 'No' },
         ]}
       />
       {(onAzione || onAddebita) && (

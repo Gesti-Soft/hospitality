@@ -581,15 +581,36 @@ public class PrenotazioniService(
         return entity;
     }
 
+    public const string MessaggioAnnullaDaOta =
+        "Questa prenotazione è arrivata dall'OTA: va annullata dall'OTA. L'annullamento arriverà qui in automatico.";
+
     /// <summary>
     /// Annullamento (soft-cancel, DeletePrenotazione del legacy): non elimina la riga, azzera gli
     /// importi e marca Annullata — nessun hard-delete di una Prenotazione.
     /// </summary>
-    public async Task<Prenotazione> AnnullaAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken)
+    public async Task<Prenotazione> AnnullaAsync(ICurrentUser currentUser, Guid strutturaId, Guid prenotazioneId, bool anchePerOta, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationWrite, cancellationToken);
 
         var entity = await GetOwnedAsync(strutturaId, prenotazioneId, cancellationToken);
+        // Annullata solo qui resterebbe confermata sul portale, che continuerebbe a considerarla
+        // venduta: si annulla dall'OTA, e l'annullamento arriva qui con l'import. Via d'uscita per
+        // quando l'annullamento dell'OTA non arriva: solo il titolare o chi gestisce gli utenti della
+        // struttura, non il Super Admin (scelta dell'utente: è una decisione della struttura).
+        var daOta = entity.IdPrenotazioneWubook is not null;
+        if (daOta)
+        {
+            if (!anchePerOta)
+            {
+                throw new ConflictException(MessaggioAnnullaDaOta);
+            }
+
+            if (currentUser.IsSuperAdmin || !await permessoGuard.HaAsync(currentUser, strutturaId, p => p.SettingUser, cancellationToken))
+            {
+                throw new ForbiddenException("Solo il titolare o un amministratore della struttura può annullare qui una prenotazione arrivata dall'OTA.");
+            }
+        }
+
         // La camera va liberata SOLO se era proprio questa prenotazione a tenerla occupata (check-in
         // già fatto): se era ancora Incompleta (soggiorno futuro, check-in mai avvenuto), la camera
         // non è mai stata toccata da lei — se risulta non Pronta è per un altro motivo (altro
@@ -601,6 +622,8 @@ public class PrenotazioniService(
         // si registra un rimborso nel registro pagamenti.
         entity.ImportoPrenotazione = 0;
         entity.ImportoTotale = 0;
+        // L'imposta di soggiorno è dovuta per i pernottamenti: senza soggiorno non c'è.
+        entity.TotalTax = 0;
         entity.StatoPrenotazione = StatoPrenotazione.Annullata;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -617,7 +640,8 @@ public class PrenotazioniService(
             await SincronizzaDisponibilitaOtaAsync(strutturaId, entity.CheckIn.Value, entity.CheckOut.Value, cancellationToken);
         }
 
-        await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione #{entity.NumeroPrenotazione ?? entity.Id.ToString()[..8]} annullata.", cancellationToken);
+        var dettaglioOta = daOta ? " nel gestionale, anche se arrivata dall'OTA" : "";
+        await LogPrenotazioneAsync(currentUser, strutturaId, $"Prenotazione #{entity.NumeroPrenotazione ?? entity.Id.ToString()[..8]} annullata{dettaglioOta}.", cancellationToken);
         return entity;
     }
 

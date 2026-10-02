@@ -39,4 +39,6 @@ public record PrenotazioneDto(
     // Null = solo pernottamento.
     TipoTrattamento? Trattamento = null,
     // Richieste dell'ospite e altre indicazioni arrivate dall'OTA (vedi Prenotazione.NoteOta).
-    string? NoteOta = null);
+    string? NoteOta = null,
+    // Arrivata dall'OTA (anche dal sito web, che passa di lì): si annulla solo dall'OTA.
+    bool DaOta = false);

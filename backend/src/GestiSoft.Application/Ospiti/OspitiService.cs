@@ -98,8 +98,9 @@ public class OspitiService(
 
         prenotazione.NumeroOspiti = 1 + request.Membri.Count;
         // Se il toggle è disattivato, l'importo resta 0 anche aggiungendo ospiti — non va
-        // "resuscitato" da un salvataggio della scheda che non c'entra col toggle stesso.
-        prenotazione.TotalTax = prenotazione.TassaSoggiornoAttiva
+        // "resuscitato" da un salvataggio della scheda che non c'entra col toggle stesso. Lo stesso
+        // su una prenotazione annullata, che l'imposta non la deve più.
+        prenotazione.TotalTax = prenotazione.TassaSoggiornoAttiva && prenotazione.StatoPrenotazione != StatoPrenotazione.Annullata
             ? await CalcolaTassaSoggiornoAsync(strutturaId, prenotazione, ospite, cancellationToken)
             : 0;
         prenotazione.UpdatedAtUtc = DateTime.UtcNow;

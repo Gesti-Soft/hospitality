@@ -189,6 +189,8 @@ public class WubookPrenotazioniService(
         // Come l'annullamento a mano: i soldi già ricevuti restano, un eventuale rimborso si registra.
         esistente.ImportoPrenotazione = 0;
         esistente.ImportoTotale = 0;
+        // L'imposta di soggiorno è dovuta per i pernottamenti: senza soggiorno non c'è.
+        esistente.TotalTax = 0;
         esistente.UpdatedAtUtc = DateTime.UtcNow;
         await prenotazioni.UpdateAsync(esistente, cancellationToken);
 
@@ -319,6 +321,12 @@ public class WubookPrenotazioniService(
         entity.NumeroOspiti = camera.NumeroOspiti;
         entity.Anno = booking.CheckIn.Year;
         entity.NoteOta = ComponiNoteCamera(booking, camera, camereNellOrdine);
+        // Dichiarato sul sito web: comanda la prenotazione, come il trattamento. Dai portali il dato
+        // non arriva e resta quello che c'è. Il totale non cambia: è già quello pagato sul sito.
+        if (ServiziSitoWeb.Animale(booking.Extra) is { } animale)
+        {
+            entity.AnimaliAttiva = animale;
+        }
         // L'ha comprato l'ospite sul portale: comanda l'OTA. Se però non dice nulla di riconoscibile
         // (il caso più comune) resta quello che c'è, per esempio una colazione venduta al banco.
         var trattamentoOta = TrattamentoOta.Riconosci(booking.Extra);

@@ -64,6 +64,7 @@ import { tokens } from '../theme'
 import { OspiteDialog } from './OspiteDialog'
 import { ConfirmDialog } from './ConfirmDialog'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
+import { useStruttura } from '../struttura/StrutturaContext'
 
 export type StatoIniziale =
   | { modo: 'crea'; cameraId: string | null; checkIn: Date; checkOut: Date }
@@ -139,6 +140,11 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const puoScrivere = usePuoScrivere('reservationWrite')
   const puoFareCheckInOut = usePuoScrivere('checkInOut')
   const puoFatturare = usePuoScrivere('financeWrite')
+  // Annullare qui una prenotazione dell'OTA (quando l'annullamento dell'OTA non arriva): titolare o
+  // chi gestisce gli utenti della struttura, non il Super Admin. Il backend controlla lo stesso.
+  const { isSuperAdmin } = useStruttura()
+  const puoGestireUtenti = usePuoScrivere('settingUser')
+  const puoAnnullareOta = puoGestireUtenti && !isSuperAdmin
   const modifica = stato.modo === 'modifica' ? stato.prenotazione : null
   // Chi non vede le finanze riceve null (403), e l'indicazione semplicemente non compare.
   const fatturaGenerata = useFatturaPerPrenotazione(strutturaId, modifica?.id ?? null).data ?? null
@@ -328,6 +334,9 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   // esterni): se la tipologia della camera non ne prevede un importo, non ha senso mostrare il toggle.
   const cauzionePrevista = (tipologiaSelezionata?.cauzione ?? 0) > 0
   const animaliPrevisti = (tipologiaSelezionata?.animali ?? 0) > 0
+  // Animale già sulla prenotazione (es. dichiarato sul sito web) anche senza supplemento nella
+  // tipologia: la spunta si mostra comunque, e salvando non si perde.
+  const mostraAnimali = animaliPrevisti || !!modifica?.animaliAttiva
 
   // Camere della tipologia scelta nel form — include comunque la camera già assegnata anche se non
   // corrisponde più alla tipologia selezionata, per non nascondere un'associazione esistente.
@@ -570,7 +579,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       servizi: righeServizi === null ? null : richiesteServizi,
       tassaSoggiornoAttiva,
       spesePuliziaAttiva,
-      animaliAttiva: animaliPrevisti && animaliAttiva,
+      animaliAttiva: mostraAnimali && animaliAttiva,
       cauzioneAttiva: cauzionePrevista && cauzioneAttiva,
       // Solo se valorizzato: null lascia intatto l'orario registrato al check-in, così un
       // salvataggio qualunque non lo cancella.
@@ -591,12 +600,18 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
 
   function eseguiAnnulla() {
     if (!modifica) return
+    // Annullata solo qui resterebbe venduta sul portale: si annulla dall'OTA (il backend lo rifiuta comunque).
+    // Chi può farlo lo stesso passa dalla conferma, con un avviso.
+    if (modifica.daOta && !puoAnnullareOta) {
+      setErrore("Questa prenotazione è arrivata dall'OTA: va annullata dall'OTA. L'annullamento arriverà qui in automatico.")
+      return
+    }
     setConfermaAnnullaAperta(true)
   }
 
   function confermaAnnulla() {
     if (!modifica) return
-    annulla.mutate(modifica.id, {
+    annulla.mutate({ prenotazioneId: modifica.id, anchePerOta: !!modifica.daOta }, {
       onSuccess: onClose,
       onError: (err) => {
         setConfermaAnnullaAperta(false)
@@ -1063,7 +1078,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
                 control={<Checkbox checked={spesePuliziaAttiva} onChange={(e) => setSpesePuliziaAttiva(e.target.checked)} disabled={inCorso || soloImporti} />}
                 label="Spese di pulizia"
               />
-              {animaliPrevisti && (
+              {mostraAnimali && (
                 <FormControlLabel
                   control={<Checkbox checked={animaliAttiva} onChange={(e) => setAnimaliAttiva(e.target.checked)} disabled={inCorso || soloImporti} />}
                   label="Animali"
@@ -1251,9 +1266,12 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
         <ConfirmDialog
           titolo="Annullare prenotazione"
           messaggio={
-            pagato > 0
+            (modifica?.daOta
+              ? "Questa prenotazione è arrivata dall'OTA: annullandola qui resta confermata sul portale. Fallo solo se l'OTA l'ha già cancellata e l'annullamento non è arrivato. "
+              : '') +
+            (pagato > 0
               ? `Annullare questa prenotazione? L'importo totale verrà azzerato. I ${pagato.toFixed(2)} € già pagati restano nel registro: se li restituisci, registra un rimborso nel tab Pagamenti.`
-              : "Annullare questa prenotazione? Gli importi verranno azzerati."
+              : "Annullare questa prenotazione? Gli importi verranno azzerati.")
           }
           inCorso={annulla.isPending}
           onConferma={confermaAnnulla}
