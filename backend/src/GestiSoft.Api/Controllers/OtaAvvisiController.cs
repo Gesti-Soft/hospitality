@@ -36,17 +36,34 @@ public class OtaAvvisiController(WubookAvvisiDirettiService avvisi, IConfigurati
         }
 
         var contentType = Request.ContentType ?? "";
+        // Il corpo si legge due volte (testo per il Log, poi il form): va tenuto in memoria.
+        Request.EnableBuffering();
         string corpo;
-        using (var reader = new StreamReader(Request.Body, Encoding.UTF8))
+        using (var reader = new StreamReader(Request.Body, Encoding.UTF8, leaveOpen: true))
         {
             corpo = await reader.ReadToEndAsync(cancellationToken);
         }
 
+        Request.Body.Position = 0;
+
         var (lcode, rcode) = LeggiCodici(contentType, corpo);
+        if ((lcode is null || rcode is null) && Request.HasFormContentType)
+        {
+            // Form letto da ASP.NET: copre sia urlencoded sia multipart/form-data.
+            var form = await Request.ReadFormAsync(cancellationToken);
+            lcode ??= Pulito(form["lcode"].FirstOrDefault());
+            rcode ??= Pulito(form["rcode"].FirstOrDefault());
+        }
+
+        // Senza codici, nel Log va cosa è arrivato davvero: un avviso dell'OTA contiene solo lcode e
+        // rcode, nessun dato personale. Limitato, perché l'indirizzo è pubblico.
+        var dettaglio = lcode is null || rcode is null
+            ? $"Content-Type: {(contentType == "" ? "assente" : contentType)}; query: {(Request.QueryString.HasValue ? Request.QueryString.Value : "vuota")}; corpo ({corpo.Length} caratteri): {Tronca(corpo, 500)}"
+            : null;
 
         try
         {
-            await avvisi.RegistraAvvisoAsync(lcode, rcode, cancellationToken);
+            await avvisi.RegistraAvvisoAsync(lcode, rcode, dettaglio, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -94,6 +111,11 @@ public class OtaAvvisiController(WubookAvvisiDirettiService avvisi, IConfigurati
 
         return (string.IsNullOrWhiteSpace(lcode) ? null : lcode.Trim(), string.IsNullOrWhiteSpace(rcode) ? null : rcode.Trim());
     }
+
+    private static string? Pulito(string? valore) => string.IsNullOrWhiteSpace(valore) ? null : valore.Trim();
+
+    private static string Tronca(string testo, int massimo) =>
+        testo.Length <= massimo ? (testo == "" ? "vuoto" : testo) : testo[..massimo] + "…";
 
     private static string? MembroXml(string corpo, string nome)
     {

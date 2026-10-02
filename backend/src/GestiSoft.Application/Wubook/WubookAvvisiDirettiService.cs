@@ -64,22 +64,34 @@ public class WubookAvvisiDirettiService(
     /// <summary>
     /// Avviso ricevuto dall'Api: si registra soltanto (risposta immediata all'OTA, che altrimenti
     /// riprova e con troppi errori sospende gli avvisi). Un avviso per una struttura sconosciuta o
-    /// senza rcode valido (la prova dell'attivazione) va solo nel Log.
+    /// senza rcode valido (la prova dell'attivazione) va solo nel Log. <paramref name="dettaglio"/>:
+    /// com'era fatta la richiesta, quando non se ne sono letti i codici.
     /// </summary>
-    public async Task RegistraAvvisoAsync(string? lcode, string? rcodeTesto, CancellationToken cancellationToken)
+    public async Task RegistraAvvisoAsync(string? lcode, string? rcodeTesto, string? dettaglio, CancellationToken cancellationToken)
     {
         var codice = lcode?.Trim();
-        var integrazione = string.IsNullOrEmpty(codice)
-            ? null
-            : (await integrazioni.ListAttiveAsync(cancellationToken))
-                .FirstOrDefault(i => i.AvvisiDiretti && string.Equals(i.CodiceStruttura?.Trim(), codice, StringComparison.Ordinal));
+        if (string.IsNullOrEmpty(codice))
+        {
+            // Il controllo periodico recupera comunque le prenotazioni nuove: qui si annota cosa è arrivato.
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Avviso dell'OTA ricevuto senza codice struttura (rcode={rcodeTesto ?? "assente"}): non si sa a quale struttura appartiene. Se è appena stata attivata la ricezione diretta è la prova dell'attivazione.",
+                origine: "Wubook",
+                dettaglio: dettaglio,
+                categoria: "Wubook",
+                cancellationToken: cancellationToken);
+            return;
+        }
 
+        var integrazione = (await integrazioni.ListAttiveAsync(cancellationToken))
+            .FirstOrDefault(i => i.AvvisiDiretti && string.Equals(i.CodiceStruttura?.Trim(), codice, StringComparison.Ordinal));
         if (integrazione is null)
         {
             await logEventi.RegistraAsync(
                 LivelloLog.Warning,
-                $"Avviso dell'OTA per un codice struttura senza ricezione diretta attiva (lcode={codice ?? "assente"}, rcode={rcodeTesto ?? "assente"}): ignorato.",
+                $"Avviso dell'OTA per un codice struttura senza ricezione diretta attiva (lcode={codice}, rcode={rcodeTesto ?? "assente"}): ignorato.",
                 origine: "Wubook",
+                dettaglio: dettaglio,
                 categoria: "Wubook",
                 cancellationToken: cancellationToken);
             return;
@@ -92,6 +104,7 @@ public class WubookAvvisiDirettiService(
                 LivelloLog.Info,
                 $"Avviso dell'OTA ricevuto senza un codice prenotazione valido (rcode={rcodeTesto ?? "assente"}): è la prova dell'attivazione, la ricezione diretta funziona.",
                 origine: "Wubook",
+                dettaglio: dettaglio,
                 clienteId: clienteId,
                 strutturaId: integrazione.StrutturaId,
                 categoria: "Wubook",
