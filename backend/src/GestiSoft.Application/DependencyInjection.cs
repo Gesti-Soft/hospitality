@@ -64,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<WubookDisponibilitaService>();
         services.AddScoped<WubookPrenotazioniService>();
         services.AddScoped<WubookEventiService>();
+        services.AddScoped<WubookAvvisiDirettiService>();
         services.AddScoped<WubookChiusureService>();
         services.AddScoped<WubookRestrizioniPeriodoService>();
         services.AddScoped<WubookPianiPrezzoService>();

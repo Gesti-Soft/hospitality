@@ -1,5 +1,6 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
+using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Logging;
 using GestiSoft.Application.Notifiche;
 using GestiSoft.Application.Ospiti;
@@ -46,6 +47,13 @@ public class WubookPrenotazioniService(
     public async Task<RisultatoSincronizzazionePrenotazioni> SincronizzaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.ReservationWrite, cancellationToken);
+        // Con la ricezione diretta fetch_new_bookings non si usa (vedi WubookAvvisiDirettiService): dall'Api
+        // farebbe anche concorrenza al Worker, che potrebbe importare la stessa prenotazione nello stesso momento.
+        if (await licenzaService.AvvisiDirettiAttiviAsync(strutturaId, cancellationToken))
+        {
+            throw new ConflictException("Le prenotazioni dell'OTA arrivano già in automatico appena fatte: non serve sincronizzarle a mano.");
+        }
+
         return await SincronizzaSistemaAsync(strutturaId, cancellationToken);
     }
 
@@ -90,6 +98,29 @@ public class WubookPrenotazioniService(
     /// <summary>Elabora una singola prenotazione Wubook già ottenuta (fetch_booking o fetch_new_bookings) — riusato anche da WubookEventiService per il polling minute-by-minute.</summary>
     public async Task ImportaBookingRicevutoAsync(Guid strutturaId, WubookPrenotazione booking, string nomeCanale, CancellationToken cancellationToken) =>
         await ImportaBookingAsync(strutturaId, booking, nomeCanale, cancellationToken);
+
+    /// <summary>
+    /// Per il controllo periodico (vedi WubookAvvisiDirettiService): importa la prenotazione solo se
+    /// qui non c'è ancora, o se l'OTA la dà cancellata e qui è ancora attiva. Una prenotazione già
+    /// presente non si reimporta mai: l'import riscrive importo e dati con quelli dell'OTA, e ogni
+    /// controllo cancellerebbe le correzioni fatte nel gestionale (addebiti, camera spostata…).
+    /// Le modifiche arrivano con l'avviso dell'OTA. Ritorna true se ha importato qualcosa.
+    /// </summary>
+    public async Task<bool> ImportaSeMancanteAsync(Guid strutturaId, WubookPrenotazione booking, string nomeCanale, CancellationToken cancellationToken)
+    {
+        var esistenti = await prenotazioni.ListByIdPrenotazioneWubookAsync(strutturaId, booking.RCode, cancellationToken);
+        var cancellata = booking.Status == 5;
+        var daImportare = esistenti.Count == 0
+            ? !cancellata
+            : cancellata && esistenti.Any(p => p.StatoPrenotazione != StatoPrenotazione.Annullata);
+        if (!daImportare)
+        {
+            return false;
+        }
+
+        await ImportaBookingAsync(strutturaId, booking, nomeCanale, cancellationToken);
+        return true;
+    }
 
     /// <summary>
     /// Un ordine OTA diventa una prenotazione per camera (vedi OrdineOta), tutte con lo stesso rcode.

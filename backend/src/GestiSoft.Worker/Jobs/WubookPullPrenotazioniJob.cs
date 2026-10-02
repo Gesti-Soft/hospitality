@@ -15,7 +15,9 @@ public class WubookPullPrenotazioniJob(
         var attive = await integrazioni.ListAttiveAsync(context.CancellationToken);
         logger.LogInformation("Pull prenotazioni Wubook: {count} strutture attive", attive.Count);
 
-        foreach (var integrazione in attive)
+        // Con la ricezione diretta fetch_new_bookings non si usa: la documentazione dell'OTA chiede di
+        // non mischiarlo con gli avvisi (vedi WubookAvvisiDirettiService, che ha il suo controllo periodico).
+        foreach (var integrazione in attive.Where(i => !i.AvvisiDiretti))
         {
             try
             {

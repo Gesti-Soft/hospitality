@@ -21,4 +21,19 @@ public class WubookEventoRicevuto : TenantEntity
 
     /// <summary>Motivo del fallimento (fetch da Wubook o importazione locale) — null se ImportazioneRiuscita è true.</summary>
     public string? MessaggioErrore { get; set; }
+
+    /// <summary>
+    /// Avviso diretto dell'OTA ricevuto dall'Api e non ancora elaborato: lo prende il Worker (vedi
+    /// WubookAvvisiDirettiService). L'Api registra soltanto, così le importazioni le fa un solo
+    /// processo e due copie della stessa prenotazione non possono nascere in parallelo. Scritto solo
+    /// con istruzioni atomiche (IWubookEventoRicevutoRepository.SegnaDaElaborareAsync /
+    /// PrendiInCaricoAsync): un avviso arrivato mentre il Worker elabora il precedente non si perde.
+    /// </summary>
+    public bool DaElaborare { get; set; }
+
+    /// <summary>Tentativi falliti per l'avviso in corso: dopo <c>WubookAvvisiDirettiService.TentativiMassimi</c> si smette e si segnala nel Log.</summary>
+    public int Tentativi { get; set; }
+
+    /// <summary>Dopo un tentativo fallito, prima di quando non si riprova (attese crescenti, vedi WubookAvvisiDirettiService). Null = subito.</summary>
+    public DateTime? ProssimoTentativoUtc { get; set; }
 }

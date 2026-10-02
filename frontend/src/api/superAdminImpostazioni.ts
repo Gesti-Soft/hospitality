@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPut } from './client'
+import { apiGet, apiPost, apiPut } from './client'
 
 // ---------------------------------------------------------------------------
 // Impostazioni globali (a livello di applicazione, non di Cliente/Struttura)
@@ -64,5 +64,39 @@ export function useAggiornaWubookLicenzaSuperAdmin(strutturaId: string | null) {
       // Admin, che legge dagli stessi dati aggregati della dashboard.
       queryClient.invalidateQueries({ queryKey: ['super-admin', 'dashboard'] })
     },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Ricezione diretta delle prenotazioni OTA (l'OTA avvisa il gestionale invece di gestisoft.it) —
+// solo Super Admin, vedi WubookAvvisiDirettiService lato backend.
+// ---------------------------------------------------------------------------
+
+export interface WubookAvvisiDirettiDto {
+  attivi: boolean
+  /** L'OTA ha registrato proprio l'indirizzo di questo gestionale. */
+  indirizzoCorretto: boolean
+  /** Indirizzo che l'OTA dice di avere ("questo gestionale" se è il nostro). */
+  urlRegistrato: string | null
+  urlPrecedente: string | null
+  erroreLettura: string | null
+  /** Valorizzato = da qui non si può attivare né disattivare (es. ambiente di sviluppo). */
+  motivoNonAttivabile: string | null
+}
+
+export function useWubookAvvisiDiretti(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['wubook-avvisi-diretti', strutturaId],
+    queryFn: () => apiGet<WubookAvvisiDirettiDto>(`/strutture/${strutturaId}/wubook/avvisi-diretti`),
+    enabled: !!strutturaId,
+  })
+}
+
+export function useCambiaWubookAvvisiDiretti(strutturaId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (attiva: boolean) =>
+      apiPost<WubookAvvisiDirettiDto>(`/strutture/${strutturaId}/wubook/avvisi-diretti/${attiva ? 'attiva' : 'disattiva'}`),
+    onSuccess: (dati) => queryClient.setQueryData(['wubook-avvisi-diretti', strutturaId], dati),
   })
 }

@@ -122,6 +122,10 @@ public class WubookLicenzaService(
         return (tokenWubook, integrazione.CodiceStruttura);
     }
 
+    /// <summary>Ricezione diretta delle prenotazioni attiva (vedi WubookIntegrazione.AvvisiDiretti) — nessun controllo permessi, uso interno.</summary>
+    public async Task<bool> AvvisiDirettiAttiviAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        (await repository.GetByStrutturaIdAsync(strutturaId, cancellationToken))?.AvvisiDiretti ?? false;
+
     /// <summary>Per la vista Cliente/operatore (GET config): le credenziali sono pronte se il Codice struttura è impostato, la licenza della Struttura non è scaduta e il Token Wubook globale è configurato.</summary>
     public async Task<bool> CredenzialiProntoAsync(WubookIntegrazione integrazione, CancellationToken cancellationToken)
     {

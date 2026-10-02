@@ -27,4 +27,14 @@ public class WubookIntegrazione : TenantEntity
 
     /// <summary>Ultimo motivo per cui le credenziali non sono utilizzabili (mancanti o la licenza della Struttura è scaduta), per mostrarlo in UI.</summary>
     public string? UltimoErrore { get; set; }
+
+    /// <summary>
+    /// L'OTA avvisa direttamente il gestionale a ogni prenotazione nuova, modificata o cancellata
+    /// (push_activation), invece di passare da gestisoft.it: il polling su gestisoft.it e lo scarico
+    /// orario (fetch_new_bookings) per questa Struttura si fermano. Vedi WubookAvvisiDirettiService.
+    /// </summary>
+    public bool AvvisiDiretti { get; set; }
+
+    /// <summary>Indirizzo a cui l'OTA mandava gli avvisi prima dell'attivazione (gestisoft.it): disattivando si rimette questo.</summary>
+    public string? UrlAvvisiPrecedente { get; set; }
 }

@@ -45,7 +45,13 @@ import {
 import { useAggiornaCliente, useCreaCliente } from '../../api/clienti'
 import { useImpostaAttivoStruttura } from '../../api/strutture'
 import { useCreaUtente } from '../../api/utenti'
-import { useAggiornaWubookLicenzaSuperAdmin, useWubookLicenzaSuperAdmin, type WubookLicenzaDto } from '../../api/superAdminImpostazioni'
+import {
+  useAggiornaWubookLicenzaSuperAdmin,
+  useCambiaWubookAvvisiDiretti,
+  useWubookAvvisiDiretti,
+  useWubookLicenzaSuperAdmin,
+  type WubookLicenzaDto,
+} from '../../api/superAdminImpostazioni'
 import { useAggiornaLicenzaStruttura, useLicenzaStruttura, type LicenzaStrutturaDto } from '../../api/licenzaStruttura'
 import { useWubookEventiRicevuti, type WubookEventoRicevutoDto } from '../../api/integrazioni'
 import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined'
@@ -627,6 +633,92 @@ function ConfigWubookRiga({ strutturaId }: { strutturaId: string }) {
       </Box>
 
       {prenotazioniRicevuteAperto && <PrenotazioniRicevuteDialog strutturaId={strutturaId} onClose={() => setPrenotazioniRicevuteAperto(false)} />}
+
+      <RicezioneDirettaOta strutturaId={strutturaId} />
+    </Box>
+  )
+}
+
+/**
+ * Ricezione diretta: l'OTA avvisa questo gestionale a ogni prenotazione invece di gestisoft.it.
+ * Si attiva una struttura alla volta e si può tornare indietro: disattivando, gli avvisi tornano
+ * all'indirizzo di prima.
+ */
+function RicezioneDirettaOta({ strutturaId }: { strutturaId: string }) {
+  const stato = useWubookAvvisiDiretti(strutturaId)
+  const cambia = useCambiaWubookAvvisiDiretti(strutturaId)
+  const toast = useToast()
+  const [daConfermare, setDaConfermare] = useState<boolean | null>(null)
+
+  function conferma() {
+    if (daConfermare === null) return
+    const attiva = daConfermare
+    cambia.mutate(attiva, {
+      onSuccess: () => {
+        setDaConfermare(null)
+        toast.successo(attiva ? 'Ricezione diretta attivata: controlla nel Log l\'avviso di prova.' : 'Ricezione diretta disattivata.')
+      },
+      onError: (err) => {
+        setDaConfermare(null)
+        toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+      },
+    })
+  }
+
+  if (stato.isLoading) {
+    return <Skeleton variant="rounded" height={60} />
+  }
+
+  const dati = stato.data
+  const attivi = dati?.attivi ?? false
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 0.5 }}>
+      <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+        Ricezione diretta delle prenotazioni
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <Chip
+          size="small"
+          label={attivi ? 'Attiva' : 'Via gestisoft.it'}
+          sx={{ bgcolor: attivi ? tokens.ok600 : tokens.surfaceBorder, color: attivi ? '#fff' : undefined, fontWeight: 700 }}
+        />
+        <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+          Avvisi registrati sull'OTA: {dati?.urlRegistrato ?? (dati?.erroreLettura ? 'non leggibile' : 'nessun indirizzo')}
+        </Typography>
+      </Box>
+      {attivi && dati && !dati.indirizzoCorretto && (
+        <Alert severity="warning" sx={{ py: 0 }}>
+          La ricezione diretta risulta attiva ma l'OTA manda gli avvisi altrove: riattivala, o disattivala per tornare a gestisoft.it.
+          Nel frattempo il controllo ogni 15 minuti recupera le prenotazioni nuove.
+        </Alert>
+      )}
+      {dati?.erroreLettura && <Alert severity="error" sx={{ py: 0 }}>{dati.erroreLettura}</Alert>}
+      {dati?.motivoNonAttivabile ? (
+        <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>{dati.motivoNonAttivabile}</Typography>
+      ) : (
+        <Box>
+          <Button size="small" variant="outlined" color={attivi ? 'error' : 'primary'} onClick={() => setDaConfermare(!attivi)} disabled={cambia.isPending}>
+            {attivi ? 'Torna a gestisoft.it' : 'Ricevi le prenotazioni direttamente'}
+          </Button>
+        </Box>
+      )}
+
+      {daConfermare !== null && (
+        <ConfirmDialog
+          titolo={daConfermare ? 'Attivare la ricezione diretta?' : 'Tornare a gestisoft.it?'}
+          messaggio={
+            daConfermare
+              ? "L'OTA manderà gli avvisi delle prenotazioni di questa struttura direttamente a questo gestionale e non più a gestisoft.it. Subito dopo arriva un avviso di prova: lo trovi nel Log della struttura. Ogni 15 minuti un controllo recupera comunque le prenotazioni nuove."
+              : `L'OTA tornerà a mandare gli avvisi a ${dati?.urlPrecedente ?? 'nessun indirizzo (non ce n\'era uno prima)'} e la struttura tornerà a leggerli da gestisoft.it.`
+          }
+          testoConferma={daConfermare ? 'Attiva' : 'Torna a gestisoft.it'}
+          pericoloso={!daConfermare}
+          inCorso={cambia.isPending}
+          onConferma={conferma}
+          onAnnulla={() => setDaConfermare(null)}
+        />
+      )}
     </Box>
   )
 }
@@ -781,33 +873,41 @@ function RigaEventoRicevuto({ evento }: { evento: WubookEventoRicevutoDto }) {
       <TableCell sx={{ fontFamily: fontMono, fontSize: 12 }}>{evento.lcode}</TableCell>
       <TableCell sx={{ fontFamily: fontMono, fontSize: 12 }}>{evento.rcode}</TableCell>
       <TableCell>
-        <Chip
-          size="small"
-          label={evento.importazioneRiuscita ? 'Letta' : 'Non letta'}
-          sx={{ bgcolor: evento.importazioneRiuscita ? tokens.ok600 : tokens.error600, color: '#fff', fontWeight: 700 }}
-        />
+        <ChipEsitoEvento evento={evento} />
       </TableCell>
     </TableRow>
   )
 
-  return evento.messaggioErrore ? <Tooltip title={evento.messaggioErrore}>{riga}</Tooltip> : riga
+  return dettaglioEvento(evento) ? <Tooltip title={dettaglioEvento(evento)}>{riga}</Tooltip> : riga
+}
+
+/** In coda = avviso diretto dell'OTA non ancora importato (vedi WubookAvvisiDirettiService): si riprova da solo. */
+function ChipEsitoEvento({ evento }: { evento: WubookEventoRicevutoDto }) {
+  const inCoda = !!evento.daElaborare
+  const label = inCoda ? 'In coda' : evento.importazioneRiuscita ? 'Letta' : 'Non letta'
+  const colore = inCoda ? tokens.orange600 : evento.importazioneRiuscita ? tokens.ok600 : tokens.error600
+  return <Chip size="small" label={label} sx={{ bgcolor: colore, color: '#fff', fontWeight: 700 }} />
+}
+
+function dettaglioEvento(evento: WubookEventoRicevutoDto): string | null {
+  const parti: string[] = []
+  if (evento.daElaborare && (evento.tentativi ?? 0) > 0) {
+    const prossimo = evento.prossimoTentativoUtc ? `, prossimo alle ${formattatoreDataOra.format(new Date(evento.prossimoTentativoUtc))}` : ''
+    parti.push(`Tentativo ${evento.tentativi} non riuscito${prossimo}.`)
+  }
+  if (evento.messaggioErrore) parti.push(evento.messaggioErrore)
+  return parti.length > 0 ? parti.join(' ') : null
 }
 
 function CardEventoRicevuto({ evento }: { evento: WubookEventoRicevutoDto }) {
   const data = evento.updatedAtUtc ?? evento.createdAtUtc
-  const esito = (
-    <Chip
-      size="small"
-      label={evento.importazioneRiuscita ? 'Letta' : 'Non letta'}
-      sx={{ bgcolor: evento.importazioneRiuscita ? tokens.ok600 : tokens.error600, color: '#fff', fontWeight: 700 }}
-    />
-  )
+  const esito = <ChipEsitoEvento evento={evento} />
 
   return (
     <CardElenco>
       <TestataCardElenco
         titolo={formattatoreDataOra.format(new Date(data))}
-        azioneDestra={evento.messaggioErrore ? <Tooltip title={evento.messaggioErrore}>{esito}</Tooltip> : esito}
+        azioneDestra={dettaglioEvento(evento) ? <Tooltip title={dettaglioEvento(evento)}>{esito}</Tooltip> : esito}
       />
       <RigaCardMeta
         voci={[

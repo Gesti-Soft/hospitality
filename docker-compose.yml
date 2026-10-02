@@ -82,6 +82,9 @@ services:
       # Valorizzata solo durante il cambio di chiave: serve a leggere ciò che è ancora cifrato con
       # la chiave vecchia mentre l'avvio riscrive tutto con quella nuova. Vedi docs/deploy.md.
       Credenziali__ChiaveCifraturaPrecedente: ${CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE:-}
+      # Segreto nel percorso a cui l'OTA manda gli avvisi delle prenotazioni (ricezione diretta,
+      # vedi OtaAvvisiController). Vuoto = endpoint spento e attivazione rifiutata.
+      OtaAvvisi__Segreto: ${OTA_AVVISI_SEGRETO:-}
       # Email di servizio (assistenza): senza host non parte nessuna email, il resto funziona lo
       # stesso. Porta 587 con STARTTLS: la 465 (TLS implicito) non è supportata.
       Email__Host: ${EMAIL_SMTP_HOST:-}

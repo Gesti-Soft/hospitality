@@ -569,6 +569,10 @@ export interface WubookEventoRicevutoDto {
   messaggioErrore: string | null
   createdAtUtc: string
   updatedAtUtc: string | null
+  /** Avviso diretto dell'OTA ancora da importare (in coda o in attesa di un nuovo tentativo). */
+  daElaborare?: boolean
+  tentativi?: number
+  prossimoTentativoUtc?: string | null
 }
 
 export function useWubookEventiRicevuti(strutturaId: string | null, abilitato: boolean) {

@@ -522,6 +522,39 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         }
     }
 
+    public async Task<IReadOnlyList<WubookPrenotazione>> FetchBookingsCreateAsync(string token, string lcode, DateTime dal, DateTime al, CancellationToken cancellationToken)
+    {
+        // oncreated=1 (date di creazione), ancillary=1 come fetch_booking.
+        var (codice, dati, fault) = await InvocaAsync(
+            "fetch_bookings", cancellationToken,
+            token, LcodeInt(lcode),
+            dal.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture),
+            al.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture),
+            1, 1);
+        VerificaEsito(codice, fault, "il controllo delle prenotazioni");
+
+        return ElementiArray(dati)
+            .Select(v => v.Element("struct"))
+            .Where(s => s is not null)
+            .Select(s => LeggiPrenotazione(s!))
+            .ToList();
+    }
+
+    public async Task PushActivationAsync(string token, string lcode, string url, bool prova, CancellationToken cancellationToken)
+    {
+        var (codice, _, fault) = await InvocaAsync("push_activation", cancellationToken, token, LcodeInt(lcode), url, prova ? 1 : 0);
+        VerificaEsito(codice, fault, "l'attivazione degli avvisi delle prenotazioni");
+    }
+
+    public async Task<string?> PushUrlAsync(string token, string lcode, CancellationToken cancellationToken)
+    {
+        var (codice, dati, fault) = await InvocaAsync("push_url", cancellationToken, token, LcodeInt(lcode));
+        VerificaEsito(codice, fault, "la lettura dell'indirizzo degli avvisi");
+
+        var url = dati?.Element("string")?.Value ?? dati?.Value;
+        return string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+    }
+
     private static XElement? MembroValore(XElement structEl, string nome) =>
         structEl.Elements("member").FirstOrDefault(m => m.Element("name")?.Value == nome)?.Element("value");
 

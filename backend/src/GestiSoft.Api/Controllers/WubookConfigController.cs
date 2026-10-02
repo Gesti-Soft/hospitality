@@ -10,8 +10,40 @@ namespace GestiSoft.Api.Controllers;
 [ApiController]
 [Route("strutture/{strutturaId:guid}/wubook/config")]
 [Authorize]
-public class WubookConfigController(WubookLicenzaService service, ICurrentUser currentUser) : ControllerBase
+public class WubookConfigController(
+    WubookLicenzaService service,
+    WubookAvvisiDirettiService avvisiDiretti,
+    IConfiguration configuration,
+    ICurrentUser currentUser) : ControllerBase
 {
+    /// <summary>Ricezione diretta delle prenotazioni (vedi WubookAvvisiDirettiService) — solo Super Admin.</summary>
+    [HttpGet("/strutture/{strutturaId:guid}/wubook/avvisi-diretti")]
+    public async Task<IActionResult> GetAvvisiDiretti(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var (url, motivo) = OtaAvvisiIndirizzo.Costruisci(configuration);
+        var stato = await avvisiDiretti.StatoAsync(currentUser, strutturaId, url, cancellationToken);
+        return Ok(ToAvvisiDto(stato, motivo));
+    }
+
+    [HttpPost("/strutture/{strutturaId:guid}/wubook/avvisi-diretti/attiva")]
+    public async Task<IActionResult> AttivaAvvisiDiretti(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var url = OtaAvvisiIndirizzo.CostruisciORifiuta(configuration);
+        var stato = await avvisiDiretti.AttivaAsync(currentUser, strutturaId, url, cancellationToken);
+        return Ok(ToAvvisiDto(stato, null));
+    }
+
+    [HttpPost("/strutture/{strutturaId:guid}/wubook/avvisi-diretti/disattiva")]
+    public async Task<IActionResult> DisattivaAvvisiDiretti(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var url = OtaAvvisiIndirizzo.CostruisciORifiuta(configuration);
+        var stato = await avvisiDiretti.DisattivaAsync(currentUser, strutturaId, url, cancellationToken);
+        return Ok(ToAvvisiDto(stato, null));
+    }
+
+    private static WubookAvvisiDirettiDto ToAvvisiDto(StatoAvvisiDiretti s, string? motivoNonAttivabile) =>
+        new(s.Attivi, s.IndirizzoCorretto, s.UrlRegistrato, s.UrlPrecedente, s.ErroreLettura, motivoNonAttivabile);
+
     [HttpGet]
     public async Task<IActionResult> Get(Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -47,7 +79,7 @@ public class WubookConfigController(WubookLicenzaService service, ICurrentUser c
     public async Task<IActionResult> GetEventiRicevuti(Guid strutturaId, CancellationToken cancellationToken)
     {
         var eventi = await service.ListEventiRicevutiAsync(currentUser, strutturaId, cancellationToken);
-        return Ok(eventi.Select(e => new WubookEventoRicevutoDto(e.Id, e.Lcode, e.Rcode, e.ImportazioneRiuscita, e.MessaggioErrore, e.CreatedAtUtc, e.UpdatedAtUtc)));
+        return Ok(eventi.Select(e => new WubookEventoRicevutoDto(e.Id, e.Lcode, e.Rcode, e.ImportazioneRiuscita, e.MessaggioErrore, e.CreatedAtUtc, e.UpdatedAtUtc, e.DaElaborare, e.Tentativi, e.ProssimoTentativoUtc)));
     }
 
     private async Task<WubookIntegrazioneDto> ToDtoAsync(WubookIntegrazione w, CancellationToken cancellationToken) => new(

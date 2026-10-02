@@ -91,6 +91,19 @@ public interface IWubookClient
 
     Task<WubookPrenotazione?> FetchBookingAsync(string token, string lcode, int rcode, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// fetch_bookings per data di creazione (oncreated=1), estremi inclusi: a differenza di
+    /// fetch_new_bookings non segna nulla come letto. Massimo 120 prenotazioni per chiamata e 288
+    /// chiamate ogni 12 ore (tdocs.wubook.net/wired/fetch.html, policies.html).
+    /// </summary>
+    Task<IReadOnlyList<WubookPrenotazione>> FetchBookingsCreateAsync(string token, string lcode, DateTime dal, DateTime al, CancellationToken cancellationToken);
+
+    /// <summary>push_activation: indirizzo a cui l'OTA manda gli avvisi delle prenotazioni di questa struttura ("" = disattivati). Con <paramref name="prova"/> l'OTA manda subito un avviso di prova.</summary>
+    Task PushActivationAsync(string token, string lcode, string url, bool prova, CancellationToken cancellationToken);
+
+    /// <summary>push_url: indirizzo degli avvisi attualmente registrato per questa struttura, null se nessuno.</summary>
+    Task<string?> PushUrlAsync(string token, string lcode, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<WubookCanale>> GetChannelsInfoAsync(string token, CancellationToken cancellationToken);
 
     /// <summary>fetch_single_room — usata per risolvere il "subroom" (camera virtuale/pool) di una camera prima di chiusure/restrizioni per periodo, fedele a RoomsController.ResolveTargetRoom del legacy.</summary>
