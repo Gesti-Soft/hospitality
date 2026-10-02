@@ -65,4 +65,53 @@ public class LetturaPrenotazioneOtaTests
         Assert.Equal([45052, 45053], letta.Camere!.Select(c => c.IdCameraWubook));
         Assert.All(letta.Camere!, c => Assert.Null(c.Occupazione));
     }
+
+    [Fact]
+    public void Modifica_LaVecchiaCancellataConWasModified()
+    {
+        var vecchia = Struct(
+            Membro("reservation_code", Intero(100)),
+            Membro("status", Intero(5)),
+            Membro("was_modified", Intero(1)),
+            Membro("deleted_from", Intero(8)));
+
+        var letta = WubookXmlRpcClient.LeggiPrenotazione(vecchia);
+
+        Assert.Equal(5, letta.Status);
+        Assert.True(letta.WasModified);
+        Assert.Empty(letta.PrenotazioniSostituite!);
+    }
+
+    [Fact]
+    public void Modifica_LaNuovaIndicaQuelleCheSostituisce()
+    {
+        var nuova = Struct(
+            Membro("reservation_code", Intero(200)),
+            Membro("status", Intero(1)),
+            Membro("modified_reservations", Array(Intero(100), Intero(150))));
+
+        var letta = WubookXmlRpcClient.LeggiPrenotazione(nuova);
+
+        Assert.False(letta.WasModified);
+        Assert.Equal([100, 150], letta.PrenotazioniSostituite!);
+    }
+
+    [Theory]
+    [InlineData("100")]
+    [InlineData("100, 150")]
+    public void Modifica_SostituiteAncheComeTesto(string testo)
+    {
+        var letta = WubookXmlRpcClient.LeggiPrenotazione(Struct(Membro("reservation_code", Intero(200)), Membro("modified_reservations", Stringa(testo))));
+
+        Assert.Equal(100, letta.PrenotazioniSostituite![0]);
+    }
+
+    [Fact]
+    public void PrenotazioneNormale_NessunaModifica()
+    {
+        var letta = WubookXmlRpcClient.LeggiPrenotazione(Struct(Membro("reservation_code", Intero(300)), Membro("status", Intero(1))));
+
+        Assert.False(letta.WasModified);
+        Assert.Empty(letta.PrenotazioniSostituite!);
+    }
 }

@@ -392,7 +392,33 @@ public class WubookXmlRpcClient(HttpClient http) : IWubookClient
         CustomerCountry: MembroStringa(s, "customer_country"),
         CustomerCity: MembroStringa(s, "customer_city"),
         Extra: LeggiDatiExtra(s),
-        Camere: LeggiCamere(s));
+        Camere: LeggiCamere(s),
+        WasModified: MembroBool(s, "was_modified"),
+        PrenotazioniSostituite: LeggiPrenotazioniSostituite(s));
+
+    /// <summary>
+    /// `modified_reservations`: codici delle prenotazioni che questa sostituisce (tdocs.wubook.net,
+    /// "Fetching reservations"). Documentato come array; si accetta anche un solo valore o una stringa
+    /// separata da virgole, perché una risposta reale non l'abbiamo mai vista.
+    /// </summary>
+    private static IReadOnlyList<int> LeggiPrenotazioniSostituite(XElement s)
+    {
+        var valore = MembroValore(s, "modified_reservations");
+        if (valore is null)
+        {
+            return [];
+        }
+
+        var testi = valore.Element("array") is not null
+            ? ElementiArray(valore).Select(v => v.Element("int")?.Value ?? v.Element("i4")?.Value ?? v.Element("string")?.Value ?? v.Value)
+            : (valore.Element("int")?.Value ?? valore.Element("i4")?.Value ?? valore.Element("string")?.Value ?? valore.Value).Split(',');
+
+        return testi
+            .Select(t => int.TryParse(t.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var rc) ? rc : 0)
+            .Where(rc => rc > 0)
+            .Distinct()
+            .ToList();
+    }
 
     /// <summary>
     /// Camere dell'ordine da `booked_rooms` (una struttura per camera prenotata, anche due dello stesso

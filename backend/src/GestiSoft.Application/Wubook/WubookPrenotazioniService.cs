@@ -109,9 +109,10 @@ public class WubookPrenotazioniService(
     public async Task<bool> ImportaSeMancanteAsync(Guid strutturaId, WubookPrenotazione booking, string nomeCanale, CancellationToken cancellationToken)
     {
         var esistenti = await prenotazioni.ListByIdPrenotazioneWubookAsync(strutturaId, booking.RCode, cancellationToken);
-        var cancellata = booking.Status == 5;
+        // Cancellata per una modifica (was_modified): non si annulla, la aggiorna la nuova (vedi ImportaBookingAsync).
+        var cancellata = booking.Status == 5 && !booking.WasModified;
         var daImportare = esistenti.Count == 0
-            ? !cancellata
+            ? booking.Status != 5
             : cancellata && esistenti.Any(p => p.StatoPrenotazione != StatoPrenotazione.Annullata);
         if (!daImportare)
         {
@@ -131,6 +132,28 @@ public class WubookPrenotazioniService(
     {
         var camereOrdine = OrdineOta.Suddividi(booking);
         var esistenti = await prenotazioni.ListByIdPrenotazioneWubookAsync(strutturaId, booking.RCode, cancellationToken);
+
+        // Modifica dall'OTA: la vecchia arriva cancellata con was_modified = 1 e subito dopo arriva la
+        // nuova, con un altro rcode e in modified_reservations quello vecchio (tdocs.wubook.net,
+        // "Fetching reservations"). La vecchia qui non si annulla: la nuova la aggiorna (vedi sotto), e
+        // resta una sola prenotazione con ospiti, pagamenti, extra e fatture. Se la nuova si perdesse,
+        // con la ricezione diretta la recupera il controllo periodico.
+        if (booking.Status == 5 && booking.WasModified)
+        {
+            if (esistenti.Count > 0)
+            {
+                await logEventi.RegistraAsync(
+                    LivelloLog.Info,
+                    $"Prenotazione #{esistenti[0].NumeroPrenotazione} da {nomeCanale} (rcode={booking.RCode}) modificata sul portale: non si annulla, la aggiorna la prenotazione nuova appena arriva.",
+                    origine: "Wubook",
+                    clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                    strutturaId: strutturaId,
+                    categoria: "Wubook",
+                    cancellationToken: cancellationToken);
+            }
+
+            return EsitoBooking.Ignorata;
+        }
 
         // Status 5 = prenotazione cancellata lato Wubook (vedi report Fase 5 sez. C).
         if (booking.Status == 5)
@@ -154,12 +177,35 @@ public class WubookPrenotazioniService(
                 ?? throw new InvalidOperationException($"Nessuna tipologia locale associata alla camera OTA {camera.IdCameraWubook}."));
         }
 
+        // Prenotazione nuova che ne sostituisce una modificata: prende il posto di quella vecchia
+        // (stesso numero e stessa riga nel gestionale), che passa al codice OTA nuovo. Solo dopo aver
+        // risolto le tipologie: se l'import si ferma lì, la vecchia resta com'era.
+        var modificaDi = esistenti.Count == 0 ? await PrenotazioneSostituitaAsync(strutturaId, booking, cancellationToken) : null;
+        if (modificaDi is { } sostituita)
+        {
+            foreach (var precedente in sostituita.Prenotazioni)
+            {
+                precedente.IdPrenotazioneWubook = booking.RCode;
+                await prenotazioni.UpdateAsync(precedente, cancellationToken);
+            }
+
+            esistenti = sostituita.Prenotazioni;
+            await logEventi.RegistraAsync(
+                LivelloLog.Info,
+                $"Prenotazione #{esistenti[0].NumeroPrenotazione} da {nomeCanale} modificata sul portale: aggiornata con la prenotazione nuova (rcode {sostituita.Rcode} → {booking.RCode}).",
+                origine: "Wubook",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "Wubook",
+                cancellationToken: cancellationToken);
+        }
+
         var esito = EsitoBooking.Aggiornata;
         foreach (var camera in camereOrdine)
         {
             var esitoCamera = await ImportaCameraAsync(
                 strutturaId, booking, camera, camereOrdine.Count, tipologieCamere[camera.Indice],
-                esistenti.FirstOrDefault(p => p.IndiceCameraOta == camera.Indice), nomeCanale, cancellationToken);
+                esistenti.FirstOrDefault(p => p.IndiceCameraOta == camera.Indice), nomeCanale, modificaDi is not null, cancellationToken);
             if (esitoCamera == EsitoBooking.Creata && camera.Indice == 0)
             {
                 esito = EsitoBooking.Creata;
@@ -173,6 +219,31 @@ public class WubookPrenotazioniService(
         }
 
         return esito;
+    }
+
+    /// <summary>
+    /// La prenotazione del gestionale che <paramref name="booking"/> sostituisce (modified_reservations),
+    /// se ce n'è una ancora attiva. Più codici = una catena di modifiche: vale il primo che qui esiste.
+    /// Una già annullata (modifiche arrivate prima di questa gestione) non si riprende: resta com'è e
+    /// la nuova si crea a parte, come prima.
+    /// </summary>
+    private async Task<(int Rcode, IReadOnlyList<Prenotazione> Prenotazioni)?> PrenotazioneSostituitaAsync(Guid strutturaId, WubookPrenotazione booking, CancellationToken cancellationToken)
+    {
+        foreach (var rcodeVecchio in booking.PrenotazioniSostituite ?? [])
+        {
+            if (rcodeVecchio == booking.RCode)
+            {
+                continue;
+            }
+
+            var precedenti = await prenotazioni.ListByIdPrenotazioneWubookAsync(strutturaId, rcodeVecchio, cancellationToken);
+            if (precedenti.Any(p => p.StatoPrenotazione != StatoPrenotazione.Annullata))
+            {
+                return (rcodeVecchio, precedenti);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -284,6 +355,7 @@ public class WubookPrenotazioniService(
         SettingTipologia tipologia,
         Prenotazione? esistente,
         string nomeCanale,
+        bool modificaSulPortale,
         CancellationToken cancellationToken)
     {
         // Nel log e nelle notifiche: "(camera 2 di 3)" solo se l'ordine ne ha più d'una.
@@ -481,6 +553,13 @@ public class WubookPrenotazioniService(
             if (serviziCambiati is not null)
             {
                 cambiamenti.Add(serviziCambiati);
+            }
+
+            // Modificata sul portale (nuovo rcode che sostituisce il vecchio): è una modifica anche se
+            // ha toccato solo campi che qui non si confrontano (nome, note…), e va notificata.
+            if (modificaSulPortale && cambiamenti.Count == 0 && camera.Indice == 0)
+            {
+                cambiamenti.Add("dati aggiornati dal portale");
             }
 
             if (cambiamenti.Count > 0)

@@ -25,7 +25,11 @@ public record WubookPrenotazione(
     string? CustomerCity,
     DatiExtraOta? Extra = null,
     // Una per camera dell'ordine, nell'ordine in cui l'OTA le elenca (vedi OrdineOta).
-    IReadOnlyList<CameraOrdineOta>? Camere = null);
+    IReadOnlyList<CameraOrdineOta>? Camere = null,
+    // Modifica dall'OTA: la vecchia arriva cancellata con was_modified = 1, la nuova ha un altro rcode
+    // e in modified_reservations quelli che sostituisce (vedi WubookPrenotazioniService).
+    bool WasModified = false,
+    IReadOnlyList<int>? PrenotazioniSostituite = null);
 
 /// <summary>
 /// Una camera di un ordine OTA: id della camera OTA, somma dei prezzi per notte (`booked_rooms`, 0 se

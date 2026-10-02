@@ -543,6 +543,9 @@ function LicenzaStrutturaRiga({ strutturaId, clienteQuotaAnnua }: { strutturaId:
 function ConfigWubookRiga({ strutturaId }: { strutturaId: string }) {
   const licenza = useWubookLicenzaSuperAdmin(strutturaId)
   const aggiorna = useAggiornaWubookLicenzaSuperAdmin(strutturaId)
+  // Con la ricezione diretta utente e token gestisoft.it non servono: si nascondono, ma restano salvati
+  // (Salva OTA li rimanda com'erano) per quando si torna a gestisoft.it.
+  const ricezioneDiretta = useWubookAvvisiDiretti(strutturaId).data?.attivi ?? false
   const toast = useToast()
 
   const [gestisoftUsername, setGestisoftUsername] = useState('')
@@ -601,27 +604,31 @@ function ConfigWubookRiga({ strutturaId }: { strutturaId: string }) {
         />
       </Box>
 
-      <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em', mt: 0.5 }}>
-        Solo per l'intercettazione prenotazioni (gestisoft.it)
-      </Typography>
-      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-        <TextField
-          size="small"
-          label="Utente gestisoft.it"
-          value={gestisoftUsername}
-          onChange={(e) => setGestisoftUsername(e.target.value)}
-          disabled={aggiorna.isPending}
-          sx={{ minWidth: 200 }}
-        />
-        <TextField
-          size="small"
-          label="Token gestisoft.it"
-          value={gestisoftToken}
-          onChange={(e) => setGestisoftToken(e.target.value)}
-          disabled={aggiorna.isPending}
-          sx={{ minWidth: 200 }}
-        />
-      </Box>
+      {!ricezioneDiretta && (
+        <>
+          <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: tokens.textTertiary, textTransform: 'uppercase', letterSpacing: '.05em', mt: 0.5 }}>
+            Solo per l'intercettazione prenotazioni (gestisoft.it)
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              label="Utente gestisoft.it"
+              value={gestisoftUsername}
+              onChange={(e) => setGestisoftUsername(e.target.value)}
+              disabled={aggiorna.isPending}
+              sx={{ minWidth: 200 }}
+            />
+            <TextField
+              size="small"
+              label="Token gestisoft.it"
+              value={gestisoftToken}
+              onChange={(e) => setGestisoftToken(e.target.value)}
+              disabled={aggiorna.isPending}
+              sx={{ minWidth: 200 }}
+            />
+          </Box>
+        </>
+      )}
 
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button size="small" variant="contained" color="primary" onClick={salva} disabled={aggiorna.isPending}>
