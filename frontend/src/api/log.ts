@@ -28,14 +28,14 @@ export interface PagedResultDto<T> {
 }
 
 /** Tutte le categorie — solo per il Super Admin (vedi LogVisibilita lato backend, applicata comunque anche se il filtro qui non venisse rispettato). */
-export const CATEGORIE_LOG = ['Prenotazione', 'Utente', 'Servizi', 'Wubook', 'AlloggiatiWeb', 'Osservatorio', 'PayTourist', 'Auth', 'SuperAdmin', 'Backup'] as const
+export const CATEGORIE_LOG = ['Prenotazione', 'Utente', 'Servizi', 'Wubook', 'AlloggiatiWeb', 'Osservatorio', 'PayTourist', 'Auth', 'SuperAdmin', 'Backup', 'Aggiornamento'] as const
 
 /**
  * Sottoinsieme visibile a un Cliente — deve restare identico a LogVisibilita.CategorieVisibiliCliente
  * lato backend. Niente "Auth": il log di un Cliente mostra solo la struttura selezionata e le righe
  * di login non ne hanno una, quindi quel filtro non troverebbe mai nulla.
  */
-export const CATEGORIE_LOG_CLIENTE = ['Prenotazione', 'Utente', 'Servizi', 'AlloggiatiWeb', 'Osservatorio', 'PayTourist'] as const
+export const CATEGORIE_LOG_CLIENTE = ['Prenotazione', 'Utente', 'Servizi', 'AlloggiatiWeb', 'Osservatorio', 'PayTourist', 'Aggiornamento'] as const
 
 /**
  * Come mostrare una categoria all'utente. La categoria è l'identificatore con cui la riga è salvata

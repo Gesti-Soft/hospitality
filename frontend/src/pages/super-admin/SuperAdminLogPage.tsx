@@ -39,7 +39,7 @@ export function SuperAdminLogPage() {
         </Typography>
       </Box>
 
-      <LogPage strutturaId={null} categorie={['Auth', 'SuperAdmin', 'Utente', 'Backup']} nomeCliente={nomeCliente} />
+      <LogPage strutturaId={null} categorie={['Auth', 'SuperAdmin', 'Utente', 'Backup', 'Aggiornamento']} nomeCliente={nomeCliente} />
     </Box>
   )
 }

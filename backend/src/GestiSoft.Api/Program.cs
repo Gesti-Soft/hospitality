@@ -5,7 +5,9 @@ using GestiSoft.Api.Auth;
 using GestiSoft.Api.Middleware;
 using GestiSoft.Application;
 using GestiSoft.Application.Auth;
+using GestiSoft.Application.Logging;
 using GestiSoft.Application.Notifiche;
+using GestiSoft.Domain.Enums;
 using GestiSoft.Contracts.Health;
 using GestiSoft.Infrastructure;
 using GestiSoft.Infrastructure.Auth;
@@ -166,6 +168,20 @@ using (var startupScope = app.Services.CreateScope())
         catch (Exception ex)
         {
             app.Logger.LogWarning(ex, "Notifica di aggiornamento del gestionale non riuscita (versione {Versione}).", versione);
+            // Anche nel Log del Super Admin, che altrimenti non saprebbe che la notifica non è partita.
+            try
+            {
+                await startupScope.ServiceProvider.GetRequiredService<ILogEventoService>().RegistraAsync(
+                    LivelloLog.Warning,
+                    $"Gestionale aggiornato alla versione {versione.Trim()}, ma la notifica alle strutture non è riuscita.",
+                    origine: "Api",
+                    dettaglio: ex.Message,
+                    categoria: NotificaService.CategoriaLogAggiornamento);
+            }
+            catch (Exception logEx)
+            {
+                app.Logger.LogWarning(logEx, "Registrazione nel Log non riuscita.");
+            }
         }
     }
 }

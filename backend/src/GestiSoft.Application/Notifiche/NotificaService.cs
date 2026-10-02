@@ -1,5 +1,6 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Logging;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -17,6 +18,7 @@ public class NotificaService(
     INotificaRepository notifiche,
     IOspiteRepository ospiti,
     IStrutturaRepository strutture,
+    ILogEventoService logEventi,
     TenantAccessGuard accessGuard,
     PermessoStrutturaGuard permessoGuard)
 {
@@ -26,6 +28,8 @@ public class NotificaService(
     /// Nuova versione del gestionale installata: una notifica a ogni struttura attiva, con data e ora
     /// italiane. Chiamata all'avvio dell'Api con la versione (commit) passata da deploy/update.sh;
     /// la chiave di deduplica con la versione fa sì che un semplice riavvio non la ripeta.
+    /// Va anche nel Log: una riga per struttura (Log della struttura) e una di riepilogo senza
+    /// Cliente (Log del Super Admin), solo quando la notifica è nuova.
     /// Ritorna quante strutture l'hanno ricevuta.
     /// </summary>
     public async Task<int> NotificaAggiornamentoGestionaleAsync(string versione, DateTime adessoUtc, CancellationToken cancellationToken)
@@ -40,11 +44,31 @@ public class NotificaService(
             if (await CreaSeNonEsisteAsync(struttura.Id, TipoNotifica.GestionaleAggiornato, $"aggiornamento:{versione}", "Gestionale aggiornato", messaggio, cancellationToken))
             {
                 notificate++;
+                await logEventi.RegistraAsync(
+                    LivelloLog.Info,
+                    $"Gestionale aggiornato (versione {versione}).",
+                    origine: "Api",
+                    clienteId: struttura.ClienteId,
+                    strutturaId: struttura.Id,
+                    categoria: CategoriaLogAggiornamento,
+                    cancellationToken: cancellationToken);
             }
+        }
+
+        if (notificate > 0)
+        {
+            await logEventi.RegistraAsync(
+                LivelloLog.Info,
+                $"Gestionale aggiornato alla versione {versione}: notificato a {notificate} strutture.",
+                origine: "Api",
+                categoria: CategoriaLogAggiornamento,
+                cancellationToken: cancellationToken);
         }
 
         return notificate;
     }
+
+    public const string CategoriaLogAggiornamento = "Aggiornamento";
 
     public async Task<IReadOnlyList<Notifica>> ListaAsync(ICurrentUser currentUser, Guid strutturaId, bool soloNonLette, CancellationToken cancellationToken)
     {
