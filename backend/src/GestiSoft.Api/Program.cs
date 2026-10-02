@@ -153,7 +153,7 @@ using (var startupScope = app.Services.CreateScope())
     var credenzialiSeeder = startupScope.ServiceProvider.GetRequiredService<CredenzialiCifraturaSeeder>();
     await credenzialiSeeder.SeedAsync();
 
-    // Nuova versione installata (GESTISOFT_VERSIONE = commit, valorizzata da deploy/update.sh):
+    // Nuova versione installata (GESTISOFT_VERSIONE, es. "2.1", calcolata da deploy/update.sh):
     // lo si dice a tutte le strutture. Senza variabile (sviluppo, avvio a mano) non si notifica.
     // Una notifica non riuscita non deve impedire all'Api di partire.
     var versione = app.Configuration["GESTISOFT_VERSIONE"];

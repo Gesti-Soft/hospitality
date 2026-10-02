@@ -59,7 +59,7 @@ services:
       # per processo) o se le strutture gestite crescono di un ordine di grandezza.
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD};Maximum Pool Size=25"
       Frontend__Origin: ${FRONTEND_ORIGIN:-http://localhost:8081}
-      # Commit installato, esportato da deploy/update.sh: a una versione nuova l'Api lo notifica a
+      # Versione installata ("2.1"), calcolata da deploy/update.sh: a una versione nuova l'Api lo notifica a
       # tutte le strutture con data e ora. Vuota (avvio a mano) = nessuna notifica.
       GESTISOFT_VERSIONE: ${GESTISOFT_VERSIONE:-}
       Jwt__Issuer: ${JWT_ISSUER:-GestiSoft.Gestionale}

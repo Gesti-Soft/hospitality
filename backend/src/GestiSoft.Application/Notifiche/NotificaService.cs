@@ -26,7 +26,7 @@ public class NotificaService(
 
     /// <summary>
     /// Nuova versione del gestionale installata: una notifica a ogni struttura attiva, con data e ora
-    /// italiane. Chiamata all'avvio dell'Api con la versione (commit) passata da deploy/update.sh;
+    /// italiane. Chiamata all'avvio dell'Api con la versione ("2.1") calcolata da deploy/update.sh;
     /// la chiave di deduplica con la versione fa sì che un semplice riavvio non la ripeta.
     /// Va anche nel Log: una riga per struttura (Log della struttura) e una di riepilogo senza
     /// Cliente (Log del Super Admin), solo quando la notifica è nuova.
@@ -36,17 +36,17 @@ public class NotificaService(
     {
         var italia = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
         var adesso = TimeZoneInfo.ConvertTimeFromUtc(adessoUtc, italia);
-        var messaggio = $"Il gestionale è stato aggiornato il {adesso:dd/MM/yyyy} alle {adesso:HH:mm}.";
+        var messaggio = $"Il gestionale è stato aggiornato alla versione {versione} il {adesso:dd/MM/yyyy} alle {adesso:HH:mm}.";
 
         var notificate = 0;
         foreach (var struttura in await strutture.ListByClienteAsync(null, includiInattive: false, cancellationToken))
         {
-            if (await CreaSeNonEsisteAsync(struttura.Id, TipoNotifica.GestionaleAggiornato, $"aggiornamento:{versione}", "Gestionale aggiornato", messaggio, cancellationToken))
+            if (await CreaSeNonEsisteAsync(struttura.Id, TipoNotifica.GestionaleAggiornato, $"aggiornamento:{versione}", $"Gestionale aggiornato alla versione {versione}", messaggio, cancellationToken))
             {
                 notificate++;
                 await logEventi.RegistraAsync(
                     LivelloLog.Info,
-                    $"Gestionale aggiornato (versione {versione}).",
+                    $"Gestionale aggiornato alla versione {versione}.",
                     origine: "Api",
                     clienteId: struttura.ClienteId,
                     strutturaId: struttura.Id,
