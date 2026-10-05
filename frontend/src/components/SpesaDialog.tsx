@@ -74,13 +74,11 @@ export function SpesaDialog({ strutturaId, spesa, onClose }: Props) {
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
         <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
-        <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-          <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} required fullWidth disabled={inCorso} autoFocus />
-          <TextField label="Importo (€)" type="number" value={importoSpesa} onChange={(e) => setImportoSpesa(e.target.value)} required fullWidth disabled={inCorso} />
-        </Box>
+        <TextField label="Descrizione" value={descrizione} onChange={(e) => setDescrizione(e.target.value)} required fullWidth disabled={inCorso} autoFocus />
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <SelettoreTipoConCamera label="Tipo spesa" valore={tipoSpesa} onChange={setTipoSpesa} tipologie={listaTipologie} camere={listaCamere} disabled={inCorso} />
+          <TextField label="Importo (€)" type="number" value={importoSpesa} onChange={(e) => setImportoSpesa(e.target.value)} required fullWidth disabled={inCorso} />
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
