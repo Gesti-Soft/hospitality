@@ -1,3 +1,4 @@
+using GestiSoft.Application.Assistenza;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Clienti;
 using GestiSoft.Application.Exceptions;
@@ -29,7 +30,8 @@ public class SuperAdminService(
     IPasswordHasher<Utente> passwordHasher,
     IDueFattoriRepository dueFattori,
     ILogEventoService logEventi,
-    IBackupExporter backupExporter)
+    IBackupExporter backupExporter,
+    IAllegatiStorage allegatiStorage)
 {
     public async Task<DashboardSuperAdminInfo> GetDashboardAsync(ICurrentUser currentUser, CancellationToken cancellationToken)
     {
@@ -313,14 +315,17 @@ public class SuperAdminService(
 
         var clienteId = struttura.ClienteId;
         var nomeStruttura = struttura.Nome;
-        await repository.EliminaStrutturaAsync(strutturaId, cancellationToken);
+        var allegatiSulDisco = await repository.EliminaStrutturaAsync(strutturaId, cancellationToken);
+        var fotoNonCancellate = allegatiSulDisco.Count(percorso => !allegatiStorage.Elimina(percorso));
 
         // Loggato PRIMA della richiesta di eliminazione sarebbe scorretto (potrebbe fallire) — qui
         // dopo, ma con Id/nome già letti perché la riga Struttura non esiste più. Categoria
         // "SuperAdmin": azione irreversibile, mai visibile al Cliente.
         await logEventi.RegistraAsync(
             LivelloLog.Warning,
-            $"Struttura '{nomeStruttura}' eliminata definitivamente.",
+            fotoNonCancellate == 0
+                ? $"Struttura '{nomeStruttura}' eliminata definitivamente."
+                : $"Struttura '{nomeStruttura}' eliminata definitivamente: {fotoNonCancellate} foto dei ticket non si sono potute cancellare dal disco.",
             origine: "SuperAdmin",
             clienteId: clienteId,
             categoria: "SuperAdmin",

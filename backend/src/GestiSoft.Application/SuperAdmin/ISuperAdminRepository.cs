@@ -49,7 +49,8 @@ public interface ISuperAdminRepository
     /// <summary>
     /// Elimina DEFINITIVAMENTE una Struttura e tutti i dati collegati (camere, prenotazioni, ospiti,
     /// fatture, integrazioni...). Irreversibile — il chiamante (SuperAdminService) verifica prima che
-    /// la Struttura sia disattivata da almeno 90 giorni.
+    /// la Struttura sia disattivata da almeno 90 giorni. Restituisce i percorsi delle foto dei ticket
+    /// ancora sul disco, da cancellare dopo: il database non può annullare la cancellazione di un file.
     /// </summary>
-    Task EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken);
 }

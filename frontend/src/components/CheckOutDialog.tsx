@@ -95,6 +95,10 @@ export function CheckOutDialog({
 
   function eseguiCheckOut() {
     const trattenuta = restituisciCauzione || importoCauzioneTrattenuta.trim() === '' ? null : Number(importoCauzioneTrattenuta)
+    if (cauzionePrevista && trattenuta !== null && trattenuta > cauzione) {
+      toast.errore(`Non si può trattenere più della cauzione versata (${formattatoreEuro.format(cauzione)}).`)
+      return
+    }
     checkOut.mutate(
       { prenotazioneId: prenotazione.id, restituisciCauzione: !cauzionePrevista || restituisciCauzione, importoCauzioneTrattenuta: cauzionePrevista ? trattenuta : null },
       {
@@ -194,9 +198,10 @@ export function CheckOutDialog({
                 type="number"
                 size="small"
                 value={importoCauzioneTrattenuta}
-                onChange={(e) => setImportoCauzioneTrattenuta(e.target.value)}
+                onChange={(e) => setImportoCauzioneTrattenuta(Number(e.target.value) > cauzione ? String(cauzione) : e.target.value)}
                 disabled={inCorso}
                 helperText={`Cauzione versata: ${formattatoreEuro.format(cauzione)}`}
+                slotProps={{ htmlInput: { min: 0, max: cauzione, step: '0.01' } }}
               />
             )}
           </>

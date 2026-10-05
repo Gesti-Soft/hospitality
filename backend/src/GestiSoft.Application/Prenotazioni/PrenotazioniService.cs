@@ -1,3 +1,4 @@
+using System.Globalization;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Camere;
 using GestiSoft.Application.Exceptions;
@@ -80,6 +81,7 @@ public record CheckOutRequest(bool RestituisciCauzione, decimal? ImportoCauzione
 public class PrenotazioniService(
     IPrenotazioneRepository prenotazioni,
     ICameraRepository camere,
+    ITipologiaCameraRepository tipologie,
     ICauzioneRepository cauzioni,
     IOspiteRepository ospiti,
     IStrutturaRepository strutture,
@@ -714,6 +716,16 @@ public class PrenotazioniService(
 
         var prenotazione = await GetOwnedAsync(strutturaId, prenotazioneId, cancellationToken);
         var camera = await GetCameraDellaPrenotazioneAsync(prenotazione, cancellationToken);
+
+        // Non si trattiene più di quanto l'ospite ha versato: la cauzione è quella della tipologia.
+        if (!request.RestituisciCauzione && request.ImportoCauzioneTrattenuta is { } trattenuta && trattenuta > 0 && camera.TipologiaId is { } tipologiaId)
+        {
+            var cauzioneTipologia = (await tipologie.GetAsync(tipologiaId, cancellationToken))?.Cauzione;
+            if (cauzioneTipologia is { } versata && versata > 0 && trattenuta > versata)
+            {
+                throw new ConflictException($"Non si può trattenere più della cauzione versata ({versata.ToString("N2", CultureInfo.GetCultureInfo("it-IT"))} €).");
+            }
+        }
 
         var oggi = DateTime.UtcNow.Date;
         // Checkout anticipato = le notti tra oggi e il check-out originariamente previsto si
