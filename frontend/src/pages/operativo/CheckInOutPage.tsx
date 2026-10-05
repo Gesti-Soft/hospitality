@@ -88,7 +88,7 @@ export function CheckInOutPage() {
   function cauzionePrevista(p: PrenotazioneDto) {
     const tipologiaId = camere.data?.find((c) => c.id === p.cameraId)?.tipologiaId
     const cauzione = tipologie.data?.find((t) => t.id === tipologiaId)?.cauzione ?? 0
-    return p.cauzioneAttiva && cauzione > 0
+    return p.cauzioneAttiva && cauzione > 0 ? cauzione : 0
   }
 
   const caricamento = arriviProssimi.isLoading || arriviInCorso.isLoading || camere.isLoading || tipologie.isLoading
@@ -148,7 +148,7 @@ export function CheckInOutPage() {
         <CheckOutDialog
           strutturaId={strutturaId}
           prenotazione={checkOutDaConfermare}
-          cauzionePrevista={cauzionePrevista(checkOutDaConfermare)}
+          cauzione={cauzionePrevista(checkOutDaConfermare)}
           onChiudi={() => setCheckOutDaConfermare(null)}
           onCompletato={() => setCheckOutDaConfermare(null)}
         />

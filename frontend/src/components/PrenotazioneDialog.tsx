@@ -1247,7 +1247,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
         <CheckOutDialog
           strutturaId={strutturaId}
           prenotazione={modifica}
-          cauzionePrevista={cauzionePrevista && cauzioneAttiva}
+          cauzione={cauzionePrevista && cauzioneAttiva ? (tipologiaSelezionata?.cauzione ?? 0) : 0}
           onChiudi={() => setCheckOutAperto(false)}
           onCompletato={onClose}
         />

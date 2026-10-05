@@ -35,14 +35,14 @@ const formattatoreEuro = new Intl.NumberFormat('it-IT', { style: 'currency', cur
 export function CheckOutDialog({
   strutturaId,
   prenotazione,
-  cauzionePrevista,
+  cauzione,
   onChiudi,
   onCompletato,
 }: {
   strutturaId: string
   prenotazione: PrenotazioneDto
-  /** La tipologia prevede una cauzione e la prenotazione ha il toggle attivo. */
-  cauzionePrevista: boolean
+  /** Importo della cauzione della tipologia se la prenotazione ha il toggle attivo, altrimenti 0. */
+  cauzione: number
   onChiudi: () => void
   /** Dopo il check-out (e l'eventuale fattura): chi l'ha aperto può chiudere anche il resto. */
   onCompletato: () => void
@@ -65,6 +65,7 @@ export function CheckOutDialog({
   const pagato = pagamenti.data ? nettoPagamenti(pagamenti.data) : (prenotazione.importoPagato ?? 0)
   const daSaldare = Math.round((totale - pagato) * 100) / 100
   const inCorso = registra.isPending || checkOut.isPending
+  const cauzionePrevista = cauzione > 0
 
   function gestisciErrore(err: unknown) {
     toast.errore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
@@ -185,7 +186,7 @@ export function CheckOutDialog({
           <>
             <FormControlLabel
               control={<Checkbox checked={restituisciCauzione} onChange={(e) => setRestituisciCauzione(e.target.checked)} disabled={inCorso} />}
-              label="Restituisci l'intera cauzione al cliente"
+              label={`Restituisci l'intera cauzione al cliente (${formattatoreEuro.format(cauzione)})`}
             />
             {!restituisciCauzione && (
               <TextField
@@ -195,6 +196,7 @@ export function CheckOutDialog({
                 value={importoCauzioneTrattenuta}
                 onChange={(e) => setImportoCauzioneTrattenuta(e.target.value)}
                 disabled={inCorso}
+                helperText={`Cauzione versata: ${formattatoreEuro.format(cauzione)}`}
               />
             )}
           </>
