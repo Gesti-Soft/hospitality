@@ -52,7 +52,8 @@ public class EliminaStrutturaTests
         try
         {
             var options = new DbContextOptionsBuilder<GestiSoftDbContext>()
-                .UseNpgsql(new NpgsqlConnectionStringBuilder(server.ConnectionString) { Database = nomeDatabase }.ConnectionString)
+                // Stessa strategia di retry dell'Api: senza, una transazione aperta nel modo sbagliato passa qui e fallisce in produzione.
+                .UseNpgsql(new NpgsqlConnectionStringBuilder(server.ConnectionString) { Database = nomeDatabase }.ConnectionString, npgsql => npgsql.EnableRetryOnFailure())
                 .Options;
             var credenziali = new CredenzialiProtector(new byte[32]);
 

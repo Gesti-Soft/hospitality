@@ -62,4 +62,10 @@ public class Struttura
     /// impostata (null), solo per una data reale già superata.
     /// </summary>
     public DateTime? ScadenzaLicenza { get; set; }
+
+    /// <summary>
+    /// Struttura dimostrativa creata dal pulsante "Crea struttura demo" (dati inventati): il Super
+    /// Admin la elimina definitivamente quando vuole, senza disattivazione né attesa dei 90 giorni.
+    /// </summary>
+    public bool Demo { get; set; }
 }

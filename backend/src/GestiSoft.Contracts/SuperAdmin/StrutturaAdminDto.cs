@@ -17,4 +17,6 @@ public record StrutturaAdminDto(
     bool WubookAbilitato,
     bool AlloggiatiWebAbilitato,
     bool OsservatorioAbilitato,
-    bool PayTouristAbilitato);
+    bool PayTouristAbilitato,
+    bool Demo,
+    DateTime? DemoEliminazioneAtUtc);

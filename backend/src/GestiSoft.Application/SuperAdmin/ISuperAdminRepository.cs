@@ -14,7 +14,9 @@ public record StrutturaAdminInfo(
     bool WubookAbilitato,
     bool AlloggiatiWebAbilitato,
     bool OsservatorioAbilitato,
-    bool PayTouristAbilitato);
+    bool PayTouristAbilitato,
+    bool Demo,
+    DateTime? DemoEliminazioneAtUtc);
 
 public record ClienteAdminInfo(
     Guid Id,
@@ -53,4 +55,11 @@ public interface ISuperAdminRepository
     /// ancora sul disco, da cancellare dopo: il database non può annullare la cancellazione di un file.
     /// </summary>
     Task<IReadOnlyList<string>> EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken);
+
+    /// <summary>Strutture demo create prima di <paramref name="createPrimaDelUtc"/>: da eliminare.</summary>
+    Task<IReadOnlyList<Guid>> ListaDemoScaduteAsync(DateTime createPrimaDelUtc, CancellationToken cancellationToken);
+
+    /// <summary>Salva in un'unica transazione la struttura dimostrativa (vedi StrutturaDemoGenerator): o tutta, o niente.</summary>
+    /// <param name="titolare">Accesso del Cliente demo nuovo, salvato nella stessa transazione; null se la demo va a un Cliente esistente.</param>
+    Task AggiungiStrutturaDemoAsync(DatiStrutturaDemo dati, Domain.Entities.Utente? titolare, CancellationToken cancellationToken);
 }

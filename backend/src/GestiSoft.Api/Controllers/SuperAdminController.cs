@@ -57,6 +57,18 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
         });
     }
 
+    /// <summary>
+    /// Crea la struttura dimostrativa (20 camere, dati inventati) per il Cliente indicato, o per un
+    /// Cliente demo nuovo se non ne è indicato nessuno.
+    /// </summary>
+    [HttpPost("strutture-demo")]
+    public async Task<IActionResult> CreaStrutturaDemo([FromBody] CreaStrutturaDemoRequest request, CancellationToken cancellationToken)
+    {
+        var struttura = await service.CreaStrutturaDemoAsync(currentUser, request.ClienteId, request.NomeCliente, request.Email, cancellationToken);
+        // La password è fissa e già nota al Super Admin: ripeterla qui evita solo di doverla ricordare.
+        return Ok(new { struttura.Id, struttura.ClienteId, struttura.Nome, PasswordDemo = request.ClienteId is null ? ApplicationSuperAdmin.SuperAdminService.PasswordDemo() : null });
+    }
+
     [HttpPut("utenti/{utenteId:guid}/reset-password")]
     public async Task<IActionResult> ResettaPassword(Guid utenteId, [FromBody] ResettaPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -119,7 +131,7 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
             c.Strutture.Select(s => new StrutturaAdminDto(
                 s.Id, s.Nome, s.Attivo, s.DisattivataAtUtc, s.WubookAttivo, s.WubookUltimoErrore, s.ScadenzaLicenza,
                 s.PoliziaStatoAttiva, s.OsservatorioAttivo, s.PayTouristAttivo,
-                s.WubookAbilitato, s.AlloggiatiWebAbilitato, s.OsservatorioAbilitato, s.PayTouristAbilitato)).ToList()))
+                s.WubookAbilitato, s.AlloggiatiWebAbilitato, s.OsservatorioAbilitato, s.PayTouristAbilitato, s.Demo, s.DemoEliminazioneAtUtc)).ToList()))
             .ToList(),
         d.Utenti.Select(u => new UtenteAdminDto(u.Id, u.Email, u.Nome, u.Cognome, u.IsSuperAdmin, u.Attivo, u.ClienteId, u.ClienteRagioneSociale, u.CreatedAtUtc, u.IsClienteAccount)).ToList());
 }

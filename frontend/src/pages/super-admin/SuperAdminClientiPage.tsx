@@ -32,6 +32,7 @@ import {
   giorniDaDisattivazione,
   useAggiornaServiziStruttura,
   useAggiornaUtente,
+  useCreaStrutturaDemo,
   useDashboardSuperAdmin,
   useEliminaStrutturaDefinitivamente,
   useImpostaAttivoCliente,
@@ -113,6 +114,7 @@ export function SuperAdminClientiPage() {
   const [strutturaDaEliminare, setStrutturaDaEliminare] = useState<{ struttura: StrutturaAdminDto; clienteRagioneSociale: string } | null>(null)
   const [mostraNonAttivi, setMostraNonAttivi] = useState(false)
   const [ricerca, setRicerca] = useState('')
+  const [demoAperto, setDemoAperto] = useState(false)
 
   if (!isSuperAdmin) {
     return <Alert severity="error">Questa pagina è riservata al Super Admin.</Alert>
@@ -279,6 +281,7 @@ export function SuperAdminClientiPage() {
               placeholder="Cerca per cliente, struttura, partita IVA o email"
               sx={{ minWidth: { xs: '100%', sm: 320 } }}
             />
+            <BottoneNuovo etichetta="Crea struttura demo" variant="outlined" onClick={() => setDemoAperto(true)} />
             <BottoneNuovo etichetta="+ Nuovo Cliente" onClick={() => setNuovoClienteAperto(true)} />
           </Box>
         </Box>
@@ -314,6 +317,7 @@ export function SuperAdminClientiPage() {
         />
       )}
       {nuovoClienteAperto && <NuovoClienteDialog onClose={() => setNuovoClienteAperto(false)} />}
+      {demoAperto && <CreaStrutturaDemoDialog clienti={clienti.filter((c) => c.attivo)} onClose={() => setDemoAperto(false)} />}
       {strutturaDaEliminare && (
         <EliminaStrutturaDialog
           struttura={strutturaDaEliminare.struttura}
@@ -322,6 +326,107 @@ export function SuperAdminClientiPage() {
         />
       )}
     </Box>
+  )
+}
+
+const CLIENTE_DEMO_NUOVO = 'nuovo'
+
+/**
+ * La demo si assegna a un Cliente esistente: il suo titolare la ritrova tra le proprie strutture e
+ * prova il gestionale con dati già pieni. Senza Cliente se ne crea uno demo a parte.
+ */
+function CreaStrutturaDemoDialog({ clienti, onClose }: { clienti: ClienteAdminDto[]; onClose: () => void }) {
+  const [clienteId, setClienteId] = useState(CLIENTE_DEMO_NUOVO)
+  const [nomeCliente, setNomeCliente] = useState('')
+  const [email, setEmail] = useState('')
+  const [errore, setErrore] = useState<string | null>(null)
+  // Credenziali del Cliente demo nuovo, mostrate a fine creazione per poterle dare al cliente.
+  const [accesso, setAccesso] = useState<{ email: string; password: string } | null>(null)
+  const creaDemo = useCreaStrutturaDemo()
+  const toast = useToast()
+  const clienteNuovo = clienteId === CLIENTE_DEMO_NUOVO
+
+  function crea() {
+    if (clienteNuovo && (nomeCliente.trim() === '' || email.trim() === '')) {
+      setErrore("Indica il nome del Cliente demo e l'email con cui accederà.")
+      return
+    }
+    setErrore(null)
+    creaDemo.mutate(
+      clienteNuovo ? { clienteId: null, nomeCliente: nomeCliente.trim(), email: email.trim() } : { clienteId, nomeCliente: null, email: null },
+      {
+        onSuccess: (risultato) => {
+          toast.successo(`Struttura demo "${risultato.nome}" creata.`)
+          if (risultato.passwordDemo) {
+            setAccesso({ email: email.trim().toLowerCase(), password: risultato.passwordDemo })
+          } else {
+            onClose()
+          }
+        },
+        onError: (err) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.'),
+      },
+    )
+  }
+
+  if (accesso) {
+    return (
+      <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Demo pronta</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
+          <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>Credenziali da dare al cliente:</Typography>
+          <Typography sx={{ fontFamily: fontMono, fontSize: 14 }}>Email: {accesso.email}</Typography>
+          <Typography sx={{ fontFamily: fontMono, fontSize: 14 }}>Password: {accesso.password}</Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button variant="contained" color="secondary" onClick={onClose}>
+            Chiudi
+          </Button>
+        </DialogActions>
+      </Dialog>
+    )
+  }
+
+  return (
+    <Dialog open onClose={creaDemo.isPending ? undefined : onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Crea struttura demo</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+          "Hotel Belvedere": 20 camere con circa due anni di prenotazioni, ospiti, incassi e spese inventati. Nessun servizio esterno attivo
+          (OTA, Alloggiati Web, Osservatorio, PayTourist). Il titolare del Cliente scelto la vede tra le sue strutture. Si elimina da sola dopo 30 giorni, o prima quando vuoi.
+        </Typography>
+        {errore && <Alert severity="error">{errore}</Alert>}
+        <TextField select label="Cliente" value={clienteId} onChange={(e) => setClienteId(e.target.value)} fullWidth disabled={creaDemo.isPending}>
+          <MenuItem value={CLIENTE_DEMO_NUOVO}>Nuovo Cliente demo</MenuItem>
+          {clienti.map((c) => (
+            <MenuItem key={c.id} value={c.id}>
+              {c.ragioneSociale}
+            </MenuItem>
+          ))}
+        </TextField>
+        {clienteNuovo && (
+          <>
+            <TextField label="Nome del Cliente demo" value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)} fullWidth disabled={creaDemo.isPending} />
+            <TextField
+              label="Email di accesso"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              fullWidth
+              disabled={creaDemo.isPending}
+              helperText={`La password sarà Demo.${new Date().getFullYear()}!`}
+            />
+          </>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} disabled={creaDemo.isPending}>
+          Annulla
+        </Button>
+        <Button variant="contained" color="secondary" onClick={crea} disabled={creaDemo.isPending}>
+          {creaDemo.isPending ? 'Creazione…' : 'Crea'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
@@ -372,6 +477,7 @@ function RigaStruttura({ struttura, clienteQuotaAnnua }: { struttura: StrutturaA
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Typography sx={{ fontSize: 13, fontWeight: 700, minWidth: 160 }}>{struttura.nome}</Typography>
+        {struttura.demo && <Chip size="small" label="Demo" color="secondary" variant="outlined" />}
 
         <Tooltip title={struttura.attivo ? 'Elimina struttura (soft-delete)' : 'Riattiva struttura'}>
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, minWidth: 90 }}>
@@ -1095,8 +1201,11 @@ function StruttureClienteDialog({ cliente, onClose }: { cliente: ClienteAdminDto
   // Stessa soglia della tabella "Strutture eliminabili" in dashboard — qui è comodo poterla
   // eliminare subito dalla struttura che si sta già guardando, senza dover tornare indietro e
   // ricercarla in quella tabella.
+  // La demo invece si elimina subito: dati inventati, niente da conservare.
   const eliminabile =
-    !!struttura && !struttura.attivo && !!struttura.disattivataAtUtc && giorniDaDisattivazione(struttura.disattivataAtUtc) >= GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA
+    !!struttura &&
+    (struttura.demo ||
+      (!struttura.attivo && !!struttura.disattivataAtUtc && giorniDaDisattivazione(struttura.disattivataAtUtc) >= GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA))
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -1123,7 +1232,9 @@ function StruttureClienteDialog({ cliente, onClose }: { cliente: ClienteAdminDto
               </Button>
             }
           >
-            Disattivata da {giorniDaDisattivazione(struttura!.disattivataAtUtc!)} giorni: può essere eliminata in modo definitivo.
+            {struttura!.demo
+              ? `Struttura demo con dati inventati: si elimina da sola il ${struttura!.demoEliminazioneAtUtc ? formattatoreData.format(new Date(struttura!.demoEliminazioneAtUtc)) : '—'}, oppure eliminala quando vuoi.`
+              : `Disattivata da ${giorniDaDisattivazione(struttura!.disattivataAtUtc!)} giorni: può essere eliminata in modo definitivo.`}
           </Alert>
         )}
       </DialogContent>
@@ -1166,7 +1277,6 @@ function ModificaClienteDialog({
   const [email, setEmail] = useState(adminUtente?.email ?? '')
   const [nome, setNome] = useState(adminUtente?.nome ?? '')
   const [cognome, setCognome] = useState(adminUtente?.cognome ?? '')
-  const [isClienteAccount, setIsClienteAccount] = useState(adminUtente?.isClienteAccount ?? true)
   const [errore, setErrore] = useState<string | null>(null)
 
   const [nuovaPassword, setNuovaPassword] = useState('')
@@ -1205,7 +1315,9 @@ function ModificaClienteDialog({
       if (adminUtente) {
         await aggiornaUtente.mutateAsync({
           utenteId: adminUtente.id,
-          request: { email: email.trim(), nome: nome.trim() || null, cognome: cognome.trim() || null, isClienteAccount },
+          // Dal Super Admin si gestisce solo il titolare, che vede sempre tutte le strutture del suo
+          // Cliente: niente interruttore, spegnerlo serviva solo a lasciarlo senza strutture.
+          request: { email: email.trim(), nome: nome.trim() || null, cognome: cognome.trim() || null, isClienteAccount: true },
         })
       }
       queryClient.invalidateQueries({ queryKey: ['super-admin', 'dashboard'] })
@@ -1307,10 +1419,6 @@ function ModificaClienteDialog({
               <TextField label="Nome" value={nome} onChange={(e) => setNome(e.target.value)} fullWidth disabled={inCorso} />
               <TextField label="Cognome" value={cognome} onChange={(e) => setCognome(e.target.value)} fullWidth disabled={inCorso} />
             </Box>
-            <FormControlLabel
-              control={<Switch checked={isClienteAccount} onChange={(e) => setIsClienteAccount(e.target.checked)} disabled={inCorso} />}
-              label="Account Cliente (accesso libero a tutte le strutture, senza bisogno di assegnazioni)"
-            />
 
             <Divider />
             <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
@@ -1519,6 +1627,7 @@ function EliminaStrutturaDialog({
         <Alert severity="error">
           Questa azione è <strong>irreversibile</strong>: cancella per sempre la struttura "{struttura.nome}" del Cliente "{clienteRagioneSociale}"
           e tutti i dati collegati (camere, prenotazioni, ospiti, fatture, integrazioni). Non è un semplice disattiva/riattiva.
+          {struttura.demo && ' Se il Cliente ci ha inserito dati veri durante la prova, spariscono anche quelli.'}
         </Alert>
         <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
           Per confermare, scrivi il nome esatto della struttura: <strong>{struttura.nome}</strong>

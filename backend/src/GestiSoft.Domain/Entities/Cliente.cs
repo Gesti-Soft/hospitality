@@ -28,5 +28,11 @@ public class Cliente
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Cliente creato dal pulsante "Crea struttura demo": quando resta senza strutture (demo eliminata
+    /// a mano o dopo 30 giorni) sparisce insieme ai suoi utenti, che hanno la password demo nota.
+    /// </summary>
+    public bool Demo { get; set; }
+
     public ICollection<Struttura> Strutture { get; set; } = new List<Struttura>();
 }

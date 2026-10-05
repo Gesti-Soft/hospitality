@@ -1,4 +1,5 @@
 using GestiSoft.Application.SuperAdmin;
+using GestiSoft.Domain.Entities;
 using GestiSoft.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,7 +53,9 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
                     s.WubookAbilitato,
                     s.AlloggiatiWebAbilitato,
                     s.OsservatorioAbilitato,
-                    s.PayTouristAbilitato);
+                    s.PayTouristAbilitato,
+                    s.Demo,
+                    s.Demo ? s.CreatedAtUtc.AddDays(SuperAdminService.GiorniDemo) : null);
             }).ToList();
 
             return new ClienteAdminInfo(
@@ -91,8 +94,14 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
     /// OsservatorioInvio prima di Prenotazione). Tutto in un'unica transazione: se un vincolo FK non
     /// previsto blocca una cancellazione, l'intera operazione va in rollback, nessun dato parziale
     /// viene perso — mai un'eliminazione "a metà".
+    ///
+    /// La transazione va aperta dentro la strategia di esecuzione: con EnableRetryOnFailure (vedi
+    /// DependencyInjection) una transazione aperta a mano fuori da lì viene rifiutata da EF.
     /// </summary>
-    public async Task<IReadOnlyList<string>> EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<string>> EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        db.Database.CreateExecutionStrategy().ExecuteAsync(() => EliminaStrutturaInTransazioneAsync(strutturaId, cancellationToken));
+
+    private async Task<IReadOnlyList<string>> EliminaStrutturaInTransazioneAsync(Guid strutturaId, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
@@ -151,9 +160,75 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
         await db.TicketMessaggi.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
         await db.Ticket.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
         await db.UtentiStrutture.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        var clienteId = await db.Strutture.Where(x => x.Id == strutturaId).Select(x => x.ClienteId).SingleAsync(cancellationToken);
         await db.Strutture.Where(x => x.Id == strutturaId).ExecuteDeleteAsync(cancellationToken);
+
+        // Un Cliente demo rimasto senza strutture se ne va con i suoi utenti (password demo nota):
+        // nessun accesso resta aperto dopo la demo. Codici di recupero, dispositivi fidati e
+        // assegnazioni seguono gli utenti in cascata. Mai un Cliente vero: solo Cliente.Demo.
+        var clienteDemoVuoto = await db.Clienti.AnyAsync(c => c.Id == clienteId && c.Demo && !db.Strutture.Any(s => s.ClienteId == c.Id), cancellationToken);
+        if (clienteDemoVuoto)
+        {
+            await db.Utenti.Where(x => x.ClienteId == clienteId).ExecuteDeleteAsync(cancellationToken);
+            await db.Clienti.Where(x => x.Id == clienteId).ExecuteDeleteAsync(cancellationToken);
+        }
 
         await transaction.CommitAsync(cancellationToken);
         return allegatiSulDisco;
+    }
+
+    public async Task<IReadOnlyList<Guid>> ListaDemoScaduteAsync(DateTime createPrimaDelUtc, CancellationToken cancellationToken) =>
+        await db.Strutture.AsNoTracking()
+            .Where(s => s.Demo && s.CreatedAtUtc < createPrimaDelUtc)
+            .Select(s => s.Id)
+            .ToListAsync(cancellationToken);
+
+    public async Task AggiungiStrutturaDemoAsync(DatiStrutturaDemo dati, Utente? titolare, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Dentro la strategia di esecuzione (vedi EliminaStrutturaAsync); a ogni tentativo si
+            // riparte da un contesto pulito, così un retry non trova righe già marcate come salvate.
+            await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                db.ChangeTracker.Clear();
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+                if (dati.Cliente is not null)
+                {
+                    db.Clienti.Add(dati.Cliente);
+                }
+
+                if (titolare is not null)
+                {
+                    db.Utenti.Add(titolare);
+                }
+
+                db.Strutture.Add(dati.Struttura);
+                db.ImpostazioniStruttura.Add(dati.Impostazioni);
+                db.DatiAziendali.Add(dati.DatiAziendali);
+                db.TrattamentiStruttura.AddRange(dati.Trattamenti);
+                db.TipologieCamera.AddRange(dati.Tipologie);
+                db.Camere.AddRange(dati.Camere);
+                db.CanaliVendita.AddRange(dati.Canali);
+                db.Prenotazioni.AddRange(dati.Prenotazioni);
+                db.Ospiti.AddRange(dati.Ospiti);
+                db.OspitiRighe.AddRange(dati.OspitiRighe);
+                db.PagamentiPrenotazione.AddRange(dati.Pagamenti);
+                db.Cauzioni.AddRange(dati.Cauzioni);
+                db.Entrate.AddRange(dati.Entrate);
+                db.Spese.AddRange(dati.Spese);
+
+                await db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            });
+        }
+        finally
+        {
+            // Sempre, anche se fallisce: righe rimaste nel contesto verrebbero salvate dal primo
+            // SaveChanges successivo sulla stessa richiesta (es. il Log dell'errore), fuori dalla
+            // transazione. È successo davvero: una demo "fallita" si è salvata lo stesso.
+            db.ChangeTracker.Clear();
+        }
     }
 }

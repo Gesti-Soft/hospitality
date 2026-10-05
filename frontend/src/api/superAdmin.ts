@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiDelete, apiGet, apiPut, apiScaricaFile } from './client'
+import { apiDelete, apiGet, apiPost, apiPut, apiScaricaFile } from './client'
 
 export interface StrutturaAdminDto {
   id: string
@@ -20,6 +20,10 @@ export interface StrutturaAdminDto {
   alloggiatiWebAbilitato: boolean
   osservatorioAbilitato: boolean
   payTouristAbilitato: boolean
+  /** Struttura dimostrativa (dati inventati): si elimina definitivamente quando si vuole, senza i 90 giorni. */
+  demo: boolean
+  /** Solo per le demo: quando il Worker la elimina da sola (30 giorni dopo la creazione). */
+  demoEliminazioneAtUtc: string | null
 }
 
 export interface ClienteAdminDto {
@@ -156,6 +160,23 @@ export function useEliminaStrutturaDefinitivamente() {
   return useMutation({
     mutationFn: (strutturaId: string) => apiDelete(`/super-admin/strutture/${strutturaId}`),
     onSuccess: invalida,
+  })
+}
+
+/**
+ * Crea la struttura dimostrativa "Hotel Belvedere" (20 camere, dati inventati) per il Cliente indicato,
+ * o per un Cliente demo nuovo (nome ed email del titolare, password fissa "Demo." + anno + "!") se clienteId è null.
+ */
+export function useCreaStrutturaDemo() {
+  const invalida = useInvalidaDashboard()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: { clienteId: string | null; nomeCliente: string | null; email: string | null }) =>
+      apiPost<{ id: string; clienteId: string; nome: string; passwordDemo: string | null }>('/super-admin/strutture-demo', request),
+    onSuccess: () => {
+      invalida()
+      queryClient.invalidateQueries({ queryKey: ['strutture'] })
+    },
   })
 }
 

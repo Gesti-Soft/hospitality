@@ -292,7 +292,7 @@ public class SuperAdminService(
     /// Eliminazione DEFINITIVA (hard delete, non il soft-delete di Struttura.Attivo) di una Struttura
     /// e di tutti i suoi dati collegati — irreversibile. Consentita solo per Strutture già disattivate
     /// da almeno 90 giorni (controllo ripetuto qui lato server, non solo filtrato in UI, perché
-    /// l'azione non si può annullare). Nessuna cancellazione automatica: va sempre confermata
+    /// l'azione non si può annullare), tranne le strutture demo, eliminabili subito. Nessuna cancellazione automatica: va sempre confermata
     /// esplicitamente riga per riga dal Super Admin (vedi ISuperAdminRepository.EliminaStrutturaAsync
     /// per l'ordine di cancellazione delle tabelle collegate).
     /// </summary>
@@ -303,20 +303,57 @@ public class SuperAdminService(
         var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)
             ?? throw new NotFoundException("Struttura non trovata.");
 
-        if (struttura.Attivo || struttura.DisattivataAtUtc is null)
+        // La demo ha dati inventati: niente da conservare, si elimina subito (scelta dell'utente).
+        if (!struttura.Demo)
         {
-            throw new ConflictException("Solo una struttura disattivata può essere eliminata definitivamente.");
+            if (struttura.Attivo || struttura.DisattivataAtUtc is null)
+            {
+                throw new ConflictException("Solo una struttura disattivata può essere eliminata definitivamente.");
+            }
+
+            if (struttura.DisattivataAtUtc.Value > DateTime.UtcNow.AddDays(-90))
+            {
+                throw new ConflictException("La struttura può essere eliminata definitivamente solo dopo 90 giorni dalla disattivazione.");
+            }
         }
 
-        if (struttura.DisattivataAtUtc.Value > DateTime.UtcNow.AddDays(-90))
+        await EliminaERegistraAsync(struttura, currentUser.Email, cancellationToken);
+    }
+
+    /// <summary>Giorni dopo i quali una struttura demo si elimina da sola (scelta dell'utente).</summary>
+    public const int GiorniDemo = 30;
+
+    /// <summary>
+    /// Elimina le strutture demo create da più di <see cref="GiorniDemo"/> giorni: le chiama il Worker
+    /// (EliminazioneDemoJob). Solo strutture con Struttura.Demo, che soltanto il pulsante "Crea
+    /// struttura demo" imposta: le strutture vere non passano mai di qui.
+    /// </summary>
+    public async Task<int> EliminaDemoScaduteAsync(CancellationToken cancellationToken)
+    {
+        var scadute = await repository.ListaDemoScaduteAsync(DateTime.UtcNow.AddDays(-GiorniDemo), cancellationToken);
+        var eliminate = 0;
+        foreach (var strutturaId in scadute)
         {
-            throw new ConflictException("La struttura può essere eliminata definitivamente solo dopo 90 giorni dalla disattivazione.");
+            var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken);
+            if (struttura is not { Demo: true })
+            {
+                continue;
+            }
+
+            await EliminaERegistraAsync(struttura, operatore: null, cancellationToken);
+            eliminate++;
         }
 
+        return eliminate;
+    }
+
+    private async Task EliminaERegistraAsync(Domain.Entities.Struttura struttura, string? operatore, CancellationToken cancellationToken)
+    {
         var clienteId = struttura.ClienteId;
         var nomeStruttura = struttura.Nome;
-        var allegatiSulDisco = await repository.EliminaStrutturaAsync(strutturaId, cancellationToken);
+        var allegatiSulDisco = await repository.EliminaStrutturaAsync(struttura.Id, cancellationToken);
         var fotoNonCancellate = allegatiSulDisco.Count(percorso => !allegatiStorage.Elimina(percorso));
+        var come = operatore is null ? $" (demo, automaticamente dopo {GiorniDemo} giorni)" : string.Empty;
 
         // Loggato PRIMA della richiesta di eliminazione sarebbe scorretto (potrebbe fallire) — qui
         // dopo, ma con Id/nome già letti perché la riga Struttura non esiste più. Categoria
@@ -324,14 +361,76 @@ public class SuperAdminService(
         await logEventi.RegistraAsync(
             LivelloLog.Warning,
             fotoNonCancellate == 0
-                ? $"Struttura '{nomeStruttura}' eliminata definitivamente."
-                : $"Struttura '{nomeStruttura}' eliminata definitivamente: {fotoNonCancellate} foto dei ticket non si sono potute cancellare dal disco.",
-            origine: "SuperAdmin",
+                ? $"Struttura '{nomeStruttura}' eliminata definitivamente{come}."
+                : $"Struttura '{nomeStruttura}' eliminata definitivamente{come}: {fotoNonCancellate} foto dei ticket non si sono potute cancellare dal disco.",
+            origine: operatore is null ? "Worker" : "SuperAdmin",
             clienteId: clienteId,
+            categoria: "SuperAdmin",
+            operatore: operatore,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Crea la struttura dimostrativa "Hotel Belvedere" (20 camere, prenotazioni da gennaio dell'anno
+    /// scorso a sei mesi da oggi, anagrafiche inventate) per il Cliente indicato, così il suo titolare
+    /// la vede tra le proprie strutture e prova il gestionale; senza Cliente se ne crea uno demo nuovo.
+    /// Ogni pressione ne crea una nuova; si elimina quando si vuole (vedi EliminaStrutturaAsync).
+    /// Il Cliente demo nuovo ha il nome scelto dal Super Admin e un titolare con l'email indicata e
+    /// password fissa <see cref="PasswordDemo"/> (scelta dell'utente, consapevole che è prevedibile:
+    /// quell'accesso vede solo la sua struttura demo, con dati inventati).
+    /// </summary>
+    public async Task<Domain.Entities.Struttura> CreaStrutturaDemoAsync(
+        ICurrentUser currentUser, Guid? clienteId, string? nomeCliente, string? email, CancellationToken cancellationToken)
+    {
+        RichiediSuperAdmin(currentUser);
+
+        Utente? titolare = null;
+        if (clienteId is { } id)
+        {
+            if (await clienti.GetByIdAsync(id, cancellationToken) is null)
+            {
+                throw new NotFoundException("Cliente non trovato.");
+            }
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(nomeCliente) || string.IsNullOrWhiteSpace(email))
+            {
+                throw new ConflictException("Indica il nome del Cliente demo e l'email con cui accederà.");
+            }
+
+            var emailNormalizzata = email.Trim().ToLowerInvariant();
+            if (await utenti.GetByEmailAsync(emailNormalizzata, cancellationToken) is not null)
+            {
+                throw new ConflictException("Esiste già un utente con questa email.");
+            }
+
+            titolare = new Utente { Email = emailNormalizzata, IsClienteAccount = true };
+        }
+
+        var dati = StrutturaDemoGenerator.Genera(Pulizie.PulizieSoggiornoService.Oggi(), Random.Shared.Next(), clienteId, nomeCliente);
+        if (titolare is not null)
+        {
+            titolare.ClienteId = dati.Struttura.ClienteId;
+            titolare.PasswordHash = passwordHasher.HashPassword(titolare, PasswordDemo());
+        }
+
+        await repository.AggiungiStrutturaDemoAsync(dati, titolare, cancellationToken);
+
+        await logEventi.RegistraAsync(
+            LivelloLog.Info,
+            $"Struttura dimostrativa '{dati.Struttura.Nome}' creata ({dati.Camere.Count} camere, {dati.Prenotazioni.Count} prenotazioni).",
+            origine: "SuperAdmin",
+            clienteId: dati.Struttura.ClienteId,
             categoria: "SuperAdmin",
             operatore: currentUser.Email,
             cancellationToken: cancellationToken);
+
+        return dati.Struttura;
     }
+
+    /// <summary>Password dei titolari dei Clienti demo: "Demo." + anno corrente (data civile italiana) + "!", es. Demo.2026!.</summary>
+    public static string PasswordDemo() => $"Demo.{Pulizie.PulizieSoggiornoService.Oggi().Year}!";
 
     /// <summary>
     /// Ogni metodo che chiama questo helper è già dietro RichiediSuperAdmin, quindi categoria
