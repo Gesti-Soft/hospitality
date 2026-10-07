@@ -78,7 +78,7 @@ interface EsitoServizio {
 }
 
 const SERVIZI: {
-  chiave: keyof Pick<StrutturaAdminDto, 'wubookAbilitato' | 'alloggiatiWebAbilitato' | 'osservatorioAbilitato' | 'payTouristAbilitato'>
+  chiave: keyof Pick<StrutturaAdminDto, 'wubookAbilitato' | 'alloggiatiWebAbilitato' | 'osservatorioAbilitato' | 'payTouristAbilitato' | 'sdiAbilitato'>
   etichetta: string
   // Nome dell'esito mostrato sotto lo switch — non sempre coincide con l'etichetta della
   // concessione (es. si concede "Alloggiati Web" ma l'esito è l'invio "Polizia di Stato").
@@ -97,6 +97,7 @@ const SERVIZI: {
   { chiave: 'alloggiatiWebAbilitato', etichetta: 'Alloggiati Web', statoNome: 'Polizia di Stato', stato: (s) => ({ attivo: s.poliziaStatoAttiva }) },
   { chiave: 'osservatorioAbilitato', etichetta: 'Osservatorio', statoNome: 'Osservatorio', stato: (s) => ({ attivo: s.osservatorioAttivo }) },
   { chiave: 'payTouristAbilitato', etichetta: 'PayTourist', statoNome: 'PayTourist', stato: (s) => ({ attivo: s.payTouristAttivo }) },
+  { chiave: 'sdiAbilitato', etichetta: 'Invio fatture SdI', statoNome: 'Invio SdI', stato: (s) => ({ attivo: s.sdiAttivo }) },
 ]
 
 export function SuperAdminClientiPage() {
@@ -445,6 +446,7 @@ function RigaStruttura({ struttura, clienteQuotaAnnua }: { struttura: StrutturaA
           alloggiatiWebAbilitato: struttura.alloggiatiWebAbilitato,
           osservatorioAbilitato: struttura.osservatorioAbilitato,
           payTouristAbilitato: struttura.payTouristAbilitato,
+          sdiAbilitato: struttura.sdiAbilitato,
           [chiave]: valore,
         },
       },

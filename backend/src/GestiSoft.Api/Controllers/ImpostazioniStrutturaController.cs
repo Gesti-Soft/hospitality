@@ -40,5 +40,6 @@ public class ImpostazioniStrutturaController(ImpostazioniStrutturaService servic
         impostazioni.TassaSoggiornoPercentualeAnziani,
         impostazioni.ComuneAttivita,
         impostazioni.IntervalloPuliziaGiorni,
-        impostazioni.IntervalloBiancheriaGiorni);
+        impostazioni.IntervalloBiancheriaGiorni,
+        impostazioni.SdiAttivo);
 }

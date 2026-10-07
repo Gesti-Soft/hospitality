@@ -7,7 +7,7 @@ public record ImpostaAttivoRequest(bool Attivo);
 /// <summary>ClienteId null = la demo va a un Cliente demo nuovo, con NomeCliente ed Email del suo titolare.</summary>
 public record CreaStrutturaDemoRequest(Guid? ClienteId, string? NomeCliente, string? Email);
 
-public record ServiziStrutturaRequest(bool WubookAbilitato, bool AlloggiatiWebAbilitato, bool OsservatorioAbilitato, bool PayTouristAbilitato);
+public record ServiziStrutturaRequest(bool WubookAbilitato, bool AlloggiatiWebAbilitato, bool OsservatorioAbilitato, bool PayTouristAbilitato, bool SdiAbilitato = false);
 
 public record ResettaPasswordRequest(string NuovaPassword);
 

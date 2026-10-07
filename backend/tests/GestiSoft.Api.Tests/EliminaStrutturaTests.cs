@@ -34,7 +34,7 @@ public class EliminaStrutturaTests
     private static readonly HashSet<Type> TabelleGlobali =
     [
         typeof(Cliente), typeof(Utente), typeof(CodiceRecuperoUtente), typeof(DispositivoFidato),
-        typeof(ImpostazioniGlobali), typeof(Comune), typeof(Stato), typeof(Documento), typeof(TipoAlloggiato),
+        typeof(ImpostazioniGlobali), typeof(ContatoreProgressivoInvio), typeof(Comune), typeof(Stato), typeof(Documento), typeof(TipoAlloggiato),
     ];
 
     [FactConPostgres]
@@ -133,6 +133,7 @@ public class EliminaStrutturaTests
         var ospite = new Ospite { StrutturaId = s, PrenotazioneId = prenotazione.Id };
         var servizio = new ServizioStruttura { StrutturaId = s, Nome = "Parcheggio" };
         var fattura = new DatiFattura { StrutturaId = s, Progressivo = 1, NumeroDocumento = 1, DataDocumento = DateTime.UtcNow };
+        var fileRicevuto = new FileRicevutoSdi { StrutturaId = s, IdentificativoSdi = "222", NomeFile = "IT01234567890_00001.xml", File = [1] };
         var appartamento = new OsservatorioAppartamento { StrutturaId = s };
         var payTourist = new PayTouristIntegrazione { StrutturaId = s };
         var payTouristStruttura = new PayTouristStruttura { StrutturaId = s };
@@ -147,6 +148,10 @@ public class EliminaStrutturaTests
             new PagamentoPrenotazione { StrutturaId = s, PrenotazioneId = prenotazione.Id, Data = DateOnly.FromDateTime(DateTime.UtcNow), Importo = 10 },
             new RigaFattura { StrutturaId = s, DatiFatturaId = fattura.Id, Numero = 1, Descrizione = "Soggiorno" },
             new FatturaPrenotazione { StrutturaId = s, DatiFatturaId = fattura.Id, PrenotazioneId = prenotazione.Id },
+            new TrasmissioneFattura { StrutturaId = s, DatiFatturaId = fattura.Id, NomeFile = $"IT01234567890_{Random.Shared.Next(10000, 99999)}.xml", ProgressivoInvio = "01000", CodiceTrasmittente = "01234567890", Xml = [1] },
+            new RicevutaSdi { StrutturaId = s, Tipo = Domain.Enums.TipoRicevutaSdi.Consegna, Xml = [1] },
+            fileRicevuto,
+            new FatturaRicevuta { StrutturaId = s, FileRicevutoSdiId = fileRicevuto.Id, IdentificativoSdi = "222", Fornitore = "Lavanderia", TipoDocumento = "TD01", Numero = "1", Impronta = "x" },
             new GestionePrezzo { StrutturaId = s, TipologiaId = tipologia.Id },
             new SettingAgenzia { StrutturaId = s, Descrizione = "Diretta", Colore = "#000000" },
             new OspiteRiga { StrutturaId = s, OspiteId = ospite.Id, CameraId = camera.Id },

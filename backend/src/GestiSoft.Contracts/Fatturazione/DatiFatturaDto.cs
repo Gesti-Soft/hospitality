@@ -27,7 +27,31 @@ public record DatiFatturaDto(
     int Anno,
     IReadOnlyList<RigaFatturaDto> Righe,
     /// <summary>Le prenotazioni fatturate: la prima è di chi paga.</summary>
-    IReadOnlyList<Guid> PrenotazioneIds);
+    IReadOnlyList<Guid> PrenotazioneIds,
+    /// <summary>Stato verso lo SdI; null per ricevute e fatture emesse prima del canale.</summary>
+    StatoSdiFattura? StatoSdi = null,
+    string? IdentificativoSdi = null,
+    DateTime? InviataSdiAtUtc = null,
+    DateTime? EsitoSdiAtUtc = null,
+    string? NotaSdi = null,
+    /// <summary>Su una nota di credito: la fattura stornata.</summary>
+    Guid? FatturaStornataId = null,
+    /// <summary>Si può modificare: non è nello SdI e nessun invio è in sospeso.</summary>
+    bool Modificabile = true);
+
+/// <summary>Un file XML generato per la fattura, senza i suoi byte (si scaricano a parte).</summary>
+public record TrasmissioneFatturaDto(
+    Guid Id,
+    string NomeFile,
+    bool ViaCanale,
+    bool Prova,
+    EsitoTrasmissioneSdi Esito,
+    string? IdentificativoSdi,
+    DateTime CreatedAtUtc,
+    DateTime? InviataAtUtc,
+    DateTime? EsitoAtUtc,
+    string? Nota,
+    string? InviataDa);
 
 /// <summary>Una riga del documento, o una riga proposta dalla prenotazione (Numero 0 finché non è salvata).</summary>
 public record RigaFatturaDto(
@@ -50,3 +74,6 @@ public record RigaFatturaDto(
 public record DaFatturareDto(bool SoggiornoFatturato, int ServiziDaFatturare, decimal ImportoServiziDaFatturare);
 
 public record PropostaFatturaDto(IReadOnlyList<RigaFatturaDto> Righe, decimal ImpostaSoggiorno, IReadOnlyList<string> Avvisi);
+
+/// <summary>Com'è andato l'invio allo SdI. Prova = spedita allo SdI di collaudo: la fattura resta da inviare.</summary>
+public record EsitoInvioSdiDto(string NomeFile, string IdentificativoSdi, bool Prova);

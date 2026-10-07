@@ -15,4 +15,5 @@ public record ImpostazioniStrutturaDto(
     decimal? TassaSoggiornoPercentualeAnziani,
     string? ComuneAttivita,
     int? IntervalloPuliziaGiorni = null,
-    int? IntervalloBiancheriaGiorni = null);
+    int? IntervalloBiancheriaGiorni = null,
+    bool SdiAttivo = false);

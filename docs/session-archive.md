@@ -2530,3 +2530,35 @@ Testo originale, spostato per stare nel limite di 300 righe.
 - Fattura a righe e multi-prenotazione, aliquota IVA sui servizi extra. 269 test verdi.
 - Poi: ticket sui trattamenti, N2.2 automatico per il forfettario, "Fattura gli extra" (`da-fatturare`), etichetta
   Fattura/Ricevuta anche nel dialogo prenotazione, cliente con Cittadinanza a select, spaziatura dei tab.
+
+**Ricezione diretta OTA, versioni, prenotazioni OTA** (02/10, da `d1a269b` a `2a83b47`)
+- Note OTA ridotte, animale dal sito, annullamento OTA riservato, tassa azzerata all'annullamento;
+  notifica e Log a ogni aggiornamento con versione 2.x; ricezione diretta degli avvisi OTA con controllo
+  periodico; modifiche dal portale unite in una prenotazione. 318 test verdi.
+
+**Eliminazione definitiva della struttura, cauzione, finanze** (05/10, `2527041`, `59dec76`, `e63addd`, `9fb21d0`)
+- L'eliminazione definitiva (Super Admin, 90 giorni dopo la disattivazione) falliva per 11 tabelle aggiunte dopo:
+  ora completa, foto dei ticket tolte dal disco dopo il commit; test su database temporaneo (`GESTISOFT_TEST_POSTGRES`,
+  senza viene saltato). Check-out: importo della cauzione mostrato, trattenuta mai oltre il versato. **Pulsante "Crea struttura
+  demo"** (Super Admin > Clienti): "Hotel Belvedere" a 20 camere per un Cliente scelto o uno demo nuovo (nome
+  ed email scelti, titolare con password fissa `Demo.{anno}!`, scelta dell'utente; `Cliente.Demo`: sparisce con utenti e ultima demo), da
+  `StrutturaDemoGenerator`; `Struttura.Demo` (migration): eliminabile subito, il Worker la elimina dopo 30 giorni (`EliminazioneDemoJob`).
+  Scartata la demo unica condivisa tra clienti (eccezione al controllo tenant, dati visibili tra clienti). Corretto anche `EliminaStrutturaAsync`:
+  la transazione a mano falliva con `EnableRetryOnFailure` (anche per le strutture vere); ora nella execution strategy. 329 test verdi.
+
+**Sincronizzazione col desktop**
+- Fase 1 desktop costruita e provata contro un Postgres vero; pacchetto `GestiSoft.Domain` anticipato.
+- Fase 2 iniziata: `SyncChange` + `DispositivoLocale` + `SyncChangeInterceptor` (changelog nella stessa
+  transazione, nessuna FK verso `Struttura`; l'intercettore **deve** chiamare `DetectChanges()`).
+
+**Fasi 0-11 — la costruzione** (dettagli in `docs/session-archive.md`)
+- Fondamenta: .NET 10 + Docker + Postgres, schema dati, auth JWT con permessi per Struttura, Camere e
+  Prenotazioni, Finanze e Fatturazione (PDF + XML SDI).
+- Integrazioni esterne (Wubook, Alloggiati Web, Osservatorio, PayTourist) con parità rispetto a
+  `OtaService.Web` del legacy; Worker diviso in due processi.
+- Frontend React completo (calendario/booking board, ospiti, finanze, impostazioni, log, notifiche) e
+  primo deploy reale sulla VPS.
+- Migrazione dati legacy da SQL Server: una sola installazione migrata, tool rilanciabile; **i 3 utenti
+  reali dell'originale non hanno un account nel nuovo sistema**, vanno ricreati a mano.
+- Backup: pgBackRest (fisico + WAL, 30 giorni) e `pg_dump` (7 giorni), test di restore mensile, pagina
+  "Backup" in sola lettura — il ripristino non è a un click da un pannello web, di proposito.

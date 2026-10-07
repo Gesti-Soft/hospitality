@@ -20,6 +20,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\GestiSoft.Api\GestiSoft.Api.csproj" />
+    <ProjectReference Include="..\..\src\GestiSoft.Sdi\GestiSoft.Sdi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Esempi ufficiali dei messaggi dello SdI (fatturapa.gov.it, documentazione SdI). -->
+    <None Include="MessaggiSdi\*.xml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

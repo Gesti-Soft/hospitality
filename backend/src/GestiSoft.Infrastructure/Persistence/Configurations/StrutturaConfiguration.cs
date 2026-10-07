@@ -25,6 +25,7 @@ public class StrutturaConfiguration : IEntityTypeConfiguration<Struttura>
         builder.Property(s => s.AlloggiatiWebAbilitato).HasDefaultValue(false);
         builder.Property(s => s.OsservatorioAbilitato).HasDefaultValue(false);
         builder.Property(s => s.PayTouristAbilitato).HasDefaultValue(false);
+        builder.Property(s => s.SdiAbilitato).HasDefaultValue(false);
         builder.Property(s => s.Demo).HasDefaultValue(false);
     }
 }

@@ -53,6 +53,12 @@ public class Struttura
     public bool PayTouristAbilitato { get; set; }
 
     /// <summary>
+    /// Invio delle fatture allo SdI dal canale GestiSoft. Senza, l'XML si genera e si scarica lo
+    /// stesso, e la struttura lo carica da sé sul portale dell'Agenzia.
+    /// </summary>
+    public bool SdiAbilitato { get; set; }
+
+    /// <summary>
     /// Scadenza della licenza software GestiSoft assegnata dal Super Admin a questa Struttura — è la
     /// licenza che GestiSoft concede al Cliente per usare il gestionale, indipendente da quali
     /// integrazioni esterne (Wubook/Alloggiati Web/Osservatorio/PayTourist) siano concesse: NON è la

@@ -80,4 +80,30 @@ public class DatiFattura : TenantEntity
     public string? Link { get; set; }
 
     public int Anno { get; set; } = DateTime.UtcNow.Year;
+
+    /// <summary>
+    /// Stato verso lo SdI, riassunto dell'ultima TrasmissioneFattura. Null sulle ricevute e sulle
+    /// fatture emesse prima del canale: quelle non si spediscono da qui.
+    /// </summary>
+    public StatoSdiFattura? StatoSdi { get; set; }
+
+    /// <summary>
+    /// Identificativo dato dallo SdI al file accettato. Una fattura spedita dal canale lo ha sempre:
+    /// "inviata" senza identificativo non può esistere.
+    /// </summary>
+    public string? IdentificativoSdi { get; set; }
+
+    public DateTime? InviataSdiAtUtc { get; set; }
+
+    /// <summary>Quando è arrivata l'ultima ricevuta (consegna, mancata consegna, scarto).</summary>
+    public DateTime? EsitoSdiAtUtc { get; set; }
+
+    /// <summary>Esito leggibile dell'ultima ricevuta: per uno scarto, i codici e la descrizione degli errori.</summary>
+    public string? NotaSdi { get; set; }
+
+    /// <summary>
+    /// Su una nota di credito (TD04): la fattura che storna. Chiave vera e non testo: il campo
+    /// dell'XML (DatiFattureCollegate) è libero, il legame tra i due documenti no.
+    /// </summary>
+    public Guid? FatturaStornataId { get; set; }
 }

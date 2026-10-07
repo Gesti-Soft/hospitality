@@ -243,6 +243,46 @@ export interface DatiFatturaDto {
   righe: RigaFatturaDto[]
   /** Le prenotazioni fatturate: la prima è di chi paga. */
   prenotazioneIds: string[]
+  /** Stato verso lo SdI; null per ricevute e fatture emesse prima dell'invio dal gestionale. */
+  statoSdi: StatoSdiFattura | null
+  identificativoSdi: string | null
+  inviataSdiAtUtc: string | null
+  esitoSdiAtUtc: string | null
+  /** Esito dell'ultima ricevuta: per uno scarto, codici e descrizione degli errori. */
+  notaSdi: string | null
+  /** Su una nota di credito: la fattura che storna. */
+  fatturaStornataId: string | null
+  /** False quando la fattura è nello SdI: si corregge solo con una nota di credito. */
+  modificabile: boolean
+}
+
+export const StatoSdiFattura = { DaInviare: 1, Inviata: 2, Consegnata: 3, NonConsegnata: 4, Scartata: 5 } as const
+export type StatoSdiFattura = (typeof StatoSdiFattura)[keyof typeof StatoSdiFattura]
+
+/**
+ * Etichetta e colore di ogni stato. Non consegnata è ambra e non rossa: la fattura è valida, sta
+ * nel cassetto fiscale del cliente. Rossa è solo la scartata, l'unico vero rifiuto.
+ */
+export const STATO_SDI: Record<StatoSdiFattura, { etichetta: string; colore: 'default' | 'info' | 'success' | 'warning' | 'error'; spiegazione: string }> = {
+  [StatoSdiFattura.DaInviare]: { etichetta: 'Da inviare', colore: 'default', spiegazione: 'Non ancora trasmessa allo SdI.' },
+  [StatoSdiFattura.Inviata]: { etichetta: 'Inviata', colore: 'info', spiegazione: "Lo SdI l'ha presa in carico: si attende la ricevuta." },
+  [StatoSdiFattura.Consegnata]: { etichetta: 'Consegnata', colore: 'success', spiegazione: "Il cliente l'ha ricevuta." },
+  [StatoSdiFattura.NonConsegnata]: {
+    etichetta: 'Non consegnata',
+    colore: 'warning',
+    spiegazione: 'La fattura è valida: è nel cassetto fiscale del cliente. Basta consegnargli la copia PDF.',
+  },
+  [StatoSdiFattura.Scartata]: {
+    etichetta: 'Scartata',
+    colore: 'error',
+    spiegazione: "Lo SdI l'ha rifiutata: correggila e inviala di nuovo, con lo stesso numero.",
+  },
+}
+
+/** Una nota di credito (TD04) che storna in tutto o in parte una fattura. */
+export interface CreaNotaDiCreditoRequest {
+  righe: RigaFatturaRichiesta[]
+  impostaSoggiorno?: number | null
 }
 
 /** Da dove viene una riga: il soggiorno o un servizio extra si fatturano una volta sola; una riga a mano è Altro. */
@@ -348,6 +388,16 @@ function useInvalidaFatture(strutturaId: string | null) {
   }
 }
 
+/** Nota di credito sulla fattura indicata: nasce collegata all'originale, con il suo numero. */
+export function useCreaNotaDiCredito(strutturaId: string | null) {
+  const invalida = useInvalidaFatture(strutturaId)
+  return useMutation({
+    mutationFn: ({ fatturaId, request }: { fatturaId: string; request: CreaNotaDiCreditoRequest }) =>
+      apiPost<DatiFatturaDto>(`/strutture/${strutturaId}/fatture/${fatturaId}/nota-di-credito`, request),
+    onSuccess: invalida,
+  })
+}
+
 export function useCreaFattura(strutturaId: string | null) {
   const invalida = useInvalidaFatture(strutturaId)
   return useMutation({
@@ -358,8 +408,14 @@ export function useCreaFattura(strutturaId: string | null) {
 
 /** L'eventuale fattura già generata per una prenotazione — null se non ancora fatturata (o se l'operatore non ha il permesso di consultare le fatture). */
 /** "Fattura n. 12/2026" o "Ricevuta n. 3/2026": due serie diverse, il nome giusto conta. */
-export function nomeDocumento(f: Pick<DatiFatturaDto, 'tipoEmissione' | 'numeroDocumento' | 'anno'>): string {
-  return `${f.tipoEmissione === TipoEmissioneDocumento.Ricevuta ? 'Ricevuta' : 'Fattura'} n. ${f.numeroDocumento}/${f.anno}`
+export function nomeDocumento(f: Pick<DatiFatturaDto, 'tipoEmissione' | 'numeroDocumento' | 'anno'> & Partial<Pick<DatiFatturaDto, 'tipoDocumento'>>): string {
+  const nome =
+    f.tipoEmissione === TipoEmissioneDocumento.Ricevuta
+      ? 'Ricevuta'
+      : f.tipoDocumento === TipoDocumentoFattura.TD04_NotaDiCredito
+        ? 'Nota di credito'
+        : 'Fattura'
+  return `${nome} n. ${f.numeroDocumento}/${f.anno}`
 }
 
 /** Cosa resta da fatturare di una prenotazione: soggiorno già in un documento, servizi extra non ancora. */
@@ -438,6 +494,171 @@ export function scaricaFatturaPdf(strutturaId: string, fatturaId: string, numero
   return apiScaricaFile(`/strutture/${strutturaId}/fatture/${fatturaId}/pdf`, `fattura-${numeroDocumento}.pdf`)
 }
 
+/** Il nome del file lo decide il server: IT + codice del trasmittente + progressivo, come lo vuole lo SdI. */
 export function scaricaFatturaXml(strutturaId: string, fatturaId: string, numeroDocumento: number) {
-  return apiScaricaFile(`/strutture/${strutturaId}/fatture/${fatturaId}/xml`, `fattura-${numeroDocumento}.xml`)
+  return apiScaricaFile(`/strutture/${strutturaId}/fatture/${fatturaId}/xml`, `fattura-${numeroDocumento}.xml`, true)
+}
+
+// ---------------------------------------------------------------------------
+// Canale SdI
+// ---------------------------------------------------------------------------
+
+/** True se le fatture si spediscono dal canale GestiSoft: concesso dal Super Admin e acceso dalla struttura. */
+export function useCanaleSdiAttivo(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['fatture', strutturaId, 'canale-sdi'],
+    queryFn: () => apiGet<boolean>(`/strutture/${strutturaId}/fatture/canale-sdi`),
+    enabled: !!strutturaId,
+  })
+}
+
+/** Cosa è successo a un singolo file XML della fattura. */
+export const EsitoTrasmissioneSdi = { Generato: 1, Inviato: 2, Rifiutato: 3, EsitoIgnoto: 4, Consegnato: 5, NonConsegnato: 6, Scartato: 7 } as const
+export type EsitoTrasmissioneSdi = (typeof EsitoTrasmissioneSdi)[keyof typeof EsitoTrasmissioneSdi]
+
+export const ESITO_TRASMISSIONE: Record<EsitoTrasmissioneSdi, { etichetta: string; colore: 'default' | 'info' | 'success' | 'warning' | 'error' }> = {
+  [EsitoTrasmissioneSdi.Generato]: { etichetta: 'Scaricato', colore: 'default' },
+  [EsitoTrasmissioneSdi.Inviato]: { etichetta: 'Inviato', colore: 'info' },
+  [EsitoTrasmissioneSdi.Rifiutato]: { etichetta: 'Non accettato', colore: 'error' },
+  [EsitoTrasmissioneSdi.EsitoIgnoto]: { etichetta: 'Esito incerto', colore: 'warning' },
+  [EsitoTrasmissioneSdi.Consegnato]: { etichetta: 'Consegnato', colore: 'success' },
+  [EsitoTrasmissioneSdi.NonConsegnato]: { etichetta: 'Non consegnato', colore: 'warning' },
+  [EsitoTrasmissioneSdi.Scartato]: { etichetta: 'Scartato', colore: 'error' },
+}
+
+/** Un file XML generato per la fattura, senza i byte (si scaricano a parte). */
+export interface TrasmissioneFatturaDto {
+  id: string
+  nomeFile: string
+  /** Spedito dal canale GestiSoft; false = scaricato per caricarlo a mano. */
+  viaCanale: boolean
+  /** Spedito allo SdI di collaudo: non conta, la fattura resta da inviare. */
+  prova: boolean
+  esito: EsitoTrasmissioneSdi
+  identificativoSdi: string | null
+  createdAtUtc: string
+  inviataAtUtc: string | null
+  esitoAtUtc: string | null
+  /** Per uno scarto: codici e descrizioni degli errori, separati da "; ". */
+  nota: string | null
+  inviataDa: string | null
+}
+
+export function useTrasmissioniFattura(strutturaId: string | null, fatturaId: string | null) {
+  return useQuery({
+    queryKey: ['fatture', strutturaId, 'trasmissioni', fatturaId],
+    queryFn: () => apiGet<TrasmissioneFatturaDto[]>(`/strutture/${strutturaId}/fatture/${fatturaId}/trasmissioni`),
+    enabled: !!strutturaId && !!fatturaId,
+  })
+}
+
+/** Il file esattamente com'era: per quelli spediti, il file partito, non uno rigenerato. */
+export function scaricaXmlTrasmissione(strutturaId: string, fatturaId: string, t: Pick<TrasmissioneFatturaDto, 'id' | 'nomeFile'>) {
+  return apiScaricaFile(`/strutture/${strutturaId}/fatture/${fatturaId}/trasmissioni/${t.id}/xml`, t.nomeFile, true)
+}
+
+export interface EsitoInvioSdiDto {
+  nomeFile: string
+  identificativoSdi: string
+  /** Spedita allo SdI di collaudo: la fattura resta da inviare. */
+  prova: boolean
+}
+
+/** Spedisce la fattura allo SdI. Sempre su richiesta esplicita dell'operatore. */
+export function useInviaSdi(strutturaId: string | null) {
+  const invalida = useInvalidaFatture(strutturaId)
+  return useMutation({
+    mutationFn: (fatturaId: string) => apiPost<EsitoInvioSdiDto>(`/strutture/${strutturaId}/fatture/${fatturaId}/invia-sdi`, {}),
+    // Anche se fallisce: un esito incerto lascia comunque un file nello storico.
+    onSettled: invalida,
+  })
+}
+
+/** Un errore di scarto: codice SdI, descrizione e, se lo SdI lo dà, il suggerimento per correggerlo. */
+export interface ErroreScartoSdi {
+  codice: string | null
+  descrizione: string
+  suggerimento: string | null
+}
+
+/** Riapre la nota scritta dal server ("00404 Fattura duplicata (suggerimento); …") in un errore per riga. */
+export function erroriScarto(nota: string | null): ErroreScartoSdi[] {
+  if (!nota) return []
+  return nota
+    .split('; ')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+    .map((parte) => {
+      const codice = /^(\d{5})\s+/.exec(parte)
+      let testo = codice ? parte.slice(codice[0].length) : parte
+      let suggerimento: string | null = null
+      const tra = /\s\(([^()]*)\)$/.exec(testo)
+      if (tra) {
+        suggerimento = tra[1]
+        testo = testo.slice(0, tra.index)
+      }
+      return { codice: codice?.[1] ?? null, descrizione: testo, suggerimento }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Fatture ricevute (dai fornitori, via SdI)
+// ---------------------------------------------------------------------------
+
+/** Una fattura di un fornitore. È del Cliente: da ogni struttura si vedono quelle di tutte. Importi del fornitore, mai ricalcolati. */
+export interface FatturaRicevutaDto {
+  id: string
+  strutturaId: string
+  strutturaNome: string
+  identificativoSdi: string
+  fornitore: string
+  fornitorePartitaIva: string | null
+  fornitoreCodiceFiscale: string | null
+  /** TD01, TD04…: com'è scritto nel file. */
+  tipoDocumento: string
+  /** Il numero del fornitore, testo libero. */
+  numero: string
+  /** "YYYY-MM-DD" */
+  data: string
+  divisa: string
+  importoTotale: number | null
+  imponibile: number
+  imposta: number
+  ricevutaAtUtc: string
+  /** Null finché nessuno l'ha aperta. */
+  lettaAtUtc: string | null
+}
+
+const TIPI_DOCUMENTO_RICEVUTO: Record<string, string> = {
+  TD01: 'Fattura',
+  TD02: 'Acconto su fattura',
+  TD04: 'Nota di credito',
+  TD05: 'Nota di debito',
+  TD06: 'Parcella',
+  TD24: 'Fattura differita',
+}
+
+export function nomeTipoDocumentoRicevuto(codice: string): string {
+  return TIPI_DOCUMENTO_RICEVUTO[codice] ?? codice
+}
+
+export function useFattureRicevute(strutturaId: string | null, anno: number) {
+  return useQuery({
+    queryKey: ['fatture-ricevute', strutturaId, anno],
+    queryFn: () => apiGet<FatturaRicevutaDto[]>(`/strutture/${strutturaId}/fatture-ricevute?anno=${anno}`),
+    enabled: !!strutturaId,
+  })
+}
+
+export function useAnniFattureRicevute(strutturaId: string | null) {
+  return useQuery({
+    queryKey: ['fatture-ricevute', strutturaId, 'anni'],
+    queryFn: () => apiGet<number[]>(`/strutture/${strutturaId}/fatture-ricevute/anni`),
+    enabled: !!strutturaId,
+  })
+}
+
+/** Il file com'è arrivato dallo SdI (XML o .p7m). Scaricarlo la segna come letta. */
+export function scaricaFatturaRicevuta(strutturaId: string, f: Pick<FatturaRicevutaDto, 'id' | 'numero'>) {
+  return apiScaricaFile(`/strutture/${strutturaId}/fatture-ricevute/${f.id}/file`, `fattura-${f.numero}.xml`, true)
 }

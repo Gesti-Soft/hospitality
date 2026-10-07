@@ -16,7 +16,9 @@ public record StrutturaAdminInfo(
     bool OsservatorioAbilitato,
     bool PayTouristAbilitato,
     bool Demo,
-    DateTime? DemoEliminazioneAtUtc);
+    DateTime? DemoEliminazioneAtUtc,
+    bool SdiAttivo = false,
+    bool SdiAbilitato = false);
 
 public record ClienteAdminInfo(
     Guid Id,

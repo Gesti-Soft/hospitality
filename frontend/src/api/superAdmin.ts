@@ -20,6 +20,9 @@ export interface StrutturaAdminDto {
   alloggiatiWebAbilitato: boolean
   osservatorioAbilitato: boolean
   payTouristAbilitato: boolean
+  /** Invio fatture allo SdI: concesso dal Super Admin / acceso dalla struttura. */
+  sdiAbilitato: boolean
+  sdiAttivo: boolean
   /** Struttura dimostrativa (dati inventati): si elimina definitivamente quando si vuole, senza i 90 giorni. */
   demo: boolean
   /** Solo per le demo: quando il Worker la elimina da sola (30 giorni dopo la creazione). */
@@ -65,6 +68,7 @@ export interface ServiziStrutturaRequest {
   alloggiatiWebAbilitato: boolean
   osservatorioAbilitato: boolean
   payTouristAbilitato: boolean
+  sdiAbilitato: boolean
 }
 
 export function useDashboardSuperAdmin(abilitato: boolean) {

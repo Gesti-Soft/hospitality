@@ -15,6 +15,12 @@ public class ImpostazioniStruttura : TenantEntity
 
     public bool PayTouristAttivo { get; set; }
 
+    /// <summary>
+    /// Fatture spedite allo SdI dal canale GestiSoft. Spento, l'XML resta scaricabile e porta il
+    /// codice fiscale della struttura come trasmittente, perché sarà lei a caricarlo.
+    /// </summary>
+    public bool SdiAttivo { get; set; }
+
     /// <summary>Orario giornaliero di invio schedine/Osservatorio/PayTourist (ora locale struttura).</summary>
     public TimeOnly? OraInvioGiornaliero { get; set; }
 

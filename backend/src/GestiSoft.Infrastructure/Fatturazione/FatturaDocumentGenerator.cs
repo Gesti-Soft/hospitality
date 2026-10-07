@@ -10,12 +10,10 @@ using QuestPDF.Infrastructure;
 namespace GestiSoft.Infrastructure.Fatturazione;
 
 /// <summary>
-/// Genera PDF e XML SDI di una fattura al volo (mai persistiti, vedi
-/// <see cref="IFatturaDocumentGenerator"/>). Il PDF è un layout nuovo, semplice; l'XML segue la
+/// Genera PDF e XML SDI di una fattura. Il PDF è un layout nuovo, semplice; l'XML segue la
 /// struttura standard "FatturaElettronica ordinaria" (namespace SDI v1.2, FormatoTrasmissione
-/// FPR12 verso privati, stessa scelta del legacy) scritta a mano con System.Xml.Linq — non è
-/// validata contro l'XSD ufficiale (nessuna libreria di validazione portata, coerente con lo
-/// scope Fase 4: generazione locale per download manuale, nessun invio a SDI).
+/// FPR12 verso privati, stessa scelta del legacy) scritta a mano con System.Xml.Linq, e si valida
+/// contro lo schema ufficiale con <see cref="ValidaSchema"/> prima di diventare un file da spedire.
 /// </summary>
 public class FatturaDocumentGenerator : IFatturaDocumentGenerator
 {
@@ -335,7 +333,9 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
     private static string? PrimoNonVuoto(params string?[] valori) =>
         valori.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
 
-    public byte[] GeneraXmlSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda)
+    public IReadOnlyList<string> ValidaSchema(byte[] xml) => SchemaFatturaPA.Valida(xml);
+
+    public byte[] GeneraXmlSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, IntestazioneTrasmissione? trasmissione = null, DatiFattura? stornata = null)
     {
         XNamespace p = "http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2";
         XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
@@ -343,19 +343,29 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         var righe = fattura.Righe.OrderBy(r => r.Numero).ToList();
         var clienteEstero = Estero(cliente?.Iso2);
 
+        trasmissione ??= new IntestazioneTrasmissione(
+            CodiceNazione(azienda?.Iso2),
+            azienda?.CodiceFiscale ?? azienda?.PIva ?? string.Empty,
+            fattura.Progressivo.ToString("00000", CultureInfo.InvariantCulture));
+
+        // La PEC serve solo quando non c'è un codice destinatario vero: con un codice, lo SdI recapita lì.
+        var codiceDestinatario = CodiceDestinatario(cliente, clienteEstero);
+        var pec = codiceDestinatario == CodiceDestinatarioItaliano && PecValida(cliente?.Pec) ? cliente!.Pec!.Trim() : null;
+
         var datiTrasmissione = new XElement("DatiTrasmissione",
             new XElement("IdTrasmittente",
-                new XElement("IdPaese", CodiceNazione(azienda?.Iso2)),
-                new XElement("IdCodice", azienda?.CodiceFiscale ?? azienda?.PIva ?? string.Empty)),
-            new XElement("ProgressivoInvio", fattura.Progressivo.ToString("00000", CultureInfo.InvariantCulture)),
+                new XElement("IdPaese", trasmissione.IdPaese),
+                new XElement("IdCodice", trasmissione.IdCodice)),
+            new XElement("ProgressivoInvio", trasmissione.ProgressivoInvio),
             new XElement("FormatoTrasmissione", "FPR12"),
-            new XElement("CodiceDestinatario", CodiceDestinatario(cliente, clienteEstero)));
+            new XElement("CodiceDestinatario", codiceDestinatario),
+            pec is null ? null : new XElement("PECDestinatario", pec));
 
         // La nazione della sede è l'ISO2, non il campo "Nazione" dei dati aziendali: quello è una
         // denominazione leggibile ("Italia") e nel tracciato vale solo il codice a due lettere. Ci
         // finiva davvero, e bastava a impedire la generazione del file.
         var cedentePrestatore = new XElement("CedentePrestatore",
-            DatiAnagrafici(azienda?.Iso2, azienda?.PIva, azienda?.CodiceFiscale, azienda?.Denominazione, azienda?.Nome, azienda?.Cognome, azienda?.RegimeFiscale),
+            DatiAnagrafici(azienda?.Iso2, azienda?.PIva, azienda?.CodiceFiscale, azienda?.Denominazione, azienda?.Nome, azienda?.Cognome, azienda?.RegimeFiscale, estero: false),
             Sede(azienda?.Indirizzo, azienda?.NCivico, azienda?.Cap, azienda?.Comune, azienda?.Provincia, azienda?.Iso2));
 
         // Per un cessionario non residente l'indirizzo segue le convenzioni dello SDI: CAP fisso a
@@ -363,7 +373,7 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         // omessa, che è valorizzabile solo per l'Italia. La Nazione è quella del cliente: prima era
         // scritta fissa a "IT" e un cliente estero risultava residente in Italia.
         var cessionarioCommittente = new XElement("CessionarioCommittente",
-            DatiAnagrafici(cliente?.Iso2, cliente?.PIva, cliente?.CodiceFiscale, cliente?.Denominazione, cliente?.Nome, cliente?.Cognome, regimeFiscale: null),
+            DatiAnagrafici(cliente?.Iso2, cliente?.PIva, cliente?.CodiceFiscale, cliente?.Denominazione, cliente?.Nome, cliente?.Cognome, regimeFiscale: null, clienteEstero),
             Sede(
                 cliente?.Indirizzo,
                 cliente?.NCivico,
@@ -373,7 +383,9 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                 cliente?.Iso2));
 
         // L'ordine degli elementi dentro DatiGeneraliDocumento è fissato dallo schema: TipoDocumento,
-        // Divisa, Data, Numero, DatiBollo, ... — invertirli fa scartare il file.
+        // Divisa, Data, Numero, DatiBollo, ImportoTotaleDocumento, ... — invertirli fa scartare il file.
+        // Il totale comprende IVA e imposta di soggiorno (è una riga del documento), non il bollo: il
+        // blocco DatiBollo lo dichiara, non lo addebita.
         var datiGenerali = new XElement("DatiGenerali",
             new XElement("DatiGeneraliDocumento",
                 new XElement("TipoDocumento", fattura.TipoDocumento is { } td ? $"TD{(int)td:00}" : "TD01"),
@@ -384,13 +396,20 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                     ? new XElement("DatiBollo",
                         new XElement("BolloVirtuale", "SI"),
                         new XElement("ImportoBollo", bollo.ToString("0.00", CultureInfo.InvariantCulture)))
-                    : null));
+                    : null,
+                new XElement("ImportoTotaleDocumento", fattura.ImportoTotale.ToString("0.00", CultureInfo.InvariantCulture))),
+            // La nota di credito dice quale fattura storna: numero e data dell'originale.
+            stornata is null
+                ? null
+                : new XElement("DatiFattureCollegate",
+                    new XElement("IdDocumento", stornata.NumeroDocumento),
+                    new XElement("Data", stornata.DataDocumento.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))));
 
         // Una riga per voce, ognuna con la sua aliquota: AliquotaIVA è obbligatoria, e dove l'IVA non c'è
         // vale 0.00 accanto alla natura. Il formato vuole due decimali ("10.00"): "10" non passa.
         var dettaglioLinee = righe.Select((r, i) => new XElement("DettaglioLinee",
             new XElement("NumeroLinea", i + 1),
-            new XElement("Descrizione", r.Descrizione),
+            new XElement("Descrizione", TestoFatturaPA.Pulisci(r.Descrizione, TestoFatturaPA.Descrizione) ?? "-"),
             new XElement("Quantita", r.Quantita.ToString("0.00", CultureInfo.InvariantCulture)),
             new XElement("PrezzoUnitario", r.PrezzoUnitario.ToString("0.00000", CultureInfo.InvariantCulture)),
             new XElement("PrezzoTotale", r.PrezzoTotale.ToString("0.00", CultureInfo.InvariantCulture)),
@@ -427,13 +446,24 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                 new XElement("Natura", CodiceNatura(NaturaIva.N1_EscluseArt15)),
                 new XElement("ImponibileImporto", impostaRiepilogo.ToString("0.00", CultureInfo.InvariantCulture)),
                 new XElement("Imposta", "0.00"),
-                new XElement("EsigibilitaIVA", "I"))
+                new XElement("EsigibilitaIVA", "I"),
+                new XElement("RiferimentoNormativo", RiferimentoImpostaSoggiorno))
             : null;
 
         var datiBeniServizi = new XElement("DatiBeniServizi", dettaglioLinee, rigaImpostaSoggiorno, datiRiepilogo, riepilogoImpostaSoggiorno);
 
+        // Come ha pagato il cliente, se l'operatore l'ha indicato: pagamento completo (TP02) dell'intero
+        // totale. Una nota di credito non ha un pagamento da dichiarare.
+        var datiPagamento = fattura.ModalitaPagamento is { } modalita && fattura.TipoDocumento != TipoDocumentoFattura.TD04_NotaDiCredito
+            ? new XElement("DatiPagamento",
+                new XElement("CondizioniPagamento", "TP02"),
+                new XElement("DettaglioPagamento",
+                    new XElement("ModalitaPagamento", CodiceModalitaPagamento(modalita)),
+                    new XElement("ImportoPagamento", fattura.ImportoTotale.ToString("0.00", CultureInfo.InvariantCulture))))
+            : null;
+
         var header = new XElement("FatturaElettronicaHeader", datiTrasmissione, cedentePrestatore, cessionarioCommittente);
-        var body = new XElement("FatturaElettronicaBody", datiGenerali, datiBeniServizi);
+        var body = new XElement("FatturaElettronicaBody", datiGenerali, datiBeniServizi, datiPagamento);
 
         var radice = new XElement(p + "FatturaElettronica",
             new XAttribute(XNamespace.Xmlns + "p", p.NamespaceName),
@@ -450,7 +480,7 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<string> ValidaPerSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda)
+    public IReadOnlyList<string> ValidaPerSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, DatiFattura? stornata = null)
     {
         // Numero, data e importi della fattura non si controllano: sono campi non annullabili del
         // modello, valorizzati alla creazione. Qui manca solo ciò che l'operatore può lasciare in
@@ -476,6 +506,17 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
             {
                 motivi.Add("manca il regime fiscale della struttura");
             }
+
+            // Chi emette una fattura ha sempre la partita IVA: il tracciato la vuole obbligatoria.
+            if (string.IsNullOrWhiteSpace(azienda.PIva))
+            {
+                motivi.Add("manca la partita IVA della struttura");
+            }
+        }
+
+        if (fattura.FatturaStornataId is not null && stornata is null)
+        {
+            motivi.Add("la nota di credito non trova la fattura che storna");
         }
 
         // Descrizione di ogni riga: obbligatoria nel tracciato. Una fattura creata altrove, o di prima
@@ -499,6 +540,24 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
                 "del cliente", cliente.Iso2, cliente.PIva, cliente.CodiceFiscale,
                 cliente.Denominazione, cliente.Nome, cliente.Cognome,
                 cliente.Indirizzo, cliente.LuogoResidenza, cliente.Cap, cliente.Provincia));
+
+            // Sette caratteri, lettere maiuscole e cifre: un codice sbagliato manda la fattura su un
+            // altro canale, o la fa scartare. Quello a sei è della Pubblica Amministrazione, fuori ambito.
+            if (!string.IsNullOrWhiteSpace(cliente.CodiceDestinatario))
+            {
+                var codice = cliente.CodiceDestinatario.Trim().ToUpperInvariant();
+                if (codice.Length != 7 || !codice.All(char.IsAsciiLetterOrDigit))
+                {
+                    motivi.Add(codice.Length == 6
+                        ? "il codice destinatario del cliente ha sei caratteri, cioè è di una Pubblica Amministrazione: le fatture verso la PA non sono gestite"
+                        : "il codice destinatario del cliente non è valido: servono sette caratteri, lettere e cifre");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(cliente.Pec) && !PecValida(cliente.Pec))
+            {
+                motivi.Add("la PEC del cliente non è un indirizzo email valido");
+            }
         }
 
         return motivi;
@@ -517,7 +576,9 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
         var motivi = new List<string>();
         var estero = Estero(nazione);
 
-        if (string.IsNullOrWhiteSpace(pIva) && string.IsNullOrWhiteSpace(codiceFiscale))
+        // Uno straniero spesso non ha né partita IVA né un codice fiscale italiano: il file porta allora
+        // un identificativo convenzionale (vedi DatiAnagrafici), e la fattura si emette lo stesso.
+        if (!estero && string.IsNullOrWhiteSpace(pIva) && string.IsNullOrWhiteSpace(codiceFiscale))
         {
             motivi.Add($"manca la partita IVA o il codice fiscale {chi}");
         }
@@ -565,29 +626,101 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
     private static bool ProvinciaValida(string? provincia) =>
         provincia is not null && provincia.Trim().Length == 2 && provincia.Trim().All(char.IsLetter);
 
-    private static XElement DatiAnagrafici(string? iso2, string? pIva, string? codiceFiscale, string? denominazione, string? nome, string? cognome, RegimeFiscale? regimeFiscale)
+    /// <param name="estero">
+    /// Controparte non residente: l'identificativo va sempre in IdFiscaleIVA col paese vero, e mai in
+    /// CodiceFiscale (che ammette solo il formato italiano). Per un privato straniero senza codice si
+    /// scrive un identificativo convenzionale: lo SdI non lo controlla per i soggetti esteri, e senza
+    /// nessun identificativo il file viene scartato.
+    /// </param>
+    private static XElement DatiAnagrafici(string? iso2, string? pIva, string? codiceFiscale, string? denominazione, string? nome, string? cognome, RegimeFiscale? regimeFiscale, bool estero)
     {
-        var anagrafica = !string.IsNullOrWhiteSpace(denominazione)
-            ? new XElement("Anagrafica", new XElement("Denominazione", denominazione))
-            : new XElement("Anagrafica", new XElement("Nome", nome ?? string.Empty), new XElement("Cognome", cognome ?? string.Empty));
+        // Denominazione oppure nome e cognome, mai entrambi (scarto 00200).
+        var anagrafica = TestoFatturaPA.Pulisci(denominazione, TestoFatturaPA.Denominazione) is { } ragioneSociale
+            ? new XElement("Anagrafica", new XElement("Denominazione", ragioneSociale))
+            : new XElement("Anagrafica",
+                new XElement("Nome", TestoFatturaPA.Pulisci(nome, TestoFatturaPA.NomeCognome) ?? string.Empty),
+                new XElement("Cognome", TestoFatturaPA.Pulisci(cognome, TestoFatturaPA.NomeCognome) ?? string.Empty));
+
+        var partitaIva = Codice(pIva);
+        var codice = Codice(codiceFiscale);
+        var paese = CodiceNazione(iso2);
+
+        XElement? idFiscale;
+        XElement? cf;
+        if (estero)
+        {
+            var identificativo = partitaIva ?? codice ?? IdentificativoEsteroConvenzionale;
+            // Una partita IVA UE si scrive spesso col prefisso del paese ("DE123..."): IdPaese lo dice già.
+            if (identificativo.Length > 2 && identificativo.StartsWith(paese, StringComparison.Ordinal) && identificativo != IdentificativoEsteroConvenzionale)
+            {
+                identificativo = identificativo[2..];
+            }
+
+            idFiscale = new XElement("IdFiscaleIVA", new XElement("IdPaese", paese), new XElement("IdCodice", identificativo.Length > 28 ? identificativo[..28] : identificativo));
+            cf = null;
+        }
+        else
+        {
+            if (partitaIva is { Length: 13 } && partitaIva.StartsWith("IT", StringComparison.Ordinal))
+            {
+                partitaIva = partitaIva[2..];
+            }
+
+            idFiscale = partitaIva is null ? null : new XElement("IdFiscaleIVA", new XElement("IdPaese", paese), new XElement("IdCodice", partitaIva));
+            cf = codice is null ? null : new XElement("CodiceFiscale", codice);
+        }
 
         return new XElement("DatiAnagrafici",
-            !string.IsNullOrWhiteSpace(pIva)
-                ? new XElement("IdFiscaleIVA", new XElement("IdPaese", iso2 ?? "IT"), new XElement("IdCodice", pIva))
-                : null,
-            !string.IsNullOrWhiteSpace(codiceFiscale) ? new XElement("CodiceFiscale", codiceFiscale) : null,
+            idFiscale,
+            cf,
             anagrafica,
             regimeFiscale is { } regime ? new XElement("RegimeFiscale", $"RF{(int)regime:00}") : null);
     }
 
+    /// <summary>Un codice fiscale o una partita IVA scritti a mano: maiuscolo, senza spazi, punti o trattini.</summary>
+    private static string? Codice(string? valore)
+    {
+        var pulito = new string((valore ?? "").Where(char.IsAsciiLetterOrDigit).ToArray()).ToUpperInvariant();
+        return pulito.Length == 0 ? null : pulito;
+    }
+
     private static XElement Sede(string? indirizzo, string? nCivico, string? cap, string? comune, string? provincia, string? nazione) => new(
         "Sede",
-        new XElement("Indirizzo", indirizzo ?? string.Empty),
-        !string.IsNullOrWhiteSpace(nCivico) ? new XElement("NumeroCivico", nCivico) : null,
-        new XElement("CAP", string.IsNullOrWhiteSpace(cap) ? "00000" : cap),
-        new XElement("Comune", comune ?? string.Empty),
+        new XElement("Indirizzo", TestoFatturaPA.Pulisci(indirizzo, TestoFatturaPA.Indirizzo) ?? string.Empty),
+        // NumeroCivico ammette solo Basic Latin: un civico con lettere accentate si scrive dentro l'indirizzo.
+        TestoFatturaPA.Pulisci(nCivico, TestoFatturaPA.NumeroCivico) is { } civico && civico.All(c => c < '\u0080')
+            ? new XElement("NumeroCivico", civico)
+            : null,
+        new XElement("CAP", string.IsNullOrWhiteSpace(cap) ? "00000" : cap.Trim()),
+        new XElement("Comune", TestoFatturaPA.Pulisci(comune, TestoFatturaPA.Comune) ?? string.Empty),
         !string.IsNullOrWhiteSpace(provincia) ? new XElement("Provincia", provincia.Trim().ToUpperInvariant()) : null,
         new XElement("Nazione", CodiceNazione(nazione)));
+
+    /// <summary>Identificativo di un cessionario estero che non ne ha uno (privato straniero): convenzione diffusa, lo SdI non lo verifica.</summary>
+    private const string IdentificativoEsteroConvenzionale = "99999999999";
+
+    /// <summary>Dicitura di legge sul riepilogo dell'imposta di soggiorno (massimo 100 caratteri nel tracciato).</summary>
+    private const string RiferimentoImpostaSoggiorno = "Escluse ex art. 15 c.1 n.3 DPR 633/72";
+
+    /// <summary>Un indirizzo email ben formato: una PEC sbagliata fa scartare il file dallo schema.</summary>
+    private static bool PecValida(string? pec) =>
+        !string.IsNullOrWhiteSpace(pec)
+        && pec.Trim().Length is >= 7 and <= 256
+        && System.Text.RegularExpressions.Regex.IsMatch(pec.Trim(), @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
+
+    /// <summary>
+    /// Codici MP del tracciato. L'incasso tramite il portale di prenotazione è un pagamento elettronico
+    /// con carta (MP08): è così che il portale lo incassa dall'ospite.
+    /// </summary>
+    private static string CodiceModalitaPagamento(ModalitaPagamento modalita) => modalita switch
+    {
+        ModalitaPagamento.Contanti => "MP01",
+        ModalitaPagamento.Assegno => "MP02",
+        ModalitaPagamento.Bonifico => "MP05",
+        ModalitaPagamento.CartaDiPagamento => "MP08",
+        ModalitaPagamento.PortaleOnline => "MP08",
+        _ => "MP01",
+    };
 
     /// <summary>Descrizione della riga dell'imposta di soggiorno: cita la norma perché chi riceve la fattura (e chi la controlla) capisca perché quella somma non ha IVA.</summary>
     private const string DescrizioneImpostaSoggiorno = "Imposta di soggiorno - somma esclusa ex art. 15 c.1 n.3 DPR 633/72";
@@ -621,7 +754,7 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
     /// </summary>
     private static string CodiceDestinatario(DatiCliente? cliente, bool estero) =>
         !string.IsNullOrWhiteSpace(cliente?.CodiceDestinatario)
-            ? cliente.CodiceDestinatario.Trim()
+            ? cliente.CodiceDestinatario.Trim().ToUpperInvariant()
             : estero ? CodiceDestinatarioEstero : CodiceDestinatarioItaliano;
 
     /// <summary>Aliquota come la vuole il tracciato: due decimali, 0.00 dove l'IVA non c'è.</summary>

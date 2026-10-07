@@ -5,6 +5,7 @@
     <Project Path="src/GestiSoft.Contracts/GestiSoft.Contracts.csproj" />
     <Project Path="src/GestiSoft.Domain/GestiSoft.Domain.csproj" />
     <Project Path="src/GestiSoft.Infrastructure/GestiSoft.Infrastructure.csproj" />
+    <Project Path="src/GestiSoft.Sdi/GestiSoft.Sdi.csproj" />
     <Project Path="src/GestiSoft.Worker/GestiSoft.Worker.csproj" />
     <Project Path="src/GestiSoft.WorkerSchedine/GestiSoft.WorkerSchedine.csproj" />
   </Folder>

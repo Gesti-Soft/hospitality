@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import Alert from '@mui/material/Alert'
 import Snackbar from '@mui/material/Snackbar'
 
-type Severita = 'success' | 'error'
+type Severita = 'success' | 'error' | 'info'
 
 interface Toast {
   chiave: number
@@ -15,6 +15,8 @@ interface ToastContextValue {
   successo: (messaggio: string) => void
   /** Esito negativo di un'azione tentata (es. "Operazione non riuscita, riprova.") — stesso comportamento transitorio, resta visibile più a lungo per dare tempo di leggerlo. */
   errore: (messaggio: string) => void
+  /** Informazione, né riuscita né errore (es. "Le ricevute non vanno allo SdI.") — stessa durata del successo. */
+  info: (messaggio: string) => void
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null)
@@ -39,6 +41,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const successo = useCallback((messaggio: string) => accoda('success', messaggio), [accoda])
   const erroreToast = useCallback((messaggio: string) => accoda('error', messaggio), [accoda])
+  const info = useCallback((messaggio: string) => accoda('info', messaggio), [accoda])
 
   // Pattern ufficiale MUI per Snackbar consecutivi: quando arriva un nuovo toast mentre uno è
   // ancora visibile, prima si chiude quello corrente (transizione di uscita), solo dopo — a
@@ -61,7 +64,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ToastContext.Provider value={{ successo, errore: erroreToast }}>
+    <ToastContext.Provider value={{ successo, errore: erroreToast, info }}>
       {children}
       <Snackbar
         open={aperto}

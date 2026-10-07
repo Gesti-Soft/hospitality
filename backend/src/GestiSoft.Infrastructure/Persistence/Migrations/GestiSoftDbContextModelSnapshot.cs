@@ -216,6 +216,23 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("codici_recupero_utente", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.ContatoreProgressivoInvio", b =>
+                {
+                    b.Property<string>("CodiceFiscale")
+                        .HasMaxLength(28)
+                        .HasColumnType("character varying(28)");
+
+                    b.Property<int>("UltimoProgressivo")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CodiceFiscale");
+
+                    b.ToTable("contatori_progressivo_invio", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.DatiAziendali", b =>
                 {
                     b.Property<Guid>("Id")
@@ -400,6 +417,16 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<string>("Divisa")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("EsitoSdiAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("FatturaStornataId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IdentificativoSdi")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<decimal?>("ImportoBollo")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -412,11 +439,18 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<DateTime?>("InviataSdiAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Link")
                         .HasColumnType("text");
 
                     b.Property<int?>("ModalitaPagamento")
                         .HasColumnType("integer");
+
+                    b.Property<string>("NotaSdi")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<int>("NumeroDocumento")
                         .HasColumnType("integer");
@@ -434,6 +468,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<int?>("RegimeFiscale")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("StatoSdi")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("StrutturaId")
                         .HasColumnType("uuid");
 
@@ -449,6 +486,10 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DatiClienteId");
+
+                    b.HasIndex("FatturaStornataId");
+
+                    b.HasIndex("IdentificativoSdi");
 
                     b.HasIndex("StrutturaId");
 
@@ -606,6 +647,161 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("fatture_prenotazioni", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.FatturaRicevuta", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Divisa")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<Guid>("FileRicevutoSdiId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Fornitore")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FornitoreCodiceFiscale")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("FornitorePartitaIva")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("IdentificativoSdi")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("Imponibile")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("ImportoTotale")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("Imposta")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Impronta")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("IndiceNelFile")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LettaAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Numero")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("RicevutaAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TipoDocumento")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileRicevutoSdiId");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.HasIndex("StrutturaId", "Data");
+
+                    b.HasIndex("StrutturaId", "Impronta")
+                        .IsUnique();
+
+                    b.ToTable("fatture_ricevute", (string)null);
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.FileRicevutoSdi", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Esito")
+                        .HasColumnType("integer");
+
+                    b.Property<byte[]>("File")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("Fornitore")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("IdentificativoCessionario")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("IdentificativoSdi")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Messaggio")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<byte[]>("Metadati")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("NomeFile")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NomeFileMetadati")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("Prova")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("RicevutoAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.HasIndex("IdentificativoSdi", "Prova")
+                        .IsUnique();
+
+                    b.ToTable("file_ricevuti_sdi", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.GestionePrezzo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -694,6 +890,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("PoliziaStatoAttiva")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SdiAttivo")
                         .HasColumnType("boolean");
 
                     b.Property<Guid>("StrutturaId")
@@ -1551,6 +1750,56 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("restrizioni_soggiorno_camera", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.RicevutaSdi", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Descrizione")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("IdentificativoSdi")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("NomeFile")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NomeFileFattura")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("Prova")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("RicevutaAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TrasmissioneFatturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Xml")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StrutturaId");
+
+                    b.HasIndex("TrasmissioneFatturaId");
+
+                    b.ToTable("ricevute_sdi", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.Riferimenti.Comune", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2068,6 +2317,11 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("ScadenzaLicenza")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("SdiAbilitato")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("WubookAbilitato")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -2230,6 +2484,84 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.HasIndex("TicketId", "CreatedAtUtc");
 
                     b.ToTable("ticket_assistenza_messaggi", (string)null);
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.TrasmissioneFattura", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CodiceTrasmittente")
+                        .IsRequired()
+                        .HasMaxLength(28)
+                        .HasColumnType("character varying(28)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DatiFatturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Esito")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("EsitoAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IdentificativoSdi")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("InviataAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InviataDa")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("NomeFile")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Nota")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("ProgressivoInvio")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<bool>("Prova")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("StrutturaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ViaCanale")
+                        .HasColumnType("boolean");
+
+                    b.Property<byte[]>("Xml")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatiFatturaId");
+
+                    b.HasIndex("IdentificativoSdi");
+
+                    b.HasIndex("NomeFile")
+                        .IsUnique();
+
+                    b.HasIndex("StrutturaId");
+
+                    b.ToTable("trasmissioni_fattura", (string)null);
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.TrattamentoStruttura", b =>
@@ -2597,6 +2929,11 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasForeignKey("DatiClienteId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("GestiSoft.Domain.Entities.DatiFattura", null)
+                        .WithMany()
+                        .HasForeignKey("FatturaStornataId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
                         .WithMany()
                         .HasForeignKey("StrutturaId")
@@ -2652,6 +2989,21 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.HasOne("GestiSoft.Domain.Entities.Prenotazione", null)
                         .WithMany()
                         .HasForeignKey("PrenotazioneId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.FatturaRicevuta", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.FileRicevutoSdi", null)
+                        .WithMany()
+                        .HasForeignKey("FileRicevutoSdiId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -2909,6 +3261,14 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Navigation("Camera");
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.RicevutaSdi", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.TrasmissioneFattura", null)
+                        .WithMany()
+                        .HasForeignKey("TrasmissioneFatturaId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.RigaFattura", b =>
                 {
                     b.HasOne("GestiSoft.Domain.Entities.DatiFattura", null)
@@ -3051,6 +3411,21 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Navigation("AutoreUtente");
 
                     b.Navigation("Ticket");
+                });
+
+            modelBuilder.Entity("GestiSoft.Domain.Entities.TrasmissioneFattura", b =>
+                {
+                    b.HasOne("GestiSoft.Domain.Entities.DatiFattura", null)
+                        .WithMany()
+                        .HasForeignKey("DatiFatturaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GestiSoft.Domain.Entities.Struttura", null)
+                        .WithMany()
+                        .HasForeignKey("StrutturaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("GestiSoft.Domain.Entities.TrattamentoStruttura", b =>

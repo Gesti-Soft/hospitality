@@ -1,5 +1,6 @@
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Impostazioni;
 using GestiSoft.Application.Ospiti;
 using GestiSoft.Application.Prenotazioni;
 using GestiSoft.Application.Camere;
@@ -38,6 +39,17 @@ public record CreaFatturaDaPrenotazioneRequest(
     TipoEmissioneDocumento TipoEmissione = TipoEmissioneDocumento.Fattura,
     /// <summary>Come ha pagato l'ospite: si conserva e si stampa solo sulla ricevuta.</summary>
     ModalitaPagamento? ModalitaPagamento = null);
+
+/// <summary>
+/// Nota di credito (TD04) su una fattura già trasmessa: le righe dicono cosa si storna, tutto o in
+/// parte. Gli importi sono positivi, è il tipo documento a dire che si tolgono.
+/// </summary>
+public record CreaNotaDiCreditoRequest(
+    IReadOnlyList<RigaFatturaRichiesta> Righe,
+    decimal? ImpostaSoggiorno = null);
+
+/// <summary>Il file XML pronto da scaricare, con il nome che lo SdI si aspetta.</summary>
+public record FileXmlFattura(string NomeFile, byte[] Contenuto);
 
 public record AggiornaFatturaRequest(
     Guid? DatiClienteId,
@@ -81,7 +93,12 @@ public class FatturazioneService(
     IFatturaDocumentGenerator documentGenerator,
     PermessoStrutturaGuard permessoGuard,
     IServizioStrutturaRepository servizi,
-    ITipologiaCameraRepository tipologie)
+    ITipologiaCameraRepository tipologie,
+    ITrasmissioneFatturaRepository trasmissioni,
+    FileSdiService fileSdi,
+    IImpostazioniStrutturaRepository impostazioni,
+    Sdi.IServizioSdi servizioSdi,
+    ConcessioneServiziGuard concessioneGuard)
 {
     private const int MassimiTentativiProgressivo = 5;
 
@@ -149,32 +166,50 @@ public class FatturazioneService(
 
         var (cliente, _) = await RisolviOCreaClienteAsync(strutturaId, capofila, cancellationToken);
 
-        var anno = DateTime.UtcNow.Year;
+        if (!ricevuta && request.TipoDocumento == TipoDocumentoFattura.TD04_NotaDiCredito)
+        {
+            throw new ConflictException("Una nota di credito si emette dalla fattura che storna, con \"Storna con nota di credito\": così resta collegata all'originale.");
+        }
+
+        return await NumeraEAggiungiAsync(strutturaId, request.TipoEmissione, progressivo => new DatiFattura
+        {
+            StrutturaId = strutturaId,
+            PrenotazioneId = principale.Id,
+            DatiClienteId = cliente.Id,
+            TipoEmissione = request.TipoEmissione,
+            ModalitaPagamento = request.ModalitaPagamento,
+            // Una ricevuta di locazione breve è fuori dal campo IVA e non passa dallo SDI:
+            // aliquota, natura, regime e tipo documento sono codici del tracciato elettronico e
+            // su quel foglio non significano niente.
+            TipoDocumento = ricevuta ? null : request.TipoDocumento,
+            RegimeFiscale = ricevuta ? null : request.RegimeFiscale,
+            StatoSdi = ricevuta ? null : StatoSdiFattura.DaInviare,
+            Divisa = string.IsNullOrWhiteSpace(request.Divisa) ? "EUR" : request.Divisa,
+            Righe = righe.Select(Copia).ToList(),
+            Prenotazioni = elencoPrenotazioni.Select(p => new FatturaPrenotazione { StrutturaId = strutturaId, PrenotazioneId = p.Id }).ToList(),
+            ImpostaSoggiorno = impostaSoggiorno > 0 ? impostaSoggiorno : null,
+        }, impostaSoggiorno, cancellationToken);
+    }
+
+    /// <summary>
+    /// Numero e data al documento, poi l'inserimento. La data è quella civile italiana: in UTC, fra
+    /// mezzanotte e l'una (le due d'estate) il documento prendeva il giorno prima, e a Capodanno
+    /// l'anno prima. Il vincolo unico su (struttura, anno, serie, numero) fa da arbitro fra due
+    /// emissioni contemporanee: chi perde ricalcola il numero e riprova.
+    /// </summary>
+    private async Task<DatiFattura> NumeraEAggiungiAsync(
+        Guid strutturaId, TipoEmissioneDocumento serie, Func<int, DatiFattura> crea, decimal impostaSoggiorno, CancellationToken cancellationToken)
+    {
+        var oggi = Pulizie.PulizieSoggiornoService.Oggi();
         for (var tentativo = 0; tentativo < MassimiTentativiProgressivo; tentativo++)
         {
-            var progressivo = await fatture.GetMaxProgressivoAsync(strutturaId, anno, request.TipoEmissione, cancellationToken) + 1;
+            var progressivo = await fatture.GetMaxProgressivoAsync(strutturaId, oggi.Year, serie, cancellationToken) + 1;
 
-            var candidata = new DatiFattura
-            {
-                StrutturaId = strutturaId,
-                PrenotazioneId = principale.Id,
-                DatiClienteId = cliente.Id,
-                Progressivo = progressivo,
-                NumeroDocumento = progressivo,
-                TipoEmissione = request.TipoEmissione,
-                ModalitaPagamento = ricevuta ? request.ModalitaPagamento : null,
-                // Una ricevuta di locazione breve è fuori dal campo IVA e non passa dallo SDI:
-                // aliquota, natura, regime e tipo documento sono codici del tracciato elettronico e
-                // su quel foglio non significano niente.
-                TipoDocumento = ricevuta ? null : request.TipoDocumento,
-                RegimeFiscale = ricevuta ? null : request.RegimeFiscale,
-                DataDocumento = DateTime.UtcNow.Date,
-                Divisa = string.IsNullOrWhiteSpace(request.Divisa) ? "EUR" : request.Divisa,
-                Righe = righe.Select(Copia).ToList(),
-                Prenotazioni = elencoPrenotazioni.Select(p => new FatturaPrenotazione { StrutturaId = strutturaId, PrenotazioneId = p.Id }).ToList(),
-                ImpostaSoggiorno = impostaSoggiorno > 0 ? impostaSoggiorno : null,
-                Anno = anno,
-            };
+            var candidata = crea(progressivo);
+            candidata.Progressivo = progressivo;
+            candidata.NumeroDocumento = progressivo;
+            candidata.DataDocumento = oggi;
+            candidata.Anno = oggi.Year;
             ApplicaTotali(candidata, impostaSoggiorno);
 
             if (await fatture.TryAddAsync(candidata, cancellationToken))
@@ -186,11 +221,34 @@ public class FatturazioneService(
         throw new ConflictException("Impossibile generare il numero fattura, riprova.");
     }
 
+    /// <summary>
+    /// Una fattura entrata nello SdI non si tocca più: per lo SdI esiste così, e si corregge solo con
+    /// una nota di credito. Lo stesso vale mentre l'esito di un invio è ignoto: il file potrebbe essere
+    /// arrivato, e cambiare la fattura farebbe partire alla prossima spedizione un documento diverso.
+    /// Una scartata invece si corregge: per lo SdI non è mai esistita.
+    /// </summary>
+    private async Task VerificaModificabileAsync(DatiFattura fattura, CancellationToken cancellationToken)
+    {
+        switch (fattura.StatoSdi)
+        {
+            case StatoSdiFattura.Inviata:
+                throw new ConflictException("La fattura è stata inviata allo SdI e si attende la ricevuta: non si può modificare.");
+            case StatoSdiFattura.Consegnata or StatoSdiFattura.NonConsegnata:
+                throw new ConflictException("La fattura è già stata trasmessa allo SdI e non si può più modificare. Per correggerla emetti una nota di credito.");
+        }
+
+        if (await trasmissioni.GetUltimaAsync(fattura.Id, cancellationToken) is { Esito: EsitoTrasmissioneSdi.EsitoIgnoto })
+        {
+            throw new ConflictException("L'ultimo invio allo SdI non ha avuto risposta e il file potrebbe essere arrivato: controlla sul portale e riprova l'invio prima di modificare la fattura.");
+        }
+    }
+
     public async Task<DatiFattura> AggiornaAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, AggiornaFatturaRequest request, CancellationToken cancellationToken)
     {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceWrite, cancellationToken);
 
         var entity = await GetOwnedAsync(strutturaId, fatturaId, cancellationToken);
+        await VerificaModificabileAsync(entity, cancellationToken);
 
         if (request.DatiClienteId is { } clienteId)
         {
@@ -205,13 +263,28 @@ public class FatturazioneService(
         // aliquota, natura, regime e tipo documento non esistono. Le prenotazioni fatturate restano
         // quelle scelte alla creazione.
         var ricevuta = entity.TipoEmissione == TipoEmissioneDocumento.Ricevuta;
+        var notaDiCredito = entity.FatturaStornataId is not null;
+        // Le fatture di prima del canale (StatoSdi null) restano come sono: qualcuna è una TD04 scritta
+        // a mano senza collegamento, e deve restare modificabile.
+        if (!ricevuta && entity.StatoSdi is not null && notaDiCredito != (request.TipoDocumento == TipoDocumentoFattura.TD04_NotaDiCredito))
+        {
+            throw new ConflictException(notaDiCredito
+                ? "Una nota di credito resta una nota di credito: per stornare in modo diverso emettine un'altra."
+                : "Una nota di credito si emette dalla fattura che storna, con \"Storna con nota di credito\": così resta collegata all'originale.");
+        }
+
         var collegate = await CaricaPrenotazioniAsync(strutturaId, entity.Prenotazioni.Select(p => p.PrenotazioneId).ToList(), cancellationToken, obbligatorie: false);
         var righe = await CostruisciRigheAsync(strutturaId, ricevuta, request.Righe, collegate, entity.Id, cancellationToken);
         VerificaRegimeSenzaIva(ricevuta, request.RegimeFiscale, righe);
         var impostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno.Value : 0m;
 
+        if (entity.FatturaStornataId is { } stornataId)
+        {
+            await VerificaImportoStornabileAsync(strutturaId, stornataId, CalcoloFattura.Totale(righe, impostaSoggiorno), entity.Id, cancellationToken);
+        }
+
         entity.DatiClienteId = request.DatiClienteId;
-        entity.ModalitaPagamento = ricevuta ? request.ModalitaPagamento : null;
+        entity.ModalitaPagamento = request.ModalitaPagamento;
         entity.TipoDocumento = ricevuta ? null : request.TipoDocumento;
         entity.RegimeFiscale = ricevuta ? null : request.RegimeFiscale;
         entity.ImpostaSoggiorno = impostaSoggiorno > 0 ? impostaSoggiorno : null;
@@ -381,25 +454,137 @@ public class FatturazioneService(
         return new DatiSoggiorno(prenotazione.CheckIn, prenotazione.CheckOut, prenotazione.NumeroOspiti, alloggio, prenotazione.NumeroPrenotazione);
     }
 
-    public async Task<byte[]> GeneraXmlSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Il file XML della fattura, col nome che lo SdI si aspetta. Se la struttura spedisce dal canale
+    /// è il file che il canale spedirà (o ha spedito); altrimenti porta la struttura come trasmittente,
+    /// perché sarà lei a caricarlo sul portale. Le fatture di prima del canale si scaricano sempre così.
+    /// </summary>
+    public async Task<FileXmlFattura> GeneraXmlSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
     {
-        var (fattura, cliente, azienda) = await CaricaPerDocumentoAsync(currentUser, strutturaId, fatturaId, cancellationToken);
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+        var fattura = await GetOwnedAsync(strutturaId, fatturaId, cancellationToken);
 
-        if (fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta)
+        var viaCanale = fattura.StatoSdi is not null && await CanaleSdiAttivoAsync(strutturaId, cancellationToken);
+        var file = await fileSdi.PreparaAsync(fattura, viaCanale, cancellationToken);
+        return new FileXmlFattura(file.NomeFile, file.Xml);
+    }
+
+    /// <summary>Lo storico dei file XML della fattura, dal più recente.</summary>
+    public async Task<IReadOnlyList<TrasmissioneFattura>> TrasmissioniAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+        await GetOwnedAsync(strutturaId, fatturaId, cancellationToken);
+        return await trasmissioni.ListByFatturaAsync(strutturaId, fatturaId, cancellationToken);
+    }
+
+    /// <summary>Un file già generato, coi suoi byte: quello partito, non uno rigenerato.</summary>
+    public async Task<FileXmlFattura> FileTrasmissioneAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, Guid trasmissioneId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+        var trasmissione = await trasmissioni.GetAsync(strutturaId, trasmissioneId, cancellationToken);
+        return trasmissione is not null && trasmissione.DatiFatturaId == fatturaId
+            ? new FileXmlFattura(trasmissione.NomeFile, trasmissione.Xml)
+            : throw new NotFoundException("File non trovato.");
+    }
+
+    /// <summary>
+    /// Spedisce la fattura allo SdI dal canale, su richiesta dell'operatore. Qui si controlla chi la
+    /// chiede; il servizio SdI ricontrolla concessione, interruttore e stato, spedisce e aggiorna la fattura.
+    /// </summary>
+    public async Task<EsitoInvioSdi> InviaSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceWrite, cancellationToken);
+        await concessioneGuard.EnsureSdiAsync(strutturaId, cancellationToken);
+        await GetOwnedAsync(strutturaId, fatturaId, cancellationToken);
+        return await servizioSdi.InviaFatturaAsync(strutturaId, fatturaId, currentUser.Email, cancellationToken);
+    }
+
+    /// <summary>
+    /// Per chi consulta le fatture: se si spediscono dal canale. Le impostazioni della struttura le
+    /// legge solo chi ha "gestione utenti", chi fattura no.
+    /// </summary>
+    public async Task<bool> CanaleSdiAttivoAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+        return await CanaleSdiAttivoAsync(strutturaId, cancellationToken);
+    }
+
+    /// <summary>Le fatture partono dal canale quando il Super Admin l'ha concesso e la struttura l'ha acceso.</summary>
+    public async Task<bool> CanaleSdiAttivoAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        await strutture.GetByIdAsync(strutturaId, cancellationToken) is { SdiAbilitato: true }
+        && await impostazioni.GetByStrutturaIdAsync(strutturaId, cancellationToken) is { SdiAttivo: true };
+
+    /// <summary>
+    /// Nota di credito (TD04) che storna in tutto o in parte una fattura. Stesso cliente e stessa
+    /// numerazione delle fatture, collegata all'originale. Le righe sono libere (non legate a soggiorno
+    /// o servizi): uno storno totale rende di nuovo fatturabile la prenotazione, uno parziale no.
+    /// <para>
+    /// Si storna una fattura che lo SdI ha già: consegnata, non consegnata (è valida comunque), o
+    /// emessa prima del canale. Una fattura ancora da inviare o scartata si corregge e basta, se la
+    /// spedisce il canale; se la struttura la carica da sé, il gestionale non sa se è nello SdI e
+    /// lascia decidere all'operatore.
+    /// </para>
+    /// </summary>
+    public async Task<DatiFattura> CreaNotaDiCreditoAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CreaNotaDiCreditoRequest request, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceWrite, cancellationToken);
+        var originale = await GetOwnedAsync(strutturaId, fatturaId, cancellationToken);
+
+        if (originale.TipoEmissione == TipoEmissioneDocumento.Ricevuta)
         {
-            throw new ConflictException("Una ricevuta di locazione breve non ha una fattura elettronica: l'operazione è fuori dal campo IVA e non passa dallo SDI. Resta scaricabile il PDF.");
+            throw new ConflictException("Una ricevuta di locazione breve non si storna con una nota di credito.");
         }
 
-        // Un dato obbligatorio mancante diventerebbe un elemento vuoto e lo SDI scarterebbe il file
-        // giorni dopo, quando nessuno ricorda più quella fattura: meglio non generarlo e dire cosa
-        // manca. Il PDF resta scaricabile comunque, non ha vincoli di tracciato.
-        var motivi = documentGenerator.ValidaPerSdi(fattura, cliente, azienda);
-        if (motivi.Count > 0)
+        if (originale.TipoDocumento == TipoDocumentoFattura.TD04_NotaDiCredito || originale.FatturaStornataId is not null)
         {
-            throw new ConflictException($"Fattura elettronica non generabile: {string.Join("; ", motivi)}.");
+            throw new ConflictException("Una nota di credito non si storna con un'altra nota di credito.");
         }
 
-        return documentGenerator.GeneraXmlSdi(fattura, cliente, azienda);
+        switch (originale.StatoSdi)
+        {
+            case StatoSdiFattura.Inviata:
+                throw new ConflictException("La fattura è in attesa della ricevuta dello SdI: aspetta l'esito prima di stornarla.");
+            case StatoSdiFattura.Scartata:
+                throw new ConflictException("La fattura è stata scartata dallo SdI, quindi non esiste: correggila e inviala di nuovo, senza nota di credito.");
+            case StatoSdiFattura.DaInviare when await CanaleSdiAttivoAsync(strutturaId, cancellationToken):
+                throw new ConflictException("La fattura non è ancora stata inviata allo SdI: correggila direttamente, senza nota di credito.");
+        }
+
+        var righe = await CostruisciRigheAsync(
+            strutturaId, ricevuta: false,
+            request.Righe.Select(r => r with { Tipo = TipoRigaFattura.Altro, PrenotazioneId = null, PrenotazioneServizioId = null }).ToList(),
+            prenotazioniDocumento: [], fatturaId: null, cancellationToken);
+        VerificaRegimeSenzaIva(ricevuta: false, originale.RegimeFiscale, righe);
+        var impostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno.Value : 0m;
+        await VerificaImportoStornabileAsync(strutturaId, originale.Id, CalcoloFattura.Totale(righe, impostaSoggiorno), escludiNotaId: null, cancellationToken);
+
+        return await NumeraEAggiungiAsync(strutturaId, TipoEmissioneDocumento.Fattura, _ => new DatiFattura
+        {
+            StrutturaId = strutturaId,
+            DatiClienteId = originale.DatiClienteId,
+            TipoEmissione = TipoEmissioneDocumento.Fattura,
+            TipoDocumento = TipoDocumentoFattura.TD04_NotaDiCredito,
+            RegimeFiscale = originale.RegimeFiscale,
+            StatoSdi = StatoSdiFattura.DaInviare,
+            FatturaStornataId = originale.Id,
+            Divisa = originale.Divisa ?? "EUR",
+            Righe = righe.Select(Copia).ToList(),
+            ImpostaSoggiorno = impostaSoggiorno > 0 ? impostaSoggiorno : null,
+        }, impostaSoggiorno, cancellationToken);
+    }
+
+    /// <summary>Le note di credito di una fattura, insieme, non possono stornare più della fattura.</summary>
+    private async Task VerificaImportoStornabileAsync(Guid strutturaId, Guid stornataId, decimal importoNota, Guid? escludiNotaId, CancellationToken cancellationToken)
+    {
+        var originale = await GetOwnedAsync(strutturaId, stornataId, cancellationToken);
+        var giaStornato = await fatture.TotaleStornatoAsync(stornataId, escludiNotaId, cancellationToken);
+        var residuo = originale.ImportoTotale - giaStornato;
+        if (importoNota > residuo)
+        {
+            throw new ConflictException(giaStornato > 0
+                ? $"La nota di credito ({importoNota:0.00} €) supera quanto resta da stornare della fattura: {residuo:0.00} € (già stornati {giaStornato:0.00} €)."
+                : $"La nota di credito ({importoNota:0.00} €) supera il totale della fattura ({originale.ImportoTotale:0.00} €).");
+        }
     }
 
     private async Task<(DatiFattura Fattura, DatiCliente? Cliente, DatiAziendali? Azienda)> CaricaPerDocumentoAsync(

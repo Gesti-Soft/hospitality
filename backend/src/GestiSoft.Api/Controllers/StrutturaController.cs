@@ -71,6 +71,7 @@ public class StrutturaController(StrutturaService service, ICurrentUser currentU
         struttura.AlloggiatiWebAbilitato,
         struttura.OsservatorioAbilitato,
         struttura.PayTouristAbilitato,
+        struttura.SdiAbilitato,
         StrutturaService.IsLicenzaScaduta(struttura),
         struttura.Attivo);
 }

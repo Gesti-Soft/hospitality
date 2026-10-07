@@ -55,7 +55,9 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
                     s.OsservatorioAbilitato,
                     s.PayTouristAbilitato,
                     s.Demo,
-                    s.Demo ? s.CreatedAtUtc.AddDays(SuperAdminService.GiorniDemo) : null);
+                    s.Demo ? s.CreatedAtUtc.AddDays(SuperAdminService.GiorniDemo) : null,
+                    imp?.SdiAttivo ?? false,
+                    s.SdiAbilitato);
             }).ToList();
 
             return new ClienteAdminInfo(
@@ -125,6 +127,10 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
         await db.PrenotazioniServizi.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
         await db.FatturePrenotazioni.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
         await db.RigheFattura.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.TrasmissioniFattura.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.RicevuteSdi.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.FattureRicevute.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
+        await db.FileRicevutiSdi.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
         await db.DatiFattura.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
         await db.Prenotazioni.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);
         await db.ServiziStruttura.Where(x => x.StrutturaId == strutturaId).ExecuteDeleteAsync(cancellationToken);

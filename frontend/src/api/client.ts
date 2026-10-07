@@ -211,7 +211,20 @@ export async function apiInviaForm<T>(method: string, path: string, corpo: FormD
 }
 
 /** Scarica un file binario (PDF/XML) autenticato e avvia il download nel browser. */
-export async function apiScaricaFile(path: string, nomeFile: string): Promise<void> {
+/** Il nome del file indicato dal server (filename*=UTF-8''... oppure filename=...), se c'è. */
+function nomeDaContentDisposition(intestazione: string | null): string | null {
+  if (!intestazione) return null
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(intestazione)
+  if (utf8) return decodeURIComponent(utf8[1].trim())
+  const semplice = /filename="?([^";]+)"?/i.exec(intestazione)
+  return semplice ? semplice[1].trim() : null
+}
+
+/**
+ * Scarica un file autenticato. Con `usaNomeDelServer` il nome lo decide il server (serve per l'XML
+ * della fattura elettronica, il cui nome lo SdI controlla); `nomeFile` resta il ripiego.
+ */
+export async function apiScaricaFile(path: string, nomeFile: string, usaNomeDelServer = false): Promise<void> {
   const sessione = leggiSessione()
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -241,7 +254,7 @@ export async function apiScaricaFile(path: string, nomeFile: string): Promise<vo
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = nomeFile
+  link.download = (usaNomeDelServer && nomeDaContentDisposition(response.headers.get('content-disposition'))) || nomeFile
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)

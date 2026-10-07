@@ -91,6 +91,11 @@ public class DatiFatturaRepository(GestiSoftDbContext db) : IDatiFatturaReposito
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<decimal> TotaleStornatoAsync(Guid fatturaId, Guid? escludiNotaId, CancellationToken cancellationToken) =>
+        await db.DatiFattura.AsNoTracking()
+            .Where(n => n.FatturaStornataId == fatturaId && n.Id != (escludiNotaId ?? Guid.Empty))
+            .SumAsync(n => n.ImportoTotale, cancellationToken);
+
     public async Task<IReadOnlyList<RigaFatturata>> ListRigheFatturateAsync(Guid strutturaId, IReadOnlyCollection<Guid> prenotazioneIds, Guid? escludiFatturaId, CancellationToken cancellationToken) =>
         await (from riga in db.RigheFattura.AsNoTracking()
                join fattura in db.DatiFattura.AsNoTracking() on riga.DatiFatturaId equals fattura.Id
@@ -99,6 +104,8 @@ public class DatiFatturaRepository(GestiSoftDbContext db) : IDatiFatturaReposito
                      && prenotazioneIds.Contains(riga.PrenotazioneId.Value)
                      && riga.Tipo != TipoRigaFattura.Altro
                      && fattura.Id != (escludiFatturaId ?? Guid.Empty)
+                     && !(db.DatiFattura.Any(n => n.FatturaStornataId == fattura.Id)
+                          && db.DatiFattura.Where(n => n.FatturaStornataId == fattura.Id).Sum(n => n.ImportoTotale) >= fattura.ImportoTotale)
                select new RigaFatturata(riga.PrenotazioneId!.Value, riga.Tipo, riga.PrenotazioneServizioId, fattura.TipoEmissione, fattura.NumeroDocumento, fattura.Anno))
             .ToListAsync(cancellationToken);
 }

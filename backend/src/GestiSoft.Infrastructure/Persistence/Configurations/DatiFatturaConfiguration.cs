@@ -25,6 +25,16 @@ public class DatiFatturaConfiguration : IEntityTypeConfiguration<DatiFattura>
         // legami con le prenotazioni vanno via con lui.
         builder.HasMany(f => f.Righe).WithOne().HasForeignKey(r => r.DatiFatturaId).OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(f => f.Prenotazioni).WithOne().HasForeignKey(p => p.DatiFatturaId).OnDelete(DeleteBehavior.Cascade);
+
+        builder.Property(f => f.IdentificativoSdi).HasMaxLength(20);
+        builder.HasIndex(f => f.IdentificativoSdi);
+        builder.Property(f => f.NotaSdi).HasMaxLength(4000);
+
+        // Nota di credito -> fattura stornata: una fattura stornata non può sparire lasciando la nota
+        // senza il documento a cui si riferisce. NoAction e non Restrict: il controllo cade a fine
+        // istruzione, così l'eliminazione definitiva di una struttura toglie note e fatture insieme.
+        builder.HasOne<DatiFattura>().WithMany().HasForeignKey(f => f.FatturaStornataId).OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(f => f.FatturaStornataId);
     }
 }
 

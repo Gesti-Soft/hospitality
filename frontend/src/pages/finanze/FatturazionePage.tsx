@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
+import Chip from '@mui/material/Chip'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
@@ -14,11 +15,15 @@ import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import CodeIcon from '@mui/icons-material/CodeOutlined'
+import NotaDiCreditoIcon from '@mui/icons-material/ReceiptLongOutlined'
+import SendIcon from '@mui/icons-material/SendOutlined'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { useArriviInCorso, useStoricoPrenotazioni } from '../../api/prenotazioni'
 import { ApiError } from '../../api/client'
@@ -27,9 +32,15 @@ import {
   RegimeFiscale,
   scaricaFatturaPdf,
   scaricaFatturaXml,
+  STATO_SDI,
+  StatoSdiFattura,
+  TipoDocumentoFattura,
   TipoEmissioneDocumento,
   useAggiornaDatiAziendali,
   useAnniDisponibiliFatture,
+  useAnniFattureRicevute,
+  useCanaleSdiAttivo,
+  useInviaSdi,
   useCaricaLogoDatiAziendali,
   useDatiAziendali,
   useDatiClienti,
@@ -52,17 +63,48 @@ import { FiltriRicercaData, nelRangeData, RigaCaricamentoAltri } from '../../com
 import { usePaginazioneScroll } from '../../lib/usePaginazioneScroll'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { PannelloSdiFattura } from '../../components/fatturazione/PannelloSdiFattura'
+import { TabFattureRicevute } from '../../components/fatturazione/TabFattureRicevute'
 import { alleggerisciLogo, LOGO_MAX_BYTE, LOGO_TIPI_ACCETTATI } from '../../lib/immagini'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-type Tab_ = 'fatture' | 'dati-aziendali' | 'clienti'
+type Tab_ = 'fatture' | 'fatture-ricevute' | 'dati-aziendali' | 'clienti'
 
 /** La prima riga del documento, e quante altre ce ne sono: una fattura può avere soggiorno, servizi e più prenotazioni. */
 function descrizioneFattura(f: DatiFatturaDto): string {
   const prima = f.righe[0]?.descrizione ?? '—'
   return f.righe.length > 1 ? `${prima} (+${f.righe.length - 1} righe)` : prima
+}
+
+/** Lo stato verso lo SdI, col suo colore e la spiegazione al passaggio del mouse. Niente per ricevute e fatture di prima. */
+function ChipStatoSdi({ fattura }: { fattura: DatiFatturaDto }) {
+  if (fattura.statoSdi == null) return null
+  const stato = STATO_SDI[fattura.statoSdi]
+  const dettaglio = [stato.spiegazione, fattura.identificativoSdi ? `Identificativo SdI: ${fattura.identificativoSdi}` : null, fattura.notaSdi]
+    .filter(Boolean)
+    .join(' ')
+  return (
+    <Tooltip title={dettaglio}>
+      <Chip size="small" label={stato.etichetta} color={stato.colore} variant={stato.colore === 'default' ? 'outlined' : 'filled'} />
+    </Tooltip>
+  )
+}
+
+/**
+ * Si storna una fattura che lo SdI ha: consegnata, non consegnata (è valida comunque) o di prima
+ * dell'invio dal gestionale. Una da inviare si corregge e basta, se la spedisce il canale; se la
+ * struttura la carica da sé, il gestionale non sa se è già nello SdI. Il backend ricontrolla tutto.
+ */
+function stornabile(f: DatiFatturaDto, canaleConcesso: boolean): boolean {
+  if (f.tipoEmissione === TipoEmissioneDocumento.Ricevuta || f.tipoDocumento === TipoDocumentoFattura.TD04_NotaDiCredito || f.fatturaStornataId) return false
+  return (
+    f.statoSdi == null ||
+    f.statoSdi === StatoSdiFattura.Consegnata ||
+    f.statoSdi === StatoSdiFattura.NonConsegnata ||
+    (f.statoSdi === StatoSdiFattura.DaInviare && !canaleConcesso)
+  )
 }
 
 export function FatturazionePage() {
@@ -71,8 +113,12 @@ export function FatturazionePage() {
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const toast = useToast()
 
+  const { strutturaCorrente } = useStruttura()
+  // Le fatture dei fornitori arrivano solo a chi ha il canale SdI.
+  const conRicevute = strutturaCorrente?.sdiAbilitato ?? false
   const anniDisponibili = useAnniDisponibiliFatture(strutturaId)
-  const anni = anniConAnnoCorrente(anniDisponibili.data)
+  const anniRicevute = useAnniFattureRicevute(conRicevute ? strutturaId : null)
+  const anni = anniConAnnoCorrente(tab === 'fatture-ricevute' ? anniRicevute.data : anniDisponibili.data)
   const fatture = useFatture(strutturaId, anno)
   const clienti = useDatiClienti(strutturaId)
   const storico = useStoricoPrenotazioni(strutturaId, anno)
@@ -97,11 +143,12 @@ export function FatturazionePage() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ minHeight: 0 }}>
           <Tab label="Fatture" value="fatture" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
+          {conRicevute && <Tab label="Fatture ricevute" value="fatture-ricevute" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />}
           <Tab label="Dati aziendali" value="dati-aziendali" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
           <Tab label="Clienti" value="clienti" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
         </Tabs>
 
-        {tab === 'fatture' && (
+        {(tab === 'fatture' || tab === 'fatture-ricevute') && (
           <TextField select size="small" label="Anno" value={anno} onChange={(e) => setAnno(Number(e.target.value))} sx={{ minWidth: 110 }}>
             {anni.map((a) => (
               <MenuItem key={a} value={a}>
@@ -122,6 +169,7 @@ export function FatturazionePage() {
           onErrore={segnalaErrore}
         />
       )}
+      {tab === 'fatture-ricevute' && conRicevute && <TabFattureRicevute strutturaId={strutturaId} anno={anno} />}
       {tab === 'dati-aziendali' && <TabDatiAziendali strutturaId={strutturaId} />}
       {tab === 'clienti' && <TabClienti strutturaId={strutturaId} clienti={clienti.data} caricamento={clienti.isLoading} />}
     </Box>
@@ -168,7 +216,19 @@ function TabFatture({
 }) {
   const mobile = useMobile()
   const puoScrivere = usePuoScrivere('financeWrite')
+  const { strutturaCorrente } = useStruttura()
+  const canaleConcesso = strutturaCorrente?.sdiAbilitato ?? false
+  const canaleAttivo = useCanaleSdiAttivo(canaleConcesso ? strutturaId : null).data ?? false
   const [dialogo, setDialogo] = useState<StatoFatturaIniziale | null>(null)
+  // Per id e non l'oggetto: dopo un invio l'elenco si ricarica e il pannello mostra lo stato nuovo.
+  const [selezionataId, setSelezionataId] = useState<string | null>(null)
+  const selezionata = fatture?.find((f) => f.id === selezionataId) ?? null
+  // Col canale acceso l'elenco si divide: quelle da spedire (e le scartate, da correggere) e lo storico.
+  const [vista, setVista] = useState<'da-inviare' | 'storico'>('da-inviare')
+  const inviaSdi = useInviaSdi(strutturaId)
+  const toast = useToast()
+  const [confermaInvio, setConfermaInvio] = useState(false)
+  const [avanzamento, setAvanzamento] = useState<{ fatte: number; totale: number } | null>(null)
   const [ricerca, setRicerca] = useState('')
   const [dataDa, setDataDa] = useState('')
   const [dataA, setDataA] = useState('')
@@ -181,8 +241,48 @@ function TabFatture({
     }
   }
 
+  /** Il pannello solo per le fatture collegate allo SdI: per le altre basta un messaggio. */
+  function apri(f: DatiFatturaDto) {
+    if (f.tipoEmissione === TipoEmissioneDocumento.Ricevuta) toast.info('Le ricevute di locazione breve non vanno allo SdI.')
+    else if (f.statoSdi == null) toast.info("Fattura emessa prima dell'invio dal gestionale: non è collegata allo SdI.")
+    else setSelezionataId(f.id)
+  }
+
+  const daInviare = (f: DatiFatturaDto) => f.statoSdi === StatoSdiFattura.DaInviare || f.statoSdi === StatoSdiFattura.Scartata
+  // Lo scarto si corregge prima di rispedire: l'invio di gruppo prende solo quelle mai inviate.
+  const pronte = (fatture ?? []).filter((f) => f.statoSdi === StatoSdiFattura.DaInviare).sort((a, b) => a.progressivo - b.progressivo)
+  const quanteDaInviare = (fatture ?? []).filter(daInviare).length
+
+  /** Una alla volta, in ordine di numero. Al primo errore si ferma: se il canale è giù, insistere non serve. */
+  async function inviaTutte() {
+    setConfermaInvio(false)
+    let inviate = 0
+    let prova = false
+    setAvanzamento({ fatte: 0, totale: pronte.length })
+    try {
+      for (const f of pronte) {
+        const esito = await inviaSdi.mutateAsync(f.id)
+        prova ||= esito.prova
+        inviate++
+        setAvanzamento({ fatte: inviate, totale: pronte.length })
+      }
+      toast.successo(
+        prova
+          ? `${inviate} ${inviate === 1 ? 'fattura inviata' : 'fatture inviate'} allo SdI di collaudo: per il fisco restano da inviare.`
+          : `${inviate} ${inviate === 1 ? 'fattura inviata' : 'fatture inviate'} allo SdI. Si attendono le ricevute.`,
+      )
+    } catch (err) {
+      const ferma = pronte[inviate]
+      const motivo = err instanceof ApiError ? err.message : 'invio non riuscito.'
+      toast.errore(`Inviate ${inviate} di ${pronte.length}. Fattura n. ${ferma.numeroDocumento}/${ferma.anno}: ${motivo}`)
+    } finally {
+      setAvanzamento(null)
+    }
+  }
+
   const testoRicerca = ricerca.trim().toLowerCase()
   const fattureFiltrate = (fatture ?? [])
+    .filter((f) => !canaleAttivo || (vista === 'da-inviare') === daInviare(f))
     .filter(
       (f) =>
         (!testoRicerca || [String(f.numeroDocumento), f.clienteNome, ...f.righe.map((r) => r.descrizione)].some((campo) => campo?.toString().toLowerCase().includes(testoRicerca))) &&
@@ -191,8 +291,14 @@ function TabFatture({
     .sort((a, b) => b.progressivo - a.progressivo)
   // "fatture" (non solo i filtri) tra le dipendenze del reset: cambia riferimento quando l'anno
   // selezionato nella pagina genitore cambia (nuova query), anche se la lunghezza filtrata coincide.
-  const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(fattureFiltrate.length, [testoRicerca, dataDa, dataA, fatture])
+  const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(fattureFiltrate.length, [testoRicerca, dataDa, dataA, fatture, vista])
   const fattureVisibili = fattureFiltrate.slice(0, righeVisibili)
+  const messaggioVuoto =
+    testoRicerca || dataDa || dataA
+      ? 'Nessuna fattura corrisponde ai filtri applicati.'
+      : canaleAttivo && vista === 'da-inviare'
+        ? "Nessuna fattura da inviare per l'anno selezionato."
+        : "Nessuna fattura emessa per l'anno selezionato."
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -200,6 +306,24 @@ function TabFatture({
         titolo="Fatture"
         azione={puoScrivere ? { etichetta: '+ Nuova fattura', onClick: () => setDialogo({ modo: 'crea' }), disabilitato: !strutturaId } : undefined}
       />
+
+      {canaleAttivo && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+          <ToggleButtonGroup size="small" exclusive value={vista} onChange={(_, v) => v && setVista(v)}>
+            <ToggleButton value="da-inviare" sx={{ textTransform: 'none', px: 2 }}>
+              Da inviare{quanteDaInviare > 0 ? ` (${quanteDaInviare})` : ''}
+            </ToggleButton>
+            <ToggleButton value="storico" sx={{ textTransform: 'none', px: 2 }}>
+              Storico
+            </ToggleButton>
+          </ToggleButtonGroup>
+          {puoScrivere && vista === 'da-inviare' && (
+            <Button variant="contained" color="primary" startIcon={<SendIcon />} disabled={pronte.length === 0 || avanzamento != null} onClick={() => setConfermaInvio(true)}>
+              {avanzamento ? `Invio in corso ${avanzamento.fatte}/${avanzamento.totale}…` : `Invia fatture${pronte.length > 0 ? ` (${pronte.length})` : ''}`}
+            </Button>
+          )}
+        </Box>
+      )}
 
       <FiltriRicercaData
         ricerca={ricerca}
@@ -217,13 +341,13 @@ function TabFatture({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {fattureFiltrate.length === 0 && (
             <MessaggioVuotoElenco
-              messaggio={testoRicerca || dataDa || dataA ? 'Nessuna fattura corrisponde ai filtri applicati.' : "Nessuna fattura emessa per l'anno selezionato."}
+              messaggio={messaggioVuoto}
             />
           )}
           {fattureVisibili.map((f) => (
-            <CardElenco key={f.id}>
+            <CardElenco key={f.id} onClick={() => apri(f)}>
               <TestataCardElenco
-                titolo={`${f.numeroDocumento}/${f.anno}`}
+                titolo={`${f.numeroDocumento}/${f.anno}${f.tipoDocumento === TipoDocumentoFattura.TD04_NotaDiCredito ? ' · nota di credito' : ''}`}
                 sottotitolo={f.clienteNome ?? undefined}
                 azioneDestra={
                   <Box component="span" sx={{ ...stileImporto, fontWeight: 700, fontSize: 15 }}>
@@ -237,27 +361,41 @@ function TabFatture({
                   { etichetta: 'Descrizione', valore: descrizioneFattura(f) },
                 ]}
               />
-              <AzioniCardElenco>
-                {puoScrivere && (
-                  <Tooltip title="Modifica">
-                    <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', fattura: f })}>
-                      <EditIcon fontSize="small" />
+              {f.statoSdi != null && (
+                <Box sx={{ px: 0.5 }}>
+                  <ChipStatoSdi fattura={f} />
+                </Box>
+              )}
+              <Box onClick={(e) => e.stopPropagation()}>
+                <AzioniCardElenco>
+                  {puoScrivere && f.modificabile && (
+                    <Tooltip title="Modifica">
+                      <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', fattura: f })}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  {puoScrivere && stornabile(f, canaleConcesso) && (
+                    <Tooltip title="Storna con nota di credito">
+                      <IconButton size="small" onClick={() => setDialogo({ modo: 'nota-di-credito', fattura: f })}>
+                        <NotaDiCreditoIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="Scarica PDF">
+                    <IconButton size="small" onClick={() => scarica(scaricaFatturaPdf, f)}>
+                      <PictureAsPdfIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                )}
-                <Tooltip title="Scarica PDF">
-                  <IconButton size="small" onClick={() => scarica(scaricaFatturaPdf, f)}>
-                    <PictureAsPdfIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                {f.tipoEmissione !== TipoEmissioneDocumento.Ricevuta && (
-                  <Tooltip title="Scarica XML SDI">
-                    <IconButton size="small" onClick={() => scarica(scaricaFatturaXml, f)}>
-                      <CodeIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </AzioniCardElenco>
+                  {f.tipoEmissione !== TipoEmissioneDocumento.Ricevuta && (
+                    <Tooltip title="Scarica XML SDI">
+                      <IconButton size="small" onClick={() => scarica(scaricaFatturaXml, f)}>
+                        <CodeIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </AzioniCardElenco>
+              </Box>
             </CardElenco>
           ))}
           {altreDaCaricare && <SentinellaCaricamentoElenco ref={sentinellaRef} />}
@@ -273,6 +411,7 @@ function TabFatture({
                 <TableCell>Data</TableCell>
                 <TableCell>Cliente</TableCell>
                 <TableCell>Descrizione</TableCell>
+                <TableCell>SdI</TableCell>
                 <TableCell align="right">Importo</TableCell>
                 <TableCell align="right">Azioni</TableCell>
               </TableRow>
@@ -280,26 +419,41 @@ function TabFatture({
             <TableBody>
               {fattureFiltrate.length === 0 && (
                 <RigaVuota
-                  colSpan={6}
-                  messaggio={testoRicerca || dataDa || dataA ? 'Nessuna fattura corrisponde ai filtri applicati.' : "Nessuna fattura emessa per l'anno selezionato."}
+                  colSpan={7}
+                  messaggio={messaggioVuoto}
                 />
               )}
               {fattureVisibili.map((f) => (
-                <TableRow key={f.id} hover>
+                <TableRow key={f.id} hover onClick={() => apri(f)} sx={{ cursor: 'pointer' }}>
                   <TableCell sx={{ fontFamily: fontMono, fontWeight: 700 }}>
                     {f.numeroDocumento}/{f.anno}
+                    {f.tipoDocumento === TipoDocumentoFattura.TD04_NotaDiCredito && (
+                      <Box component="span" sx={{ display: 'block', fontFamily: 'inherit', fontWeight: 400, fontSize: 11, color: tokens.textTertiary }}>
+                        nota di credito
+                      </Box>
+                    )}
                   </TableCell>
                   <TableCell sx={{ ...stileImporto }}>{formattatoreData.format(new Date(f.dataDocumento))}</TableCell>
                   <TableCell>{f.clienteNome ?? '—'}</TableCell>
                   <TableCell>{descrizioneFattura(f)}</TableCell>
+                  <TableCell>
+                    <ChipStatoSdi fattura={f} />
+                  </TableCell>
                   <TableCell align="right" sx={{ ...stileImporto, fontWeight: 700 }}>
                     {formattatoreValuta.format(f.importoTotale)}
                   </TableCell>
-                  <TableCell align="right">
-                    {puoScrivere && (
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                    {puoScrivere && f.modificabile && (
                       <Tooltip title="Modifica">
                         <IconButton size="small" onClick={() => setDialogo({ modo: 'modifica', fattura: f })}>
                           <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {puoScrivere && stornabile(f, canaleConcesso) && (
+                      <Tooltip title="Storna con nota di credito">
+                        <IconButton size="small" onClick={() => setDialogo({ modo: 'nota-di-credito', fattura: f })}>
+                          <NotaDiCreditoIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}
@@ -318,10 +472,31 @@ function TabFatture({
                   </TableCell>
                 </TableRow>
               ))}
-              {altreDaCaricare && <RigaCaricamentoAltri colSpan={6} ref={sentinellaRef} />}
+              {altreDaCaricare && <RigaCaricamentoAltri colSpan={7} ref={sentinellaRef} />}
             </TableBody>
           </Table>
         </Cornice>
+      )}
+
+      {confermaInvio && (
+        <ConfirmDialog
+          titolo="Inviare le fatture allo SdI?"
+          messaggio={`${pronte.length === 1 ? 'La fattura da inviare sarà trasmessa' : `Le ${pronte.length} fatture da inviare saranno trasmesse`} all'Agenzia delle Entrate, una alla volta in ordine di numero. Una volta consegnate non si possono più modificare: si correggono solo con una nota di credito. Le fatture scartate non partono: correggile e inviale una per una.`}
+          testoConferma="Invia"
+          pericoloso={false}
+          onConferma={() => void inviaTutte()}
+          onAnnulla={() => setConfermaInvio(false)}
+        />
+      )}
+
+      {selezionata && strutturaId && (
+        <PannelloSdiFattura
+          strutturaId={strutturaId}
+          fattura={selezionata}
+          canaleAttivo={canaleAttivo}
+          puoScrivere={puoScrivere}
+          onClose={() => setSelezionataId(null)}
+        />
       )}
 
       {dialogo && strutturaId && (

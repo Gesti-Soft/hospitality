@@ -28,7 +28,15 @@ public interface IFatturaDocumentGenerator
     /// <param name="soggiorno">Dati della prenotazione da cui nasce il documento, stampati sulla ricevuta di locazione breve. Null se il documento non ha una prenotazione collegata.</param>
     byte[] GeneraPdf(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, string? nomeStruttura, DatiSoggiorno? soggiorno = null);
 
-    byte[] GeneraXmlSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda);
+    /// <param name="trasmissione">Chi spedisce il file e con quale progressivo. Null: la struttura stessa, con il numero della fattura (anteprima, test).</param>
+    /// <param name="stornata">Su una nota di credito, la fattura che storna (DatiFattureCollegate).</param>
+    byte[] GeneraXmlSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, IntestazioneTrasmissione? trasmissione = null, DatiFattura? stornata = null);
+
+    /// <summary>
+    /// Errori di validazione dell'XML contro lo schema ufficiale FatturaPA (FPR12): vuoto se è
+    /// conforme. Un file che non passa lo schema non deve mai diventare una fattura trasmessa.
+    /// </summary>
+    IReadOnlyList<string> ValidaSchema(byte[] xml);
 
     /// <summary>
     /// Motivi per cui l'XML non è trasmissibile, vuoto se è a posto — stesso principio di
@@ -37,5 +45,5 @@ public interface IFatturaDocumentGenerator
     /// il file senza che l'operatore possa capire quale dato mancava. Meglio non produrlo affatto e
     /// dirlo subito, quando la fattura è ancora sotto gli occhi di chi l'ha fatta.
     /// </summary>
-    IReadOnlyList<string> ValidaPerSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda);
+    IReadOnlyList<string> ValidaPerSdi(DatiFattura fattura, DatiCliente? cliente, DatiAziendali? azienda, DatiFattura? stornata = null);
 }

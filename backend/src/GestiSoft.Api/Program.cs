@@ -121,6 +121,9 @@ builder.Services.AddCors(options =>
         .WithOrigins(frontendOrigin)
         .AllowAnyHeader()
         .AllowAnyMethod()
+        // Il nome del file XML della fattura lo decide il server (IT + trasmittente + progressivo):
+        // il browser lo legge da qui, che altrimenti fuori dalla stessa origine resta nascosto.
+        .WithExposedHeaders("Content-Disposition")
         .AllowCredentials());
 });
 

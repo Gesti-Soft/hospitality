@@ -28,6 +28,9 @@ public class ConcessioneServiziGuard(IStrutturaRepository strutture)
     public Task EnsurePayTouristAsync(Guid strutturaId, CancellationToken cancellationToken) =>
         EnsureAsync(strutturaId, s => s.PayTouristAbilitato, "PayTourist", cancellationToken);
 
+    public Task EnsureSdiAsync(Guid strutturaId, CancellationToken cancellationToken) =>
+        EnsureAsync(strutturaId, s => s.SdiAbilitato, "di invio delle fatture allo SdI", cancellationToken);
+
     private async Task EnsureAsync(Guid strutturaId, Func<Struttura, bool> concesso, string nomeServizio, CancellationToken cancellationToken)
     {
         var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken)

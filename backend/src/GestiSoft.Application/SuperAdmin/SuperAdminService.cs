@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace GestiSoft.Application.SuperAdmin;
 
-public record ServiziStrutturaRequest(bool WubookAbilitato, bool AlloggiatiWebAbilitato, bool OsservatorioAbilitato, bool PayTouristAbilitato);
+public record ServiziStrutturaRequest(bool WubookAbilitato, bool AlloggiatiWebAbilitato, bool OsservatorioAbilitato, bool PayTouristAbilitato, bool SdiAbilitato = false);
 
 public record ResettaPasswordRequest(string NuovaPassword);
 
@@ -114,12 +114,14 @@ public class SuperAdminService(
             ("Alloggiati Web", struttura.AlloggiatiWebAbilitato, request.AlloggiatiWebAbilitato),
             ("Osservatorio Turistico", struttura.OsservatorioAbilitato, request.OsservatorioAbilitato),
             ("PayTourist", struttura.PayTouristAbilitato, request.PayTouristAbilitato),
+            ("Invio fatture allo SdI", struttura.SdiAbilitato, request.SdiAbilitato),
         };
 
         struttura.WubookAbilitato = request.WubookAbilitato;
         struttura.AlloggiatiWebAbilitato = request.AlloggiatiWebAbilitato;
         struttura.OsservatorioAbilitato = request.OsservatorioAbilitato;
         struttura.PayTouristAbilitato = request.PayTouristAbilitato;
+        struttura.SdiAbilitato = request.SdiAbilitato;
 
         await strutture.UpdateAsync(struttura, cancellationToken);
 

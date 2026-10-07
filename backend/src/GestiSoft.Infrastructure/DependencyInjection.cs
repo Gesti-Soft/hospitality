@@ -112,6 +112,14 @@ public static class DependencyInjection
         services.AddScoped<IDatiClienteRepository, DatiClienteRepository>();
         services.AddScoped<IDatiFatturaRepository, DatiFatturaRepository>();
         services.AddScoped<IFatturaDocumentGenerator, FatturaDocumentGenerator>();
+        services.AddScoped<ITrasmissioneFatturaRepository, TrasmissioneFatturaRepository>();
+        services.AddScoped<IFatturaRicevutaRepository, FatturaRicevutaRepository>();
+        services.Configure<SdiOptions>(configuration.GetSection(SdiOptions.SectionName));
+        services.AddSingleton<IConfigurazioneCanaleSdi, ConfigurazioneCanaleSdi>();
+        services.AddScoped<GestiSoft.Application.Fatturazione.Sdi.ISdiRepository, SdiRepository>();
+        services.AddSingleton<GestiSoft.Application.Fatturazione.Sdi.IArchivioSdi, ArchivioSdi>();
+        // Lo SdI può metterci fino a due minuti a rispondere al servizio: l'Api aspetta un po' di più.
+        services.AddHttpClient<GestiSoft.Application.Fatturazione.Sdi.IServizioSdi, ServizioSdiHttp>(client => client.Timeout = TimeSpan.FromSeconds(150));
         services.AddScoped<IBuoniColazioneGenerator, BuoniColazioneGenerator>();
         services.AddScoped<IWubookIntegrazioneRepository, WubookIntegrazioneRepository>();
         services.AddScoped<IWubookEventoRicevutoRepository, WubookEventoRicevutoRepository>();

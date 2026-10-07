@@ -35,4 +35,10 @@ public enum TipoNotifica
 
     /// <summary>Installata una nuova versione del gestionale (deploy/update.sh): a tutte le strutture, con data e ora.</summary>
     GestionaleAggiornato = 12,
+
+    /// <summary>È arrivata una ricevuta dello SdI su una fattura emessa: consegna, mancata consegna o scarto.</summary>
+    EsitoFatturaSdi = 13,
+
+    /// <summary>È arrivata dallo SdI una fattura di un fornitore.</summary>
+    FatturaRicevuta = 14,
 }

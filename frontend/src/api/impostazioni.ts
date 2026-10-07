@@ -19,6 +19,8 @@ export interface ImpostazioniStrutturaDto {
   intervalloPuliziaGiorni: number | null
   /** Cambio biancheria ogni N giorni. Null = nessuno. */
   intervalloBiancheriaGiorni: number | null
+  /** Fatture spedite allo SdI dal canale GestiSoft. Spento: l'XML si scarica e lo carica la struttura. */
+  sdiAttivo: boolean
 }
 
 export type ImpostazioniStrutturaRequest = Omit<ImpostazioniStrutturaDto, 'strutturaId'>

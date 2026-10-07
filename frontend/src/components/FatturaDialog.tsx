@@ -27,6 +27,7 @@ import {
   type ModalitaPagamento,
   useAggiornaFattura,
   useCreaFattura,
+  useCreaNotaDiCredito,
   useDatiAziendali,
   usePropostaFattura,
   useRisolviClientePerPrenotazione,
@@ -41,7 +42,8 @@ import { useMobile } from '../lib/useMobile'
 import { tokens } from '../theme'
 import { DatiClienteDialog } from './DatiClienteDialog'
 
-export type StatoFatturaIniziale = { modo: 'crea' } | { modo: 'modifica'; fattura: DatiFatturaDto }
+/** In "nota-di-credito" la fattura è quella da stornare: la nota nasce dalle sue righe, collegata a lei. */
+export type StatoFatturaIniziale = { modo: 'crea' } | { modo: 'modifica'; fattura: DatiFatturaDto } | { modo: 'nota-di-credito'; fattura: DatiFatturaDto }
 
 const ETICHETTA_TIPO_DOCUMENTO: Record<TipoDocumentoFattura, string> = {
   [TipoDocumentoFattura.TD01_Fattura]: 'TD01 — Fattura',
@@ -137,6 +139,11 @@ function etichettaPrenotazione(p: PrenotazioneDto): string {
 export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, clienti, onClose }: Props) {
   const mobile = useMobile()
   const modifica = stato.modo === 'modifica' ? stato.fattura : null
+  // Nota di credito: le righe partono da quelle della fattura stornata, slegate da soggiorno e servizi
+  // (lo storno non "consuma" la prenotazione), e l'operatore le riduce per uno storno parziale.
+  const stornata = stato.modo === 'nota-di-credito' ? stato.fattura : null
+  const daRighe = modifica ?? stornata
+  const notaInModifica = modifica?.fatturaStornataId != null
 
   // Se c'è una sola prenotazione disponibile (es. aperto da "Genera fattura" sulla scheda ospiti di
   // una prenotazione specifica), è già preselezionata come quella di chi paga.
@@ -148,9 +155,16 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   // Non si cambia in modifica — sono due numerazioni diverse, e il numero è già stato assegnato.
   const [tipoEmissione, setTipoEmissione] = useState<TipoEmissioneDocumento>(modifica?.tipoEmissione ?? TipoEmissioneDocumento.Fattura)
   const ricevuta = tipoEmissione === TipoEmissioneDocumento.Ricevuta
-  const [tipoDocumento, setTipoDocumento] = useState<string>(modifica?.tipoDocumento != null ? String(modifica.tipoDocumento) : String(TipoDocumentoFattura.TD01_Fattura))
-  const [regimeFiscale, setRegimeFiscale] = useState<string>(modifica?.regimeFiscale != null ? String(modifica.regimeFiscale) : String(RegimeFiscale.RF01_Ordinario))
-  const [divisa, setDivisa] = useState(modifica?.divisa ?? 'EUR')
+  const [tipoDocumento, setTipoDocumento] = useState<string>(
+    stornata ? String(TipoDocumentoFattura.TD04_NotaDiCredito) : modifica?.tipoDocumento != null ? String(modifica.tipoDocumento) : String(TipoDocumentoFattura.TD01_Fattura),
+  )
+  const [regimeFiscale, setRegimeFiscale] = useState<string>(daRighe?.regimeFiscale != null ? String(daRighe.regimeFiscale) : String(RegimeFiscale.RF01_Ordinario))
+  const [divisa, setDivisa] = useState(daRighe?.divisa ?? 'EUR')
+  // TD04 si sceglie solo con "Storna con nota di credito", che la collega alla fattura: qui resta per le
+  // note già emesse e per quelle scritte a mano prima dell'invio dal gestionale.
+  const tipiDocumento = (Object.keys(ETICHETTA_TIPO_DOCUMENTO).map(Number) as TipoDocumentoFattura[]).filter(
+    (t) => t !== TipoDocumentoFattura.TD04_NotaDiCredito || stornata != null || notaInModifica || (modifica != null && modifica.statoSdi == null),
+  )
   const [modalitaPagamento, setModalitaPagamento] = useState<string>(modifica?.modalitaPagamento != null ? String(modifica.modalitaPagamento) : '')
   const [errore, setErrore] = useState<string | null>(null)
   // Cliente fatturabile appena creato (bare-bones) per la prenotazione di chi paga, da completare con
@@ -159,28 +173,31 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
 
   const crea = useCreaFattura(strutturaId)
   const aggiorna = useAggiornaFattura(strutturaId)
+  const creaNota = useCreaNotaDiCredito(strutturaId)
   const risolviCliente = useRisolviClientePerPrenotazione(strutturaId)
-  const inCorso = crea.isPending || aggiorna.isPending
+  const inCorso = crea.isPending || aggiorna.isPending || creaNota.isPending
 
   // Le righe: in modifica quelle della fattura; in creazione quelle proposte dal backend, finché
   // l'operatore non ne tocca una. Cambiare prenotazioni o tipo di documento riparte dalla proposta.
-  const proposta = usePropostaFattura(strutturaId, prenotazioneIds, tipoEmissione, !modifica)
+  const proposta = usePropostaFattura(strutturaId, prenotazioneIds, tipoEmissione, !daRighe)
   const [righeModificate, setRigheModificate] = useState<RigaForm[] | null>(null)
   const prossimaChiave = useRef(1)
   const righeScritte: RigaForm[] =
     righeModificate ??
     (modifica
       ? modifica.righe.map((r) => daRiga(r, `r${r.numero}`))
-      : (proposta.data?.righe ?? []).map((r, i) => daRiga(r, `p${i}`)))
+      : stornata
+        ? stornata.righe.map((r) => ({ ...daRiga(r, `s${r.numero}`), tipo: TipoRigaFattura.Altro, prenotazioneId: null, prenotazioneServizioId: null }))
+        : (proposta.data?.righe ?? []).map((r, i) => daRiga(r, `p${i}`)))
   // Forfettari e minimi non applicano l'IVA: ogni riga è 0% N2.2, senza doverlo scegliere riga per riga.
   const senzaIva = !ricevuta && REGIMI_SENZA_IVA.includes(Number(regimeFiscale) as RegimeFiscale)
   const righe = senzaIva ? righeScritte.map((r) => ({ ...r, iva: IVA_SENZA_IVA })) : righeScritte
   const [impostaSoggiornoModificata, setImpostaSoggiornoModificata] = useState<string | null>(null)
   const impostaSoggiorno =
     impostaSoggiornoModificata ??
-    (modifica
-      ? modifica.impostaSoggiorno != null
-        ? String(modifica.impostaSoggiorno)
+    (daRighe
+      ? daRighe.impostaSoggiorno != null
+        ? String(daRighe.impostaSoggiorno)
         : ''
       : proposta.data && proposta.data.impostaSoggiorno > 0
         ? String(proposta.data.impostaSoggiorno)
@@ -201,7 +218,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   const datiAziendali = useDatiAziendali(strutturaId)
   const predefinitiApplicati = useRef(false)
   useEffect(() => {
-    if (modifica !== null || predefinitiApplicati.current || !datiAziendali.data) return
+    if (daRighe !== null || predefinitiApplicati.current || !datiAziendali.data) return
     predefinitiApplicati.current = true
     if (datiAziendali.data.regimeFiscale != null) setRegimeFiscale(String(datiAziendali.data.regimeFiscale))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,7 +232,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   // Se non esiste ancora, il form "Nuovo cliente" si apre precompilato ma NON crea nulla finché
   // l'operatore non preme "Crea cliente" lì dentro — annullare non lascia un Cliente orfano.
   useEffect(() => {
-    if (modifica || prenotazioneId === '') return
+    if (daRighe || prenotazioneId === '') return
     risolviCliente.mutate(prenotazioneId, {
       onSuccess: (risultato) => {
         if (risultato.appenaCreato) {
@@ -243,7 +260,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   const prenotazioniScelte = prenotazioneIds.map((id) => prenotazioniDisponibili.find((p) => p.id === id)).filter((p): p is PrenotazioneDto => !!p)
 
   function salva() {
-    if (!modifica && prenotazioneId === '') {
+    if (!daRighe && prenotazioneId === '') {
       setErrore('Seleziona la prenotazione di chi paga.')
       return
     }
@@ -270,6 +287,17 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
       prenotazioneServizioId: r.prenotazioneServizioId,
     }))
     const onError = (err: unknown) => setErrore(err instanceof ApiError ? err.message : 'Operazione non riuscita, riprova.')
+    // Sulla ricevuta si stampa; sulla fattura va nei dati di pagamento del file per lo SdI. Una nota
+    // di credito non ha un pagamento da dichiarare.
+    const pagamento = modalitaPagamento !== '' && !stornata && !notaInModifica ? (Number(modalitaPagamento) as ModalitaPagamento) : null
+
+    if (stornata) {
+      creaNota.mutate(
+        { fatturaId: stornata.id, request: { righe: righeRichiesta, impostaSoggiorno: impostaSoggiorno.trim() === '' ? null : Number(impostaSoggiorno) } },
+        { onSuccess: onClose, onError },
+      )
+      return
+    }
 
     if (modifica) {
       const request: AggiornaFatturaRequest = {
@@ -279,7 +307,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
         divisa: divisa.trim() === '' ? null : divisa.trim(),
         righe: righeRichiesta,
         impostaSoggiorno: impostaSoggiorno.trim() === '' ? null : Number(impostaSoggiorno),
-        modalitaPagamento: ricevuta && modalitaPagamento !== '' ? (Number(modalitaPagamento) as ModalitaPagamento) : null,
+        modalitaPagamento: pagamento,
       }
       aggiorna.mutate({ fatturaId: modifica.id, request }, { onSuccess: onClose, onError })
     } else {
@@ -290,7 +318,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
         divisa: divisa.trim() === '' ? null : divisa.trim(),
         righe: righeRichiesta,
         impostaSoggiorno: impostaSoggiorno.trim() === '' ? null : Number(impostaSoggiorno),
-        modalitaPagamento: ricevuta && modalitaPagamento !== '' ? (Number(modalitaPagamento) as ModalitaPagamento) : null,
+        modalitaPagamento: pagamento,
         tipoEmissione,
       }
       crea.mutate(request, { onSuccess: onClose, onError })
@@ -300,11 +328,25 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
   return (
     <>
       <Dialog open onClose={onClose} maxWidth="md" fullWidth fullScreen={mobile}>
-        <DialogTitle>{modifica ? `Modifica ${ricevuta ? 'ricevuta' : 'fattura'} n. ${modifica.numeroDocumento}` : 'Nuova fattura da prenotazione'}</DialogTitle>
+        <DialogTitle>
+          {stornata
+            ? `Nota di credito sulla fattura n. ${stornata.numeroDocumento}/${stornata.anno}`
+            : modifica
+              ? `Modifica ${ricevuta ? 'ricevuta' : notaInModifica ? 'nota di credito' : 'fattura'} n. ${modifica.numeroDocumento}`
+              : 'Nuova fattura da prenotazione'}
+        </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           <Box>{errore && <Alert severity="error">{errore}</Alert>}</Box>
 
-          {!modifica && (
+          {stornata && (
+            <Alert severity="info">
+              La nota di credito storna la fattura n. {stornata.numeroDocumento}/{stornata.anno} ({formattatoreEuro.format(stornata.importoTotale)}), allo
+              stesso cliente. Lascia le righe come sono per lo storno totale, o riduci importi e righe per uno storno parziale. Uno storno totale rende di
+              nuovo fatturabile la prenotazione.
+            </Alert>
+          )}
+
+          {!daRighe && (
             <Autocomplete
               options={prenotazioniDisponibili}
               getOptionLabel={etichettaPrenotazione}
@@ -323,7 +365,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           )}
 
           {/* Due famiglie, paga una: le altre prenotazioni finiscono sullo stesso documento. */}
-          {!modifica && prenotazioneId !== '' && prenotazioniDisponibili.length > 1 && (
+          {!daRighe && prenotazioneId !== '' && prenotazioniDisponibili.length > 1 && (
             <Autocomplete
               multiple
               options={prenotazioniDisponibili.filter((p) => p.id !== prenotazioneId)}
@@ -340,10 +382,10 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
             />
           )}
 
-          {!modifica && prenotazioneId !== '' && risolviCliente.isPending && (
+          {!daRighe && prenotazioneId !== '' && risolviCliente.isPending && (
             <Box sx={{ fontSize: 12, color: 'text.secondary' }}>Verifico il cliente fatturabile collegato a questo ospite...</Box>
           )}
-          {!modifica && risolviCliente.data && risolviCliente.variables === prenotazioneId && (
+          {!daRighe && risolviCliente.data && risolviCliente.variables === prenotazioneId && (
             <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
               Cliente:{' '}
               <b>
@@ -364,7 +406,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
             </TextField>
           )}
 
-          {!modifica && (
+          {!daRighe && (
             <TextField
               select
               label="Documento da emettere"
@@ -386,32 +428,36 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           )}
 
           {/* Avviso, non blocco: la scelta fiscale resta del cliente. */}
-          {!modifica && ricevuta && prenotazioniScelte.some((p) => p.trattamento != null) && (
+          {!daRighe && ricevuta && prenotazioniScelte.some((p) => p.trattamento != null) && (
             <Alert severity="warning">
               Una prenotazione comprende un trattamento (colazione o pasti): con servizi di ristorazione la locazione breve e la cedolare secca
               potrebbero non essere applicabili (art. 4 DL 50/2017). Verifica con il commercialista prima di emettere la ricevuta.
             </Alert>
           )}
 
-          {!modifica && (proposta.data?.avvisi.length ?? 0) > 0 && (
+          {!daRighe && (proposta.data?.avvisi.length ?? 0) > 0 && (
             <Alert severity="info">
               {proposta.data!.avvisi.map((a) => (
                 <Box key={a}>{a}</Box>
               ))}
             </Alert>
           )}
-          {!modifica && proposta.error && (
+          {!daRighe && proposta.error && (
             <Alert severity="error">{proposta.error instanceof ApiError ? proposta.error.message : 'Proposta non disponibile, riprova.'}</Alert>
           )}
 
-          {ricevuta && (
+          {!stornata && !notaInModifica && (
             <TextField
               select
               label="Pagato con"
               value={modalitaPagamento}
               onChange={(e) => setModalitaPagamento(e.target.value)}
               disabled={inCorso}
-              helperText="Viene stampato sulla ricevuta. Per un pagamento in contanti la ricevuta è obbligatoria."
+              helperText={
+                ricevuta
+                  ? 'Viene stampato sulla ricevuta. Per un pagamento in contanti la ricevuta è obbligatoria.'
+                  : 'Va nei dati di pagamento della fattura elettronica. Facoltativo.'
+              }
             >
               <MenuItem value="">Non indicato</MenuItem>
               {Object.entries(ETICHETTA_MODALITA_PAGAMENTO).map(([valore, etichetta]) => (
@@ -423,10 +469,17 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           )}
 
           <Box sx={{ display: ricevuta ? 'none' : 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-            <TextField select label="Tipo documento" value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)} fullWidth disabled={inCorso}>
-              {Object.entries(ETICHETTA_TIPO_DOCUMENTO).map(([valore, etichetta]) => (
-                <MenuItem key={valore} value={valore}>
-                  {etichetta}
+            <TextField
+              select
+              label="Tipo documento"
+              value={tipoDocumento}
+              onChange={(e) => setTipoDocumento(e.target.value)}
+              fullWidth
+              disabled={inCorso || stornata != null || notaInModifica}
+            >
+              {tipiDocumento.map((t) => (
+                <MenuItem key={t} value={String(t)}>
+                  {ETICHETTA_TIPO_DOCUMENTO[t]}
                 </MenuItem>
               ))}
             </TextField>
@@ -447,7 +500,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
               Regime senza IVA: tutte le righe sono a 0% con natura N2.2, in automatico.
             </Typography>
           )}
-          {!modifica && proposta.isLoading && <Skeleton variant="rounded" height={70} />}
+          {!daRighe && proposta.isLoading && <Skeleton variant="rounded" height={70} />}
           {righe.map((r, i) => (
             <Box
               key={r.chiave}
@@ -573,7 +626,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
             Chiudi
           </Button>
           <Button variant="contained" color="primary" onClick={salva} disabled={inCorso}>
-            {modifica ? 'Salva modifiche' : ricevuta ? 'Crea ricevuta' : 'Crea fattura'}
+            {stornata ? 'Emetti nota di credito' : modifica ? 'Salva modifiche' : ricevuta ? 'Crea ricevuta' : 'Crea fattura'}
           </Button>
         </DialogActions>
       </Dialog>

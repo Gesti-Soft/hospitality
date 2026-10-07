@@ -19,4 +19,6 @@ public record StrutturaAdminDto(
     bool OsservatorioAbilitato,
     bool PayTouristAbilitato,
     bool Demo,
-    DateTime? DemoEliminazioneAtUtc);
+    DateTime? DemoEliminazioneAtUtc,
+    bool SdiAttivo = false,
+    bool SdiAbilitato = false);

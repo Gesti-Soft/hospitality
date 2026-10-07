@@ -177,6 +177,7 @@ export interface ServiziConcessi {
   alloggiatiWebAbilitato: boolean
   osservatorioAbilitato: boolean
   payTouristAbilitato: boolean
+  sdiAbilitato: boolean
 }
 
 export function ImpostazioniGeneraliForm({
@@ -194,6 +195,7 @@ export function ImpostazioniGeneraliForm({
   const [poliziaStatoAttiva, setPoliziaStatoAttiva] = useState(dati.poliziaStatoAttiva)
   const [osservatorioAttivo, setOsservatorioAttivo] = useState(dati.osservatorioAttivo)
   const [payTouristAttivo, setPayTouristAttivo] = useState(dati.payTouristAttivo)
+  const [sdiAttivo, setSdiAttivo] = useState(dati.sdiAttivo)
   const [oraInvioGiornaliero, setOraInvioGiornaliero] = useState(dati.oraInvioGiornaliero?.slice(0, 5) ?? '04:00')
   const [tassaSoggiornoPrezzo, setTassaSoggiornoPrezzo] = useState(dati.tassaSoggiornoPrezzo != null ? String(dati.tassaSoggiornoPrezzo) : '')
   const [tassaSoggiornoMaxGiorni, setTassaSoggiornoMaxGiorni] = useState(dati.tassaSoggiornoMaxGiorni != null ? String(dati.tassaSoggiornoMaxGiorni) : '')
@@ -274,6 +276,7 @@ export function ImpostazioniGeneraliForm({
       poliziaStatoAttiva,
       osservatorioAttivo,
       payTouristAttivo,
+      sdiAttivo,
       oraInvioGiornaliero: oraInvioGiornaliero === '' ? null : `${oraInvioGiornaliero}:00`,
       tassaSoggiornoPrezzo: tassaSoggiornoPrezzo.trim() === '' ? null : Number(tassaSoggiornoPrezzo),
       tassaSoggiornoMaxGiorni: tassaSoggiornoMaxGiorni.trim() === '' ? null : Number(tassaSoggiornoMaxGiorni),
@@ -472,6 +475,20 @@ export function ImpostazioniGeneraliForm({
               slotProps={{ inputLabel: { shrink: true } }}
               disabled={aggiorna.isPending}
               helperText={servizi.payTouristAbilitato ? 'L orario di invio non può essere tra le 14:00 e le 18:00: PayTourist è in manutenzione in quella fascia oraria.' : ' '}
+            />
+          </Box>
+        )}
+
+        {servizi.sdiAbilitato && (
+          <Box sx={{ flex: '1 1 320px', border: `1px solid ${tokens.surfaceBorder}`, borderRadius: 2, bgcolor: tokens.surface, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Fatturazione elettronica</Typography>
+            <Typography sx={{ fontSize: 12, color: tokens.textTertiary }}>
+              Con l'invio attivo, le fatture partono verso il Sistema di Interscambio dal gestionale, quando premi "Invia allo SdI". Spento,
+              l'XML resta scaricabile e lo carichi tu dal portale Fatture e Corrispettivi.
+            </Typography>
+            <FormControlLabel
+              control={<Checkbox checked={sdiAttivo} onChange={(e) => setSdiAttivo(e.target.checked)} disabled={aggiorna.isPending} />}
+              label="Invio delle fatture allo SdI dal gestionale"
             />
           </Box>
         )}

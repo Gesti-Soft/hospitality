@@ -58,6 +58,8 @@ public static class DependencyInjection
         services.AddScoped<DatiAziendaliService>();
         services.AddScoped<DatiClienteService>();
         services.AddScoped<FatturazioneService>();
+        services.AddScoped<FileSdiService>();
+        services.AddScoped<FattureRicevuteService>();
         services.AddScoped<WubookLicenzaService>();
         services.AddScoped<WubookCamereService>();
         services.AddScoped<WubookPrezziService>();

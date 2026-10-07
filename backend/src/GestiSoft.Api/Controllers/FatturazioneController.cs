@@ -27,6 +27,14 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
         return Ok(anni);
     }
 
+    /// <summary>True se le fatture si spediscono dal canale GestiSoft (concesso e acceso).</summary>
+    [HttpGet("canale-sdi")]
+    public async Task<IActionResult> CanaleSdi(Guid strutturaId, CancellationToken cancellationToken)
+    {
+        var attivo = await service.CanaleSdiAttivoAsync(currentUser, strutturaId, cancellationToken);
+        return Ok(attivo);
+    }
+
     [HttpGet("{fatturaId:guid}")]
     public async Task<IActionResult> Get(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
     {
@@ -103,11 +111,45 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
         return File(pdf, "application/pdf", $"fattura-{fatturaId}.pdf");
     }
 
+    /// <summary>Il file XML col nome che lo SdI si aspetta (IT + codice del trasmittente + progressivo).</summary>
     [HttpGet("{fatturaId:guid}/xml")]
     public async Task<IActionResult> Xml(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
     {
-        var xml = await service.GeneraXmlSdiAsync(currentUser, strutturaId, fatturaId, cancellationToken);
-        return File(xml, "application/xml", $"fattura-{fatturaId}.xml");
+        var file = await service.GeneraXmlSdiAsync(currentUser, strutturaId, fatturaId, cancellationToken);
+        return File(file.Contenuto, "application/xml", file.NomeFile);
+    }
+
+    /// <summary>Lo storico dei file XML della fattura: uno per riga, con l'esito di ognuno.</summary>
+    [HttpGet("{fatturaId:guid}/trasmissioni")]
+    public async Task<IActionResult> Trasmissioni(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
+    {
+        var elenco = await service.TrasmissioniAsync(currentUser, strutturaId, fatturaId, cancellationToken);
+        return Ok(elenco.Select(t => new TrasmissioneFatturaDto(
+            t.Id, t.NomeFile, t.ViaCanale, t.Prova, t.Esito, t.IdentificativoSdi, t.CreatedAtUtc, t.InviataAtUtc, t.EsitoAtUtc, t.Nota, t.InviataDa)));
+    }
+
+    /// <summary>Un file già generato, esattamente com'era: per quelli spediti, il file partito.</summary>
+    [HttpGet("{fatturaId:guid}/trasmissioni/{trasmissioneId:guid}/xml")]
+    public async Task<IActionResult> XmlTrasmissione(Guid strutturaId, Guid fatturaId, Guid trasmissioneId, CancellationToken cancellationToken)
+    {
+        var file = await service.FileTrasmissioneAsync(currentUser, strutturaId, fatturaId, trasmissioneId, cancellationToken);
+        return File(file.Contenuto, "application/xml", file.NomeFile);
+    }
+
+    /// <summary>Spedisce la fattura allo SdI dal canale GestiSoft. Sempre su richiesta, mai automatico.</summary>
+    [HttpPost("{fatturaId:guid}/invia-sdi")]
+    public async Task<IActionResult> InviaSdi(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
+    {
+        var esito = await service.InviaSdiAsync(currentUser, strutturaId, fatturaId, cancellationToken);
+        return Ok(new EsitoInvioSdiDto(esito.NomeFile, esito.IdentificativoSdi, esito.Prova));
+    }
+
+    /// <summary>Nota di credito (TD04) che storna in tutto o in parte la fattura.</summary>
+    [HttpPost("{fatturaId:guid}/nota-di-credito")]
+    public async Task<IActionResult> NotaDiCredito(Guid strutturaId, Guid fatturaId, [FromBody] CreaNotaDiCreditoRequest request, CancellationToken cancellationToken)
+    {
+        var nota = await service.CreaNotaDiCreditoAsync(currentUser, strutturaId, fatturaId, request, cancellationToken);
+        return Ok(ToDto(nota));
     }
 
     private static DatiFatturaDto ToDto(DatiFattura f) => new(
@@ -122,7 +164,9 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
         // La prenotazione di chi paga per prima, poi le altre.
         f.Prenotazioni.Select(p => p.PrenotazioneId)
             .OrderBy(id => id == f.PrenotazioneId ? 0 : 1)
-            .ToList());
+            .ToList(),
+        f.StatoSdi, f.IdentificativoSdi, f.InviataSdiAtUtc, f.EsitoSdiAtUtc, f.NotaSdi, f.FatturaStornataId,
+        f.StatoSdi is not (StatoSdiFattura.Inviata or StatoSdiFattura.Consegnata or StatoSdiFattura.NonConsegnata));
 
     private static DatiClienteDto ToDtoCliente(DatiCliente c) => new(
         c.Id, c.StrutturaId, c.Iso2, c.PIva, c.CodiceFiscale, c.Denominazione, c.Nome, c.Cognome,

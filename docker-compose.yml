@@ -98,6 +98,12 @@ services:
       # Foto allegate ai ticket di assistenza: su un volume a parte e non nel database, così alla
       # chiusura del ticket si cancellano davvero e non finiscono nei backup.
       Assistenza__CartellaAllegati: /var/lib/gestisoft/allegati
+      # Invio delle fatture allo SdI: l'Api chiama il servizio "sdi" sulla rete interna, con un
+      # segreto condiviso. Vuoti = invio non disponibile (il resto della fatturazione funziona).
+      Sdi__IndirizzoServizio: ${SDI_INDIRIZZO_SERVIZIO:-http://sdi:8080}
+      Sdi__ChiaveInterna: ${SDI_CHIAVE_INTERNA:-}
+      Sdi__TrasmittenteCodiceFiscale: ${SDI_TRASMITTENTE_CF:-}
+      Sdi__ProgressivoIniziale: ${SDI_PROGRESSIVO_INIZIALE:-1000}
     volumes:
       - gestisoft_allegati:/var/lib/gestisoft/allegati
     ports:
@@ -177,6 +183,50 @@ services:
       # la chiave vecchia mentre l'avvio riscrive tutto con quella nuova. Vedi docs/deploy.md.
       Credenziali__ChiaveCifraturaPrecedente: ${CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE:-}
 
+  # Il canale SdI (fatturazione elettronica): l'unico container che vede i certificati del canale.
+  # Spedisce le fatture su richiesta dell'Api e riceve dallo SdI ricevute e fatture dei fornitori,
+  # attraverso il vhost Apache con mutua autenticazione (docs/sdi.md), che inoltra solo /sdi/.
+  # Profilo "sdi": parte solo dove COMPOSE_PROFILES=sdi (la VPS), non in sviluppo senza certificati.
+  sdi:
+    profiles: ["sdi"]
+    build:
+      context: .
+      dockerfile: backend/src/GestiSoft.Sdi/Dockerfile
+    container_name: gestisoft-gestionale-sdi
+    restart: unless-stopped
+    mem_limit: 384m
+    cpus: 0.5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      TZ: ${TZ:-Europe/Rome}
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-gestisoft};Username=${POSTGRES_USER:-gestisoft};Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD};Maximum Pool Size=8"
+      Credenziali__ChiaveCifratura: ${CREDENZIALI_CHIAVE_CIFRATURA:?set CREDENZIALI_CHIAVE_CIFRATURA (32 byte casuali in base64, es. openssl rand -base64 32)}
+      Credenziali__ChiaveCifraturaPrecedente: ${CREDENZIALI_CHIAVE_CIFRATURA_PRECEDENTE:-}
+      Sdi__TrasmittenteCodiceFiscale: ${SDI_TRASMITTENTE_CF:-}
+      Sdi__ProgressivoIniziale: ${SDI_PROGRESSIVO_INIZIALE:-1000}
+      # Collaudo finché contiene "testservizi.": le fatture spedite non risultano inviate.
+      Sdi__Endpoint: ${SDI_ENDPOINT:-https://testservizi.fatturapa.it/ricevi_file}
+      Sdi__KeystorePath: /etc/sdi/certs/sdi-client.p12
+      Sdi__KeystorePassword: ${SDI_KEYSTORE_PASSWORD:-}
+      Sdi__TruststorePath: /etc/sdi/certs/ca-agenzia.pem
+      Sdi__ClientVerifiedHeader: X-SdI-Client-Verified
+      Sdi__ArchivioPath: /var/lib/gestisoft/sdi-ricevuti
+      # Senza (o sotto i 24 caratteri) il servizio rifiuta ogni chiamata interna: invio spento.
+      Sdi__ChiaveInterna: ${SDI_CHIAVE_INTERNA:-}
+    volumes:
+      # Certificati del canale in sola lettura. Le chiavi private restano sull'host, fuori dai
+      # volumi Docker: il container legge solo il .p12 (root:5678, 640) e le CA.
+      - ${SDI_CERTS_DIR:-/etc/sdi-hospitality/certs}:/etc/sdi/certs:ro
+      - gestisoft_sdi_ricevuti:/var/lib/gestisoft/sdi-ricevuti
+    ports:
+      # Solo per Apache sull'host: il vhost inoltra /sdi/ qui. Verificare che la porta sia libera.
+      - "127.0.0.1:${SDI_HOST_PORT:-5090}:8080"
+
   frontend:
     build:
       context: ./frontend
@@ -196,3 +246,5 @@ volumes:
   gestisoft_postgres_data:
   gestisoft_pgbackrest_repo:
   gestisoft_allegati:
+  # Copia su disco delle fatture ricevute dallo SdI (i byte sono anche nel database).
+  gestisoft_sdi_ricevuti:

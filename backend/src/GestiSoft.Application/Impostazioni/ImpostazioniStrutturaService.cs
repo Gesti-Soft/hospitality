@@ -19,7 +19,8 @@ public record AggiornaImpostazioniRequest(
     decimal? TassaSoggiornoPercentualeAnziani,
     string? ComuneAttivita,
     int? IntervalloPuliziaGiorni = null,
-    int? IntervalloBiancheriaGiorni = null);
+    int? IntervalloBiancheriaGiorni = null,
+    bool SdiAttivo = false);
 
 public class ImpostazioniStrutturaService(
     IImpostazioniStrutturaRepository repository,
@@ -70,6 +71,10 @@ public class ImpostazioniStrutturaService(
         {
             await concessioneGuard.EnsurePayTouristAsync(strutturaId, cancellationToken);
         }
+        if (request.SdiAttivo)
+        {
+            await concessioneGuard.EnsureSdiAsync(strutturaId, cancellationToken);
+        }
 
         if (request.OraInvioGiornaliero is { } orario && orario >= InizioManutenzionePayTourist && orario < FineManutenzionePayTourist)
         {
@@ -87,6 +92,7 @@ public class ImpostazioniStrutturaService(
         impostazioni.PoliziaStatoAttiva = request.PoliziaStatoAttiva;
         impostazioni.OsservatorioAttivo = request.OsservatorioAttivo;
         impostazioni.PayTouristAttivo = request.PayTouristAttivo;
+        impostazioni.SdiAttivo = request.SdiAttivo;
         impostazioni.OraInvioGiornaliero = request.OraInvioGiornaliero;
         impostazioni.TassaSoggiornoPrezzo = request.TassaSoggiornoPrezzo;
         impostazioni.TassaSoggiornoMaxGiorni = request.TassaSoggiornoMaxGiorni;

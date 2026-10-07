@@ -35,6 +35,10 @@ public interface IDatiFatturaRepository
     /// Le righe di soggiorno e di servizio già fatturate per queste prenotazioni, in qualunque documento
     /// tranne quello indicato (in modifica si esclude se stesso): servono a non fatturare due volte.
     /// </summary>
+    /// <summary>Somma dei totali delle note di credito che stornano la fattura (tranne quella indicata, in modifica).</summary>
+    Task<decimal> TotaleStornatoAsync(Guid fatturaId, Guid? escludiNotaId, CancellationToken cancellationToken);
+
+    /// <remarks>Una fattura stornata per intero non conta più: soggiorno e servizi tornano fatturabili.</remarks>
     Task<IReadOnlyList<RigaFatturata>> ListRigheFatturateAsync(Guid strutturaId, IReadOnlyCollection<Guid> prenotazioneIds, Guid? escludiFatturaId, CancellationToken cancellationToken);
 }
 

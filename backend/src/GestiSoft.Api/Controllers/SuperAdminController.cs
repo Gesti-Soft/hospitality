@@ -44,7 +44,7 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
         var struttura = await service.AggiornaServiziAsync(
             currentUser,
             strutturaId,
-            new ApplicationSuperAdmin.ServiziStrutturaRequest(request.WubookAbilitato, request.AlloggiatiWebAbilitato, request.OsservatorioAbilitato, request.PayTouristAbilitato),
+            new ApplicationSuperAdmin.ServiziStrutturaRequest(request.WubookAbilitato, request.AlloggiatiWebAbilitato, request.OsservatorioAbilitato, request.PayTouristAbilitato, request.SdiAbilitato),
             cancellationToken);
 
         return Ok(new
@@ -54,6 +54,7 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
             struttura.AlloggiatiWebAbilitato,
             struttura.OsservatorioAbilitato,
             struttura.PayTouristAbilitato,
+            struttura.SdiAbilitato,
         });
     }
 
@@ -131,7 +132,7 @@ public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService servic
             c.Strutture.Select(s => new StrutturaAdminDto(
                 s.Id, s.Nome, s.Attivo, s.DisattivataAtUtc, s.WubookAttivo, s.WubookUltimoErrore, s.ScadenzaLicenza,
                 s.PoliziaStatoAttiva, s.OsservatorioAttivo, s.PayTouristAttivo,
-                s.WubookAbilitato, s.AlloggiatiWebAbilitato, s.OsservatorioAbilitato, s.PayTouristAbilitato, s.Demo, s.DemoEliminazioneAtUtc)).ToList()))
+                s.WubookAbilitato, s.AlloggiatiWebAbilitato, s.OsservatorioAbilitato, s.PayTouristAbilitato, s.Demo, s.DemoEliminazioneAtUtc, s.SdiAttivo, s.SdiAbilitato)).ToList()))
             .ToList(),
         d.Utenti.Select(u => new UtenteAdminDto(u.Id, u.Email, u.Nome, u.Cognome, u.IsSuperAdmin, u.Attivo, u.ClienteId, u.ClienteRagioneSociale, u.CreatedAtUtc, u.IsClienteAccount)).ToList());
 }
