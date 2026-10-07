@@ -1,3 +1,5 @@
+using GestiSoft.Domain.Entities;
+
 namespace GestiSoft.Application.SuperAdmin;
 
 public record StrutturaAdminInfo(
@@ -55,8 +57,10 @@ public interface ISuperAdminRepository
     /// fatture, integrazioni...). Irreversibile — il chiamante (SuperAdminService) verifica prima che
     /// la Struttura sia disattivata da almeno 90 giorni. Restituisce i percorsi delle foto dei ticket
     /// ancora sul disco, da cancellare dopo: il database non può annullare la cancellazione di un file.
+    /// <paramref name="archivio"/> sono le copie dei documenti fiscali, salvate nella stessa
+    /// transazione: o la struttura sparisce con i documenti al sicuro, o non succede niente.
     /// </summary>
-    Task<IReadOnlyList<string>> EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken, IReadOnlyList<DocumentoFiscaleArchiviato>? archivio = null);
 
     /// <summary>Strutture demo create prima di <paramref name="createPrimaDelUtc"/>: da eliminare.</summary>
     Task<IReadOnlyList<Guid>> ListaDemoScaduteAsync(DateTime createPrimaDelUtc, CancellationToken cancellationToken);

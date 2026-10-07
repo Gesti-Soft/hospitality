@@ -6,6 +6,7 @@ using System.Text;
 using System.Xml.Linq;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Common;
+using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Fatturazione;
 using GestiSoft.Application.Fatturazione.Sdi;
 using GestiSoft.Application.Logging;
@@ -533,10 +534,89 @@ public class SdiCanaleTests
     {
         public Task<Guid?> GetClienteIdAsync(Guid strutturaId, CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
         public Task<Struttura?> GetByIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<Struttura?>(new Struttura { Id = id });
-        public Task<IReadOnlyList<Struttura>> ListByClienteAsync(Guid? clienteId, bool includiInattive, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Struttura>> ListByClienteAsync(Guid? clienteId, bool includiInattive, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Struttura>>([]);
         public Task<IReadOnlyList<Struttura>> ListAssegnateAsync(Guid utenteId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task AddAsync(Struttura s, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpdateAsync(Struttura s, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    // ------------------------------------------------------------------ quarantena (Super Admin)
+
+    private static CanaleSdiAdminService Admin(Ricezione r) =>
+        new(new AdminFinto(r.Sdi), new CanaleFinto(), r.Servizio(), new StruttureFinte(), new LogFinto());
+
+    [Fact]
+    public async Task Quarantena_AttribuitaAMano_DiventaFatturaRicevuta()
+    {
+        var r = new Ricezione();
+        await r.Ricevi(FatturaFornitore());
+        var file = Assert.Single(r.Sdi.FileRicevuti);
+        Assert.Equal(EsitoFileRicevutoSdi.SenzaDestinatario, file.Esito);
+        var strutturaId = Guid.NewGuid();
+
+        await Admin(r).AttribuisciAsync(new Utente(superAdmin: true), file.Id, strutturaId, CancellationToken.None);
+
+        Assert.Equal(strutturaId, Assert.Single(r.Sdi.FattureRicevute).StrutturaId);
+        Assert.Equal(strutturaId, file.StrutturaId);
+        Assert.Equal(EsitoFileRicevutoSdi.Importata, file.Esito);
+        await Assert.ThrowsAsync<ConflictException>(() => Admin(r).AttribuisciAsync(new Utente(superAdmin: true), file.Id, strutturaId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Quarantena_NonLeggibileODiCollaudo_NonSiAttribuisce()
+    {
+        var r = new Ricezione();
+        await r.Ricevi(Encoding.UTF8.GetBytes("non è una fattura"), identificativo: "901");
+        await r.Ricevi(FatturaFornitore(), identificativo: "902", prova: true);
+
+        foreach (var file in r.Sdi.FileRicevuti)
+        {
+            await Assert.ThrowsAsync<ConflictException>(() => Admin(r).AttribuisciAsync(new Utente(superAdmin: true), file.Id, Guid.NewGuid(), CancellationToken.None));
+        }
+
+        Assert.Empty(r.Sdi.FattureRicevute);
+    }
+
+    [Fact]
+    public async Task Quarantena_SoloIlSuperAdmin()
+    {
+        var r = new Ricezione();
+        await r.Ricevi(FatturaFornitore());
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => Admin(r).StatoAsync(new Utente(superAdmin: false), CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
+            Admin(r).AttribuisciAsync(new Utente(superAdmin: false), r.Sdi.FileRicevuti[0].Id, Guid.NewGuid(), CancellationToken.None));
+        Assert.Empty(r.Sdi.FattureRicevute);
+    }
+
+    private sealed class Utente(bool superAdmin) : ICurrentUser
+    {
+        public bool IsAuthenticated => true;
+        public Guid UtenteId => Guid.Empty;
+        public string Email => "operatore@example.com";
+        public bool IsSuperAdmin => superAdmin;
+        public Guid? ClienteId => null;
+        public bool IsClienteAccount => false;
+    }
+
+    private sealed class CanaleFinto : IConfigurazioneCanaleSdi
+    {
+        public string? CodiceFiscaleTrasmittente => null;
+        public int ProgressivoIniziale => 1000;
+        public string? CodiceDestinatario => null;
+        public bool Collaudo => true;
+    }
+
+    private sealed class AdminFinto(SdiFinto sdi) : ICanaleSdiAdminRepository
+    {
+        public Task<IReadOnlyList<FileRicevutoSdi>> FileInQuarantenaAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FileRicevutoSdi>>(sdi.FileRicevuti.Where(f => f.StrutturaId is null && !f.Prova).ToList());
+        public Task<IReadOnlyList<FileRicevutoSdi>> FileDiCollaudoAsync(int massimo, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FileRicevutoSdi>>(sdi.FileRicevuti.Where(f => f.Prova).ToList());
+        public Task<IReadOnlyList<RicevutaSdi>> RicevuteNonAbbinateAsync(int massimo, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RicevutaSdi>>(sdi.Ricevute.Where(x => x.TrasmissioneFatturaId is null).ToList());
+        public Task<FileRicevutoSdi?> FileRicevutoAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(sdi.FileRicevuti.FirstOrDefault(f => f.Id == id));
+        public Task<RicevutaSdi?> RicevutaAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(sdi.Ricevute.FirstOrDefault(x => x.Id == id));
     }
 
     private sealed class LogFinto : ILogEventoService

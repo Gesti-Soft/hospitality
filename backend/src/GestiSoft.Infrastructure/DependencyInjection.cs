@@ -114,6 +114,8 @@ public static class DependencyInjection
         services.AddScoped<IFatturaDocumentGenerator, FatturaDocumentGenerator>();
         services.AddScoped<ITrasmissioneFatturaRepository, TrasmissioneFatturaRepository>();
         services.AddScoped<IFatturaRicevutaRepository, FatturaRicevutaRepository>();
+        services.AddScoped<IArchivioDocumentiRepository, ArchivioDocumentiRepository>();
+        services.AddScoped<GestiSoft.Application.Fatturazione.Sdi.ICanaleSdiAdminRepository, CanaleSdiAdminRepository>();
         services.Configure<SdiOptions>(configuration.GetSection(SdiOptions.SectionName));
         services.AddSingleton<IConfigurazioneCanaleSdi, ConfigurazioneCanaleSdi>();
         services.AddScoped<GestiSoft.Application.Fatturazione.Sdi.ISdiRepository, SdiRepository>();

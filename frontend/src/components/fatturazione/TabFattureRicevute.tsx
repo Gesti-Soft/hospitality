@@ -49,12 +49,14 @@ export function TabFattureRicevute({ strutturaId, anno }: { strutturaId: string 
   const testoRicerca = ricerca.trim().toLowerCase()
   const filtrate = (fatture.data ?? []).filter(
     (f) =>
-      (!testoRicerca || [f.fornitore, f.numero, f.fornitorePartitaIva, f.fornitoreCodiceFiscale].some((campo) => campo?.toLowerCase().includes(testoRicerca))) &&
+      (!testoRicerca ||
+        [f.fornitore, f.numero, f.fornitorePartitaIva, f.fornitoreCodiceFiscale].some((campo) => campo?.toLowerCase().includes(testoRicerca))) &&
       nelRangeData(`${f.data}T00:00:00`, dataDa, dataA),
   )
   const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(filtrate.length, [testoRicerca, dataDa, dataA, fatture.data])
   const visibili = filtrate.slice(0, righeVisibili)
-  const messaggioVuoto = testoRicerca || dataDa || dataA ? 'Nessuna fattura corrisponde ai filtri applicati.' : "Nessuna fattura ricevuta per l'anno selezionato."
+  const messaggioVuoto =
+    testoRicerca || dataDa || dataA ? 'Nessuna fattura corrisponde ai filtri applicati.' : "Nessuna fattura ricevuta per l'anno selezionato."
 
   async function scarica(f: FatturaRicevutaDto) {
     if (!strutturaId) return
@@ -105,12 +107,7 @@ export function TabFattureRicevute({ strutturaId, anno }: { strutturaId: string 
                   </Box>
                 }
               />
-              <RigaCardMeta
-                voci={[
-                  { etichetta: 'Data', valore: data(f) },
-                  ...(piuStrutture ? [{ etichetta: 'Struttura', valore: f.strutturaNome }] : []),
-                ]}
-              />
+              <RigaCardMeta voci={[{ etichetta: 'Data', valore: data(f) }, ...(piuStrutture ? [{ etichetta: 'Struttura', valore: f.strutturaNome }] : [])]} />
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>{nuova(f)}</Box>
                 {bottoneScarica(f)}

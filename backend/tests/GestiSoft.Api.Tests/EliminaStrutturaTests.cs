@@ -34,7 +34,7 @@ public class EliminaStrutturaTests
     private static readonly HashSet<Type> TabelleGlobali =
     [
         typeof(Cliente), typeof(Utente), typeof(CodiceRecuperoUtente), typeof(DispositivoFidato),
-        typeof(ImpostazioniGlobali), typeof(ContatoreProgressivoInvio), typeof(Comune), typeof(Stato), typeof(Documento), typeof(TipoAlloggiato),
+        typeof(ImpostazioniGlobali), typeof(ContatoreProgressivoInvio), typeof(DocumentoFiscaleArchiviato), typeof(Comune), typeof(Stato), typeof(Documento), typeof(TipoAlloggiato),
     ];
 
     [FactConPostgres]
@@ -70,7 +70,12 @@ public class EliminaStrutturaTests
             IReadOnlyList<string> foto;
             await using (var db = new GestiSoftDbContext(options, credenziali))
             {
-                foto = await new SuperAdminRepository(db).EliminaStrutturaAsync(strutturaId, CancellationToken.None);
+                var archiviato = new DocumentoFiscaleArchiviato
+                {
+                    StrutturaIdOriginale = strutturaId, StrutturaNome = "Struttura", Numero = "1/2026", Data = new DateOnly(2026, 3, 1),
+                    Pdf = [1, 2, 3], Scadenza = DocumentoFiscaleArchiviato.ScadenzaPer(new DateOnly(2026, 3, 1)),
+                };
+                foto = await new SuperAdminRepository(db).EliminaStrutturaAsync(strutturaId, CancellationToken.None, [archiviato]);
             }
 
             await using (var db = new GestiSoftDbContext(options, credenziali))
@@ -78,6 +83,10 @@ public class EliminaStrutturaTests
                 var rimaste = await TabelleDellaStrutturaAsync(db, conteggio => conteggio > 0);
                 Assert.True(rimaste.Count == 0, $"Righe rimaste dopo l'eliminazione: {string.Join(", ", rimaste)}");
                 Assert.Equal(1, await db.Clienti.CountAsync());
+                // Le copie dei documenti fiscali, salvate nella stessa transazione, restano.
+                var copia = Assert.Single(await db.DocumentiFiscaliArchiviati.ToListAsync());
+                Assert.Equal(new DateOnly(2036, 12, 31), copia.Scadenza);
+                Assert.Equal([1, 2, 3], copia.Pdf);
             }
 
             Assert.Equal(["struttura/foto-ancora-sul-disco.jpg"], foto);

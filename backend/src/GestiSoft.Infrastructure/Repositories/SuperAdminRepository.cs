@@ -100,12 +100,20 @@ public class SuperAdminRepository(GestiSoftDbContext db) : ISuperAdminRepository
     /// La transazione va aperta dentro la strategia di esecuzione: con EnableRetryOnFailure (vedi
     /// DependencyInjection) una transazione aperta a mano fuori da lì viene rifiutata da EF.
     /// </summary>
-    public Task<IReadOnlyList<string>> EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken) =>
-        db.Database.CreateExecutionStrategy().ExecuteAsync(() => EliminaStrutturaInTransazioneAsync(strutturaId, cancellationToken));
+    public Task<IReadOnlyList<string>> EliminaStrutturaAsync(Guid strutturaId, CancellationToken cancellationToken, IReadOnlyList<DocumentoFiscaleArchiviato>? archivio = null) =>
+        db.Database.CreateExecutionStrategy().ExecuteAsync(() => EliminaStrutturaInTransazioneAsync(strutturaId, archivio ?? [], cancellationToken));
 
-    private async Task<IReadOnlyList<string>> EliminaStrutturaInTransazioneAsync(Guid strutturaId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> EliminaStrutturaInTransazioneAsync(Guid strutturaId, IReadOnlyList<DocumentoFiscaleArchiviato> archivio, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // Prima le copie dei documenti fiscali: a ogni tentativo si riparte da un contesto pulito.
+        if (archivio.Count > 0)
+        {
+            db.ChangeTracker.Clear();
+            db.DocumentiFiscaliArchiviati.AddRange(archivio);
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         // Foto dei ticket ancora sul disco (ticket aperti, o cancellazione alla chiusura non
         // riuscita): lette prima che spariscano le righe, le cancella il chiamante a transazione

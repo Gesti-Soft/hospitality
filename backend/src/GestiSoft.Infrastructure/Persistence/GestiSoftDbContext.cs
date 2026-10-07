@@ -56,6 +56,7 @@ public class GestiSoftDbContext(DbContextOptions<GestiSoftDbContext> options, Cr
     public DbSet<FileRicevutoSdi> FileRicevutiSdi => Set<FileRicevutoSdi>();
 
     public DbSet<FatturaRicevuta> FattureRicevute => Set<FatturaRicevuta>();
+    public DbSet<DocumentoFiscaleArchiviato> DocumentiFiscaliArchiviati => Set<DocumentoFiscaleArchiviato>();
 
     public DbSet<Comune> Comuni => Set<Comune>();
 

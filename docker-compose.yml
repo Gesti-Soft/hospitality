@@ -104,6 +104,9 @@ services:
       Sdi__ChiaveInterna: ${SDI_CHIAVE_INTERNA:-}
       Sdi__TrasmittenteCodiceFiscale: ${SDI_TRASMITTENTE_CF:-}
       Sdi__ProgressivoIniziale: ${SDI_PROGRESSIVO_INIZIALE:-1000}
+      # Solo per il pannello "Canale SdI" del Super Admin: collaudo o produzione, e il codice destinatario.
+      Sdi__Endpoint: ${SDI_ENDPOINT:-https://testservizi.fatturapa.it/ricevi_file}
+      Sdi__CodiceDestinatario: ${SDI_CODICE_DESTINATARIO:-}
     volumes:
       - gestisoft_allegati:/var/lib/gestisoft/allegati
     ports:

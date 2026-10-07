@@ -254,6 +254,8 @@ export interface DatiFatturaDto {
   fatturaStornataId: string | null
   /** False quando la fattura è nello SdI: si corregge solo con una nota di credito. */
   modificabile: boolean
+  /** Qualcuno ne ha scaricato l'XML per caricarlo da sé sul portale. Valorizzato solo nell'elenco. */
+  xmlScaricato: boolean
 }
 
 export const StatoSdiFattura = { DaInviare: 1, Inviata: 2, Consegnata: 3, NonConsegnata: 4, Scartata: 5 } as const

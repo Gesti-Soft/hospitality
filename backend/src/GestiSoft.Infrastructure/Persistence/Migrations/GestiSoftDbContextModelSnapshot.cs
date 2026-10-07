@@ -529,6 +529,76 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.ToTable("dispositivi_fidati", (string)null);
                 });
 
+            modelBuilder.Entity("GestiSoft.Domain.Entities.DocumentoFiscaleArchiviato", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ArchiviatoAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ClienteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClienteRagioneSociale")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Controparte")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("date");
+
+                    b.Property<byte[]>("File")
+                        .HasColumnType("bytea");
+
+                    b.Property<decimal?>("Importo")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("NomeFile")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Numero")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<byte[]>("Pdf")
+                        .HasColumnType("bytea");
+
+                    b.Property<DateOnly>("Scadenza")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("StrutturaIdOriginale")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StrutturaNome")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("StrutturaPartitaIva")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId");
+
+                    b.HasIndex("Scadenza");
+
+                    b.ToTable("documenti_fiscali_archiviati", (string)null);
+                });
+
             modelBuilder.Entity("GestiSoft.Domain.Entities.Entrata", b =>
                 {
                     b.Property<Guid>("Id")

@@ -108,6 +108,16 @@ public class FatturazioneService(
         return await fatture.ListAsync(strutturaId, anno, cancellationToken);
     }
 
+    /// <summary>
+    /// Senza canale la struttura carica le fatture da sé sul portale: il gestionale sa solo se ne ha
+    /// scaricato l'XML, ed è quello che le sposta dalle "da inviare" allo storico.
+    /// </summary>
+    public async Task<IReadOnlySet<Guid>> FattureConXmlScaricatoAsync(ICurrentUser currentUser, Guid strutturaId, IReadOnlyCollection<Guid> fatturaIds, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+        return await trasmissioni.FattureConXmlScaricatoAsync(strutturaId, fatturaIds, cancellationToken);
+    }
+
     /// <summary>Anni con almeno una fattura emessa — per il selettore Anno.</summary>
     public async Task<IReadOnlyList<int>> GetAnniDisponibiliAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
@@ -428,6 +438,59 @@ public class FatturazioneService(
         var struttura = await strutture.GetByIdAsync(strutturaId, cancellationToken);
         var soggiorno = await DatiSoggiornoAsync(fattura, strutturaId, cancellationToken);
         return documentGenerator.GeneraPdf(fattura, cliente, azienda, struttura?.Nome, soggiorno);
+    }
+
+    /// <summary>
+    /// Le copie dei documenti emessi da una struttura che sta per essere eliminata: il PDF di ognuno,
+    /// e per le fatture l'XML entrato nello SdI o scaricato per il portale, se c'è. Nessun controllo
+    /// dei permessi: la chiama solo l'eliminazione definitiva, che l'ha già fatto (Super Admin o Worker).
+    /// </summary>
+    public async Task<IReadOnlyList<DocumentoFiscaleArchiviato>> DocumentiEmessiPerArchivioAsync(
+        Struttura struttura, string clienteRagioneSociale, CancellationToken cancellationToken)
+    {
+        var azienda = await aziende.GetByStrutturaIdAsync(struttura.Id, cancellationToken);
+        var elenco = await fatture.ListAsync(struttura.Id, anno: null, cancellationToken);
+        var archiviati = new List<DocumentoFiscaleArchiviato>();
+        foreach (var fattura in elenco)
+        {
+            var soggiorno = await DatiSoggiornoAsync(fattura, struttura.Id, cancellationToken);
+            var data = DateOnly.FromDateTime(fattura.DataDocumento);
+            var xml = fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta ? null : await XmlDaArchiviareAsync(struttura.Id, fattura.Id, cancellationToken);
+            archiviati.Add(new DocumentoFiscaleArchiviato
+            {
+                ClienteId = struttura.ClienteId,
+                ClienteRagioneSociale = clienteRagioneSociale,
+                StrutturaIdOriginale = struttura.Id,
+                StrutturaNome = struttura.Nome,
+                StrutturaPartitaIva = azienda?.PIva,
+                Tipo = fattura.TipoEmissione == TipoEmissioneDocumento.Ricevuta ? TipoDocumentoArchiviato.RicevutaLocazioneBreve
+                    : fattura.TipoDocumento == TipoDocumentoFattura.TD04_NotaDiCredito ? TipoDocumentoArchiviato.NotaDiCredito
+                    : TipoDocumentoArchiviato.FatturaEmessa,
+                Numero = $"{fattura.NumeroDocumento}/{fattura.Anno}",
+                Data = data,
+                Controparte = fattura.Cliente is null ? null
+                    : !string.IsNullOrWhiteSpace(fattura.Cliente.Denominazione) ? fattura.Cliente.Denominazione : $"{fattura.Cliente.Nome} {fattura.Cliente.Cognome}".Trim(),
+                Importo = fattura.ImportoTotale,
+                Pdf = documentGenerator.GeneraPdf(fattura, fattura.Cliente, azienda, struttura.Nome, soggiorno),
+                File = xml?.Xml,
+                NomeFile = xml?.NomeFile,
+                Scadenza = DocumentoFiscaleArchiviato.ScadenzaPer(data),
+            });
+        }
+
+        return archiviati;
+    }
+
+    /// <summary>
+    /// Il file che conta: quello entrato nello SdI dal canale, o l'ultimo scaricato per caricarlo sul
+    /// portale. Mai uno di collaudo, uno scartato o uno rifiutato: per il fisco non esistono.
+    /// </summary>
+    private async Task<TrasmissioneFattura?> XmlDaArchiviareAsync(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
+    {
+        var elenco = await trasmissioni.ListByFatturaAsync(strutturaId, fatturaId, cancellationToken);
+        var scelta = elenco.FirstOrDefault(t => !t.Prova && t.ViaCanale && t.Esito is (EsitoTrasmissioneSdi.Inviato or EsitoTrasmissioneSdi.Consegnato or EsitoTrasmissioneSdi.NonConsegnato))
+            ?? elenco.FirstOrDefault(t => !t.Prova && !t.ViaCanale);
+        return scelta is null ? null : await trasmissioni.GetAsync(strutturaId, scelta.Id, cancellationToken);
     }
 
     /// <summary>

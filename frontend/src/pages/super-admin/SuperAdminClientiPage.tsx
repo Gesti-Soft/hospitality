@@ -1631,6 +1631,12 @@ function EliminaStrutturaDialog({
           e tutti i dati collegati (camere, prenotazioni, ospiti, fatture, integrazioni). Non è un semplice disattiva/riattiva.
           {struttura.demo && ' Se il Cliente ci ha inserito dati veri durante la prova, spariscono anche quelli.'}
         </Alert>
+        {!struttura.demo && (
+          <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+            Fatture emesse e ricevute, note di credito e ricevute di locazione breve restano in "Archivio documenti" per 10 anni, per
+            restituirle al Cliente se le chiede.
+          </Typography>
+        )}
         <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
           Per confermare, scrivi il nome esatto della struttura: <strong>{struttura.nome}</strong>
         </Typography>

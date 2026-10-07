@@ -13,6 +13,14 @@ public class TrasmissioneFatturaRepository(GestiSoftDbContext db) : ITrasmission
             .OrderByDescending(t => t.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlySet<Guid>> FattureConXmlScaricatoAsync(Guid strutturaId, IReadOnlyCollection<Guid> fatturaIds, CancellationToken cancellationToken) =>
+        (await db.TrasmissioniFattura.AsNoTracking()
+            .Where(t => t.StrutturaId == strutturaId && !t.ViaCanale && fatturaIds.Contains(t.DatiFatturaId))
+            .Select(t => t.DatiFatturaId)
+            .Distinct()
+            .ToListAsync(cancellationToken))
+        .ToHashSet();
+
     public async Task<IReadOnlyList<TrasmissioneFattura>> ListByFatturaAsync(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken) =>
         await db.TrasmissioniFattura.AsNoTracking()
             .Where(t => t.StrutturaId == strutturaId && t.DatiFatturaId == fatturaId)

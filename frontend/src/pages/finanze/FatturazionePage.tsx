@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
@@ -223,10 +224,12 @@ function TabFatture({
   // Per id e non l'oggetto: dopo un invio l'elenco si ricarica e il pannello mostra lo stato nuovo.
   const [selezionataId, setSelezionataId] = useState<string | null>(null)
   const selezionata = fatture?.find((f) => f.id === selezionataId) ?? null
-  // Col canale acceso l'elenco si divide: quelle da spedire (e le scartate, da correggere) e lo storico.
+  // L'elenco si divide in da inviare e storico. Col canale: da spedire e scartate (da correggere). Senza:
+  // quelle di cui nessuno ha ancora scaricato l'XML da caricare sul portale.
   const [vista, setVista] = useState<'da-inviare' | 'storico'>('da-inviare')
   const inviaSdi = useInviaSdi(strutturaId)
   const toast = useToast()
+  const queryClient = useQueryClient()
   const [confermaInvio, setConfermaInvio] = useState(false)
   const [avanzamento, setAvanzamento] = useState<{ fatte: number; totale: number } | null>(null)
   const [ricerca, setRicerca] = useState('')
@@ -236,6 +239,8 @@ function TabFatture({
   async function scarica(fn: (s: string, id: string, n: number) => Promise<void>, f: DatiFatturaDto) {
     try {
       if (strutturaId) await fn(strutturaId, f.id, f.numeroDocumento)
+      // Scaricato l'XML la fattura passa nello storico: l'elenco va riletto.
+      if (strutturaId && fn === scaricaFatturaXml) void queryClient.invalidateQueries({ queryKey: ['fatture', strutturaId] })
     } catch (err) {
       onErrore(err)
     }
@@ -248,7 +253,10 @@ function TabFatture({
     else setSelezionataId(f.id)
   }
 
-  const daInviare = (f: DatiFatturaDto) => f.statoSdi === StatoSdiFattura.DaInviare || f.statoSdi === StatoSdiFattura.Scartata
+  const daInviare = (f: DatiFatturaDto) =>
+    canaleAttivo
+      ? f.statoSdi === StatoSdiFattura.DaInviare || f.statoSdi === StatoSdiFattura.Scartata
+      : f.statoSdi === StatoSdiFattura.DaInviare && !f.xmlScaricato
   // Lo scarto si corregge prima di rispedire: l'invio di gruppo prende solo quelle mai inviate.
   const pronte = (fatture ?? []).filter((f) => f.statoSdi === StatoSdiFattura.DaInviare).sort((a, b) => a.progressivo - b.progressivo)
   const quanteDaInviare = (fatture ?? []).filter(daInviare).length
@@ -282,7 +290,7 @@ function TabFatture({
 
   const testoRicerca = ricerca.trim().toLowerCase()
   const fattureFiltrate = (fatture ?? [])
-    .filter((f) => !canaleAttivo || (vista === 'da-inviare') === daInviare(f))
+    .filter((f) => (vista === 'da-inviare') === daInviare(f))
     .filter(
       (f) =>
         (!testoRicerca || [String(f.numeroDocumento), f.clienteNome, ...f.righe.map((r) => r.descrizione)].some((campo) => campo?.toString().toLowerCase().includes(testoRicerca))) &&
@@ -296,7 +304,7 @@ function TabFatture({
   const messaggioVuoto =
     testoRicerca || dataDa || dataA
       ? 'Nessuna fattura corrisponde ai filtri applicati.'
-      : canaleAttivo && vista === 'da-inviare'
+      : vista === 'da-inviare'
         ? "Nessuna fattura da inviare per l'anno selezionato."
         : "Nessuna fattura emessa per l'anno selezionato."
 
@@ -307,23 +315,32 @@ function TabFatture({
         azione={puoScrivere ? { etichetta: '+ Nuova fattura', onClick: () => setDialogo({ modo: 'crea' }), disabilitato: !strutturaId } : undefined}
       />
 
-      {canaleAttivo && (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-          <ToggleButtonGroup size="small" exclusive value={vista} onChange={(_, v) => v && setVista(v)}>
-            <ToggleButton value="da-inviare" sx={{ textTransform: 'none', px: 2 }}>
-              Da inviare{quanteDaInviare > 0 ? ` (${quanteDaInviare})` : ''}
-            </ToggleButton>
-            <ToggleButton value="storico" sx={{ textTransform: 'none', px: 2 }}>
-              Storico
-            </ToggleButton>
-          </ToggleButtonGroup>
-          {puoScrivere && vista === 'da-inviare' && (
-            <Button variant="contained" color="primary" startIcon={<SendIcon />} disabled={pronte.length === 0 || avanzamento != null} onClick={() => setConfermaInvio(true)}>
-              {avanzamento ? `Invio in corso ${avanzamento.fatte}/${avanzamento.totale}…` : `Invia fatture${pronte.length > 0 ? ` (${pronte.length})` : ''}`}
-            </Button>
-          )}
-        </Box>
-      )}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+        <ToggleButtonGroup size="small" exclusive value={vista} onChange={(_, v) => v && setVista(v)}>
+          <ToggleButton value="da-inviare" sx={{ textTransform: 'none', px: 2 }}>
+            Da inviare{quanteDaInviare > 0 ? ` (${quanteDaInviare})` : ''}
+          </ToggleButton>
+          <ToggleButton value="storico" sx={{ textTransform: 'none', px: 2 }}>
+            Storico
+          </ToggleButton>
+        </ToggleButtonGroup>
+        {canaleAttivo && puoScrivere && vista === 'da-inviare' && (
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<SendIcon />}
+            disabled={pronte.length === 0 || avanzamento != null}
+            onClick={() => setConfermaInvio(true)}
+          >
+            {avanzamento ? `Invio in corso ${avanzamento.fatte}/${avanzamento.totale}…` : `Invia fatture${pronte.length > 0 ? ` (${pronte.length})` : ''}`}
+          </Button>
+        )}
+        {!canaleAttivo && vista === 'da-inviare' && (
+          <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary }}>
+            Scarica l'XML e caricalo sul portale Fatture e Corrispettivi: la fattura passa nello storico.
+          </Typography>
+        )}
+      </Box>
 
       <FiltriRicercaData
         ricerca={ricerca}
@@ -339,11 +356,7 @@ function TabFatture({
 
       {!caricamento && mobile && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {fattureFiltrate.length === 0 && (
-            <MessaggioVuotoElenco
-              messaggio={messaggioVuoto}
-            />
-          )}
+          {fattureFiltrate.length === 0 && <MessaggioVuotoElenco messaggio={messaggioVuoto} />}
           {fattureVisibili.map((f) => (
             <CardElenco key={f.id} onClick={() => apri(f)}>
               <TestataCardElenco
@@ -417,12 +430,7 @@ function TabFatture({
               </TableRow>
             </TableHead>
             <TableBody>
-              {fattureFiltrate.length === 0 && (
-                <RigaVuota
-                  colSpan={7}
-                  messaggio={messaggioVuoto}
-                />
-              )}
+              {fattureFiltrate.length === 0 && <RigaVuota colSpan={7} messaggio={messaggioVuoto} />}
               {fattureVisibili.map((f) => (
                 <TableRow key={f.id} hover onClick={() => apri(f)} sx={{ cursor: 'pointer' }}>
                   <TableCell sx={{ fontFamily: fontMono, fontWeight: 700 }}>

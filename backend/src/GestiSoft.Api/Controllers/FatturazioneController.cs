@@ -17,7 +17,8 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
     public async Task<IActionResult> Lista(Guid strutturaId, [FromQuery] int? anno, CancellationToken cancellationToken)
     {
         var fatture = await service.ListaAsync(currentUser, strutturaId, anno, cancellationToken);
-        return Ok(fatture.Select(ToDto));
+        var scaricate = await service.FattureConXmlScaricatoAsync(currentUser, strutturaId, fatture.Select(f => f.Id).ToList(), cancellationToken);
+        return Ok(fatture.Select(f => ToDto(f) with { XmlScaricato = scaricate.Contains(f.Id) }));
     }
 
     [HttpGet("anni")]

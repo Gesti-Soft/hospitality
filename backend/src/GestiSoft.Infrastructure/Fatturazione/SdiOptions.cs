@@ -23,6 +23,12 @@ public class SdiOptions
     /// </summary>
     public string Endpoint { get; set; } = "https://testservizi.fatturapa.it/ricevi_file";
 
+    /// <summary>
+    /// Codice destinatario (7 caratteri) che lo SdI assegna al canale quando lo si accredita in
+    /// ricezione: i Clienti lo danno ai fornitori per ricevere le fatture qui. Vuoto finché non c'è.
+    /// </summary>
+    public string? CodiceDestinatario { get; set; }
+
     /// <summary>Certificato client del canale con la sua chiave (.p12). Lo legge solo il servizio SdI.</summary>
     public string? KeystorePath { get; set; }
 
@@ -53,4 +59,10 @@ public class ConfigurazioneCanaleSdi(IOptions<SdiOptions> options) : IConfiguraz
         string.IsNullOrWhiteSpace(options.Value.TrasmittenteCodiceFiscale) ? null : options.Value.TrasmittenteCodiceFiscale.Trim().ToUpperInvariant();
 
     public int ProgressivoIniziale => Math.Max(1, options.Value.ProgressivoIniziale);
+
+    public string? CodiceDestinatario =>
+        string.IsNullOrWhiteSpace(options.Value.CodiceDestinatario) ? null : options.Value.CodiceDestinatario.Trim().ToUpperInvariant();
+
+    public bool Collaudo =>
+        !Uri.TryCreate(options.Value.Endpoint, UriKind.Absolute, out var endpoint) || endpoint.Host.StartsWith("testservizi.", StringComparison.OrdinalIgnoreCase);
 }

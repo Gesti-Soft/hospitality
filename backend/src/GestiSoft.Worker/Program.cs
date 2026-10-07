@@ -103,6 +103,14 @@ try
             .WithIdentity("anonimizzazione-ticket-trigger")
             .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(24).RepeatForever()));
 
+        // Documenti fiscali delle strutture eliminate: cancellati dopo i 10 anni (scelta dell'utente). Un giro al giorno.
+        var puliziaArchivioJobKey = new JobKey("pulizia-archivio-documenti");
+        quartz.AddJob<PuliziaArchivioDocumentiJob>(options => options.WithIdentity(puliziaArchivioJobKey));
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(puliziaArchivioJobKey)
+            .WithIdentity("pulizia-archivio-documenti-trigger")
+            .WithSimpleSchedule(schedule => schedule.WithIntervalInHours(24).RepeatForever()));
+
         // Strutture demo create da oltre 30 giorni: eliminate definitivamente (dati inventati).
         // Ogni ora, così la data mostrata nel Super Admin è rispettata entro un'ora.
         var eliminazioneDemoJobKey = new JobKey("eliminazione-demo");

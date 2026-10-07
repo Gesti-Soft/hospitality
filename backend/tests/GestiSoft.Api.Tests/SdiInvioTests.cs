@@ -185,6 +185,8 @@ public class SdiInvioTests
     {
         public string? CodiceFiscaleTrasmittente => "ZMMGTN97E08G273L";
         public int ProgressivoIniziale => 1000;
+        public string? CodiceDestinatario => null;
+        public bool Collaudo => true;
     }
 
     private sealed class ClientFinto : ISdiTrasmissioneClient
@@ -230,6 +232,9 @@ public class SdiInvioTests
         }
 
         public Task SalvaAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<IReadOnlySet<Guid>> FattureConXmlScaricatoAsync(Guid strutturaId, IReadOnlyCollection<Guid> fatturaIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<Guid>>(Elenco.Where(t => !t.ViaCanale && fatturaIds.Contains(t.DatiFatturaId)).Select(t => t.DatiFatturaId).ToHashSet());
 
         public Task<int> ProssimoProgressivoInvioAsync(string codiceFiscale, int valoreIniziale, CancellationToken cancellationToken)
         {

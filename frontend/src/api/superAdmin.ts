@@ -196,3 +196,138 @@ export function giorniDaDisattivazione(disattivataAtUtc: string): number {
   const ms = Date.now() - new Date(disattivataAtUtc).getTime()
   return Math.floor(ms / (1000 * 60 * 60 * 24))
 }
+
+// ---------------------------------------------------------------------------
+// Canale SdI
+// ---------------------------------------------------------------------------
+
+/** Cosa ne è stato di un file ricevuto dallo SdI. Valori da GestiSoft.Domain.Enums.EsitoFileRicevutoSdi. */
+export const EsitoFileRicevutoSdi = { Importata: 1, Duplicata: 2, SenzaDestinatario: 3, PiuDestinatari: 4, NonLeggibile: 5, Prova: 6 } as const
+export type EsitoFileRicevutoSdi = (typeof EsitoFileRicevutoSdi)[keyof typeof EsitoFileRicevutoSdi]
+
+export const ETICHETTA_ESITO_FILE_RICEVUTO: Record<EsitoFileRicevutoSdi, string> = {
+  [EsitoFileRicevutoSdi.Importata]: 'Importata',
+  [EsitoFileRicevutoSdi.Duplicata]: 'Già registrata',
+  [EsitoFileRicevutoSdi.SenzaDestinatario]: 'Nessuna struttura',
+  [EsitoFileRicevutoSdi.PiuDestinatari]: 'Più Clienti',
+  [EsitoFileRicevutoSdi.NonLeggibile]: 'Non leggibile',
+  [EsitoFileRicevutoSdi.Prova]: 'Collaudo',
+}
+
+/** I messaggi dello SdI su una fattura spedita. Valori da GestiSoft.Domain.Enums.TipoRicevutaSdi. */
+export const ETICHETTA_TIPO_RICEVUTA_SDI: Record<number, string> = {
+  1: 'Ricevuta di consegna',
+  2: 'Mancata consegna',
+  3: 'Scarto',
+  4: 'Esito committente',
+  5: 'Decorrenza termini',
+  6: 'Attestazione di trasmissione',
+  99: 'Non riconosciuta',
+}
+
+export interface FileRicevutoSdiDto {
+  id: string
+  identificativoSdi: string
+  nomeFile: string
+  fornitore: string | null
+  /** Partita IVA o codice fiscale del destinatario scritti nella fattura. */
+  identificativoCessionario: string | null
+  esito: EsitoFileRicevutoSdi
+  messaggio: string | null
+  ricevutoAtUtc: string
+}
+
+export interface RicevutaSdiDto {
+  id: string
+  tipo: number
+  identificativoSdi: string | null
+  nomeFileFattura: string | null
+  prova: boolean
+  descrizione: string | null
+  ricevutaAtUtc: string
+}
+
+export interface CanaleSdiDto {
+  /** Assegnato dallo SdI al canale in ricezione; null finché non c'è. */
+  codiceDestinatario: string | null
+  codiceFiscaleTrasmittente: string | null
+  /** Si spedisce allo SdI di collaudo: le fatture inviate non contano. */
+  collaudo: boolean
+  quarantena: FileRicevutoSdiDto[]
+  ricevuteNonAbbinate: RicevutaSdiDto[]
+  ricezioniDiCollaudo: FileRicevutoSdiDto[]
+}
+
+export function useCanaleSdi(abilitato: boolean) {
+  return useQuery({
+    queryKey: ['super-admin', 'canale-sdi'],
+    queryFn: () => apiGet<CanaleSdiDto>('/super-admin/canale-sdi'),
+    enabled: abilitato,
+  })
+}
+
+/** Dà a una struttura una fattura in quarantena: la vedranno tutte le strutture del suo Cliente. */
+export function useAttribuisciFileRicevuto() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ fileRicevutoId, strutturaId }: { fileRicevutoId: string; strutturaId: string }) =>
+      apiPost<void>(`/super-admin/canale-sdi/file-ricevuti/${fileRicevutoId}/attribuisci`, { strutturaId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['super-admin', 'canale-sdi'] }),
+  })
+}
+
+export function scaricaFileRicevutoSdi(f: Pick<FileRicevutoSdiDto, 'id' | 'nomeFile'>) {
+  return apiScaricaFile(`/super-admin/canale-sdi/file-ricevuti/${f.id}/file`, f.nomeFile, true)
+}
+
+export function scaricaRicevutaSdi(r: Pick<RicevutaSdiDto, 'id' | 'identificativoSdi'>) {
+  return apiScaricaFile(`/super-admin/canale-sdi/ricevute/${r.id}/file`, `ricevuta-${r.identificativoSdi ?? r.id}.xml`, true)
+}
+
+// ---------------------------------------------------------------------------
+// Archivio documenti fiscali (strutture eliminate)
+// ---------------------------------------------------------------------------
+
+/** Valori da GestiSoft.Domain.Enums.TipoDocumentoArchiviato. */
+export const ETICHETTA_TIPO_DOCUMENTO_ARCHIVIATO: Record<number, string> = {
+  1: 'Fattura emessa',
+  2: 'Nota di credito',
+  3: 'Ricevuta locazione breve',
+  4: 'Fattura ricevuta',
+}
+
+export interface DocumentoArchiviatoDto {
+  id: string
+  clienteId: string
+  clienteRagioneSociale: string
+  strutturaNome: string
+  strutturaPartitaIva: string | null
+  tipo: number
+  numero: string
+  /** "YYYY-MM-DD" */
+  data: string
+  controparte: string | null
+  importo: number | null
+  haPdf: boolean
+  haFile: boolean
+  archiviatoAtUtc: string
+  /** "YYYY-MM-DD": dal giorno dopo si cancella da solo. */
+  scadenza: string
+}
+
+export function useArchivioDocumenti(abilitato: boolean) {
+  return useQuery({
+    queryKey: ['super-admin', 'archivio-documenti'],
+    queryFn: () => apiGet<DocumentoArchiviatoDto[]>('/super-admin/archivio-documenti'),
+    enabled: abilitato,
+  })
+}
+
+export function scaricaDocumentoArchiviato(d: Pick<DocumentoArchiviatoDto, 'id'>, pdf: boolean) {
+  return apiScaricaFile(`/super-admin/archivio-documenti/${d.id}/${pdf ? 'pdf' : 'file'}`, pdf ? 'documento.pdf' : 'documento.xml', true)
+}
+
+/** Tutti i documenti archiviati di un Cliente in uno zip, per restituirglieli. */
+export function scaricaArchivioCliente(clienteId: string) {
+  return apiScaricaFile(`/super-admin/archivio-documenti/clienti/${clienteId}/zip`, 'documenti-archiviati.zip', true)
+}

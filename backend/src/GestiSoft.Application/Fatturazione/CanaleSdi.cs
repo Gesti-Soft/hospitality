@@ -22,6 +22,12 @@ public interface IConfigurazioneCanaleSdi
     /// numero riusato è uno scarto.
     /// </summary>
     int ProgressivoIniziale { get; }
+
+    /// <summary>Codice destinatario del canale in ricezione, assegnato dallo SdI. Null finché non c'è.</summary>
+    string? CodiceDestinatario { get; }
+
+    /// <summary>True se si spedisce allo SdI di collaudo: le fatture inviate da lì non contano.</summary>
+    bool Collaudo { get; }
 }
 
 /// <summary>I dati di DatiTrasmissione che dipendono da chi spedisce il file, non dalla fattura.</summary>
@@ -36,6 +42,9 @@ public interface ITrasmissioneFatturaRepository
     Task<IReadOnlyList<TrasmissioneFattura>> ListByFatturaAsync(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken);
 
     Task<TrasmissioneFattura?> GetAsync(Guid strutturaId, Guid trasmissioneId, CancellationToken cancellationToken);
+
+    /// <summary>Fra queste, le fatture di cui qualcuno ha scaricato l'XML per caricarlo da sé sul portale.</summary>
+    Task<IReadOnlySet<Guid>> FattureConXmlScaricatoAsync(Guid strutturaId, IReadOnlyCollection<Guid> fatturaIds, CancellationToken cancellationToken);
 
     Task AddAsync(TrasmissioneFattura trasmissione, CancellationToken cancellationToken);
 

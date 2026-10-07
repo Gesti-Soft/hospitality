@@ -90,6 +90,8 @@ export const navSections: NavSection[] = [
       { label: 'Clienti', path: '/super-admin/clienti', icon: IconUtenti },
       { label: 'Backup', path: '/super-admin/backup', icon: IconBackup },
       { label: 'Log', path: '/super-admin/log', icon: IconLog },
+      { label: 'Canale SdI', path: '/super-admin/canale-sdi', icon: IconFatturazione },
+      { label: 'Archivio documenti', path: '/super-admin/archivio-documenti', icon: IconBackup },
       { label: 'Assistenza', path: '/super-admin/assistenza', icon: IconAssistenza },
       { label: 'Impostazioni', path: '/super-admin/impostazioni', icon: IconImpostazioni },
     ],

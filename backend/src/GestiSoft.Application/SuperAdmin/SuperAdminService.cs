@@ -2,6 +2,7 @@ using GestiSoft.Application.Assistenza;
 using GestiSoft.Application.Auth;
 using GestiSoft.Application.Clienti;
 using GestiSoft.Application.Exceptions;
+using GestiSoft.Application.Fatturazione;
 using GestiSoft.Application.Logging;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
@@ -31,7 +32,8 @@ public class SuperAdminService(
     IDueFattoriRepository dueFattori,
     ILogEventoService logEventi,
     IBackupExporter backupExporter,
-    IAllegatiStorage allegatiStorage)
+    IAllegatiStorage allegatiStorage,
+    ArchivioDocumentiService archivioDocumenti)
 {
     public async Task<DashboardSuperAdminInfo> GetDashboardAsync(ICurrentUser currentUser, CancellationToken cancellationToken)
     {
@@ -353,7 +355,9 @@ public class SuperAdminService(
     {
         var clienteId = struttura.ClienteId;
         var nomeStruttura = struttura.Nome;
-        var allegatiSulDisco = await repository.EliminaStrutturaAsync(struttura.Id, cancellationToken);
+        // I documenti fiscali restano in archivio per 10 anni (scelta dell'utente). La demo ha dati inventati: niente da tenere.
+        var archivio = struttura.Demo ? [] : await archivioDocumenti.PreparaAsync(struttura, cancellationToken);
+        var allegatiSulDisco = await repository.EliminaStrutturaAsync(struttura.Id, cancellationToken, archivio);
         var fotoNonCancellate = allegatiSulDisco.Count(percorso => !allegatiStorage.Elimina(percorso));
         var come = operatore is null ? $" (demo, automaticamente dopo {GiorniDemo} giorni)" : string.Empty;
 
@@ -363,8 +367,8 @@ public class SuperAdminService(
         await logEventi.RegistraAsync(
             LivelloLog.Warning,
             fotoNonCancellate == 0
-                ? $"Struttura '{nomeStruttura}' eliminata definitivamente{come}."
-                : $"Struttura '{nomeStruttura}' eliminata definitivamente{come}: {fotoNonCancellate} foto dei ticket non si sono potute cancellare dal disco.",
+                ? $"Struttura '{nomeStruttura}' eliminata definitivamente{come}{Archiviati(archivio.Count)}."
+                : $"Struttura '{nomeStruttura}' eliminata definitivamente{come}{Archiviati(archivio.Count)}: {fotoNonCancellate} foto dei ticket non si sono potute cancellare dal disco.",
             origine: operatore is null ? "Worker" : "SuperAdmin",
             clienteId: clienteId,
             categoria: "SuperAdmin",
@@ -450,6 +454,8 @@ public class SuperAdminService(
             categoria: "SuperAdmin",
             operatore: currentUser.Email,
             cancellationToken: cancellationToken);
+
+    private static string Archiviati(int quanti) => quanti == 0 ? string.Empty : $", {quanti} documenti fiscali in archivio";
 
     private static void RichiediSuperAdmin(ICurrentUser currentUser)
     {

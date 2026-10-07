@@ -37,7 +37,9 @@ public record DatiFatturaDto(
     /// <summary>Su una nota di credito: la fattura stornata.</summary>
     Guid? FatturaStornataId = null,
     /// <summary>Si può modificare: non è nello SdI e nessun invio è in sospeso.</summary>
-    bool Modificabile = true);
+    bool Modificabile = true,
+    /// <summary>Qualcuno ne ha scaricato l'XML per caricarlo da sé sul portale. Valorizzato solo nell'elenco.</summary>
+    bool XmlScaricato = false);
 
 /// <summary>Un file XML generato per la fattura, senza i suoi byte (si scaricano a parte).</summary>
 public record TrasmissioneFatturaDto(
