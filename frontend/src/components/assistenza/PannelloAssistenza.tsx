@@ -16,9 +16,9 @@ import { stileImporto, tokens } from '../../theme'
 const TICKET_NEL_PANNELLO = 5
 
 /**
- * Icona Assistenza nella barra in alto: le risposte non lette e "Apri nuovo ticket" per chi può
- * aprirne (titolare e chi gestisce gli utenti della struttura), i ticket da rispondere per il Super
- * Admin nel suo pannello. Per tutti gli altri non compare.
+ * Icona Assistenza nella barra in alto: le risposte non lette per chi vede i ticket della struttura
+ * (titolare e permesso "Consulta ticket"), "Apri nuovo ticket" solo per chi può aprirne, i ticket da
+ * rispondere per il Super Admin nel suo pannello. Per tutti gli altri non compare.
  */
 export function PannelloAssistenza() {
   const navigate = useNavigate()
@@ -32,9 +32,10 @@ export function PannelloAssistenza() {
     ? strutturaId
       ? null
       : { tipo: 'staff' }
-    : strutturaId && mioPermesso.data?.settingUser === true
+    : strutturaId && (mioPermesso.data?.ticketRead === true || mioPermesso.data?.ticketWrite === true)
       ? { tipo: 'struttura', strutturaId }
       : null
+  const puoAprire = mioPermesso.data?.ticketWrite === true
 
   const conteggio = useContoTicketNonLetti(contesto)
   const tickets = useTickets(contesto, true)
@@ -94,7 +95,7 @@ export function PannelloAssistenza() {
           <Button size="small" onClick={() => vai(paginaAssistenza)}>
             Tutti i ticket
           </Button>
-          {!perStaff && (
+          {!perStaff && puoAprire && (
             <Button size="small" variant="contained" onClick={() => vai('/assistenza?nuovo=1')}>
               Apri nuovo ticket
             </Button>

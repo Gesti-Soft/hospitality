@@ -67,4 +67,10 @@ public class UtenteStruttura
     /// pulizie): chi prepara le camere vede arrivi e partenze in sola lettura, senza registrarli.
     /// </summary>
     public bool CheckInOut { get; set; }
+
+    /// <summary>Vede i ticket di assistenza della struttura e la notifica della loro chiusura.</summary>
+    public bool TicketRead { get; set; }
+
+    /// <summary>Apre i ticket di assistenza e risponde all'assistenza. Include la lettura.</summary>
+    public bool TicketWrite { get; set; }
 }

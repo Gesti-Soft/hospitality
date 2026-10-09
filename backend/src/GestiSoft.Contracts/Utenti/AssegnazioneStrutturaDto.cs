@@ -28,4 +28,6 @@ public record AssegnazioneStrutturaDto(
     bool RestaurantRead,
     bool RestaurantWrite,
     bool RoomSetupRead,
-    bool CheckInOut);
+    bool CheckInOut,
+    bool TicketRead,
+    bool TicketWrite);

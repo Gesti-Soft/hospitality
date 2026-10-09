@@ -64,6 +64,8 @@ const PERMESSI_VUOTI: PermessiStruttura = {
   restaurantWrite: false,
   roomSetupRead: false,
   checkInOut: false,
+  ticketRead: false,
+  ticketWrite: false,
 }
 
 const TUTTI_PERMESSI: PermessiStruttura = Object.fromEntries(Object.keys(PERMESSI_VUOTI).map((k) => [k, true])) as unknown as PermessiStruttura
@@ -144,7 +146,21 @@ const GRUPPI_PERMESSI: { titolo: string; voci: { chiave: keyof PermessiStruttura
     titolo: 'Amministrazione',
     voci: [{ chiave: 'settingUser', etichetta: 'Gestione utenti' }],
   },
+  {
+    titolo: 'Assistenza GestiSoft',
+    voci: [
+      { chiave: 'ticketRead', etichetta: 'Consulta ticket' },
+      { chiave: 'ticketWrite', etichetta: 'Apri ticket e rispondi' },
+    ],
+  },
 ]
+
+/** Chi apre i ticket deve anche vederli: "Apri e rispondi" accende la consultazione, togliere la consultazione spegne anche l'altro. */
+function conTicketCoerenti(permessi: PermessiStruttura, cambiato: keyof PermessiStruttura): PermessiStruttura {
+  if (cambiato === 'ticketWrite' && permessi.ticketWrite) return { ...permessi, ticketRead: true }
+  if (cambiato === 'ticketRead' && !permessi.ticketRead) return { ...permessi, ticketWrite: false }
+  return permessi
+}
 
 interface Props {
   strutturaId: string
@@ -321,7 +337,7 @@ export function AssegnaRuoloDialog({ strutturaId, clienteId, stato, utentiDispon
                     <Checkbox
                       size="small"
                       checked={permessi[voce.chiave]}
-                      onChange={(e) => setPermessi((prec) => ({ ...prec, [voce.chiave]: e.target.checked }))}
+                      onChange={(e) => setPermessi((prec) => conTicketCoerenti({ ...prec, [voce.chiave]: e.target.checked }, voce.chiave))}
                       disabled={inCorso}
                     />
                   }

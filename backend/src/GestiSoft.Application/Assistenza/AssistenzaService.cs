@@ -2,6 +2,7 @@ using GestiSoft.Application.Auth;
 using GestiSoft.Application.Common;
 using GestiSoft.Application.Exceptions;
 using GestiSoft.Application.Logging;
+using GestiSoft.Application.Notifiche;
 using GestiSoft.Domain.Entities;
 using GestiSoft.Domain.Enums;
 
@@ -11,9 +12,9 @@ namespace GestiSoft.Application.Assistenza;
 public record NuovoAllegato(string NomeFile, byte[] Contenuto);
 
 /// <summary>
-/// Ticket di assistenza tra le Strutture e lo staff GestiSoft. Lato struttura li apre e li legge
-/// solo chi gestisce gli utenti (titolare o permesso SettingUser), non un operatore qualsiasi; lato
-/// staff solo il Super Admin. Le email vanno al Super Admin quando la struttura scrive e al solo
+/// Ticket di assistenza tra le Strutture e lo staff GestiSoft. Lato struttura li legge chi ha il
+/// permesso TicketRead, li apre e risponde chi ha TicketWrite (il titolare sempre); lato staff solo
+/// il Super Admin. Le email vanno al Super Admin quando la struttura scrive e al solo
 /// titolare quando risponde lo staff — mai agli operatori, nemmeno a chi ha aperto il ticket.
 /// </summary>
 public class AssistenzaService(
@@ -22,9 +23,9 @@ public class AssistenzaService(
     IEmailSender email,
     IStrutturaRepository strutture,
     IUtenteRepository utenti,
-    TenantAccessGuard accessGuard,
-    GestioneUtentiGuard gestioneUtentiGuard,
-    ILogEventoService logEventi)
+    PermessoStrutturaGuard permessoGuard,
+    ILogEventoService logEventi,
+    NotificaService notifiche)
 {
     public const int OggettoMaxCaratteri = 150;
     public const int TestoMaxCaratteri = 5000;
@@ -41,25 +42,25 @@ public class AssistenzaService(
 
     public async Task<IReadOnlyList<TicketRiepilogo>> ListaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
-        await EnsureStrutturaAsync(currentUser, strutturaId, cancellationToken);
+        await EnsureStrutturaAsync(currentUser, strutturaId, scrittura: false, cancellationToken);
         return await tickets.ListByStrutturaAsync(strutturaId, cancellationToken);
     }
 
     public async Task<int> ContaNonLettiAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
-        await EnsureStrutturaAsync(currentUser, strutturaId, cancellationToken);
+        await EnsureStrutturaAsync(currentUser, strutturaId, scrittura: false, cancellationToken);
         return await tickets.ContaNonLettiStrutturaAsync(strutturaId, cancellationToken);
     }
 
     public async Task<TicketRiepilogo> DettaglioAsync(ICurrentUser currentUser, Guid strutturaId, Guid ticketId, CancellationToken cancellationToken)
     {
-        await EnsureStrutturaAsync(currentUser, strutturaId, cancellationToken);
+        await EnsureStrutturaAsync(currentUser, strutturaId, scrittura: false, cancellationToken);
         return await GetDellaStrutturaAsync(strutturaId, ticketId, cancellationToken);
     }
 
     public async Task SegnaLettoAsync(ICurrentUser currentUser, Guid strutturaId, Guid ticketId, CancellationToken cancellationToken)
     {
-        await EnsureStrutturaAsync(currentUser, strutturaId, cancellationToken);
+        await EnsureStrutturaAsync(currentUser, strutturaId, scrittura: false, cancellationToken);
         var dettaglio = await GetDellaStrutturaAsync(strutturaId, ticketId, cancellationToken);
 
         dettaglio.Ticket.LettoClienteAtUtc = DateTime.UtcNow;
@@ -74,7 +75,7 @@ public class AssistenzaService(
         IReadOnlyList<NuovoAllegato> allegati,
         CancellationToken cancellationToken)
     {
-        await EnsureStrutturaAsync(currentUser, strutturaId, cancellationToken);
+        await EnsureStrutturaAsync(currentUser, strutturaId, scrittura: true, cancellationToken);
 
         oggetto = oggetto.Trim();
         if (oggetto.Length == 0)
@@ -156,7 +157,7 @@ public class AssistenzaService(
         IReadOnlyList<NuovoAllegato> allegati,
         CancellationToken cancellationToken)
     {
-        await EnsureStrutturaAsync(currentUser, strutturaId, cancellationToken);
+        await EnsureStrutturaAsync(currentUser, strutturaId, scrittura: true, cancellationToken);
         var dettaglio = await GetDellaStrutturaAsync(strutturaId, ticketId, cancellationToken);
         var ticket = dettaglio.Ticket;
         EnsureAperto(ticket);
@@ -194,7 +195,7 @@ public class AssistenzaService(
 
     public async Task<(Stream Contenuto, string ContentType)> ApriAllegatoAsync(ICurrentUser currentUser, Guid strutturaId, Guid allegatoId, CancellationToken cancellationToken)
     {
-        await EnsureStrutturaAsync(currentUser, strutturaId, cancellationToken);
+        await EnsureStrutturaAsync(currentUser, strutturaId, scrittura: false, cancellationToken);
 
         var allegato = await tickets.GetAllegatoAsync(allegatoId, cancellationToken);
         if (allegato is null || allegato.StrutturaId != strutturaId)
@@ -328,6 +329,17 @@ public class AssistenzaService(
             operatore: currentUser.Email,
             cancellationToken: cancellationToken);
 
+        // Su un ticket chiuso non si può più scrivere: lo si dice con una notifica, senza email, a chi vede i ticket.
+        var dataChiusura = TimeZoneInfo.ConvertTimeFromUtc(adesso, TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome"));
+        await notifiche.CreaSeNonEsisteAsync(
+            ticket.StrutturaId,
+            TipoNotifica.TicketChiuso,
+            $"ticket-chiuso:{ticket.Id}",
+            $"Ticket n. {ticket.Numero} chiuso",
+            $"Il ticket n. {ticket.Numero} è stato chiuso in data {dataChiusura:dd/MM/yyyy}.",
+            cancellationToken,
+            richiedeTicket: true);
+
         return dettaglio;
     }
 
@@ -435,15 +447,19 @@ public class AssistenzaService(
     /// Il Super Admin entrato in una struttura vede il menu di quel Cliente, compresa la pagina
     /// Assistenza: da lì però non deve poter aprire ticket a se stesso. Per lui c'è il pannello.
     /// </summary>
-    private async Task EnsureStrutturaAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
+    /// <param name="scrittura">Aprire un ticket o rispondere chiede TicketWrite; per leggere basta uno dei due.</param>
+    private async Task EnsureStrutturaAsync(ICurrentUser currentUser, Guid strutturaId, bool scrittura, CancellationToken cancellationToken)
     {
         if (currentUser.IsSuperAdmin)
         {
             throw new ForbiddenException("Il Super Admin gestisce i ticket dalla pagina Assistenza del pannello amministratore.");
         }
 
-        await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
-        await gestioneUtentiGuard.EnsureAsync(currentUser, strutturaId, cancellationToken);
+        await permessoGuard.EnsureAsync(
+            currentUser,
+            strutturaId,
+            p => scrittura ? p.TicketWrite : p.TicketRead || p.TicketWrite,
+            cancellationToken);
     }
 
     private async Task<TicketRiepilogo> GetDellaStrutturaAsync(Guid strutturaId, Guid ticketId, CancellationToken cancellationToken)

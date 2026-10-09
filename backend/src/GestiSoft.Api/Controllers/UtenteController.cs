@@ -32,7 +32,7 @@ public class UtenteController(UtenteManagementService service, ICurrentUser curr
             a.BookingRead, a.BookingWrite, a.ReservationRead, a.ReservationWrite,
             a.StatePoliceRead, a.StatePoliceWrite, a.StatePoliceSettings,
             a.SettingAgency, a.SettingUser, a.SettingRoomRead, a.SettingRoomWrite, a.RoomStatusUpdate,
-            a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite, a.RoomSetupRead, a.CheckInOut);
+            a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite, a.RoomSetupRead, a.CheckInOut, a.TicketRead, a.TicketWrite);
         return Ok(dto);
     }
 

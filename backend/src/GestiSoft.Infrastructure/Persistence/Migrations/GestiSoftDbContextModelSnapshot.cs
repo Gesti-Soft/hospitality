@@ -1083,6 +1083,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<bool>("RichiedeStatoCamera")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("RichiedeTicket")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("ScadenzaAttesaUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2812,6 +2815,12 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("StrutturaId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("TicketRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("TicketWrite")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("UtenteId")
                         .HasColumnType("uuid");

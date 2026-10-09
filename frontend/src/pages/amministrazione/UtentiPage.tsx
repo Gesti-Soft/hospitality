@@ -47,6 +47,7 @@ function contaPermessi(a: AssegnazioneStrutturaDto): number {
     a.bookingRead, a.bookingWrite, a.reservationRead, a.reservationWrite, a.statePoliceRead, a.statePoliceWrite,
     a.statePoliceSettings, a.settingAgency, a.settingUser, a.settingRoomRead, a.settingRoomWrite, a.roomStatusUpdate,
     a.financeRead, a.financeWrite, a.restaurantRead, a.restaurantWrite, a.roomSetupRead, a.checkInOut,
+    a.ticketRead, a.ticketWrite,
   ].filter(Boolean).length
 }
 

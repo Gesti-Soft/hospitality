@@ -73,18 +73,22 @@ public class NotificaService(
     public async Task<IReadOnlyList<Notifica>> ListaAsync(ICurrentUser currentUser, Guid strutturaId, bool soloNonLette, CancellationToken cancellationToken)
     {
         await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
-        return await notifiche.ListaAsync(strutturaId, soloNonLette, await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken), cancellationToken);
+        return await notifiche.ListaAsync(strutturaId, soloNonLette, await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken), await VedeTicketAsync(currentUser, strutturaId, cancellationToken), cancellationToken);
     }
 
     public async Task<int> ContaNonLetteAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
-        return await notifiche.ContaNonLetteAsync(strutturaId, await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken), cancellationToken);
+        return await notifiche.ContaNonLetteAsync(strutturaId, await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken), await VedeTicketAsync(currentUser, strutturaId, cancellationToken), cancellationToken);
     }
 
     /// <summary>Le notifiche delle pulizie (Notifica.RichiedeStatoCamera) le vede solo chi ha "Stato camera"; titolare e Super Admin sempre.</summary>
     private Task<bool> VedeStatoCameraAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken) =>
         permessoGuard.HaAsync(currentUser, strutturaId, p => p.RoomStatusUpdate, cancellationToken);
+
+    /// <summary>Le notifiche dei ticket (Notifica.RichiedeTicket) le vede solo chi vede i ticket; titolare e Super Admin sempre.</summary>
+    private Task<bool> VedeTicketAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken) =>
+        permessoGuard.HaAsync(currentUser, strutturaId, p => p.TicketRead || p.TicketWrite, cancellationToken);
 
     public async Task SegnaLettaAsync(ICurrentUser currentUser, Guid strutturaId, Guid notificaId, CancellationToken cancellationToken)
     {
@@ -92,7 +96,8 @@ public class NotificaService(
 
         var notifica = await notifiche.GetAsync(notificaId, cancellationToken);
         if (notifica is null || notifica.StrutturaId != strutturaId
-            || (notifica.RichiedeStatoCamera && !await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken)))
+            || (notifica.RichiedeStatoCamera && !await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken))
+            || (notifica.RichiedeTicket && !await VedeTicketAsync(currentUser, strutturaId, cancellationToken)))
         {
             throw new NotFoundException("Notifica non trovata.");
         }
@@ -107,12 +112,13 @@ public class NotificaService(
     public async Task SegnaTutteLetteAsync(ICurrentUser currentUser, Guid strutturaId, CancellationToken cancellationToken)
     {
         await accessGuard.EnsureAccessAsync(currentUser, strutturaId, cancellationToken);
-        await notifiche.SegnaTutteLetteAsync(strutturaId, await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken), cancellationToken);
+        await notifiche.SegnaTutteLetteAsync(strutturaId, await VedeStatoCameraAsync(currentUser, strutturaId, cancellationToken), await VedeTicketAsync(currentUser, strutturaId, cancellationToken), cancellationToken);
     }
 
     /// <summary>Notifica idempotente per eventi generati periodicamente da un job (licenza/schedine): non duplica se già creata con la stessa chiave (es. stessa scadenza, stesso giorno).</summary>
     /// <param name="richiedeStatoCamera">Visibile solo a chi ha il permesso "Stato camera" (pulizie).</param>
-    public async Task<bool> CreaSeNonEsisteAsync(Guid strutturaId, TipoNotifica tipo, string chiaveDedup, string titolo, string messaggio, CancellationToken cancellationToken, bool richiedeStatoCamera = false)
+    /// <param name="richiedeTicket">Visibile solo a chi vede i ticket di assistenza.</param>
+    public async Task<bool> CreaSeNonEsisteAsync(Guid strutturaId, TipoNotifica tipo, string chiaveDedup, string titolo, string messaggio, CancellationToken cancellationToken, bool richiedeStatoCamera = false, bool richiedeTicket = false)
     {
         if (await notifiche.EsisteChiaveDedupAsync(strutturaId, chiaveDedup, cancellationToken))
         {
@@ -127,6 +133,7 @@ public class NotificaService(
             Messaggio = messaggio,
             ChiaveDedup = chiaveDedup,
             RichiedeStatoCamera = richiedeStatoCamera,
+            RichiedeTicket = richiedeTicket,
         }, cancellationToken);
         return true;
     }

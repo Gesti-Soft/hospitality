@@ -49,6 +49,10 @@ export interface PermessiStruttura {
   roomSetupRead: boolean
   /** Registra check-in e check-out; senza, la pagina Check-in / Check-out è in sola lettura. */
   checkInOut: boolean
+  /** Vede i ticket di assistenza della struttura. */
+  ticketRead: boolean
+  /** Apre i ticket di assistenza e risponde; comprende ticketRead. */
+  ticketWrite: boolean
 }
 
 export interface AssegnazioneStrutturaDto extends PermessiStruttura {

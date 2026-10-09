@@ -13,13 +13,15 @@ import { BottoneNuovo, MessaggioVuotoElenco } from '../../components/CardElenco'
 import { ConversazioneTicket } from '../../components/assistenza/ConversazioneTicket'
 import { ElencoTicket } from '../../components/assistenza/ElencoTicket'
 import { NuovoTicketDialog } from '../../components/assistenza/NuovoTicketDialog'
+import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 
 /** Altezza del riquadro elenco + conversazione sotto la barra in alto e il titolo della pagina. */
 const ALTEZZA_RIQUADRO_ASSISTENZA = 'calc(100vh - 190px)'
 
 /**
- * Ticket di assistenza della struttura selezionata. La vedono il titolare e chi gestisce gli
- * utenti; le risposte dello staff arrivano qui, e per email al solo titolare.
+ * Ticket di assistenza della struttura selezionata. La vedono il titolare e chi ha "Consulta
+ * ticket"; aprire e rispondere chiede "Apri ticket e rispondi". Le risposte dello staff arrivano
+ * qui, e per email al solo titolare.
  * `?ticket=<id>` apre direttamente un ticket (link nell'email), `?nuovo=1` il dialogo del nuovo
  * ticket (pulsante nella barra in alto).
  */
@@ -29,6 +31,7 @@ export function AssistenzaPage() {
   const [parametri, setParametri] = useSearchParams()
   const contesto: ContestoAssistenza | null = strutturaId ? { tipo: 'struttura', strutturaId } : null
   const tickets = useTickets(contesto)
+  const puoScrivere = usePuoScrivere('ticketWrite')
   const [nuovoAperto, setNuovoAperto] = useState(parametri.get('nuovo') === '1')
 
   const elenco = tickets.data ?? []
@@ -65,7 +68,7 @@ export function AssistenzaPage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
         <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Richieste all&apos;assistenza GestiSoft</Typography>
-        <BottoneNuovo etichetta="+ Nuovo ticket" onClick={() => setNuovoAperto(true)} />
+        {puoScrivere && <BottoneNuovo etichetta="+ Nuovo ticket" onClick={() => setNuovoAperto(true)} />}
       </Box>
 
       {tickets.isLoading && <Skeleton variant="rounded" height={320} />}
@@ -75,7 +78,9 @@ export function AssistenzaPage() {
       )}
 
       {!tickets.isLoading && !tickets.isError && elenco.length === 0 && (
-        <MessaggioVuotoElenco messaggio="Nessun ticket. Se qualcosa non funziona o hai un dubbio, apri un ticket: ti rispondiamo qui." />
+        <MessaggioVuotoElenco
+          messaggio={puoScrivere ? 'Nessun ticket. Se qualcosa non funziona o hai un dubbio, apri un ticket: ti rispondiamo qui.' : 'Nessun ticket.'}
+        />
       )}
 
       {!tickets.isLoading && elenco.length > 0 && (
@@ -103,6 +108,7 @@ export function AssistenzaPage() {
                 contesto={contesto}
                 ticketId={selezionato}
                 perStaff={false}
+                solaLettura={!puoScrivere}
                 onIndietro={mobile ? () => seleziona(null) : undefined}
               />
             </Box>
@@ -110,7 +116,7 @@ export function AssistenzaPage() {
         </Box>
       )}
 
-      {nuovoAperto && strutturaId && (
+      {nuovoAperto && puoScrivere && strutturaId && (
         <NuovoTicketDialog
           strutturaId={strutturaId}
           onClose={chiudiNuovo}

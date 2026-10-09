@@ -69,12 +69,6 @@ export interface NavSection {
    * permesso e di un Super Admin che non ha ancora scelto una struttura.
    */
   sempreVisibile?: boolean
-  /**
-   * Riservata a chi gestisce gli utenti della struttura corrente (permesso SettingUser) — un
-   * lavoratore normale (Cliente non amministratore) non deve vedere la sezione. Il Super Admin la
-   * vede sempre.
-   */
-  richiedeGestioneUtenti?: boolean
   /** Come `NavItem.richiedePermesso`, ma per l'intera sezione (es. "Finanze" richiede `financeRead`). */
   richiedePermesso?: keyof PermessiStruttura | (keyof PermessiStruttura)[]
   items: NavItem[]
@@ -141,12 +135,12 @@ export const navSections: NavSection[] = [
   {
     title: 'Amministrazione',
     icon: IconImpostazioni,
-    richiedeGestioneUtenti: true,
+    // Utenti, Impostazioni e Log solo a chi gestisce gli utenti; Assistenza a chi vede i ticket, anche senza gestione utenti.
     items: [
-      { label: 'Utenti', path: '/utenti', icon: IconUtenti },
-      { label: 'Impostazioni', path: '/impostazioni', icon: IconImpostazioni },
-      { label: 'Log', path: '/log', icon: IconLog },
-      { label: 'Assistenza', path: '/assistenza', icon: IconAssistenza, soloCliente: true },
+      { label: 'Utenti', path: '/utenti', icon: IconUtenti, richiedePermesso: 'settingUser' },
+      { label: 'Impostazioni', path: '/impostazioni', icon: IconImpostazioni, richiedePermesso: 'settingUser' },
+      { label: 'Log', path: '/log', icon: IconLog, richiedePermesso: 'settingUser' },
+      { label: 'Assistenza', path: '/assistenza', icon: IconAssistenza, soloCliente: true, richiedePermesso: 'ticketRead' },
     ],
   },
 ]

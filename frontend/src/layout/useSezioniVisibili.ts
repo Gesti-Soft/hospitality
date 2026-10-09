@@ -40,7 +40,6 @@ export function useSezioniVisibili(): SezioniVisibiliRisultato {
     // Per il SuperAdmin, le sezioni operative restano nascoste finché non seleziona
     // esplicitamente una Struttura (nessuna struttura precaricata all'accesso).
     .filter((section) => section.sempreVisibile || section.soloSuperAdmin || !isSuperAdmin || !!strutturaId)
-    .filter((section) => section.sempreVisibile || !section.richiedeGestioneUtenti || isSuperAdmin || mioPermesso.data?.settingUser === true)
     .filter((section) => section.sempreVisibile || haPermesso(section.richiedePermesso))
     .map((section) => ({
       section,

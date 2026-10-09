@@ -50,4 +50,10 @@ public class Notifica : TenantEntity
     /// alla struttura; queste agli altri non servono.
     /// </summary>
     public bool RichiedeStatoCamera { get; set; }
+
+    /// <summary>
+    /// Visibile solo a chi vede i ticket di assistenza (permesso TicketRead o TicketWrite) oltre a
+    /// titolare e Super Admin: riguarda i ticket, che agli altri operatori non sono mostrati.
+    /// </summary>
+    public bool RichiedeTicket { get; set; }
 }

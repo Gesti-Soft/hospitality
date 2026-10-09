@@ -31,6 +31,7 @@ export function ConversazioneTicket({
   perStaff,
   azioni,
   onIndietro,
+  solaLettura = false,
 }: {
   contesto: ContestoAssistenza
   ticketId: string
@@ -39,6 +40,8 @@ export function ConversazioneTicket({
   azioni?: ReactNode
   /** Su telefono si torna all'elenco da qui. */
   onIndietro?: () => void
+  /** Chi ha solo "Consulta ticket" legge la conversazione ma non risponde. */
+  solaLettura?: boolean
 }) {
   const toast = useToast()
   const dettaglio = useTicket(contesto, ticketId)
@@ -127,7 +130,9 @@ export function ConversazioneTicket({
       </Box>
 
       <Box sx={{ borderTop: `1px solid ${tokens.surfaceBorder}`, px: 2.5, py: 2, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-        {aperto ? (
+        {aperto && solaLettura ? (
+          <Typography sx={{ fontSize: 13, color: tokens.textSecondary }}>Puoi leggere questo ticket ma non rispondere.</Typography>
+        ) : aperto ? (
           <>
             <TextField
               multiline

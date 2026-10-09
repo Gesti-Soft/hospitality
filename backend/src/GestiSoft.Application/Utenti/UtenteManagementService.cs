@@ -28,7 +28,9 @@ public record AssegnaRuoloRequest(
     bool RestaurantRead,
     bool RestaurantWrite,
     bool RoomSetupRead,
-    bool CheckInOut);
+    bool CheckInOut,
+    bool TicketRead,
+    bool TicketWrite);
 
 public record CambiaPasswordRequest(string PasswordAttuale, string PasswordNuova);
 
@@ -55,16 +57,18 @@ public record MioPermessoRisultato(
     bool RestaurantRead,
     bool RestaurantWrite,
     bool RoomSetupRead,
-    bool CheckInOut)
+    bool CheckInOut,
+    bool TicketRead,
+    bool TicketWrite)
 {
-    public static readonly MioPermessoRisultato Tutti = new(true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true);
-    public static readonly MioPermessoRisultato Nessuno = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static readonly MioPermessoRisultato Tutti = new(true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true);
+    public static readonly MioPermessoRisultato Nessuno = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 
     public static MioPermessoRisultato Da(UtenteStruttura a) => new(
         a.BookingRead, a.BookingWrite, a.ReservationRead, a.ReservationWrite,
         a.StatePoliceRead, a.StatePoliceWrite, a.StatePoliceSettings,
         a.SettingAgency, a.SettingUser, a.SettingRoomRead, a.SettingRoomWrite, a.RoomStatusUpdate,
-        a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite, a.RoomSetupRead, a.CheckInOut);
+        a.FinanceRead, a.FinanceWrite, a.RestaurantRead, a.RestaurantWrite, a.RoomSetupRead, a.CheckInOut, a.TicketRead, a.TicketWrite);
 }
 
 public class UtenteManagementService(
@@ -285,6 +289,9 @@ public class UtenteManagementService(
         assegnazione.RestaurantWrite = request.RestaurantWrite;
         assegnazione.RoomSetupRead = request.RoomSetupRead;
         assegnazione.CheckInOut = request.CheckInOut;
+        // Chi apre i ticket deve anche poterli vedere.
+        assegnazione.TicketRead = request.TicketRead || request.TicketWrite;
+        assegnazione.TicketWrite = request.TicketWrite;
 
         await utentiStrutture.UpsertAsync(assegnazione, cancellationToken);
         await LogUtenteAsync(currentUser, utenteTarget.ClienteId, strutturaId, $"Ruolo/permessi aggiornati per {utenteTarget.Email}.", cancellationToken);

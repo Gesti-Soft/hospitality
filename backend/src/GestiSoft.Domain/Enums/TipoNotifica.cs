@@ -41,4 +41,7 @@ public enum TipoNotifica
 
     /// <summary>È arrivata dallo SdI una fattura di un fornitore.</summary>
     FatturaRicevuta = 14,
+
+    /// <summary>Il Super Admin ha chiuso un ticket di assistenza della struttura.</summary>
+    TicketChiuso = 15,
 }
