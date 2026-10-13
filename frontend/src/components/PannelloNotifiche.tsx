@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import Badge from '@mui/material/Badge'
@@ -13,17 +13,18 @@ import { TipoNotifica, useContoNotificheNonLette, useNotifiche, useSegnaNotifica
 import { stato2Fa } from '../api/auth'
 import { useAuth } from '../auth/AuthContext'
 
-// Notifiche mostrate alla volta: si parte con una sola pagina, poi se ne rivela un'altra ogni volta
-// che si scorre fino in fondo all'elenco (stesso principio di usePaginazioneScroll usato altrove,
-// qui reimplementato localmente perché quell'hook è tipizzato per righe di tabella, non per un
-// elenco in un pannello a tendina) — i dati sono già tutti caricati in un solo giro (fino a 100, vedi
-// NotificaRepository), qui si rivelano solo progressivamente, nessuna nuova chiamata di rete.
-const NOTIFICHE_PER_PAGINA = 5
+// Notifiche mostrate: le prime 5 all'apertura, poi altre 10 ogni volta che si scorre fino in fondo
+// all'elenco (stesso principio di usePaginazioneScroll usato altrove, qui reimplementato localmente
+// perché quell'hook è tipizzato per righe di tabella, non per un elenco in un pannello a tendina) —
+// i dati sono già tutti caricati in un solo giro (fino a 100, vedi NotificaRepository), qui si
+// rivelano solo progressivamente, nessuna nuova chiamata di rete.
+const NOTIFICHE_INIZIALI = 5
+const NOTIFICHE_PER_SCORRIMENTO = 10
 
 /** Bottone campanella con badge non-lette + pannello a tendina, nella topbar (vedi AppShell). */
 export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null }) {
   const [ancora, setAncora] = useState<HTMLElement | null>(null)
-  const [numeroVisibili, setNumeroVisibili] = useState(NOTIFICHE_PER_PAGINA)
+  const [numeroVisibili, setNumeroVisibili] = useState(NOTIFICHE_INIZIALI)
   const navigate = useNavigate()
   const { sessione } = useAuth()
   const { data: statoDueFattori } = useQuery({ queryKey: ['auth', '2fa'], queryFn: stato2Fa })
@@ -38,27 +39,28 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
   const segnaLetta = useSegnaNotificaLetta(strutturaId)
   const segnaTutteLette = useSegnaTutteNotificheLette(strutturaId)
 
-  const contenitoreRef = useRef<HTMLDivElement | null>(null)
-  const sentinellaRef = useRef<HTMLDivElement | null>(null)
+  // Contenitore e sentinella in uno stato (callback ref), non in useRef: stanno dentro il Popover,
+  // che li monta solo all'apertura. Con un useRef l'effetto girava a pannello chiuso, trovava la
+  // sentinella assente e non ripartiva più all'apertura: si restava sulle prime notifiche.
+  const [contenitore, setContenitore] = useState<HTMLDivElement | null>(null)
+  const [sentinella, setSentinella] = useState<HTMLDivElement | null>(null)
   const totale = notifiche?.length ?? 0
   const altreDaCaricare = numeroVisibili < totale
 
   useEffect(() => {
-    if (!altreDaCaricare) return
-    const el = sentinellaRef.current
-    if (!el) return
+    if (!sentinella || !contenitore) return
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          setNumeroVisibili((n) => n + NOTIFICHE_PER_PAGINA)
+          setNumeroVisibili((n) => n + NOTIFICHE_PER_SCORRIMENTO)
         }
       },
-      { root: contenitoreRef.current, rootMargin: '100px' },
+      { root: contenitore },
     )
-    observer.observe(el)
+    observer.observe(sentinella)
     return () => observer.disconnect()
-  }, [altreDaCaricare])
+  }, [sentinella, contenitore])
 
   // Senza struttura selezionata non ci sono notifiche da mostrare, ma il promemoria del 2FA sì:
   // è proprio il Super Admin appena entrato, che di struttura non ne ha ancora scelta una, il primo
@@ -72,7 +74,7 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
   function apri(elemento: HTMLElement) {
     setAncora(elemento)
     // Riparte sempre dalle prime 5 alla riapertura, non da dove si era arrivati l'ultima volta.
-    setNumeroVisibili(NOTIFICHE_PER_PAGINA)
+    setNumeroVisibili(NOTIFICHE_INIZIALI)
   }
 
   const notificheVisibili = (notifiche ?? []).slice(0, numeroVisibili)
@@ -104,7 +106,7 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
           )}
         </Box>
 
-        <Box ref={contenitoreRef} sx={{ maxHeight: 400, overflowY: 'auto' }}>
+        <Box ref={setContenitore} sx={{ maxHeight: 400, overflowY: 'auto' }}>
           {consiglia2Fa && (
             <Box
               component="button"
@@ -159,7 +161,7 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
                   }}
                 />
               ))}
-              {altreDaCaricare && <Box ref={sentinellaRef} sx={{ height: 1 }} />}
+              {altreDaCaricare && <Box ref={setSentinella} sx={{ height: 1 }} />}
             </>
           )}
         </Box>
