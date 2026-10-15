@@ -45,5 +45,5 @@ public class NotificheController(NotificaService service, ICurrentUser currentUs
         return NoContent();
     }
 
-    private static NotificaDto ToDto(Notifica n) => new(n.Id, n.Tipo, n.Titolo, n.Messaggio, n.PrenotazioneId, n.Canale, n.CreatedAtUtc, n.LettaAtUtc);
+    private static NotificaDto ToDto(Notifica n) => new(n.Id, n.Tipo, n.Titolo, n.Messaggio, n.PrenotazioneId, n.Canale, n.CreatedAtUtc, n.LettaAtUtc, CollegamentoNotifica.Per(n));
 }

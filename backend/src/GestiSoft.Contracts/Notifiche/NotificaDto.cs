@@ -10,4 +10,6 @@ public record NotificaDto(
     Guid? PrenotazioneId,
     string? Canale,
     DateTime CreatedAtUtc,
-    DateTime? LettaAtUtc);
+    DateTime? LettaAtUtc,
+    /// <summary>La pagina che la notifica apre al clic (es. "/fatturazione"). Null se è solo informativa.</summary>
+    string? Collegamento);

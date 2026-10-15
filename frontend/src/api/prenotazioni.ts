@@ -108,6 +108,11 @@ function chiaviPrenotazioni(strutturaId: string | null) {
 // alla foto del primo caricamento finché non si naviga via e si ritorna. Stessa cadenza del job.
 const INTERVALLO_REFETCH_PRENOTAZIONI = 60_000
 
+/** Una prenotazione sola, per aprirla da un collegamento (es. il clic su una notifica). */
+export function caricaPrenotazione(strutturaId: string, prenotazioneId: string) {
+  return apiGet<PrenotazioneDto>(`/strutture/${strutturaId}/prenotazioni/${prenotazioneId}`)
+}
+
 export function useArriviInCorso(strutturaId: string | null) {
   return useQuery({
     queryKey: ['prenotazioni', strutturaId, 'in-corso'],

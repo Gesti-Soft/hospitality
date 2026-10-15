@@ -12,6 +12,7 @@ import TableRow from '@mui/material/TableRow'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import DownloadIcon from '@mui/icons-material/FileDownloadOutlined'
+import RefreshIcon from '@mui/icons-material/Refresh'
 import { ApiError } from '../../api/client'
 import { nomeTipoDocumentoRicevuto, scaricaFatturaRicevuta, useFattureRicevute, type FatturaRicevutaDto } from '../../api/fatturazione'
 import { fontDisplay, fontMono, stileImporto, tokens } from '../../theme'
@@ -30,6 +31,22 @@ function importo(f: FatturaRicevutaDto): string {
 
 function data(f: FatturaRicevutaDto): string {
   return formattatoreData.format(new Date(`${f.data}T00:00:00`))
+}
+
+/** Ricarica l'elenco delle fatture, emesse o ricevute: gira su sé stesso mentre aggiorna. */
+export function BottoneAggiorna({ onClick, inCorso }: { onClick: () => void; inCorso: boolean }) {
+  return (
+    <Tooltip title="Aggiorna">
+      <span>
+        <IconButton size="small" onClick={onClick} disabled={inCorso} aria-label="Aggiorna">
+          <RefreshIcon
+            fontSize="small"
+            sx={inCorso ? { animation: 'giraAggiorna 0.9s linear infinite', '@keyframes giraAggiorna': { to: { transform: 'rotate(360deg)' } } } : undefined}
+          />
+        </IconButton>
+      </span>
+    </Tooltip>
+  )
 }
 
 /**
@@ -79,7 +96,13 @@ export function TabFattureRicevute({ strutturaId, anno }: { strutturaId: string 
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Fatture ricevute dai fornitori</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Fatture ricevute dai fornitori</Typography>
+        <BottoneAggiorna
+          onClick={() => void queryClient.invalidateQueries({ queryKey: ['fatture-ricevute', strutturaId] })}
+          inCorso={fatture.isFetching}
+        />
+      </Box>
 
       <FiltriRicercaData
         ricerca={ricerca}

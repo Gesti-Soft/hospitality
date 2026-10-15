@@ -1,5 +1,6 @@
-import { useRef, useState, type ChangeEvent } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
@@ -65,13 +66,14 @@ import { usePaginazioneScroll } from '../../lib/usePaginazioneScroll'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { PannelloSdiFattura } from '../../components/fatturazione/PannelloSdiFattura'
-import { TabFattureRicevute } from '../../components/fatturazione/TabFattureRicevute'
+import { BottoneAggiorna, TabFattureRicevute } from '../../components/fatturazione/TabFattureRicevute'
 import { alleggerisciLogo, LOGO_MAX_BYTE, LOGO_TIPI_ACCETTATI } from '../../lib/immagini'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 type Tab_ = 'fatture' | 'fatture-ricevute' | 'dati-aziendali' | 'clienti'
+const TAB_VALIDE: Tab_[] = ['fatture', 'fatture-ricevute', 'dati-aziendali', 'clienti']
 
 /** La prima riga del documento, e quante altre ce ne sono: una fattura può avere soggiorno, servizi e più prenotazioni. */
 function descrizioneFattura(f: DatiFatturaDto): string {
@@ -113,6 +115,27 @@ export function FatturazionePage() {
   const [tab, setTab] = useState<Tab_>('fatture')
   const [anno, setAnno] = useState(ANNO_CORRENTE)
   const toast = useToast()
+
+  // "?tab=…" (dal clic su una notifica, es. fattura di acquisto arrivata): apre quella scheda, poi
+  // toglie il parametro dall'indirizzo.
+  const [parametri, setParametri] = useSearchParams()
+  const tabRichiesta = parametri.get('tab')
+  const [tabLetta, setTabLetta] = useState<string | null>(null)
+  if (tabRichiesta !== tabLetta) {
+    setTabLetta(tabRichiesta)
+    if (TAB_VALIDE.includes(tabRichiesta as Tab_)) setTab(tabRichiesta as Tab_)
+  }
+  useEffect(() => {
+    if (!tabRichiesta) return
+    setParametri(
+      (attuali) => {
+        const nuovi = new URLSearchParams(attuali)
+        nuovi.delete('tab')
+        return nuovi
+      },
+      { replace: true },
+    )
+  }, [tabRichiesta, setParametri])
 
   const { strutturaCorrente } = useStruttura()
   // Le fatture dei fornitori arrivano solo a chi ha il canale SdI.
@@ -191,10 +214,22 @@ function RigaVuota({ colSpan, messaggio }: { colSpan: number; messaggio: string 
   )
 }
 
-function IntestazioneTab({ titolo, azione }: { titolo: string; azione?: { etichetta: string; onClick: () => void; disabilitato?: boolean } }) {
+function IntestazioneTab({
+  titolo,
+  azione,
+  aggiorna,
+}: {
+  titolo: string
+  azione?: { etichetta: string; onClick: () => void; disabilitato?: boolean }
+  /** Ricarica l'elenco: per vedere subito un esito SdI arrivato, senza aspettare o cambiare pagina. */
+  aggiorna?: { onClick: () => void; inCorso: boolean }
+}) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>{titolo}</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>{titolo}</Typography>
+        {aggiorna && <BottoneAggiorna onClick={aggiorna.onClick} inCorso={aggiorna.inCorso} />}
+      </Box>
       {azione && <BottoneNuovo etichetta={azione.etichetta} onClick={azione.onClick} disabilitato={azione.disabilitato} />}
     </Box>
   )
@@ -230,6 +265,8 @@ function TabFatture({
   const inviaSdi = useInviaSdi(strutturaId)
   const toast = useToast()
   const queryClient = useQueryClient()
+  // Elenco, canale e storico dei file della fattura aperta: tutto sotto la stessa chiave.
+  const aggiornando = useIsFetching({ queryKey: ['fatture', strutturaId] }) > 0
   const [confermaInvio, setConfermaInvio] = useState(false)
   const [avanzamento, setAvanzamento] = useState<{ fatte: number; totale: number } | null>(null)
   const [ricerca, setRicerca] = useState('')
@@ -313,6 +350,7 @@ function TabFatture({
       <IntestazioneTab
         titolo="Fatture"
         azione={puoScrivere ? { etichetta: '+ Nuova fattura', onClick: () => setDialogo({ modo: 'crea' }), disabilitato: !strutturaId } : undefined}
+        aggiorna={{ onClick: () => void queryClient.invalidateQueries({ queryKey: ['fatture', strutturaId] }), inCorso: aggiornando }}
       />
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>

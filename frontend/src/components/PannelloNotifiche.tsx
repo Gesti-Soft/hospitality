@@ -9,7 +9,7 @@ import Popover from '@mui/material/Popover'
 import Typography from '@mui/material/Typography'
 import { tokens } from '../theme'
 import { IconNotifiche } from '../layout/navIcons'
-import { TipoNotifica, useContoNotificheNonLette, useNotifiche, useSegnaNotificaLetta, useSegnaTutteNotificheLette, type NotificaDto } from '../api/notifiche'
+import { useContoNotificheNonLette, useNotifiche, useSegnaNotificaLetta, useSegnaTutteNotificheLette, type NotificaDto } from '../api/notifiche'
 import { stato2Fa } from '../api/auth'
 import { useAuth } from '../auth/AuthContext'
 
@@ -153,10 +153,11 @@ export function PannelloNotifiche({ strutturaId }: { strutturaId: string | null 
                   notifica={n}
                   onClick={() => {
                     segnaLetta.mutate(n.id)
-                    // L'avviso delle pulizie porta dritto all'elenco delle camere da fare.
-                    if (n.tipo === TipoNotifica.PulizieDaFare) {
+                    // Porta dove c'è qualcosa da guardare o da fare (pulizie, fattura, prenotazione…);
+                    // quelle solo informative si segnano lette e basta.
+                    if (n.collegamento) {
                       setAncora(null)
-                      navigate('/pulizie')
+                      navigate(n.collegamento)
                     }
                   }}
                 />
@@ -200,6 +201,7 @@ function RigaNotifica({ notifica, onClick }: { notifica: NotificaDto; onClick: (
         <Typography sx={{ fontSize: 12.5, color: tokens.textSecondary, mt: 0.25 }}>{notifica.messaggio}</Typography>
         <Typography sx={{ fontSize: 11, color: tokens.textTertiary, mt: 0.5 }}>
           {data.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+          {notifica.collegamento && ' · Tocca per aprire'}
         </Typography>
       </Box>
     </Box>

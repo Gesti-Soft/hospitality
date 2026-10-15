@@ -28,6 +28,8 @@ export interface NotificaDto {
   canale: string | null
   createdAtUtc: string
   lettaAtUtc: string | null
+  /** La pagina che apre al clic (es. "/fatturazione"); null se è solo informativa. */
+  collegamento: string | null
 }
 
 // Stesso intervallo di refetch già usato dal Calendario (INTERVALLO_REFETCH_PRENOTAZIONI): un

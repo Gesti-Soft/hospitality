@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
@@ -23,6 +24,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import { useStruttura } from '../../struttura/StrutturaContext'
 import { StatoCamera, useCamere, type CameraDto } from '../../api/camere'
 import {
+  caricaPrenotazione,
   useAgenzieDistinct,
   useArriviInCorso,
   useArriviProssimi,
@@ -32,6 +34,7 @@ import {
   type PrenotazioneDto,
 } from '../../api/prenotazioni'
 import { useCanaliVendita } from '../../api/canaliVendita'
+import { useToast } from '../../toast/ToastContext'
 import { useTipologie } from '../../api/tipologie'
 import { fontDisplay, fontMono, tokens } from '../../theme'
 import { PALETTE_CANALI } from '../../lib/coloriCanali'
@@ -102,7 +105,27 @@ export function CalendarioPage() {
   const [formato, setFormato] = useState<FormatoCalendario>('griglia')
   const [vistaLista, setVistaLista] = useState<VistaLista>('arrivi')
   const [dialogo, setDialogo] = useState<StatoIniziale | null>(null)
+  const [parametri, setParametri] = useSearchParams()
+  const toast = useToast()
   const [filtroTipologiaId, setFiltroTipologiaId] = useState('')
+
+  // "?prenotazione=…" (dal clic su una notifica): apre quella prenotazione, poi toglie il parametro
+  // dall'indirizzo, così aggiornando la pagina non si riapre.
+  const prenotazioneRichiesta = parametri.get('prenotazione')
+  useEffect(() => {
+    if (!prenotazioneRichiesta || !strutturaId) return
+    caricaPrenotazione(strutturaId, prenotazioneRichiesta)
+      .then((prenotazione) => setDialogo({ modo: 'modifica', prenotazione }))
+      .catch(() => toast.errore('Prenotazione non trovata: potrebbe essere stata eliminata.'))
+    setParametri(
+      (attuali) => {
+        const nuovi = new URLSearchParams(attuali)
+        nuovi.delete('prenotazione')
+        return nuovi
+      },
+      { replace: true },
+    )
+  }, [prenotazioneRichiesta, strutturaId, setParametri, toast])
   const [filtroAgenzia, setFiltroAgenzia] = useState('')
   const [ricerca, setRicerca] = useState('')
 
