@@ -132,7 +132,7 @@ public class SdiRicevuteService(
 
         if (applicabile)
         {
-            // Nessun dato del cliente nel testo: la campanella la vede tutto il personale della struttura.
+            // Solo a chi vede le finanze. Comunque nessun dato del cliente nel testo.
             var (titolo, messaggio) = letta.Tipo switch
             {
                 TipoRicevutaSdi.Consegna => ($"{etichetta} consegnata", "Lo SdI ha recapitato la fattura al cliente."),
@@ -140,7 +140,7 @@ public class SdiRicevuteService(
                 _ => ($"{etichetta} non consegnata", "La fattura è valida e si trova nel cassetto fiscale del cliente: consegnagli la copia PDF."),
             };
             await notifiche.CreaSeNonEsisteAsync(
-                trasmissione.StrutturaId, TipoNotifica.EsitoFatturaSdi, $"sdi:esito:{trasmissione.NomeFile}:{letta.Tipo}", titolo, messaggio, cancellationToken);
+                trasmissione.StrutturaId, TipoNotifica.EsitoFatturaSdi, $"sdi:esito:{trasmissione.NomeFile}:{letta.Tipo}", titolo, messaggio, cancellationToken, richiedeFinanze: true);
         }
     }
 

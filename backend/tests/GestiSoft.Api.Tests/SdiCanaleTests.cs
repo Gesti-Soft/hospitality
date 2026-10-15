@@ -112,6 +112,7 @@ public class SdiCanaleTests
         var notifica = Assert.Single(s.Notifiche.Elenco);
         Assert.Equal(TipoNotifica.EsitoFatturaSdi, notifica.Tipo);
         Assert.Contains("consegnata", notifica.Titolo);
+        Assert.True(notifica.RichiedeFinanze);
     }
 
     [Fact]
@@ -389,7 +390,9 @@ public class SdiCanaleTests
         Assert.Equal(22.00m, fattura.Imposta);
         Assert.Equal(EsitoFileRicevutoSdi.Importata, Assert.Single(r.Sdi.FileRicevuti).Esito);
         Assert.Single(r.Archivio.Salvati);
-        Assert.Equal(TipoNotifica.FatturaRicevuta, Assert.Single(r.Notifiche.Elenco).Tipo);
+        var notificaRicevuta = Assert.Single(r.Notifiche.Elenco);
+        Assert.Equal(TipoNotifica.FatturaRicevuta, notificaRicevuta.Tipo);
+        Assert.True(notificaRicevuta.RichiedeFinanze);
     }
 
     /// <summary>Fatturazione differita: un file, più documenti, una fattura ricevuta per ognuno.</summary>
@@ -546,13 +549,13 @@ public class SdiCanaleTests
         public Task<bool> EsisteChiaveDedupAsync(Guid strutturaId, string chiaveDedup, CancellationToken cancellationToken) => Task.FromResult(Elenco.Any(n => n.StrutturaId == strutturaId && n.ChiaveDedup == chiaveDedup));
         public Task AddAsync(Notifica notifica, CancellationToken cancellationToken) { Elenco.Add(notifica); return Task.CompletedTask; }
         public Task<Notifica?> GetAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Notifica>> ListaAsync(Guid strutturaId, bool soloNonLette, bool vedeStatoCamera, bool vedeTicket, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<int> ContaNonLetteAsync(Guid strutturaId, bool vedeStatoCamera, bool vedeTicket, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Notifica>> ListaAsync(Guid strutturaId, bool soloNonLette, bool vedeStatoCamera, bool vedeTicket, bool vedeFinanze, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<int> ContaNonLetteAsync(Guid strutturaId, bool vedeStatoCamera, bool vedeTicket, bool vedeFinanze, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> EsistePerPrenotazioneAsync(Guid strutturaId, TipoNotifica tipo, Guid prenotazioneId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> EsisteArrivoPerPrenotazioneAsync(Guid strutturaId, Guid prenotazioneId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<Notifica>> ListCancellazioniPendentiAsync(Guid strutturaId, string canale, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<Notifica>> ListCancellazioniPendentiScaduteAsync(Guid strutturaId, DateTime adesso, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task SegnaTutteLetteAsync(Guid strutturaId, bool vedeStatoCamera, bool vedeTicket, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task SegnaTutteLetteAsync(Guid strutturaId, bool vedeStatoCamera, bool vedeTicket, bool vedeFinanze, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task SegnaLettePerPrenotazioneAsync(Guid strutturaId, TipoNotifica tipo, Guid prenotazioneId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpdateAsync(Notifica notifica, CancellationToken cancellationToken) => throw new NotSupportedException();
     }

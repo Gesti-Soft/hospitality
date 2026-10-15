@@ -1080,6 +1080,9 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("PrenotazioneId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("RichiedeFinanze")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("RichiedeStatoCamera")
                         .HasColumnType("boolean");
 

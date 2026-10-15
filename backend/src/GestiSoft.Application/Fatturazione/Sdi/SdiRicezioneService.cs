@@ -186,7 +186,8 @@ public class SdiRicezioneService(
                 $"sdi:ricevuta:{ricevuto.IdentificativoSdi}",
                 nuove.Count == 1 ? "Nuova fattura di acquisto" : $"{nuove.Count} nuove fatture di acquisto",
                 "Arrivata dal Sistema di Interscambio: la trovi in Fatturazione, Fatture ricevute.",
-                cancellationToken);
+                cancellationToken,
+                richiedeFinanze: true);
         }
     }
 

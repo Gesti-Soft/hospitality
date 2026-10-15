@@ -56,4 +56,10 @@ public class Notifica : TenantEntity
     /// titolare e Super Admin: riguarda i ticket, che agli altri operatori non sono mostrati.
     /// </summary>
     public bool RichiedeTicket { get; set; }
+
+    /// <summary>
+    /// Visibile solo a chi vede le finanze (permesso FinanceRead) oltre a titolare e Super Admin:
+    /// esiti dello SdI e fatture di acquisto riguardano chi segue la fatturazione, non il resto del personale.
+    /// </summary>
+    public bool RichiedeFinanze { get; set; }
 }
