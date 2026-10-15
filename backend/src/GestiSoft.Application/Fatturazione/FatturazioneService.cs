@@ -100,7 +100,8 @@ public class FatturazioneService(
     FileSdiService fileSdi,
     IImpostazioniStrutturaRepository impostazioni,
     Sdi.IServizioSdi servizioSdi,
-    ConcessioneServiziGuard concessioneGuard)
+    ConcessioneServiziGuard concessioneGuard,
+    Sdi.IRicevutaSdiPdfGenerator ricevutaPdf)
 {
     private const int MassimiTentativiProgressivo = 5;
 
@@ -577,15 +578,32 @@ public class FatturazioneService(
     /// </summary>
     public async Task<FileXmlFattura> FileRicevutaSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, Guid trasmissioneId, Guid ricevutaId, CancellationToken cancellationToken)
     {
+        var ricevuta = await RicevutaSdiDellaFatturaAsync(currentUser, strutturaId, fatturaId, trasmissioneId, ricevutaId, cancellationToken);
+        return new FileXmlFattura(NomeFileRicevuta(ricevuta), ricevuta.Xml);
+    }
+
+    /// <summary>La stessa ricevuta in PDF leggibile, per chi non sa aprire un XML firmato. Fa fede l'XML.</summary>
+    public async Task<FileXmlFattura> PdfRicevutaSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, Guid trasmissioneId, Guid ricevutaId, CancellationToken cancellationToken)
+    {
+        var ricevuta = await RicevutaSdiDellaFatturaAsync(currentUser, strutturaId, fatturaId, trasmissioneId, ricevutaId, cancellationToken);
+        var nomeXml = NomeFileRicevuta(ricevuta);
+        return new FileXmlFattura(Path.ChangeExtension(nomeXml, ".pdf"), ricevutaPdf.GeneraPdf(ricevuta.Xml, nomeXml, ricevuta.Prova));
+    }
+
+    private async Task<RicevutaSdi> RicevutaSdiDellaFatturaAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, Guid trasmissioneId, Guid ricevutaId, CancellationToken cancellationToken)
+    {
         await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
         var trasmissione = await trasmissioni.GetAsync(strutturaId, trasmissioneId, cancellationToken);
         var ricevuta = trasmissione is not null && trasmissione.DatiFatturaId == fatturaId
             ? await trasmissioni.GetRicevutaAsync(strutturaId, ricevutaId, cancellationToken)
             : null;
         return ricevuta is not null && ricevuta.TrasmissioneFatturaId == trasmissioneId
-            ? new FileXmlFattura(ricevuta.NomeFile ?? $"ricevuta-{ricevuta.IdentificativoSdi ?? ricevuta.Id.ToString()}.xml", ricevuta.Xml)
+            ? ricevuta
             : throw new NotFoundException("Ricevuta non trovata.");
     }
+
+    private static string NomeFileRicevuta(RicevutaSdi ricevuta) =>
+        ricevuta.NomeFile ?? $"ricevuta-{ricevuta.IdentificativoSdi ?? ricevuta.Id.ToString()}.xml";
 
     /// <summary>
     /// Spedisce la fattura allo SdI dal canale, su richiesta dell'operatore. Qui si controlla chi la

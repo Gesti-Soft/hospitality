@@ -11,6 +11,7 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import CloseIcon from '@mui/icons-material/Close'
 import DownloadIcon from '@mui/icons-material/FileDownloadOutlined'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import SendIcon from '@mui/icons-material/SendOutlined'
 import { ApiError } from '../../api/client'
 import {
@@ -18,6 +19,7 @@ import {
   ESITO_TRASMISSIONE,
   EsitoTrasmissioneSdi,
   nomeDocumento,
+  scaricaPdfRicevutaSdi,
   scaricaRicevutaSdi,
   scaricaXmlTrasmissione,
   STATO_SDI,
@@ -239,9 +241,9 @@ function RigaTrasmissione({ strutturaId, fatturaId, trasmissione: t }: { struttu
     }
   }
 
-  async function scaricaRicevuta(r: RicevutaSdiFatturaDto) {
+  async function scaricaRicevuta(r: RicevutaSdiFatturaDto, formato: 'xml' | 'pdf') {
     try {
-      await scaricaRicevutaSdi(strutturaId, fatturaId, t.id, r)
+      await (formato === 'pdf' ? scaricaPdfRicevutaSdi : scaricaRicevutaSdi)(strutturaId, fatturaId, t.id, r)
     } catch (err) {
       toast.errore(err instanceof ApiError ? err.message : 'Download non riuscito, riprova.')
     }
@@ -286,8 +288,13 @@ function RigaTrasmissione({ strutturaId, fatturaId, trasmissione: t }: { struttu
             {ETICHETTA_TIPO_RICEVUTA_SDI[r.tipo] ?? 'Messaggio SdI'}
             <Box component="span" sx={{ color: tokens.textSecondary }}>{` · ${dataOra(r.ricevutaAtUtc)}`}</Box>
           </Typography>
-          <Tooltip title="Scarica la ricevuta">
-            <IconButton size="small" onClick={() => scaricaRicevuta(r)}>
+          <Tooltip title="Ricevuta in PDF">
+            <IconButton size="small" onClick={() => scaricaRicevuta(r, 'pdf')}>
+              <PictureAsPdfIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Ricevuta originale firmata (XML)">
+            <IconButton size="small" onClick={() => scaricaRicevuta(r, 'xml')}>
               <DownloadIcon fontSize="small" />
             </IconButton>
           </Tooltip>

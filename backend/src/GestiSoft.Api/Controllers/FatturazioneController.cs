@@ -147,6 +147,14 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
         return File(file.Contenuto, "application/xml", file.NomeFile);
     }
 
+    /// <summary>La stessa ricevuta in PDF leggibile. Fa fede l'XML firmato.</summary>
+    [HttpGet("{fatturaId:guid}/trasmissioni/{trasmissioneId:guid}/ricevute/{ricevutaId:guid}/pdf")]
+    public async Task<IActionResult> RicevutaSdiPdf(Guid strutturaId, Guid fatturaId, Guid trasmissioneId, Guid ricevutaId, CancellationToken cancellationToken)
+    {
+        var file = await service.PdfRicevutaSdiAsync(currentUser, strutturaId, fatturaId, trasmissioneId, ricevutaId, cancellationToken);
+        return File(file.Contenuto, "application/pdf", file.NomeFile);
+    }
+
     /// <summary>Spedisce la fattura allo SdI dal canale GestiSoft. Sempre su richiesta, mai automatico.</summary>
     [HttpPost("{fatturaId:guid}/invia-sdi")]
     public async Task<IActionResult> InviaSdi(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)

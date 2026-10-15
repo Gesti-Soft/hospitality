@@ -112,6 +112,7 @@ public static class DependencyInjection
         services.AddScoped<IDatiClienteRepository, DatiClienteRepository>();
         services.AddScoped<IDatiFatturaRepository, DatiFatturaRepository>();
         services.AddScoped<IFatturaDocumentGenerator, FatturaDocumentGenerator>();
+        services.AddScoped<GestiSoft.Application.Fatturazione.Sdi.IRicevutaSdiPdfGenerator, RicevutaSdiPdfGenerator>();
         services.AddScoped<ITrasmissioneFatturaRepository, TrasmissioneFatturaRepository>();
         services.AddScoped<IFatturaRicevutaRepository, FatturaRicevutaRepository>();
         services.AddScoped<IArchivioDocumentiRepository, ArchivioDocumentiRepository>();

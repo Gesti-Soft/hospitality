@@ -580,6 +580,15 @@ export function scaricaRicevutaSdi(strutturaId: string, fatturaId: string, trasm
   )
 }
 
+/** La stessa ricevuta in PDF leggibile, per chi non sa aprire l'XML. Fa fede l'XML. */
+export function scaricaPdfRicevutaSdi(strutturaId: string, fatturaId: string, trasmissioneId: string, r: RicevutaSdiFatturaDto) {
+  return apiScaricaFile(
+    `/strutture/${strutturaId}/fatture/${fatturaId}/trasmissioni/${trasmissioneId}/ricevute/${r.id}/pdf`,
+    'ricevuta-sdi.pdf',
+    true,
+  )
+}
+
 export interface EsitoInvioSdiDto {
   nomeFile: string
   identificativoSdi: string
