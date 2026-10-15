@@ -335,6 +335,8 @@ export interface CreaFatturaDaPrenotazioneRequest {
   /** Assente = fattura. */
   tipoEmissione?: TipoEmissioneDocumento
   modalitaPagamento?: ModalitaPagamento | null
+  /** A chi è intestato il documento se non all'ospite di chi paga (es. una ditta). Assente = l'ospite. */
+  datiClienteId?: string | null
 }
 
 export interface AggiornaFatturaRequest {

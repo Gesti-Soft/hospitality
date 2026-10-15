@@ -38,7 +38,9 @@ public record CreaFatturaDaPrenotazioneRequest(
     /// <summary>Fattura (chi ha partita IVA) o ricevuta (locazione breve di un privato). Serie di numerazione distinte.</summary>
     TipoEmissioneDocumento TipoEmissione = TipoEmissioneDocumento.Fattura,
     /// <summary>Come ha pagato l'ospite: si conserva e si stampa solo sulla ricevuta.</summary>
-    ModalitaPagamento? ModalitaPagamento = null);
+    ModalitaPagamento? ModalitaPagamento = null,
+    /// <summary>A chi è intestato il documento, se non all'ospite di chi paga: una ditta dell'anagrafica clienti.</summary>
+    Guid? DatiClienteId = null);
 
 /// <summary>
 /// Nota di credito (TD04) su una fattura già trasmessa: le righe dicono cosa si storna, tutto o in
@@ -166,15 +168,26 @@ public class FatturazioneService(
         var elencoPrenotazioni = await CaricaPrenotazioniAsync(strutturaId, request.PrenotazioneIds, cancellationToken);
         var principale = elencoPrenotazioni[0];
 
-        var capofila = await ospiti.GetByPrenotazioneAsync(principale.Id, cancellationToken)
-            ?? throw new ConflictException("La prenotazione di chi paga non ha ancora una scheda ospiti: compilala prima di fatturare.");
+        // Una ditta dell'anagrafica, se scelta; altrimenti il Cliente dell'ospite di chi paga. Per la
+        // ditta non serve la scheda ospiti: il documento non porta i dati dell'ospite.
+        DatiCliente cliente;
+        if (request.DatiClienteId is { } clienteId)
+        {
+            cliente = await clienti.GetAsync(clienteId, cancellationToken) is { } scelto && scelto.StrutturaId == strutturaId
+                ? scelto
+                : throw new NotFoundException("Cliente non trovato.");
+        }
+        else
+        {
+            var capofila = await ospiti.GetByPrenotazioneAsync(principale.Id, cancellationToken)
+                ?? throw new ConflictException("La prenotazione di chi paga non ha ancora una scheda ospiti: compilala prima di fatturare, oppure intesta il documento a un cliente dell'anagrafica.");
+            (cliente, _) = await RisolviOCreaClienteAsync(strutturaId, capofila, cancellationToken);
+        }
 
         var ricevuta = request.TipoEmissione == TipoEmissioneDocumento.Ricevuta;
         var righe = await CostruisciRigheAsync(strutturaId, ricevuta, request.Righe, elencoPrenotazioni, fatturaId: null, cancellationToken);
         VerificaRegimeSenzaIva(ricevuta, request.RegimeFiscale, righe);
         var impostaSoggiorno = request.ImpostaSoggiorno > 0 ? request.ImpostaSoggiorno.Value : 0m;
-
-        var (cliente, _) = await RisolviOCreaClienteAsync(strutturaId, capofila, cancellationToken);
 
         if (!ricevuta && request.TipoDocumento == TipoDocumentoFattura.TD04_NotaDiCredito)
         {

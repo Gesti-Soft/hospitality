@@ -320,6 +320,7 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
         impostaSoggiorno: impostaSoggiorno.trim() === '' ? null : Number(impostaSoggiorno),
         modalitaPagamento: pagamento,
         tipoEmissione,
+        datiClienteId: datiClienteId === '' ? null : datiClienteId,
       }
       crea.mutate(request, { onSuccess: onClose, onError })
     }
@@ -359,7 +360,13 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
               disabled={inCorso}
               noOptionsText="Nessuna prenotazione disponibile"
               renderInput={(params) => (
-                <TextField {...params} label="Prenotazione di chi paga" required placeholder="Cerca per numero o ospite..." helperText="Il documento è intestato a questo ospite." />
+                <TextField
+                  {...params}
+                  label="Prenotazione di chi paga"
+                  required
+                  placeholder="Cerca per numero o ospite..."
+                  helperText={datiClienteId === '' ? 'Il documento è intestato a questo ospite, salvo un cliente scelto in "Intestata a".' : undefined}
+                />
               )}
             />
           )}
@@ -385,7 +392,25 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
           {!daRighe && prenotazioneId !== '' && risolviCliente.isPending && (
             <Box sx={{ fontSize: 12, color: 'text.secondary' }}>Verifico il cliente fatturabile collegato a questo ospite...</Box>
           )}
-          {!daRighe && risolviCliente.data && risolviCliente.variables === prenotazioneId && (
+          {/* Chi paga non è sempre l'ospite: per gli operai in trasferta la fattura va alla ditta. */}
+          {!daRighe && clienti.length > 0 && (
+            <TextField
+              select
+              label="Intestata a"
+              value={datiClienteId}
+              onChange={(e) => setDatiClienteId(e.target.value)}
+              disabled={inCorso}
+              helperText="Una ditta o un altro cliente dell'anagrafica (scheda Clienti). Lascia l'ospite se paga lui."
+            >
+              <MenuItem value="">L'ospite della prenotazione</MenuItem>
+              {clienti.map((c) => (
+                <MenuItem key={c.id} value={c.id}>
+                  {c.denominazione || `${c.nome ?? ''} ${c.cognome ?? ''}`.trim()}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+          {!daRighe && datiClienteId === '' && risolviCliente.data && risolviCliente.variables === prenotazioneId && (
             <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
               Cliente:{' '}
               <b>
