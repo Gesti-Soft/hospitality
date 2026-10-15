@@ -20,6 +20,9 @@ deploy/.versione-installata
 # Report delle sessioni di lavoro: solo locale
 sessionreport.md
 
+# Documentazione: solo locale
+docs/
+
 # Backup DB (contengono dati reali dei clienti, mai da versionare)
 docker/postgres/dumps/
 docker/postgres/logs/
