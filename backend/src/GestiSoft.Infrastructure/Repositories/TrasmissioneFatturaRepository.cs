@@ -51,6 +51,29 @@ public class TrasmissioneFatturaRepository(GestiSoftDbContext db) : ITrasmission
         db.TrasmissioniFattura.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == trasmissioneId && t.StrutturaId == strutturaId, cancellationToken);
 
+    public async Task<IReadOnlyList<RicevutaSdi>> RicevuteByFatturaAsync(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken) =>
+        await db.RicevuteSdi.AsNoTracking()
+            .Where(r => r.StrutturaId == strutturaId
+                && db.TrasmissioniFattura.Any(t => t.Id == r.TrasmissioneFatturaId && t.StrutturaId == strutturaId && t.DatiFatturaId == fatturaId))
+            .OrderBy(r => r.RicevutaAtUtc)
+            // Come per i file: i byte si leggono solo quando qualcuno scarica la ricevuta.
+            .Select(r => new RicevutaSdi
+            {
+                Id = r.Id,
+                StrutturaId = r.StrutturaId,
+                TrasmissioneFatturaId = r.TrasmissioneFatturaId,
+                Tipo = r.Tipo,
+                IdentificativoSdi = r.IdentificativoSdi,
+                NomeFile = r.NomeFile,
+                Prova = r.Prova,
+                RicevutaAtUtc = r.RicevutaAtUtc,
+            })
+            .ToListAsync(cancellationToken);
+
+    public Task<RicevutaSdi?> GetRicevutaAsync(Guid strutturaId, Guid ricevutaId, CancellationToken cancellationToken) =>
+        db.RicevuteSdi.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == ricevutaId && r.StrutturaId == strutturaId, cancellationToken);
+
     public async Task AddAsync(TrasmissioneFattura trasmissione, CancellationToken cancellationToken)
     {
         db.TrasmissioniFattura.Add(trasmissione);

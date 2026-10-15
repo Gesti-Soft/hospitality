@@ -11,6 +11,7 @@ public record StatoCanaleSdi(
     string? CodiceDestinatario,
     string? CodiceFiscaleTrasmittente,
     bool Collaudo,
+    bool CollaudoApplicaEsiti,
     IReadOnlyList<FileRicevutoSdi> Quarantena,
     IReadOnlyList<RicevutaSdi> RicevuteNonAbbinate,
     IReadOnlyList<FileRicevutoSdi> RicezioniDiCollaudo);
@@ -36,6 +37,7 @@ public class CanaleSdiAdminService(
             canale.CodiceDestinatario,
             canale.CodiceFiscaleTrasmittente,
             canale.Collaudo,
+            canale.CollaudoApplicaEsiti,
             await repository.FileInQuarantenaAsync(cancellationToken),
             await repository.RicevuteNonAbbinateAsync(MassimoElenco, cancellationToken),
             await repository.FileDiCollaudoAsync(MassimoElenco, cancellationToken));

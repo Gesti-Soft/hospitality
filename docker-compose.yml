@@ -107,6 +107,8 @@ services:
       # Solo per il pannello "Canale SdI" del Super Admin: collaudo o produzione, e il codice destinatario.
       Sdi__Endpoint: ${SDI_ENDPOINT:-https://testservizi.fatturapa.it/ricevi_file}
       Sdi__CodiceDestinatario: ${SDI_CODICE_DESTINATARIO:-}
+      # Solo per il pannello: dice se nell'ambiente di test gli esiti del collaudo cambiano le fatture.
+      Sdi__CollaudoApplicaEsiti: ${SDI_COLLAUDO_APPLICA_ESITI:-false}
     volumes:
       - gestisoft_allegati:/var/lib/gestisoft/allegati
     ports:
@@ -214,6 +216,9 @@ services:
       Sdi__ProgressivoIniziale: ${SDI_PROGRESSIVO_INIZIALE:-1000}
       # Collaudo finché contiene "testservizi.": le fatture spedite non risultano inviate.
       Sdi__Endpoint: ${SDI_ENDPOINT:-https://testservizi.fatturapa.it/ricevi_file}
+      # SOLO ambiente di test (fatture finte): in collaudo le fatture cambiano stato come in produzione.
+      # Mai sul server di produzione: farebbe sembrare inviate fatture vere mai emesse.
+      Sdi__CollaudoApplicaEsiti: ${SDI_COLLAUDO_APPLICA_ESITI:-false}
       Sdi__KeystorePath: /etc/sdi/certs/sdi-client.p12
       Sdi__KeystorePassword: ${SDI_KEYSTORE_PASSWORD:-}
       Sdi__TruststorePath: /etc/sdi/certs/ca-agenzia.pem

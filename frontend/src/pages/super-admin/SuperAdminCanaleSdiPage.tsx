@@ -68,13 +68,18 @@ export function SuperAdminCanaleSdiPage() {
         <>
           <Riquadro titolo="Canale">
             {dati.collaudo && <Alert severity="warning">Il canale spedisce allo SdI di collaudo: le fatture inviate non hanno valore fiscale.</Alert>}
+            {dati.collaudoApplicaEsiti && (
+              <Alert severity="error">
+                Ambiente di test: gli esiti del collaudo cambiano lo stato delle fatture, come in produzione. Mai attivo sul server di produzione.
+              </Alert>
+            )}
             <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 3, rowGap: 1, fontSize: 13.5 }}>
               <Box sx={{ color: tokens.textSecondary }}>Codice destinatario</Box>
               <Box sx={{ fontFamily: fontMono, fontWeight: 700 }}>{dati.codiceDestinatario ?? 'Non ancora assegnato'}</Box>
               <Box sx={{ color: tokens.textSecondary }}>Trasmittente</Box>
               <Box sx={{ fontFamily: fontMono }}>{dati.codiceFiscaleTrasmittente ?? 'Non configurato'}</Box>
               <Box sx={{ color: tokens.textSecondary }}>Ambiente</Box>
-              <Box>{dati.collaudo ? 'Collaudo' : 'Produzione'}</Box>
+              <Box>{dati.collaudo ? (dati.collaudoApplicaEsiti ? 'Collaudo, esiti applicati alle fatture' : 'Collaudo') : 'Produzione'}</Box>
             </Box>
             <Typography sx={{ fontSize: 12.5, color: tokens.textTertiary }}>
               Il codice destinatario è quello che i Clienti comunicano ai fornitori per ricevere le fatture nel gestionale.

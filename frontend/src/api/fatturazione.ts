@@ -544,6 +544,16 @@ export interface TrasmissioneFatturaDto {
   /** Per uno scarto: codici e descrizioni degli errori, separati da "; ". */
   nota: string | null
   inviataDa: string | null
+  /** I messaggi dello SdI su questo file, dal più vecchio. */
+  ricevute: RicevutaSdiFatturaDto[]
+}
+
+/** Un messaggio dello SdI su un file (consegna, scarto…). tipo: valori di ETICHETTA_TIPO_RICEVUTA_SDI. */
+export interface RicevutaSdiFatturaDto {
+  id: string
+  tipo: number
+  nomeFile: string | null
+  ricevutaAtUtc: string
 }
 
 export function useTrasmissioniFattura(strutturaId: string | null, fatturaId: string | null) {
@@ -557,6 +567,15 @@ export function useTrasmissioniFattura(strutturaId: string | null, fatturaId: st
 /** Il file esattamente com'era: per quelli spediti, il file partito, non uno rigenerato. */
 export function scaricaXmlTrasmissione(strutturaId: string, fatturaId: string, t: Pick<TrasmissioneFatturaDto, 'id' | 'nomeFile'>) {
   return apiScaricaFile(`/strutture/${strutturaId}/fatture/${fatturaId}/trasmissioni/${t.id}/xml`, t.nomeFile, true)
+}
+
+/** La ricevuta dello SdI com'è arrivata, firmata. */
+export function scaricaRicevutaSdi(strutturaId: string, fatturaId: string, trasmissioneId: string, r: RicevutaSdiFatturaDto) {
+  return apiScaricaFile(
+    `/strutture/${strutturaId}/fatture/${fatturaId}/trasmissioni/${trasmissioneId}/ricevute/${r.id}`,
+    r.nomeFile ?? 'ricevuta-sdi.xml',
+    true,
+  )
 }
 
 export interface EsitoInvioSdiDto {

@@ -21,6 +21,7 @@ public class CanaleSdiController(CanaleSdiAdminService service, ICurrentUser cur
             stato.CodiceDestinatario,
             stato.CodiceFiscaleTrasmittente,
             stato.Collaudo,
+            stato.CollaudoApplicaEsiti,
             stato.Quarantena.Select(ToDto).ToList(),
             stato.RicevuteNonAbbinate.Select(r => new RicevutaSdiDto(r.Id, r.Tipo, r.IdentificativoSdi, r.NomeFileFattura, r.Prova, r.Descrizione, r.RicevutaAtUtc)).ToList(),
             stato.RicezioniDiCollaudo.Select(ToDto).ToList()));

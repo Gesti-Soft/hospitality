@@ -20,6 +20,7 @@ public class SdiInvioTests
     private readonly FatturaFinta fatture = new();
     private readonly TrasmissioniFinte trasmissioni = new();
     private readonly ClientFinto client = new();
+    private readonly CanaleFinto canale = new();
     private readonly Struttura struttura;
     private readonly ImpostazioniStruttura impostazioni;
     private readonly DatiFattura fattura;
@@ -49,7 +50,7 @@ public class SdiInvioTests
     {
         var strutture = new StruttureFinte(struttura);
         var fileSdi = new FileSdiService(fatture, fatture, new AziendaFinta(strutturaId), trasmissioni, new FatturaDocumentGenerator(), new CanaleFinto());
-        return new SdiInvioService(fatture, strutture, new ImpostazioniFinte(impostazioni), new ConcessioneServiziGuard(strutture), fileSdi, trasmissioni, client, new LogFinto());
+        return new SdiInvioService(fatture, strutture, new ImpostazioniFinte(impostazioni), new ConcessioneServiziGuard(strutture), fileSdi, trasmissioni, client, canale, new LogFinto());
     }
 
     private Task<EsitoInvioSdi> Invia() => Servizio().InviaAsync(strutturaId, fattura.Id, "operatore@test.it", CancellationToken.None);
@@ -78,6 +79,21 @@ public class SdiInvioTests
         Assert.True(esito.Prova);
         Assert.Equal(StatoSdiFattura.DaInviare, fattura.StatoSdi);
         Assert.Null(fattura.IdentificativoSdi);
+        Assert.True(trasmissioni.Elenco.Single().Prova);
+    }
+
+    /// <summary>Ambiente di test con gli esiti applicati: in collaudo la fattura fa il giro di produzione.</summary>
+    [Fact]
+    public async Task InCollaudo_ConEsitiApplicati_LaFatturaDiventaInviata()
+    {
+        client.Prova = true;
+        canale.CollaudoApplicaEsiti = true;
+
+        var esito = await Invia();
+
+        Assert.False(esito.Prova);
+        Assert.Equal(StatoSdiFattura.Inviata, fattura.StatoSdi);
+        Assert.NotNull(fattura.IdentificativoSdi);
         Assert.True(trasmissioni.Elenco.Single().Prova);
     }
 
@@ -187,6 +203,7 @@ public class SdiInvioTests
         public int ProgressivoIniziale => 1000;
         public string? CodiceDestinatario => null;
         public bool Collaudo => true;
+        public bool CollaudoApplicaEsiti { get; set; }
     }
 
     private sealed class ClientFinto : ISdiTrasmissioneClient
@@ -224,6 +241,9 @@ public class SdiInvioTests
 
         public Task<TrasmissioneFattura?> GetAsync(Guid strutturaId, Guid trasmissioneId, CancellationToken cancellationToken) =>
             Task.FromResult(Elenco.FirstOrDefault(t => t.Id == trasmissioneId));
+
+        public Task<IReadOnlyList<RicevutaSdi>> RicevuteByFatturaAsync(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<RicevutaSdi?> GetRicevutaAsync(Guid strutturaId, Guid ricevutaId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task AddAsync(TrasmissioneFattura trasmissione, CancellationToken cancellationToken)
         {

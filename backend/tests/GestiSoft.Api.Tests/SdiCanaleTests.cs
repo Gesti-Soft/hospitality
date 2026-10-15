@@ -79,6 +79,7 @@ public class SdiCanaleTests
         public readonly SdiFinto Sdi = new();
         public readonly FattureFinte Fatture = new();
         public readonly NotificheFinte Notifiche = new();
+        public readonly CanaleFinto Canale = new();
         public readonly DatiFattura Fattura;
         public readonly TrasmissioneFattura Trasmissione;
 
@@ -94,7 +95,7 @@ public class SdiCanaleTests
             Sdi.Trasmissioni.Add(Trasmissione);
         }
 
-        public SdiRicevuteService Servizio() => new(Sdi, Fatture, new StruttureFinte(), new NotificaService(Notifiche, null!, null!, null!, null!, null!), new LogFinto());
+        public SdiRicevuteService Servizio() => new(Sdi, Fatture, new StruttureFinte(), new NotificaService(Notifiche, null!, null!, null!, null!, null!), new LogFinto(), Canale);
     }
 
     [Fact]
@@ -146,6 +147,32 @@ public class SdiCanaleTests
         Assert.Equal(StatoSdiFattura.DaInviare, s.Fattura.StatoSdi);
         Assert.Equal(EsitoTrasmissioneSdi.Consegnato, s.Trasmissione.Esito);
         Assert.True(Assert.Single(s.Sdi.Ricevute).Prova);
+        Assert.Empty(s.Notifiche.Elenco);
+    }
+
+    /// <summary>Ambiente di test con gli esiti applicati: la ricevuta di collaudo fa il giro di produzione.</summary>
+    [Fact]
+    public async Task RicevutaDiCollaudo_ConEsitiApplicati_LaFatturaDiventaConsegnata()
+    {
+        var s = new Scenario(trasmissioneDiProva: true);
+        s.Canale.CollaudoApplicaEsiti = true;
+
+        await s.Servizio().ImportaAsync("x_RC_001.xml", "111", Esempio("RC"), prova: true, CancellationToken.None);
+
+        Assert.Equal(StatoSdiFattura.Consegnata, s.Fattura.StatoSdi);
+        Assert.Single(s.Notifiche.Elenco);
+    }
+
+    /// <summary>Anche con gli esiti applicati, collaudo e produzione non si mescolano.</summary>
+    [Fact]
+    public async Task RicevutaDiCollaudo_SuUnFileDiProduzione_NonToccaLaFattura()
+    {
+        var s = new Scenario();
+        s.Canale.CollaudoApplicaEsiti = true;
+
+        await s.Servizio().ImportaAsync("x_RC_001.xml", "111", Esempio("RC"), prova: true, CancellationToken.None);
+
+        Assert.Equal(StatoSdiFattura.Inviata, s.Fattura.StatoSdi);
         Assert.Empty(s.Notifiche.Elenco);
     }
 
@@ -605,6 +632,7 @@ public class SdiCanaleTests
         public int ProgressivoIniziale => 1000;
         public string? CodiceDestinatario => null;
         public bool Collaudo => true;
+        public bool CollaudoApplicaEsiti { get; set; }
     }
 
     private sealed class AdminFinto(SdiFinto sdi) : ICanaleSdiAdminRepository

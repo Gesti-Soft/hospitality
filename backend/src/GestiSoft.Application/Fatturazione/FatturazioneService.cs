@@ -550,6 +550,30 @@ public class FatturazioneService(
             : throw new NotFoundException("File non trovato.");
     }
 
+    /// <summary>Le ricevute dello SdI sui file della fattura, senza i byte: per mostrarle accanto a ogni file.</summary>
+    public async Task<IReadOnlyList<RicevutaSdi>> RicevuteSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+        await GetOwnedAsync(strutturaId, fatturaId, cancellationToken);
+        return await trasmissioni.RicevuteByFatturaAsync(strutturaId, fatturaId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Una ricevuta dello SdI esattamente com'è arrivata, firmata: per la consegna è la prova della data
+    /// in cui la fattura è arrivata al cliente. Solo se è davvero di un file di questa fattura.
+    /// </summary>
+    public async Task<FileXmlFattura> FileRicevutaSdiAsync(ICurrentUser currentUser, Guid strutturaId, Guid fatturaId, Guid trasmissioneId, Guid ricevutaId, CancellationToken cancellationToken)
+    {
+        await permessoGuard.EnsureAsync(currentUser, strutturaId, p => p.FinanceRead, cancellationToken);
+        var trasmissione = await trasmissioni.GetAsync(strutturaId, trasmissioneId, cancellationToken);
+        var ricevuta = trasmissione is not null && trasmissione.DatiFatturaId == fatturaId
+            ? await trasmissioni.GetRicevutaAsync(strutturaId, ricevutaId, cancellationToken)
+            : null;
+        return ricevuta is not null && ricevuta.TrasmissioneFatturaId == trasmissioneId
+            ? new FileXmlFattura(ricevuta.NomeFile ?? $"ricevuta-{ricevuta.IdentificativoSdi ?? ricevuta.Id.ToString()}.xml", ricevuta.Xml)
+            : throw new NotFoundException("Ricevuta non trovata.");
+    }
+
     /// <summary>
     /// Spedisce la fattura allo SdI dal canale, su richiesta dell'operatore. Qui si controlla chi la
     /// chiede; il servizio SdI ricontrolla concessione, interruttore e stato, spedisce e aggiorna la fattura.

@@ -53,7 +53,11 @@ public record TrasmissioneFatturaDto(
     DateTime? InviataAtUtc,
     DateTime? EsitoAtUtc,
     string? Nota,
-    string? InviataDa);
+    string? InviataDa,
+    IReadOnlyList<RicevutaSdiFatturaDto> Ricevute);
+
+/// <summary>Un messaggio dello SdI su un file della fattura (consegna, scarto…), senza i suoi byte.</summary>
+public record RicevutaSdiFatturaDto(Guid Id, TipoRicevutaSdi Tipo, string? NomeFile, DateTime RicevutaAtUtc);
 
 /// <summary>Una riga del documento, o una riga proposta dalla prenotazione (Numero 0 finché non è salvata).</summary>
 public record RigaFatturaDto(

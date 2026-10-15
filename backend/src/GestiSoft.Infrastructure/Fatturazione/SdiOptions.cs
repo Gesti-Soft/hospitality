@@ -24,6 +24,13 @@ public class SdiOptions
     public string Endpoint { get; set; } = "https://testservizi.fatturapa.it/ricevi_file";
 
     /// <summary>
+    /// SOLO per l'ambiente di test, con dati finti: in collaudo invio e ricevute cambiano lo stato delle
+    /// fatture come in produzione, per provare il giro completo. Sul server di produzione resta spento:
+    /// acceso lì, prima del passaggio in produzione, farebbe sembrare inviate fatture vere mai emesse.
+    /// </summary>
+    public bool CollaudoApplicaEsiti { get; set; }
+
+    /// <summary>
     /// Codice destinatario (7 caratteri) che lo SdI assegna al canale quando lo si accredita in
     /// ricezione: i Clienti lo danno ai fornitori per ricevere le fatture qui. Vuoto finché non c'è.
     /// </summary>
@@ -65,4 +72,6 @@ public class ConfigurazioneCanaleSdi(IOptions<SdiOptions> options) : IConfiguraz
 
     public bool Collaudo =>
         !Uri.TryCreate(options.Value.Endpoint, UriKind.Absolute, out var endpoint) || endpoint.Host.StartsWith("testservizi.", StringComparison.OrdinalIgnoreCase);
+
+    public bool CollaudoApplicaEsiti => Collaudo && options.Value.CollaudoApplicaEsiti;
 }

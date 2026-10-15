@@ -125,8 +125,10 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
     public async Task<IActionResult> Trasmissioni(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken)
     {
         var elenco = await service.TrasmissioniAsync(currentUser, strutturaId, fatturaId, cancellationToken);
+        var ricevute = (await service.RicevuteSdiAsync(currentUser, strutturaId, fatturaId, cancellationToken)).ToLookup(r => r.TrasmissioneFatturaId);
         return Ok(elenco.Select(t => new TrasmissioneFatturaDto(
-            t.Id, t.NomeFile, t.ViaCanale, t.Prova, t.Esito, t.IdentificativoSdi, t.CreatedAtUtc, t.InviataAtUtc, t.EsitoAtUtc, t.Nota, t.InviataDa)));
+            t.Id, t.NomeFile, t.ViaCanale, t.Prova, t.Esito, t.IdentificativoSdi, t.CreatedAtUtc, t.InviataAtUtc, t.EsitoAtUtc, t.Nota, t.InviataDa,
+            ricevute[t.Id].Select(r => new RicevutaSdiFatturaDto(r.Id, r.Tipo, r.NomeFile, r.RicevutaAtUtc)).ToList())));
     }
 
     /// <summary>Un file già generato, esattamente com'era: per quelli spediti, il file partito.</summary>
@@ -134,6 +136,14 @@ public class FatturazioneController(FatturazioneService service, ICurrentUser cu
     public async Task<IActionResult> XmlTrasmissione(Guid strutturaId, Guid fatturaId, Guid trasmissioneId, CancellationToken cancellationToken)
     {
         var file = await service.FileTrasmissioneAsync(currentUser, strutturaId, fatturaId, trasmissioneId, cancellationToken);
+        return File(file.Contenuto, "application/xml", file.NomeFile);
+    }
+
+    /// <summary>Una ricevuta dello SdI su quel file, firmata, esattamente com'è arrivata.</summary>
+    [HttpGet("{fatturaId:guid}/trasmissioni/{trasmissioneId:guid}/ricevute/{ricevutaId:guid}")]
+    public async Task<IActionResult> RicevutaSdi(Guid strutturaId, Guid fatturaId, Guid trasmissioneId, Guid ricevutaId, CancellationToken cancellationToken)
+    {
+        var file = await service.FileRicevutaSdiAsync(currentUser, strutturaId, fatturaId, trasmissioneId, ricevutaId, cancellationToken);
         return File(file.Contenuto, "application/xml", file.NomeFile);
     }
 

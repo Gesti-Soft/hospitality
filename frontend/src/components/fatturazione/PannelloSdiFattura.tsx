@@ -18,6 +18,7 @@ import {
   ESITO_TRASMISSIONE,
   EsitoTrasmissioneSdi,
   nomeDocumento,
+  scaricaRicevutaSdi,
   scaricaXmlTrasmissione,
   STATO_SDI,
   StatoSdiFattura,
@@ -25,8 +26,10 @@ import {
   useInviaSdi,
   useTrasmissioniFattura,
   type DatiFatturaDto,
+  type RicevutaSdiFatturaDto,
   type TrasmissioneFatturaDto,
 } from '../../api/fatturazione'
+import { ETICHETTA_TIPO_RICEVUTA_SDI } from '../../api/superAdmin'
 import { fontDisplay, fontMono, stileImporto, tokens } from '../../theme'
 import { useToast } from '../../toast/ToastContext'
 import { useMobile } from '../../lib/useMobile'
@@ -236,6 +239,14 @@ function RigaTrasmissione({ strutturaId, fatturaId, trasmissione: t }: { struttu
     }
   }
 
+  async function scaricaRicevuta(r: RicevutaSdiFatturaDto) {
+    try {
+      await scaricaRicevutaSdi(strutturaId, fatturaId, t.id, r)
+    } catch (err) {
+      toast.errore(err instanceof ApiError ? err.message : 'Download non riuscito, riprova.')
+    }
+  }
+
   return (
     <Box
       sx={{
@@ -269,6 +280,19 @@ function RigaTrasmissione({ strutturaId, fatturaId, trasmissione: t }: { struttu
           .join(' · ')}
       </Typography>
       {t.nota && <Typography sx={{ fontSize: 12.5 }}>{t.nota}</Typography>}
+      {t.ricevute.map((r) => (
+        <Box key={r.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, borderTop: `1px solid ${tokens.surfaceBorder}`, pt: 0.5 }}>
+          <Typography sx={{ fontSize: 12.5, flex: 1, minWidth: 0 }}>
+            {ETICHETTA_TIPO_RICEVUTA_SDI[r.tipo] ?? 'Messaggio SdI'}
+            <Box component="span" sx={{ color: tokens.textSecondary }}>{` · ${dataOra(r.ricevutaAtUtc)}`}</Box>
+          </Typography>
+          <Tooltip title="Scarica la ricevuta">
+            <IconButton size="small" onClick={() => scaricaRicevuta(r)}>
+              <DownloadIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ))}
     </Box>
   )
 }

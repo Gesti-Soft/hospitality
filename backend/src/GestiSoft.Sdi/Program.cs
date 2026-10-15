@@ -37,6 +37,11 @@ if (string.IsNullOrWhiteSpace(opzioni.ClientVerifiedHeader))
     log.LogWarning("Sdi:ClientVerifiedHeader vuoto: il controllo del certificato dello SdI è SPENTO. Ammesso solo in sviluppo.");
 }
 
+if (app.Services.GetRequiredService<IConfigurazioneCanaleSdi>().CollaudoApplicaEsiti)
+{
+    log.LogWarning("Sdi:CollaudoApplicaEsiti acceso: gli invii allo SdI di COLLAUDO cambiano lo stato delle fatture. Ammesso solo nell'ambiente di test, MAI in produzione.");
+}
+
 // Log di accesso dei servizi SdI: quando qualcosa non va, il portale dice solo "Err: NULL". Senza
 // questa riga, distinguere "non è arrivata" da "è arrivata e ho risposto male" richiede un pomeriggio.
 app.Use(async (context, next) =>

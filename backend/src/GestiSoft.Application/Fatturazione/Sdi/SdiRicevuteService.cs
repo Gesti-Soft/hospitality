@@ -17,7 +17,8 @@ public class SdiRicevuteService(
     IDatiFatturaRepository fatture,
     IStrutturaRepository strutture,
     NotificaService notifiche,
-    ILogEventoService logEventi)
+    ILogEventoService logEventi,
+    IConfigurazioneCanaleSdi canale)
 {
     /// <param name="nomeFileBusta">Il NomeFile della chiamata SOAP (il file della ricevuta).</param>
     /// <param name="prova">Arrivata sull'endpoint di collaudo: si conserva e si mostra, non si applica.</param>
@@ -94,7 +95,10 @@ public class SdiRicevuteService(
         }
 
         var fattura = await fatture.GetAsync(trasmissione.DatiFatturaId, cancellationToken);
-        var applicabile = !prova && !trasmissione.Prova && fattura is not null && esito is not null && !doppioneDiUnConsegnato
+        // Collaudo e produzione non si mescolano mai: una ricevuta si applica solo a un file dello
+        // stesso ambiente. Quelle di collaudo, solo nell'ambiente di test che lo chiede.
+        var applicabile = prova == trasmissione.Prova && (!prova || canale.CollaudoApplicaEsiti)
+            && fattura is not null && esito is not null && !doppioneDiUnConsegnato
             // Una ricevuta in ritardo su un file vecchio (scartato e poi rifatto) non riscrive lo stato
             // dell'invio più recente: si aggancia allo storico e basta.
             && (fattura.IdentificativoSdi is null || fattura.IdentificativoSdi == trasmissione.IdentificativoSdi);

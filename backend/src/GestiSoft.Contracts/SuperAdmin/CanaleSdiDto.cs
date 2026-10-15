@@ -9,6 +9,8 @@ public record CanaleSdiDto(
     string? CodiceFiscaleTrasmittente,
     /// <summary>Si spedisce allo SdI di collaudo: le fatture inviate non contano.</summary>
     bool Collaudo,
+    /// <summary>Ambiente di test: gli esiti del collaudo cambiano lo stato delle fatture, come in produzione.</summary>
+    bool CollaudoApplicaEsiti,
     IReadOnlyList<FileRicevutoSdiDto> Quarantena,
     IReadOnlyList<RicevutaSdiDto> RicevuteNonAbbinate,
     IReadOnlyList<FileRicevutoSdiDto> RicezioniDiCollaudo);

@@ -28,6 +28,12 @@ public interface IConfigurazioneCanaleSdi
 
     /// <summary>True se si spedisce allo SdI di collaudo: le fatture inviate da lì non contano.</summary>
     bool Collaudo { get; }
+
+    /// <summary>
+    /// In collaudo, invio e ricevute cambiano comunque lo stato delle fatture, come in produzione. Solo
+    /// per l'ambiente di test, dove le fatture sono finte: serve a provare il giro completo.
+    /// </summary>
+    bool CollaudoApplicaEsiti { get; }
 }
 
 /// <summary>I dati di DatiTrasmissione che dipendono da chi spedisce il file, non dalla fattura.</summary>
@@ -42,6 +48,11 @@ public interface ITrasmissioneFatturaRepository
     Task<IReadOnlyList<TrasmissioneFattura>> ListByFatturaAsync(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken);
 
     Task<TrasmissioneFattura?> GetAsync(Guid strutturaId, Guid trasmissioneId, CancellationToken cancellationToken);
+
+    /// <summary>Le ricevute dello SdI sui file della fattura, dalla più vecchia, senza i byte.</summary>
+    Task<IReadOnlyList<RicevutaSdi>> RicevuteByFatturaAsync(Guid strutturaId, Guid fatturaId, CancellationToken cancellationToken);
+
+    Task<RicevutaSdi?> GetRicevutaAsync(Guid strutturaId, Guid ricevutaId, CancellationToken cancellationToken);
 
     /// <summary>Fra queste, le fatture di cui qualcuno ha scaricato l'XML per caricarlo da sé sul portale.</summary>
     Task<IReadOnlySet<Guid>> FattureConXmlScaricatoAsync(Guid strutturaId, IReadOnlyCollection<Guid> fatturaIds, CancellationToken cancellationToken);

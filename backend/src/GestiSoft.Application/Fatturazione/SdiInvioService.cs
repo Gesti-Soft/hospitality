@@ -8,7 +8,7 @@ using GestiSoft.Domain.Enums;
 namespace GestiSoft.Application.Fatturazione;
 
 /// <summary>Com'è andata la spedizione di una fattura.</summary>
-/// <param name="Prova">Spedita allo SdI di collaudo: il giro è vero, la fattura resta da inviare.</param>
+/// <param name="Prova">Spedita allo SdI di collaudo e la fattura resta da inviare (non nell'ambiente di test che applica gli esiti).</param>
 public record EsitoInvioSdi(string NomeFile, string IdentificativoSdi, bool Prova);
 
 /// <summary>
@@ -25,6 +25,7 @@ public class SdiInvioService(
     FileSdiService fileSdi,
     ITrasmissioneFatturaRepository trasmissioni,
     ISdiTrasmissioneClient client,
+    IConfigurazioneCanaleSdi canale,
     ILogEventoService logEventi)
 {
     public async Task<EsitoInvioSdi> InviaAsync(Guid strutturaId, Guid fatturaId, string? operatore, CancellationToken cancellationToken)
@@ -84,7 +85,9 @@ public class SdiInvioService(
 
         // In collaudo il file è partito davvero, ma verso uno SdI dove non ha valore: segnare la
         // fattura come inviata la farebbe sembrare trasmessa quando non è arrivata da nessuna parte.
-        if (!file.Prova)
+        // Eccezione: l'ambiente di test, con fatture finte, dove si vuole provare il giro completo.
+        var restaDaInviare = file.Prova && !canale.CollaudoApplicaEsiti;
+        if (!restaDaInviare)
         {
             fattura.StatoSdi = StatoSdiFattura.Inviata;
             fattura.IdentificativoSdi = risposta.IdentificativoSdi;
@@ -97,14 +100,14 @@ public class SdiInvioService(
         await RegistraAsync(
             fattura,
             LivelloLog.Info,
-            file.Prova
+            restaDaInviare
                 ? $"{etichetta}: file {file.NomeFile} spedito allo SdI di COLLAUDO (identificativo {risposta.IdentificativoSdi}). La fattura resta da inviare."
-                : $"{etichetta} inviata allo SdI: file {file.NomeFile}, identificativo {risposta.IdentificativoSdi}.",
+                : $"{etichetta} inviata allo SdI{(file.Prova ? " di COLLAUDO (ambiente di test)" : "")}: file {file.NomeFile}, identificativo {risposta.IdentificativoSdi}.",
             null,
             operatore,
             cancellationToken);
 
-        return new EsitoInvioSdi(file.NomeFile, risposta.IdentificativoSdi!, file.Prova);
+        return new EsitoInvioSdi(file.NomeFile, risposta.IdentificativoSdi!, restaDaInviare);
     }
 
     /// <summary>

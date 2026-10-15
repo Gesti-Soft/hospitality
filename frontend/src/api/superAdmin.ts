@@ -253,6 +253,8 @@ export interface CanaleSdiDto {
   codiceFiscaleTrasmittente: string | null
   /** Si spedisce allo SdI di collaudo: le fatture inviate non contano. */
   collaudo: boolean
+  /** Ambiente di test: gli esiti del collaudo cambiano lo stato delle fatture, come in produzione. */
+  collaudoApplicaEsiti: boolean
   quarantena: FileRicevutoSdiDto[]
   ricevuteNonAbbinate: RicevutaSdiDto[]
   ricezioniDiCollaudo: FileRicevutoSdiDto[]
