@@ -283,8 +283,12 @@ function TabFatture({
     }
   }
 
-  /** Il pannello solo per le fatture collegate allo SdI: per le altre basta un messaggio. */
+  /**
+   * Il pannello solo con l'invio SdI attivo e per le fatture collegate allo SdI: per le altre basta un
+   * messaggio. Senza canale non c'è niente da inviare né ricevute da vedere, quindi non si apre.
+   */
   function apri(f: DatiFatturaDto) {
+    if (!canaleAttivo) return
     if (f.tipoEmissione === TipoEmissioneDocumento.Ricevuta) toast.info('Le ricevute di locazione breve non vanno allo SdI.')
     else if (f.statoSdi == null) toast.info("Fattura emessa prima dell'invio dal gestionale: non è collegata allo SdI.")
     else setSelezionataId(f.id)
@@ -396,7 +400,7 @@ function TabFatture({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {fattureFiltrate.length === 0 && <MessaggioVuotoElenco messaggio={messaggioVuoto} />}
           {fattureVisibili.map((f) => (
-            <CardElenco key={f.id} onClick={() => apri(f)}>
+            <CardElenco key={f.id} onClick={canaleAttivo ? () => apri(f) : undefined}>
               <TestataCardElenco
                 titolo={`${f.numeroDocumento}/${f.anno}${f.tipoDocumento === TipoDocumentoFattura.TD04_NotaDiCredito ? ' · nota di credito' : ''}`}
                 sottotitolo={f.clienteNome ?? undefined}
@@ -470,7 +474,7 @@ function TabFatture({
             <TableBody>
               {fattureFiltrate.length === 0 && <RigaVuota colSpan={7} messaggio={messaggioVuoto} />}
               {fattureVisibili.map((f) => (
-                <TableRow key={f.id} hover onClick={() => apri(f)} sx={{ cursor: 'pointer' }}>
+                <TableRow key={f.id} hover={canaleAttivo} onClick={() => apri(f)} sx={{ cursor: canaleAttivo ? 'pointer' : 'default' }}>
                   <TableCell sx={{ fontFamily: fontMono, fontWeight: 700 }}>
                     {f.numeroDocumento}/{f.anno}
                     {f.tipoDocumento === TipoDocumentoFattura.TD04_NotaDiCredito && (
