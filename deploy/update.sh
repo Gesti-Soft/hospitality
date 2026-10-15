@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aggiornamento della VPS di produzione: git pull + rebuild + restart. Le migrazioni EF si
+# Aggiornamento della VPS (produzione, o test nella sua cartella): git pull + rebuild + restart. Le migrazioni EF si
 # applicano da sole all'avvio dell'api (vedi Program.cs) — non serve più un passo manuale a parte.
 # Uso: ./deploy/update.sh (dalla root del repo, o da qualunque cartella)
 set -euo pipefail
@@ -9,6 +9,19 @@ cd "$REPO_ROOT"
 
 echo "=== git pull ==="
 git pull
+
+# Ambiente di test (ramo "test", cartella a sé, test.gestihotel.it): stesso script, ma lo stack deve
+# partire con l'override di test, letto da COMPOSE_FILE nel .env (vedi docker-compose.test.env.example).
+# Senza, partirebbero worker-schedine e worker: invii veri alle PA e prenotazioni OTA sottratte alla
+# produzione. Si controlla dopo il pull, che può aver cambiato ramo.
+if [[ "$(git rev-parse --abbrev-ref HEAD)" == "test" ]]; then
+  if ! grep -Eq '^COMPOSE_FILE=.*docker-compose\.test\.yml' "$REPO_ROOT/.env" 2>/dev/null \
+     || ! grep -Eq '^COMPOSE_PROJECT_NAME=.+' "$REPO_ROOT/.env" 2>/dev/null; then
+    echo "ERRORE: ramo test senza COMPOSE_FILE/COMPOSE_PROJECT_NAME di test nel .env (vedi docker-compose.test.env.example). Nessun container toccato." >&2
+    exit 1
+  fi
+  echo "=== ambiente di TEST ==="
+fi
 
 # Versione installata, "MAGGIORE.MINORE": la maggiore sta nel file VERSIONE del repo e si cambia a
 # mano per gli aggiornamenti strutturali importanti (2 → 3); la minore la conta questo script, +1 a

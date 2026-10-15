@@ -1,0 +1,42 @@
+# Override dell'ambiente di test (test.gestihotel.it): seconda copia dello stack sulla stessa VPS
+# della produzione, in una cartella a sé. Si attiva dal .env della cartella di test, senza toccare
+# la produzione (vedi docker-compose.test.env.example):
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml
+#   COMPOSE_PROJECT_NAME=gestisoft-test
+# Il nome del progetto separa volumi e rete da quelli di produzione; i nomi dei container, scritti
+# fissi nel file base, vanno cambiati qui perché due container con lo stesso nome non possono esistere.
+services:
+  postgres:
+    container_name: gestisoft-test-postgres
+    mem_limit: 1g
+    cpus: 1.0
+    # Niente archiviazione dei WAL: in test non c'è la stanza pgBackRest, l'archive_command
+    # fallirebbe di continuo e i WAL si accumulerebbero sul disco condiviso della VPS.
+    command: ["postgres"]
+
+  api:
+    container_name: gestisoft-test-api
+    mem_limit: 768m
+    cpus: 1.0
+
+  # Job OTA, notifiche e pulizie: spento di default. Il polling OTA via gestisoft.it consuma le
+  # prenotazioni (iread): un test che le legge le toglie alla produzione. Si accende con
+  # COMPOSE_PROFILES=worker solo su un database senza integrazioni OTA configurate.
+  worker:
+    container_name: gestisoft-test-worker
+    profiles: ["worker"]
+    mem_limit: 384m
+    cpus: 0.5
+
+  # Invii giornalieri a Questura, Osservatorio e PayTourist: irreversibili, mai da un ambiente di
+  # test. Il profilo non va acceso.
+  worker-schedine:
+    container_name: gestisoft-test-worker-schedine
+    profiles: ["mai-in-test"]
+
+  # Canale SdI: ce n'è uno solo, quello di produzione. Il profilo "sdi" non va acceso in test.
+  sdi:
+    container_name: gestisoft-test-sdi
+
+  frontend:
+    container_name: gestisoft-test-frontend
