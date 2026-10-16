@@ -41,4 +41,7 @@ public record PrenotazioneDto(
     // Richieste dell'ospite e altre indicazioni arrivate dall'OTA (vedi Prenotazione.NoteOta).
     string? NoteOta = null,
     // Arrivata dall'OTA (anche dal sito web, che passa di lì): si annulla solo dall'OTA.
-    bool DaOta = false);
+    bool DaOta = false,
+    // Commissione trattenuta dal portale e importo che versa: null se il portale non li comunica.
+    decimal? CommissioneOta = null,
+    decimal? ImportoRicevutoOta = null);

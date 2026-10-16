@@ -130,7 +130,23 @@ public class WubookPrenotazioniService(
     /// </summary>
     private async Task<EsitoBooking> ImportaBookingAsync(Guid strutturaId, WubookPrenotazione booking, string nomeCanale, CancellationToken cancellationToken)
     {
-        var camereOrdine = OrdineOta.Suddividi(booking);
+        // Airbnb manda il netto versato: la commissione si somma per avere il prezzo pagato dall'ospite.
+        var commissione = ImportiOta.Commissione(booking, nomeCanale);
+        var camereOrdine = OrdineOta.Suddividi(booking, commissione);
+        if (commissione is { } trattenuta && ImportiOta.LordoDaPrezzoBase(booking) is { } lordoAtteso && Math.Abs(booking.Importo + trattenuta - lordoAtteso) > 0.01m)
+        {
+            // Si tiene comunque importo + commissione (è la somma che fa il portale): l'avviso serve
+            // ad accorgersi se un giorno l'OTA cambia il significato dei campi.
+            await logEventi.RegistraAsync(
+                LivelloLog.Warning,
+                $"Prenotazione da {nomeCanale} (rcode={booking.RCode}): importo versato {booking.Importo:N2} € + commissione {trattenuta:N2} € non corrisponde al prezzo base più gli extra ({lordoAtteso:N2} €). Totale registrato: {booking.Importo + trattenuta:N2} €, da controllare sul portale.",
+                origine: "Wubook",
+                clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
+                strutturaId: strutturaId,
+                categoria: "Wubook",
+                cancellationToken: cancellationToken);
+        }
+
         var esistenti = await prenotazioni.ListByIdPrenotazioneWubookAsync(strutturaId, booking.RCode, cancellationToken);
 
         // Modifica dall'OTA: la vecchia arriva cancellata con was_modified = 1 e subito dopo arriva la
@@ -291,6 +307,9 @@ public class WubookPrenotazioniService(
         // Come l'annullamento a mano: i soldi già ricevuti restano, un eventuale rimborso si registra.
         esistente.ImportoPrenotazione = 0;
         esistente.ImportoTotale = 0;
+        // Commissione e versato del portale seguono il totale: senza soggiorno non restano.
+        esistente.CommissioneOta = null;
+        esistente.ImportoRicevutoOta = null;
         // L'imposta di soggiorno è dovuta per i pernottamenti: senza soggiorno non c'è.
         esistente.TotalTax = 0;
         esistente.UpdatedAtUtc = DateTime.UtcNow;
@@ -417,8 +436,13 @@ public class WubookPrenotazioniService(
         entity.Agenzia = nomeCanale;
         await AssicuraCanaleVenditaAsync(strutturaId, nomeCanale, cancellationToken);
         entity.NumeroPrenotazione = !string.IsNullOrWhiteSpace(booking.ChannelReservationCode) ? booking.ChannelReservationCode : booking.RCode.ToString();
-        entity.ImportoPrenotazione = camera.Importo;
-        entity.ImportoTotale = camera.Importo;
+        // Il totale è il prezzo pagato dall'ospite, quello da fatturare. Se il portale trattiene una
+        // commissione e la comunica (vedi ImportiOta), amount è il netto versato e si tiene a parte.
+        var prezzoOspite = camera.Importo + (camera.Commissione ?? 0);
+        entity.ImportoPrenotazione = prezzoOspite;
+        entity.ImportoTotale = prezzoOspite;
+        entity.CommissioneOta = camera.Commissione;
+        entity.ImportoRicevutoOta = camera.Commissione is null ? null : camera.Importo;
         entity.CheckIn = booking.CheckIn;
         entity.CheckOut = booking.CheckOut;
         entity.NumeroOspiti = camera.NumeroOspiti;
@@ -464,7 +488,7 @@ public class WubookPrenotazioniService(
             // non aveva più nessun modo di sapere quando e da dove fosse arrivata.
             await logEventi.RegistraAsync(
                 LivelloLog.Info,
-                $"Nuova prenotazione #{entity.NumeroPrenotazione}{dellOrdine} da {nomeCanale} (rcode={booking.RCode}): {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}, {entity.NumeroOspiti} ospiti, {camera.Importo:N2} €{(entity.Trattamento is { } trattamento ? $", {TrattamentiService.Nome(trattamento).ToLowerInvariant()}" : "")}.",
+                $"Nuova prenotazione #{entity.NumeroPrenotazione}{dellOrdine} da {nomeCanale} (rcode={booking.RCode}): {booking.CheckIn:dd/MM/yyyy}–{booking.CheckOut:dd/MM/yyyy}, {entity.NumeroOspiti} ospiti, {prezzoOspite:N2} €{(camera.Commissione is { } commissioneCamera ? $" (commissione {commissioneCamera:N2} €, versati {camera.Importo:N2} €)" : "")}{(entity.Trattamento is { } trattamento ? $", {TrattamentiService.Nome(trattamento).ToLowerInvariant()}" : "")}.",
                 origine: "Wubook",
                 clienteId: await strutture.GetClienteIdAsync(strutturaId, cancellationToken),
                 strutturaId: strutturaId,

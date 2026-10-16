@@ -1606,6 +1606,10 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("CheckOut")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("CommissioneOta")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1623,6 +1627,10 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<decimal?>("ImportoPrenotazione")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("ImportoRicevutoOta")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 

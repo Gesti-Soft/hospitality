@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
@@ -557,6 +557,13 @@ export function CalendarioPage() {
                     { etichetta: 'Check-in', valore: p.checkIn ? FORMATTATORE_LABEL.format(new Date(p.checkIn)) : '—' },
                     { etichetta: 'Check-out', valore: p.checkOut ? FORMATTATORE_LABEL.format(new Date(p.checkOut)) : '—' },
                     { etichetta: 'Importo totale', valore: p.importoTotale != null ? formattatoreValuta.format(p.importoTotale) : '—' },
+                    // Solo se il portale li comunica: per le prenotazioni dirette sarebbero sempre vuoti.
+                    ...(p.commissioneOta != null
+                      ? [
+                          { etichetta: 'Ricevuto', valore: p.importoRicevutoOta != null ? formattatoreValuta.format(p.importoRicevutoOta) : '—' },
+                          { etichetta: 'Commissioni', valore: <Box component="span" sx={{ color: tokens.error600 }}>− {formattatoreValuta.format(p.commissioneOta)}</Box> },
+                        ]
+                      : []),
                     { etichetta: 'Importo pagato', valore: p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : '—' },
                   ]}
                 />
@@ -578,14 +585,16 @@ export function CalendarioPage() {
                 <TableCell>Check-in</TableCell>
                 <TableCell>Check-out</TableCell>
                 <TableCell>Canale</TableCell>
-                <TableCell align="right">Importo totale</TableCell>
-                <TableCell align="right">Importo pagato</TableCell>
+                <TableCell align="right" sx={inizioImporti}>Importo totale</TableCell>
+                <TableCell align="right" sx={colonnaImporti}>Ricevuto</TableCell>
+                <TableCell align="right" sx={colonnaImporti}>Commissioni</TableCell>
+                <TableCell align="right" sx={colonnaImporti}>Importo pagato</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {prenotazioniLista.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
+                  <TableCell colSpan={11} sx={{ textAlign: 'center', color: tokens.textSecondary, py: 4 }}>
                     Nessuna prenotazione in questa vista.
                   </TableCell>
                 </TableRow>
@@ -603,12 +612,7 @@ export function CalendarioPage() {
                   <TableCell sx={{ fontFamily: fontMono }}>{p.checkIn ? FORMATTATORE_LABEL.format(new Date(p.checkIn)) : '—'}</TableCell>
                   <TableCell sx={{ fontFamily: fontMono }}>{p.checkOut ? FORMATTATORE_LABEL.format(new Date(p.checkOut)) : '—'}</TableCell>
                   <TableCell>{normalizzaAgenzia(p.agenzia)}</TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                    {p.importoTotale != null ? formattatoreValuta.format(p.importoTotale) : '—'}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontFamily: fontMono }}>
-                    {p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : '—'}
-                  </TableCell>
+                  <CelleImporti prenotazione={p} />
                 </TableRow>
               ))}
             </TableBody>
@@ -627,6 +631,61 @@ export function CalendarioPage() {
         />
       )}
     </Box>
+  )
+}
+
+/** Gli importi si leggono come un blocco a sé: un filo a sinistra e un fondo appena più scuro li separano dal resto della riga. */
+const inizioImporti = { borderLeft: `1px solid ${tokens.surfaceBorder}`, bgcolor: tokens.paper, whiteSpace: 'nowrap' } as const
+const colonnaImporti = { bgcolor: tokens.paper, whiteSpace: 'nowrap' } as const
+
+/** Seconda riga piccola sotto un importo: percentuale della commissione, stato del saldo. */
+function NotaImporto({ children, colore }: { children: ReactNode; colore: string }) {
+  return <Typography component="div" sx={{ fontSize: 11, fontWeight: 600, color: colore, mt: 0.25, fontFamily: 'inherit' }}>{children}</Typography>
+}
+
+/**
+ * Totale (pagato dall'ospite, da fatturare), ricevuto e commissione del portale, pagato. Ricevuto e
+ * commissioni ci sono solo se il portale li comunica (oggi Airbnb): altrimenti un trattino tenue,
+ * perché per una prenotazione diretta non è un dato mancante ma un dato che non esiste.
+ */
+function CelleImporti({ prenotazione: p }: { prenotazione: PrenotazioneDto }) {
+  const totale = p.importoTotale ?? 0
+  const pagato = p.importoPagato ?? 0
+  const daSaldare = Math.round((totale - pagato) * 100) / 100
+  const annullata = p.statoPrenotazione === StatoPrenotazione.Annullata
+  const vuoto = <Box component="span" sx={{ color: tokens.textTertiary }}>—</Box>
+
+  return (
+    <>
+      <TableCell align="right" sx={{ ...inizioImporti, fontFamily: fontMono, fontWeight: 700 }}>
+        {p.importoTotale != null ? formattatoreValuta.format(p.importoTotale) : vuoto}
+      </TableCell>
+      <TableCell align="right" sx={{ ...colonnaImporti, fontFamily: fontMono }}>
+        {p.importoRicevutoOta != null ? formattatoreValuta.format(p.importoRicevutoOta) : vuoto}
+      </TableCell>
+      <TableCell align="right" sx={{ ...colonnaImporti, fontFamily: fontMono }}>
+        {p.commissioneOta != null ? (
+          <>
+            <Box component="span" sx={{ color: tokens.error600 }}>− {formattatoreValuta.format(p.commissioneOta)}</Box>
+            {totale > 0 && <NotaImporto colore={tokens.textTertiary}>{((p.commissioneOta / totale) * 100).toLocaleString('it-IT', { maximumFractionDigits: 1 })}% del totale</NotaImporto>}
+          </>
+        ) : (
+          vuoto
+        )}
+      </TableCell>
+      <TableCell align="right" sx={{ ...colonnaImporti, fontFamily: fontMono }}>
+        {p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : vuoto}
+        {!annullata && totale > 0 &&
+          (daSaldare <= 0 ? (
+            <NotaImporto colore={tokens.ok600}>Saldato</NotaImporto>
+          ) : p.commissioneOta != null ? (
+            // L'ospite ha pagato il portale: a te arriva il versamento, non un saldo da chiedere.
+            <NotaImporto colore={tokens.textTertiary}>Incassa il portale</NotaImporto>
+          ) : (
+            <NotaImporto colore={tokens.wait600}>Da saldare {formattatoreValuta.format(daSaldare)}</NotaImporto>
+          ))}
+      </TableCell>
+    </>
   )
 }
 

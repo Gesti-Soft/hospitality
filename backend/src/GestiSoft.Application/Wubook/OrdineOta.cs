@@ -1,7 +1,11 @@
 namespace GestiSoft.Application.Wubook;
 
-/// <summary>Una camera di un ordine OTA, già con la sua parte di importo e di ospiti.</summary>
-public record CameraOrdineRisolta(int Indice, int IdCameraWubook, decimal Importo, int NumeroOspiti);
+/// <summary>
+/// Una camera di un ordine OTA, già con la sua parte di importo e di ospiti. Importo è `amount`, cioè
+/// quello che versa il portale; Commissione la sua parte della commissione, se il portale la manda
+/// (vedi ImportiOta): il prezzo pagato dall'ospite è la somma dei due.
+/// </summary>
+public record CameraOrdineRisolta(int Indice, int IdCameraWubook, decimal Importo, int NumeroOspiti, decimal? Commissione = null);
 
 /// <summary>
 /// Divide un ordine OTA in una prenotazione per camera. Un ordine con più camere (due famiglie, o
@@ -11,11 +15,11 @@ public record CameraOrdineRisolta(int Indice, int IdCameraWubook, decimal Import
 /// L'importo è quello dell'ordine intero: si divide in proporzione ai prezzi per notte di ogni camera
 /// (`booked_rooms`), in parti uguali se mancano; i centesimi di resto vanno alla prima camera, così la
 /// somma torna sempre uguale all'ordine. Gli ospiti vengono da `rooms_occupancies`; se mancano si
-/// dividono in parti uguali, almeno uno per camera.
+/// dividono in parti uguali, almeno uno per camera. La commissione, se c'è, si divide con gli stessi pesi.
 /// </summary>
 public static class OrdineOta
 {
-    public static IReadOnlyList<CameraOrdineRisolta> Suddividi(WubookPrenotazione booking)
+    public static IReadOnlyList<CameraOrdineRisolta> Suddividi(WubookPrenotazione booking, decimal? commissione = null)
     {
         var camere = booking.Camere is { Count: > 0 } lette
             ? lette
@@ -29,13 +33,15 @@ public static class OrdineOta
         // Una camera sola: come sempre, tutto l'ordine è suo.
         if (camere.Count == 1)
         {
-            return [new CameraOrdineRisolta(0, camere[0].IdCameraWubook, booking.Importo, booking.Adulti + booking.Bambini)];
+            return [new CameraOrdineRisolta(0, camere[0].IdCameraWubook, booking.Importo, booking.Adulti + booking.Bambini, commissione)];
         }
 
-        var importi = DividiImporto(booking.Importo, camere.Select(c => c.PrezzoNotti).ToList());
+        var pesi = camere.Select(c => c.PrezzoNotti).ToList();
+        var importi = DividiImporto(booking.Importo, pesi);
+        var commissioni = commissione is { } totaleCommissione ? DividiImporto(totaleCommissione, pesi) : null;
         var ospiti = DividiOspiti(Math.Max(booking.Adulti, 0) + Math.Max(booking.Bambini, 0), camere.Select(c => c.Occupazione).ToList());
 
-        return camere.Select((c, i) => new CameraOrdineRisolta(i, c.IdCameraWubook, importi[i], ospiti[i])).ToList();
+        return camere.Select((c, i) => new CameraOrdineRisolta(i, c.IdCameraWubook, importi[i], ospiti[i], commissioni?[i])).ToList();
     }
 
     /// <summary>Dal solo elenco `rooms` ("45052,45052"); vuoto se anche un solo id non è un numero.</summary>

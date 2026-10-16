@@ -14,6 +14,8 @@ public class PrenotazioneConfiguration : IEntityTypeConfiguration<Prenotazione>
         builder.Property(p => p.ImportoPrenotazione).HasPrecision(18, 2);
         builder.Property(p => p.ImportoPagato).HasPrecision(18, 2);
         builder.Property(p => p.ImportoTotale).HasPrecision(18, 2);
+        builder.Property(p => p.CommissioneOta).HasPrecision(18, 2);
+        builder.Property(p => p.ImportoRicevutoOta).HasPrecision(18, 2);
         builder.Property(p => p.TotalTax).HasPrecision(18, 2);
         builder.Property(p => p.TrattamentoPrezzoAdulto).HasPrecision(18, 2);
         builder.Property(p => p.TrattamentoPrezzoBambino).HasPrecision(18, 2);

@@ -84,6 +84,31 @@ public class OrdineOtaTests
     }
 
     [Fact]
+    public void ConCommissione_UnaCamera_TuttaSua()
+    {
+        var camera = Assert.Single(OrdineOta.Suddividi(Ordine(478.43m, 2, 0, "45052", new CameraOrdineOta(45052, 378.43m, 2)), 111.57m));
+
+        Assert.Equal((478.43m, 111.57m), (camera.Importo, camera.Commissione));
+    }
+
+    /// <summary>La commissione si divide con gli stessi pesi dell'importo, senza perdere centesimi.</summary>
+    [Fact]
+    public void ConCommissione_DueCamere_DivisaInProporzione()
+    {
+        var camere = OrdineOta.Suddividi(
+            Ordine(300m, 4, 0, "45052,45053", new CameraOrdineOta(45052, 100m, 2), new CameraOrdineOta(45053, 200m, 2)), 50.01m);
+
+        Assert.Equal([16.67m, 33.34m], camere.Select(c => c.Commissione!.Value));
+        Assert.Equal(50.01m, camere.Sum(c => c.Commissione!.Value));
+    }
+
+    [Fact]
+    public void SenzaCommissione_Null()
+    {
+        Assert.All(OrdineOta.Suddividi(Ordine(200m, 2, 0, "45052,45053")), c => Assert.Null(c.Commissione));
+    }
+
+    [Fact]
     public void IdNonNumerico_Rifiutato()
     {
         Assert.Throws<InvalidOperationException>(() => OrdineOta.Suddividi(Ordine(100m, 2, 0, "abc")));

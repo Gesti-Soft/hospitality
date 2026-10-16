@@ -624,6 +624,9 @@ public class PrenotazioniService(
         // si registra un rimborso nel registro pagamenti.
         entity.ImportoPrenotazione = 0;
         entity.ImportoTotale = 0;
+        // Commissione e versato del portale seguono il totale: senza soggiorno non restano.
+        entity.CommissioneOta = null;
+        entity.ImportoRicevutoOta = null;
         // L'imposta di soggiorno è dovuta per i pernottamenti: senza soggiorno non c'è.
         entity.TotalTax = 0;
         entity.StatoPrenotazione = StatoPrenotazione.Annullata;

@@ -106,6 +106,30 @@ public class LetturaPrenotazioneOtaTests
         Assert.Equal(100, letta.PrenotazioniSostituite![0]);
     }
 
+    /// <summary>La forma di `ancillary` di una prenotazione Airbnb vera (16/10/2026), senza dati dell'ospite.</summary>
+    [Fact]
+    public void Airbnb_CommissioneEPrezzoBaseDaAncillary()
+    {
+        var prenotazione = Struct(
+            Membro("id_channel", Intero(43)),
+            Membro("reservation_code", Intero(1788564304)),
+            Membro("amount", Numero(478.43m)),
+            Membro("rooms", Stringa("731368")),
+            Membro("addons_list", Array(Struct(Membro("price", Numero(100m)), Membro("req", Intero(1)), Membro("name", Stringa("PASS_THROUGH_CLEANING_FEE"))))),
+            Membro("channel_data", Struct(Membro("pay_model", Stringa("merchant")))),
+            Membro("ancillary", Struct(
+                Membro("Listing base price", Stringa("490.0")),
+                Membro("Payment Collect", Stringa("Payment collected by OTA")),
+                Membro("Commission", Stringa("111.57000000000001")),
+                Membro("Reservation Addon 1", Struct(Membro("Price", Stringa("100.00")), Membro("Name", Stringa("PASS_THROUGH_CLEANING_FEE")))))));
+
+        var letta = WubookXmlRpcClient.LeggiPrenotazione(prenotazione);
+
+        Assert.Equal(478.43m, letta.Importo);
+        Assert.Equal(111.57m, GestiSoft.Application.Wubook.ImportiOta.Commissione(letta, "Airbnb"));
+        Assert.Equal(590m, GestiSoft.Application.Wubook.ImportiOta.LordoDaPrezzoBase(letta));
+    }
+
     [Fact]
     public void PrenotazioneNormale_NessunaModifica()
     {

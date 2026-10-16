@@ -51,6 +51,9 @@ export interface PrenotazioneDto {
   noteOta?: string | null
   /** Arrivata dall'OTA (anche dal sito web): si annulla solo dall'OTA. */
   daOta?: boolean
+  /** Commissione trattenuta dal portale (IVA compresa) e importo che versa: null se il portale non li comunica. importoTotale resta il prezzo pagato dall'ospite. */
+  commissioneOta?: number | null
+  importoRicevutoOta?: number | null
 }
 
 export interface PrenotazioneRequest {
