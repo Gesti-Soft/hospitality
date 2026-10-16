@@ -19,6 +19,7 @@ import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
 import { useToast } from '../toast/ToastContext'
 import { CampoData } from './CampoData'
+import { CampoImporto } from './CampoImporto'
 
 interface Props {
   strutturaId: string
@@ -141,11 +142,10 @@ export function PrezzoDialog({ strutturaId, camere, tipologie, onClose }: Props)
           <CampoData label="Al" value={dataFine} onChange={setDataFine} min={dataInizio || undefined} fullWidth disabled={imposta.isPending} />
         </Box>
 
-        <TextField
+        <CampoImporto
           label="Prezzo per notte (€)"
-          type="number"
           value={prezzoPerNotte}
-          onChange={(e) => setPrezzoPerNotte(e.target.value)}
+          onChange={setPrezzoPerNotte}
           disabled={imposta.isPending}
         />
       </DialogContent>

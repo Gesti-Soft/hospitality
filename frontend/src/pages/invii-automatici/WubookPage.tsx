@@ -69,6 +69,9 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { PianoPrezzoDialog } from '../../components/PianoPrezzoDialog'
 import { PianoRestrizioneDialog } from '../../components/PianoRestrizioneDialog'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
+import { CampoImporto } from '../../components/CampoImporto'
+
+const formattatoreEuro = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 
 type TabWubook = 'camere' | 'piani-prezzo' | 'piani-restrizione'
 
@@ -349,7 +352,7 @@ function TabellaCamere({
                   <RigaCardMeta
                     voci={[
                       { etichetta: 'Posti', valore: r.remoto?.occupancy ?? '—' },
-                      { etichetta: 'Prezzo', valore: r.remoto ? `€${r.remoto.prezzo.toFixed(2)}` : '—' },
+                      { etichetta: 'Prezzo', valore: r.remoto ? formattatoreEuro.format(r.remoto.prezzo) : '—' },
                       { etichetta: 'Disponibilità oggi', valore: <DisponibilitaOggi remoto={r.remoto} locale={r.locale} /> },
                       { etichetta: 'Camere collegate', valore: r.locale?.camereCollegate ?? '—' },
                     ]}
@@ -398,7 +401,7 @@ function TabellaCamere({
                       <TableCell sx={{ fontFamily: fontMono, color: tokens.textTertiary }}>{r.remoto?.id ?? '—'}</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>{r.remoto?.nome ?? r.locale!.tipologiaNome}</TableCell>
                       <TableCell>{r.remoto?.occupancy ?? '—'}</TableCell>
-                      <TableCell>{r.remoto ? `€${r.remoto.prezzo.toFixed(2)}` : '—'}</TableCell>
+                      <TableCell>{r.remoto ? formattatoreEuro.format(r.remoto.prezzo) : '—'}</TableCell>
                       <TableCell>
                         <DisponibilitaOggi remoto={r.remoto} locale={r.locale} />
                       </TableCell>
@@ -761,7 +764,7 @@ function TipologiaOtaForm({
             slotProps={{ htmlInput: { style: { fontFamily: fontMono } } }}
           />
         </Box>
-        <TextField label="Prezzo Default" type="number" value={prezzo} onChange={(e) => setPrezzo(e.target.value)} disabled={inCorso} slotProps={{ htmlInput: { min: 0 } }} />
+        <CampoImporto label="Prezzo Default" value={prezzo} onChange={setPrezzo} disabled={inCorso} />
         <FormControlLabel control={<Checkbox checked={woodoo} onChange={(e) => setWoodoo(e.target.checked)} disabled={inCorso} />} label="WooDoo CM only" />
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>

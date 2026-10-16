@@ -22,6 +22,7 @@ import { usePuoScrivere } from '../permessi/usePuoScrivere'
 import { tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { ProponiFatturaDopoCheckIn } from './ProponiFatturaDopoCheckIn'
+import { CampoImporto } from './CampoImporto'
 
 const METODI = Object.values(ModalitaPagamento) as ModalitaPagamento[]
 const formattatoreEuro = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
@@ -176,14 +177,12 @@ export function CheckOutDialog({
                   </MenuItem>
                 ))}
               </TextField>
-              <TextField
+              <CampoImporto
                 size="small"
                 label="Importo (€)"
-                type="number"
                 value={importoSaldo ?? String(daSaldare)}
-                onChange={(e) => setImportoSaldo(e.target.value)}
+                onChange={setImportoSaldo}
                 disabled={inCorso}
-                slotProps={{ htmlInput: { min: 0, step: '0.01' } }}
                 sx={{ width: 120 }}
               />
             </Box>
@@ -202,12 +201,11 @@ export function CheckOutDialog({
               label={`Restituisci l'intera cauzione al cliente (${formattatoreEuro.format(cauzione)})`}
             />
             {!restituisciCauzione && (
-              <TextField
+              <CampoImporto
                 label="Importo cauzione trattenuta (€)"
-                type="number"
                 size="small"
                 value={importoCauzioneTrattenuta}
-                onChange={(e) => setImportoCauzioneTrattenuta(Number(e.target.value) > cauzione ? String(cauzione) : e.target.value)}
+                onChange={(v) => setImportoCauzioneTrattenuta(Number(v) > cauzione ? String(cauzione) : v)}
                 disabled={inCorso}
                 helperText={`Cauzione versata: ${formattatoreEuro.format(cauzione)}`}
                 slotProps={{ htmlInput: { min: 0, max: cauzione, step: '0.01' } }}

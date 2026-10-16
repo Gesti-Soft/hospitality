@@ -53,6 +53,7 @@ import { PayTouristStrutturaDialog } from '../../components/PayTouristStrutturaD
 import { ServiziExtraStruttura } from '../../components/ServiziExtraStruttura'
 import { TrattamentiStruttura } from '../../components/TrattamentiStruttura'
 import { usePuoScrivere } from '../../permessi/usePuoScrivere'
+import { CampoImporto } from '../../components/CampoImporto'
 
 type TabImpostazioni = 'generali' | 'servizi' | 'polizia' | 'osservatorio' | 'paytourist'
 
@@ -306,11 +307,10 @@ export function ImpostazioniGeneraliForm({
             <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15 }}>Tassa di soggiorno</Typography>
 
             <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-              <TextField
+              <CampoImporto
                 label="Prezzo per persona/notte (€)"
-                type="number"
                 value={tassaSoggiornoPrezzo}
-                onChange={(e) => setTassaSoggiornoPrezzo(e.target.value)}
+                onChange={setTassaSoggiornoPrezzo}
                 fullWidth
                 disabled={aggiorna.isPending}
               />

@@ -26,6 +26,7 @@ import {
 import { useMobile } from '../lib/useMobile'
 import { tokens } from '../theme'
 import { SceltaEuroPercentuale } from './SceltaEuroPercentuale'
+import { CampoImporto } from './CampoImporto'
 
 /** Come Booking: al massimo tre fasce, così le stesse regole si riportano uguali sul portale. */
 const FASCE_MASSIME = 3
@@ -172,8 +173,8 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
         <TextField label="Nome tipologia" value={nome} onChange={(e) => setNome(e.target.value)} required disabled={inCorso} autoFocus />
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-          <TextField label="Prezzo default (€/notte)" type="number" value={prezzoDefault} onChange={(e) => setPrezzoDefault(e.target.value)} fullWidth disabled={inCorso} />
-          <TextField label="Cauzione (€)" type="number" value={cauzione} onChange={(e) => setCauzione(e.target.value)} fullWidth disabled={inCorso} />
+          <CampoImporto label="Prezzo default (€/notte)" value={prezzoDefault} onChange={setPrezzoDefault} fullWidth disabled={inCorso} />
+          <CampoImporto label="Cauzione (€)" value={cauzione} onChange={setCauzione} fullWidth disabled={inCorso} />
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
@@ -188,11 +189,10 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
             helperText="Sopra questa soglia si applica il supplemento per notte"
           />
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', width: '100%' }}>
-            <TextField
+            <CampoImporto
               label={inPercentuale(tipoImplemento) ? 'Supplemento per persona extra (%)' : 'Supplemento per persona extra (€/notte)'}
-              type="number"
               value={implemento}
-              onChange={(e) => setImplemento(e.target.value)}
+              onChange={setImplemento}
               fullWidth
               disabled={inCorso}
               helperText={inPercentuale(tipoImplemento) ? 'Del prezzo della camera di ogni notte' : ' '}
@@ -212,14 +212,12 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-            <TextField
+            <CampoImporto
               label={tipoRiduzione === TipoVariazionePrezzo.Percentuale ? 'Riduzione (%)' : 'Riduzione (€/notte)'}
-              type="number"
               size="small"
               value={riduzioneOspiti}
-              onChange={(e) => setRiduzioneOspiti(e.target.value)}
+              onChange={setRiduzioneOspiti}
               disabled={inCorso}
-              slotProps={{ htmlInput: { min: 0, max: tipoRiduzione === TipoVariazionePrezzo.Percentuale ? 100 : undefined } }}
               sx={{ flex: 1 }}
             />
             <SceltaEuroPercentuale valore={tipoRiduzione} onChange={setTipoRiduzione} disabled={inCorso} />
@@ -264,14 +262,12 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
                 slotProps={{ htmlInput: { min: 0, max: 17 } }}
                 sx={{ flex: 1 }}
               />
-              <TextField
+              <CampoImporto
                 label={inPercentuale(f.tipo) ? '% del pieno' : '€/notte'}
-                type="number"
                 size="small"
                 value={f.importo}
-                onChange={(e) => modificaFascia(i, { importo: e.target.value })}
+                onChange={(v) => modificaFascia(i, { importo: v })}
                 disabled={inCorso}
-                slotProps={{ htmlInput: { min: 0, max: inPercentuale(f.tipo) ? 100 : undefined } }}
                 sx={{ flex: 1 }}
               />
               <SceltaEuroPercentuale valore={f.tipo} onChange={(tipo) => modificaFascia(i, { tipo })} disabled={inCorso} />
@@ -292,8 +288,8 @@ export function TipologiaDialog({ strutturaId, tipologia, onClose }: Props) {
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-          <TextField label="Spese pulizia (€)" type="number" value={spesePulizia} onChange={(e) => setSpesePulizia(e.target.value)} fullWidth disabled={inCorso} />
-          <TextField label="Supplemento animali (€)" type="number" value={animali} onChange={(e) => setAnimali(e.target.value)} fullWidth disabled={inCorso} />
+          <CampoImporto label="Spese pulizia (€)" value={spesePulizia} onChange={setSpesePulizia} fullWidth disabled={inCorso} />
+          <CampoImporto label="Supplemento animali (€)" value={animali} onChange={setAnimali} fullWidth disabled={inCorso} />
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>

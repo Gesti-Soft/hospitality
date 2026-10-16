@@ -16,6 +16,7 @@ import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 import { SelettoreTipoConCamera } from './finanze/FinanzeComuni'
+import { CampoImporto } from './CampoImporto'
 
 const OPZIONI_METODO_PAGAMENTO = ['Contanti', 'Bonifico bancario', 'Carta di credito', 'POS', 'Assegno']
 
@@ -78,7 +79,7 @@ export function SpesaDialog({ strutturaId, spesa, onClose }: Props) {
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <SelettoreTipoConCamera label="Tipo spesa" valore={tipoSpesa} onChange={setTipoSpesa} tipologie={listaTipologie} camere={listaCamere} disabled={inCorso} />
-          <TextField label="Importo (€)" type="number" value={importoSpesa} onChange={(e) => setImportoSpesa(e.target.value)} required fullWidth disabled={inCorso} />
+          <CampoImporto label="Importo (€)" value={importoSpesa} onChange={setImportoSpesa} required fullWidth disabled={inCorso} />
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>

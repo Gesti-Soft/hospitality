@@ -41,6 +41,7 @@ import {
 import { useMobile } from '../lib/useMobile'
 import { tokens } from '../theme'
 import { DatiClienteDialog } from './DatiClienteDialog'
+import { CampoImporto } from './CampoImporto'
 
 /** In "nota-di-credito" la fattura è quella da stornare: la nota nasce dalle sue righe, collegata a lei. */
 export type StatoFatturaIniziale = { modo: 'crea' } | { modo: 'modifica'; fattura: DatiFatturaDto } | { modo: 'nota-di-credito'; fattura: DatiFatturaDto }
@@ -556,12 +557,12 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
                   disabled={inCorso}
                   sx={{ width: 100 }}
                 />
-                <TextField
+                <CampoImporto
                   label="Prezzo unitario (€)"
-                  type="number"
                   size="small"
                   value={r.prezzoUnitario}
-                  onChange={(e) => aggiornaRiga(r.chiave, { prezzoUnitario: e.target.value })}
+                  onChange={(v) => aggiornaRiga(r.chiave, { prezzoUnitario: v })}
+                  ammettiNegativo
                   disabled={inCorso}
                   sx={{ width: 150 }}
                 />
@@ -617,11 +618,10 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
             </Button>
           </Box>
 
-          <TextField
+          <CampoImporto
             label="Imposta di soggiorno"
-            type="number"
             value={impostaSoggiorno}
-            onChange={(e) => setImpostaSoggiornoModificata(e.target.value)}
+            onChange={setImpostaSoggiornoModificata}
             disabled={inCorso}
             helperText="Riga a sé in fattura, esclusa dall'IVA (art. 15 DPR 633/72): non va sommata al prezzo del soggiorno. Vuoto se l'ospite non la paga qui."
           />

@@ -24,6 +24,8 @@ import { useMobile } from '../../lib/useMobile'
 import { fontDisplay, tokens } from '../../theme'
 
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
+// Un decimale con la virgola: "3,9 notti", "71,9%".
+const formattatoreUnDecimale = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
 // Sopra questa soglia un grafico a barre con una serie per tipologia diventa illeggibile — la
 // matrice completa (tutte le tipologie, non solo le prime) resta comunque disponibile in tabella.
@@ -100,11 +102,11 @@ export function StatistichePage() {
             <KpiCard etichetta="Ricavo effettivo" valore={formattatoreValuta.format(dati.kpi.ricavoEffettivo)} accento icona={<EuroIcon />} />
             <KpiCard
               etichetta="Permanenza media"
-              valore={dati.kpi.permanenzaMediaNotti === null ? '—' : dati.kpi.permanenzaMediaNotti.toFixed(1)}
+              valore={dati.kpi.permanenzaMediaNotti === null ? '—' : formattatoreUnDecimale.format(dati.kpi.permanenzaMediaNotti)}
               dettaglio={dati.kpi.permanenzaMediaNotti === null ? undefined : 'notti'}
               icona={<AccessTimeIcon />}
             />
-            <KpiCard etichetta="Tasso occupazione" valore={`${dati.kpi.tassoOccupazionePercentuale}%`} icona={<HomeIcon />} />
+            <KpiCard etichetta="Tasso occupazione" valore={`${formattatoreUnDecimale.format(dati.kpi.tassoOccupazionePercentuale)}%`} icona={<HomeIcon />} />
             <KpiCard etichetta="Tassa di soggiorno" valore={formattatoreValuta.format(dati.tassaSoggiorno.totaleAnno)} icona={<PercentIcon />} />
           </Box>
 
@@ -148,7 +150,7 @@ export function StatistichePage() {
                       data: dati.prenotazioniPerNazionalita.map((v) => ({
                         id: v.etichetta,
                         value: v.conteggio,
-                        label: `${v.etichetta} — ${v.percentuale}%`,
+                        label: `${v.etichetta} — ${formattatoreUnDecimale.format(v.percentuale)}%`,
                       })),
                       valueFormatter: (v) => `${v.value} prenotazioni`,
                     },

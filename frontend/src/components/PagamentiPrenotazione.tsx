@@ -28,6 +28,7 @@ import { tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { CampoData } from './CampoData'
 import { ConfirmDialog } from './ConfirmDialog'
+import { CampoImporto } from './CampoImporto'
 
 const TIPI = Object.values(TipoPagamento) as TipoPagamento[]
 const METODI = Object.values(ModalitaPagamento) as ModalitaPagamento[]
@@ -266,14 +267,12 @@ export function PagamentiPrenotazione({ strutturaId, prenotazioneId, locali, onC
                 </MenuItem>
               ))}
             </TextField>
-            <TextField
+            <CampoImporto
               size="small"
               label="Importo (€)"
-              type="number"
               value={modulo.importo}
-              onChange={(e) => setModulo({ ...modulo, importo: e.target.value })}
+              onChange={(v) => setModulo({ ...modulo, importo: v })}
               disabled={inCorso}
-              slotProps={{ htmlInput: { min: 0, step: '0.01' } }}
               sx={{ width: mobile ? '100%' : 130 }}
             />
           </Box>

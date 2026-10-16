@@ -15,6 +15,7 @@ import { formatoInputData, isoLocale, parsaInputData } from '../lib/date'
 import { useMobile } from '../lib/useMobile'
 import { CampoData } from './CampoData'
 import { SelettoreTipoConCamera } from './finanze/FinanzeComuni'
+import { CampoImporto } from './CampoImporto'
 
 interface Props {
   strutturaId: string
@@ -73,7 +74,7 @@ export function EntrataDialog({ strutturaId, entrata, onClose }: Props) {
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
           <SelettoreTipoConCamera label="Tipo entrata" valore={tipoEntrata} onChange={setTipoEntrata} tipologie={listaTipologie} camere={listaCamere} disabled={inCorso} />
-          <TextField label="Importo (€)" type="number" value={importoEntrata} onChange={(e) => setImportoEntrata(e.target.value)} required fullWidth disabled={inCorso} />
+          <CampoImporto label="Importo (€)" value={importoEntrata} onChange={setImportoEntrata} required fullWidth disabled={inCorso} />
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>

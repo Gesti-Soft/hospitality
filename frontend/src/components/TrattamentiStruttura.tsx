@@ -12,6 +12,7 @@ import { NOME_TRATTAMENTO, TipoTrattamento, useSalvaTrattamento, useTrattamenti,
 import { fontDisplay, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { SceltaEuroPercentuale } from './SceltaEuroPercentuale'
+import { CampoImporto } from './CampoImporto'
 
 const TIPI: TipoTrattamento[] = [TipoTrattamento.Colazione, TipoTrattamento.MezzaPensione, TipoTrattamento.PensioneCompleta, TipoTrattamento.AllInclusive]
 
@@ -111,25 +112,21 @@ function SchedaTrattamento({
 
       {/* Un campo per riga: le schede sono affiancate e strette, in riga le etichette si tagliavano. */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <TextField
+        <CampoImporto
           label="Prezzo a persona (€/notte)"
-          type="number"
           size="small"
           value={prezzo}
-          onChange={(e) => setPrezzo(e.target.value)}
+          onChange={setPrezzo}
           disabled={disabilitato}
-          slotProps={{ htmlInput: { min: 0 } }}
           fullWidth
         />
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <TextField
+          <CampoImporto
             label={inPercentuale ? 'Bambini a notte (% dell’adulto)' : 'Bambini a notte (€)'}
-            type="number"
             size="small"
             value={prezzoBambini}
-            onChange={(e) => setPrezzoBambini(e.target.value)}
+            onChange={setPrezzoBambini}
             disabled={disabilitato}
-            slotProps={{ htmlInput: { min: 0, max: inPercentuale ? 100 : undefined } }}
             sx={{ flex: 1 }}
           />
           <SceltaEuroPercentuale valore={tipoPrezzoBambini} onChange={setTipoPrezzoBambini} disabled={disabilitato} />

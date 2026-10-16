@@ -25,6 +25,7 @@ import { fontDisplay, tokens } from '../theme'
 import { useToast } from '../toast/ToastContext'
 import { ConfirmDialog } from './ConfirmDialog'
 import { ETICHETTA_NATURA } from './FatturaDialog'
+import { CampoImporto } from './CampoImporto'
 
 const MODALITA = Object.values(ModalitaPrezzoServizio) as ModalitaPrezzoServizio[]
 const ALIQUOTE_POSITIVE = (Object.values(AliquotaIva) as AliquotaIva[]).filter((a) => a > 0)
@@ -187,14 +188,12 @@ function SchedaServizio({
           slotProps={{ htmlInput: { maxLength: 100 } }}
           fullWidth
         />
-        <TextField
+        <CampoImporto
           label="Prezzo (€)"
-          type="number"
           size="small"
           value={prezzo}
-          onChange={(e) => setPrezzo(e.target.value)}
+          onChange={setPrezzo}
           disabled={disabilitato}
-          slotProps={{ htmlInput: { min: 0 } }}
           fullWidth
         />
         <TextField select label="Si conta" size="small" value={modalita} onChange={(e) => setModalita(Number(e.target.value) as ModalitaPrezzoServizio)} disabled={disabilitato} fullWidth>

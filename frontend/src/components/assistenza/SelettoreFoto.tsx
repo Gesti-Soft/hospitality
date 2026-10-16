@@ -52,7 +52,7 @@ export function SelettoreFoto({ foto, onChange, disabilitato }: { foto: File[]; 
         <Chip
           key={`${f.name}-${i}`}
           size="small"
-          label={`${f.name} · ${(f.size / MB).toFixed(1)} MB`}
+          label={`${f.name} · ${(f.size / MB).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`}
           onDelete={disabilitato ? undefined : () => onChange(foto.filter((_, j) => j !== i))}
           sx={{ maxWidth: 260 }}
         />

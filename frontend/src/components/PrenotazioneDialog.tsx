@@ -65,6 +65,7 @@ import { OspiteDialog } from './OspiteDialog'
 import { ConfirmDialog } from './ConfirmDialog'
 import { usePuoScrivere } from '../permessi/usePuoScrivere'
 import { useStruttura } from '../struttura/StrutturaContext'
+import { CampoImporto } from './CampoImporto'
 
 export type StatoIniziale =
   | { modo: 'crea'; cameraId: string | null; checkIn: Date; checkOut: Date }
@@ -1173,22 +1174,20 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       {/* Fissi in entrambi i tab: aggiungendo un servizio l'importo che cambia resta sotto gli occhi. */}
       <Box sx={{ px: 3, pt: 2, borderTop: `1px solid ${tokens.surfaceBorder}` }}>
         <Box sx={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 2 }}>
-          <TextField
+          <CampoImporto
             label="Importo totale (€)"
-            type="number"
             value={importoTotale}
-            onChange={(e) => {
-              setImportoTotale(e.target.value)
+            onChange={(v) => {
+              setImportoTotale(v)
               setImportoTotaleAuto(false)
             }}
             fullWidth
             disabled={inCorso}
           />
-          <TextField
+          <CampoImporto
             label="Commissione (€)"
-            type="number"
             value={commissione}
-            onChange={(e) => setCommissione(e.target.value)}
+            onChange={setCommissione}
             fullWidth
             disabled={inCorso}
             error={commissioneNonValida}
@@ -1201,7 +1200,8 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           {/* In sola lettura: è la somma del registro, si cambia dal tab Pagamenti. */}
           <TextField
             label="Pagato (€)"
-            value={pagato.toFixed(2)}
+            // Formato italiano: col punto, copiato in una calcolatrice italiana 546.50 diventava 54.650.
+            value={pagato.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             fullWidth
             onClick={() => setTab('pagamenti')}
             slotProps={{ input: { readOnly: true } }}
@@ -1301,7 +1301,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
               ? "Questa prenotazione è arrivata dall'OTA: annullandola qui resta confermata sul portale. Fallo solo se l'OTA l'ha già cancellata e l'annullamento non è arrivato. "
               : '') +
             (pagato > 0
-              ? `Annullare questa prenotazione? L'importo totale verrà azzerato. I ${pagato.toFixed(2)} € già pagati restano nel registro: se li restituisci, registra un rimborso nel tab Pagamenti.`
+              ? `Annullare questa prenotazione? L'importo totale verrà azzerato. I ${formattaEuro(pagato)} già pagati restano nel registro: se li restituisci, registra un rimborso nel tab Pagamenti.`
               : "Annullare questa prenotazione? Gli importi verranno azzerati.")
           }
           inCorso={annulla.isPending}
@@ -1313,7 +1313,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       {confermaAzzeraTassaAperta && (
         <ConfirmDialog
           titolo="Azzerare la tassa di soggiorno?"
-          messaggio={`Disattivando "Tassa di soggiorno" l'importo già calcolato di €${(modifica?.totalTax ?? 0).toFixed(2)} verrà azzerato. Confermi il salvataggio?`}
+          messaggio={`Disattivando "Tassa di soggiorno" l'importo già calcolato di ${formattaEuro(modifica?.totalTax ?? 0)} verrà azzerato. Confermi il salvataggio?`}
           testoConferma="Salva e azzera"
           inCorso={aggiorna.isPending}
           onConferma={confermaAzzeraTassa}
@@ -1324,7 +1324,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       {propostaImporto !== null && (
         <ConfirmDialog
           titolo="Aggiornare l'importo totale?"
-          messaggio={`In base alla modifica appena fatta l'Importo totale corretto sarebbe €${propostaImporto.proposto.toFixed(2)} (attuale: €${importoTotale || '0'}). Vuoi aggiornarlo? Annullando, la modifica appena fatta viene ripristinata com'era.`}
+          messaggio={`In base alla modifica appena fatta l'Importo totale corretto sarebbe ${formattaEuro(propostaImporto.proposto)} (attuale: ${formattaEuro(Number(importoTotale) || 0)}). Vuoi aggiornarlo? Annullando, la modifica appena fatta viene ripristinata com'era.`}
           testoConferma="Aggiorna"
           pericoloso={false}
           onConferma={confermaAggiornaImporto}
