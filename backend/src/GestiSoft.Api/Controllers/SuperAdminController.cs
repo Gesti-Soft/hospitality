@@ -15,8 +15,24 @@ namespace GestiSoft.Api.Controllers;
 [ApiController]
 [Route("super-admin")]
 [Authorize]
-public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService service, ICurrentUser currentUser) : ControllerBase
+public class SuperAdminController(ApplicationSuperAdmin.SuperAdminService service, ICurrentUser currentUser, IConfiguration configuration) : ControllerBase
 {
+    /// <summary>
+    /// Versione installata ("2.1", da deploy/update.sh), mostrata in fondo al menu del Super Admin.
+    /// Null fuori da un deploy (sviluppo, avvio a mano). Solo al Super Admin: agli altri non serve.
+    /// </summary>
+    [HttpGet("versione")]
+    public IActionResult Versione()
+    {
+        if (!currentUser.IsSuperAdmin)
+        {
+            return Forbid();
+        }
+
+        var versione = configuration["GESTISOFT_VERSIONE"];
+        return Ok(new VersioneGestionaleDto(string.IsNullOrWhiteSpace(versione) ? null : versione.Trim()));
+    }
+
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard(CancellationToken cancellationToken)
     {

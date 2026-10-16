@@ -95,7 +95,7 @@ public class SdiCanaleTests
             Sdi.Trasmissioni.Add(Trasmissione);
         }
 
-        public SdiRicevuteService Servizio() => new(Sdi, Fatture, new StruttureFinte(), new NotificaService(Notifiche, null!, null!, null!, null!, null!), new LogFinto(), Canale);
+        public SdiRicevuteService Servizio() => new(Sdi, Fatture, new StruttureFinte(), new NotificaService(Notifiche, null!, null!, null!, null!), new LogFinto(), Canale);
     }
 
     [Fact]
@@ -367,7 +367,7 @@ public class SdiCanaleTests
         public readonly ArchivioFinto Archivio = new();
         public readonly NotificheFinte Notifiche = new();
 
-        public SdiRicezioneService Servizio() => new(Sdi, Archivio, new StruttureFinte(), new NotificaService(Notifiche, null!, null!, null!, null!, null!), new LogFinto());
+        public SdiRicezioneService Servizio() => new(Sdi, Archivio, new StruttureFinte(), new NotificaService(Notifiche, null!, null!, null!, null!), new LogFinto());
 
         public Task<bool> Ricevi(byte[] file, string identificativo = "900", bool prova = false) =>
             Servizio().RiceviAsync(identificativo, "IT09876543210_00001.xml.p7m", file, null, null, prova, CancellationToken.None);

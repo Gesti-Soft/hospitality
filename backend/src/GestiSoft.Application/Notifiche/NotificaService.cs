@@ -17,7 +17,6 @@ namespace GestiSoft.Application.Notifiche;
 public class NotificaService(
     INotificaRepository notifiche,
     IOspiteRepository ospiti,
-    IStrutturaRepository strutture,
     ILogEventoService logEventi,
     TenantAccessGuard accessGuard,
     PermessoStrutturaGuard permessoGuard)
@@ -25,47 +24,26 @@ public class NotificaService(
     private static readonly TimeSpan FinestraGraziaCancellazioneWubook = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// Nuova versione del gestionale installata: una notifica a ogni struttura attiva, con data e ora
-    /// italiane. Chiamata all'avvio dell'Api con la versione ("2.1") calcolata da deploy/update.sh;
-    /// la chiave di deduplica con la versione fa sì che un semplice riavvio non la ripeta.
-    /// Va anche nel Log: una riga per struttura (Log della struttura) e una di riepilogo senza
-    /// Cliente (Log del Super Admin), solo quando la notifica è nuova.
-    /// Ritorna quante strutture l'hanno ricevuta.
+    /// Nuova versione del gestionale installata: una riga nel Log del Super Admin, una sola volta per
+    /// versione (un riavvio non la ripete). Chiamata all'avvio dell'Api con la versione ("2.1")
+    /// calcolata da deploy/update.sh. Alle strutture non si notifica più nulla: la versione installata
+    /// la vede il Super Admin in fondo al menu (scelta dell'utente, 16/10/2026).
+    /// Ritorna true se la riga è nuova.
     /// </summary>
-    public async Task<int> NotificaAggiornamentoGestionaleAsync(string versione, DateTime adessoUtc, CancellationToken cancellationToken)
+    public async Task<bool> RegistraAggiornamentoGestionaleAsync(string versione, CancellationToken cancellationToken)
     {
-        var italia = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
-        var adesso = TimeZoneInfo.ConvertTimeFromUtc(adessoUtc, italia);
-        var messaggio = $"Il gestionale è stato aggiornato alla versione {versione} il {adesso:dd/MM/yyyy} alle {adesso:HH:mm}.";
-
-        var notificate = 0;
-        foreach (var struttura in await strutture.ListByClienteAsync(null, includiInattive: false, cancellationToken))
+        // Il punto finale distingue "versione 2.5." da "versione 2.51.".
+        var messaggio = $"Gestionale aggiornato alla versione {versione}.";
+        var giaRegistrata = await logEventi.CercaAsync(
+            new LogEventoFiltro(ClienteId: null, StrutturaId: null, Livello: null, Categoria: CategoriaLogAggiornamento, Ricerca: messaggio, PageSize: 1),
+            cancellationToken);
+        if (giaRegistrata.TotalCount > 0)
         {
-            if (await CreaSeNonEsisteAsync(struttura.Id, TipoNotifica.GestionaleAggiornato, $"aggiornamento:{versione}", $"Gestionale aggiornato alla versione {versione}", messaggio, cancellationToken))
-            {
-                notificate++;
-                await logEventi.RegistraAsync(
-                    LivelloLog.Info,
-                    $"Gestionale aggiornato alla versione {versione}.",
-                    origine: "Api",
-                    clienteId: struttura.ClienteId,
-                    strutturaId: struttura.Id,
-                    categoria: CategoriaLogAggiornamento,
-                    cancellationToken: cancellationToken);
-            }
+            return false;
         }
 
-        if (notificate > 0)
-        {
-            await logEventi.RegistraAsync(
-                LivelloLog.Info,
-                $"Gestionale aggiornato alla versione {versione}: notificato a {notificate} strutture.",
-                origine: "Api",
-                categoria: CategoriaLogAggiornamento,
-                cancellationToken: cancellationToken);
-        }
-
-        return notificate;
+        await logEventi.RegistraAsync(LivelloLog.Info, messaggio, origine: "Api", categoria: CategoriaLogAggiornamento, cancellationToken: cancellationToken);
+        return true;
     }
 
     public const string CategoriaLogAggiornamento = "Aggiornamento";

@@ -156,35 +156,23 @@ using (var startupScope = app.Services.CreateScope())
     var credenzialiSeeder = startupScope.ServiceProvider.GetRequiredService<CredenzialiCifraturaSeeder>();
     await credenzialiSeeder.SeedAsync();
 
-    // Nuova versione installata (GESTISOFT_VERSIONE, es. "2.1", calcolata da deploy/update.sh):
-    // lo si dice a tutte le strutture. Senza variabile (sviluppo, avvio a mano) non si notifica.
-    // Una notifica non riuscita non deve impedire all'Api di partire.
+    // Nuova versione installata (GESTISOFT_VERSIONE, es. "2.1", calcolata da deploy/update.sh): una
+    // riga nel Log del Super Admin, niente notifiche alle strutture. Senza variabile (sviluppo, avvio
+    // a mano) non si registra. Un errore qui non deve impedire all'Api di partire.
     var versione = app.Configuration["GESTISOFT_VERSIONE"];
     if (!string.IsNullOrWhiteSpace(versione))
     {
         try
         {
             var notificaService = startupScope.ServiceProvider.GetRequiredService<NotificaService>();
-            var notificate = await notificaService.NotificaAggiornamentoGestionaleAsync(versione.Trim(), DateTime.UtcNow, CancellationToken.None);
-            app.Logger.LogInformation("Versione {Versione}: notifica di aggiornamento a {Strutture} strutture.", versione, notificate);
+            if (await notificaService.RegistraAggiornamentoGestionaleAsync(versione.Trim(), CancellationToken.None))
+            {
+                app.Logger.LogInformation("Versione {Versione} installata.", versione);
+            }
         }
         catch (Exception ex)
         {
-            app.Logger.LogWarning(ex, "Notifica di aggiornamento del gestionale non riuscita (versione {Versione}).", versione);
-            // Anche nel Log del Super Admin, che altrimenti non saprebbe che la notifica non è partita.
-            try
-            {
-                await startupScope.ServiceProvider.GetRequiredService<ILogEventoService>().RegistraAsync(
-                    LivelloLog.Warning,
-                    $"Gestionale aggiornato alla versione {versione.Trim()}, ma la notifica alle strutture non è riuscita.",
-                    origine: "Api",
-                    dettaglio: ex.Message,
-                    categoria: NotificaService.CategoriaLogAggiornamento);
-            }
-            catch (Exception logEx)
-            {
-                app.Logger.LogWarning(logEx, "Registrazione nel Log non riuscita.");
-            }
+            app.Logger.LogWarning(ex, "Registrazione della versione {Versione} nel Log non riuscita.", versione);
         }
     }
 }

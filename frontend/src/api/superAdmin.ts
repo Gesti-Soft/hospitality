@@ -79,6 +79,17 @@ export function useDashboardSuperAdmin(abilitato: boolean) {
   })
 }
 
+/** Versione installata del gestionale ("2.1", da deploy/update.sh); null fuori da un deploy. */
+export function useVersioneGestionale(abilitato: boolean) {
+  return useQuery({
+    queryKey: ['super-admin', 'versione'],
+    queryFn: () => apiGet<{ versione: string | null }>('/super-admin/versione'),
+    enabled: abilitato,
+    // Cambia solo con un deploy, che ricarica comunque la pagina.
+    staleTime: Infinity,
+  })
+}
+
 function useInvalidaDashboard() {
   const queryClient = useQueryClient()
   return () => queryClient.invalidateQueries({ queryKey: ['super-admin', 'dashboard'] })
