@@ -41,7 +41,9 @@ public record CreaPrenotazioneRequest(
     // Servizi extra venduti con la prenotazione (escursioni, parcheggio…).
     IReadOnlyList<ServizioPrenotazioneRichiesta>? Servizi = null,
     // Pagamenti già ricevuti (l'acconto preso al telefono). ImportoPagato ne è la somma.
-    IReadOnlyList<SalvaPagamentoRequest>? Pagamenti = null);
+    IReadOnlyList<SalvaPagamentoRequest>? Pagamenti = null,
+    // Commissione del portale o dell'agenzia; null = nessuna (ricevuto = totale).
+    decimal? CommissioneOta = null);
 
 public record AggiornaPrenotazioneRequest(
     Guid? CameraId,
@@ -67,7 +69,9 @@ public record AggiornaPrenotazioneRequest(
     // Null = solo pernottamento: a differenza delle età il dialog lo manda sempre.
     TipoTrattamento? Trattamento = null,
     // Null = lascia quelli registrati (le liste del calendario non li caricano); una lista vuota li toglie.
-    IReadOnlyList<ServizioPrenotazioneRichiesta>? Servizi = null);
+    IReadOnlyList<ServizioPrenotazioneRichiesta>? Servizi = null,
+    // Null = lascia quella registrata (anche quella arrivata dall'OTA); 0 la toglie.
+    decimal? CommissioneOta = null);
 
 public record CheckOutRequest(bool RestituisciCauzione, decimal? ImportoCauzioneTrattenuta);
 
@@ -334,6 +338,7 @@ public class PrenotazioniService(
             // La somma dei pagamenti, scritta da PagamentiService dopo la creazione.
             ImportoPagato = null,
             ImportoTotale = request.ImportoTotale,
+            CommissioneOta = ValidaCommissione(request.CommissioneOta, request.ImportoTotale),
             CheckIn = request.CheckIn,
             CheckOut = request.CheckOut,
             NumeroOspiti = request.NumeroOspiti,
@@ -407,6 +412,7 @@ public class PrenotazioniService(
         var importoPrenotazionePrima = entity.ImportoPrenotazione;
         var importoTotalePrima = entity.ImportoTotale;
         var importoPagatoPrima = entity.ImportoPagato;
+        var commissionePrima = entity.CommissioneOta;
         var totalTaxPrima = entity.TotalTax;
         // Snapshot delle date "prima" — servono a spingere su Wubook l'intero periodo toccato dalla
         // modifica (sia dove la vecchia camera si libera sia dove la nuova/stessa camera si occupa),
@@ -521,6 +527,7 @@ public class PrenotazioniService(
         entity.ImportoPrenotazione = request.ImportoPrenotazione;
         // ImportoPagato non si scrive più a mano: è la somma del registro pagamenti (PagamentiService).
         entity.ImportoTotale = request.ImportoTotale;
+        entity.CommissioneOta = ValidaCommissione(request.CommissioneOta ?? entity.CommissioneOta, entity.ImportoTotale);
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await prenotazioni.UpdateAsync(entity, cancellationToken);
@@ -568,6 +575,10 @@ public class PrenotazioniService(
         if (importoTotalePrima != entity.ImportoTotale)
         {
             modificheEconomiche.Add($"Importo totale {importoTotalePrima?.ToString("0.00") ?? "—"}€→{entity.ImportoTotale?.ToString("0.00") ?? "—"}€");
+        }
+        if ((commissionePrima ?? 0) != (entity.CommissioneOta ?? 0))
+        {
+            modificheEconomiche.Add($"Commissione {commissionePrima?.ToString("0.00") ?? "—"}€→{entity.CommissioneOta?.ToString("0.00") ?? "—"}€");
         }
         if (importoPagatoPrima != entity.ImportoPagato)
         {
@@ -624,9 +635,8 @@ public class PrenotazioniService(
         // si registra un rimborso nel registro pagamenti.
         entity.ImportoPrenotazione = 0;
         entity.ImportoTotale = 0;
-        // Commissione e versato del portale seguono il totale: senza soggiorno non restano.
+        // La commissione segue il totale: senza soggiorno non resta.
         entity.CommissioneOta = null;
-        entity.ImportoRicevutoOta = null;
         // L'imposta di soggiorno è dovuta per i pernottamenti: senza soggiorno non c'è.
         entity.TotalTax = 0;
         entity.StatoPrenotazione = StatoPrenotazione.Annullata;
@@ -928,6 +938,27 @@ public class PrenotazioniService(
     /// Un'età per bambino, da 0 a 17 anni (dai 18 si è adulti, come per Booking), e almeno un
     /// adulto nella prenotazione: i bambini sono una parte degli ospiti, non si aggiungono.
     /// </summary>
+    /// <summary>Una commissione è un importo tra zero e il totale: oltre, il ricevuto sarebbe negativo.</summary>
+    private static decimal? ValidaCommissione(decimal? commissione, decimal? importoTotale)
+    {
+        if (commissione is not { } valore)
+        {
+            return null;
+        }
+
+        if (valore < 0)
+        {
+            throw new ConflictException("La commissione non può essere negativa.");
+        }
+
+        if (valore > (importoTotale ?? 0))
+        {
+            throw new ConflictException("La commissione non può superare l'importo totale.");
+        }
+
+        return valore;
+    }
+
     public static List<int> ValidaEtaBambini(IReadOnlyList<int> etaBambini, int? numeroOspiti)
     {
         if (etaBambini.Count == 0)

@@ -254,6 +254,9 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
     )
   }
   const [importoTotale, setImportoTotale] = useState<string>(modifica?.importoTotale != null ? String(modifica.importoTotale) : '')
+  // Commissione del portale o dell'agenzia: vuota = nessuna, il ricevuto è il totale. Per Airbnb la
+  // compila l'import; per gli altri portali la scrive l'operatore, e l'import non la sovrascrive.
+  const [commissione, setCommissione] = useState<string>(modifica?.commissioneOta != null ? String(modifica.commissioneOta) : '')
   // Il tab dei servizi c'è solo se c'è qualcosa da vendere: un trattamento o un servizio offerto, oppure
   // quelli che la prenotazione ha già (anche se nel frattempo non sono più offerti).
   const mostraTabServizi =
@@ -270,6 +273,10 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       : (modifica.importoPagato ?? 0)
     : nettoPagamenti(pagamentiLocali)
   const numeroPagamenti = modifica ? (pagamentiSalvati.data?.length ?? 0) : pagamentiLocali.length
+  // Si salda quello che resta alla struttura, non il prezzo pagato dall'ospite: la commissione del
+  // portale non arriva mai. Positivo = da saldare, negativo = pagato in più.
+  const ricevuto = Math.round(((Number(importoTotale) || 0) - (Number(commissione) || 0)) * 100) / 100
+  const saldoAperto = Math.round((ricevuto - pagato) * 100) / 100
   // Finché l'operatore non tocca il campo a mano, "Importo totale" segue il preventivo — se cambi
   // camera/date/checkbox si aggiorna da solo, senza dover recliccare "Usa" ogni volta.
   const [importoTotaleAuto, setImportoTotaleAuto] = useState(!modifica)
@@ -508,6 +515,8 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   }, [agenzia, numeroPrenotazione, numeroAssegnato])
 
   const inCorso = crea.isPending || aggiorna.isPending || annulla.isPending || checkInMutation.isPending
+  // Stessa regola del backend (PrenotazioniService.ValidaCommissione): oltre il totale il ricevuto sarebbe negativo.
+  const commissioneNonValida = commissione.trim() !== '' && (Number(commissione) < 0 || Number(commissione) > (Number(importoTotale) || 0))
   // Un soggiorno Completato è chiuso: resta modificabile solo il saldo (Importo totale/Importo
   // pagato), tutto il resto (camera, date, toggle...) è quello con cui si è effettivamente svolto.
   const soloImporti = modifica?.statoPrenotazione === StatoPrenotazione.Completata
@@ -547,6 +556,10 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       setErrore('Controlla i servizi extra: quantità da 1 a 99 e date dentro il soggiorno (per quelli a notte almeno una notte).')
       return
     }
+    if (commissioneNonValida) {
+      setErrore("La commissione deve essere tra zero e l'importo totale.")
+      return
+    }
     setErrore(null)
 
     // Disattivare la tassa azzera un importo già calcolato sulla scheda ospiti — un cambio che vale
@@ -571,6 +584,8 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
       importoPagato: null,
       pagamenti: modifica ? null : pagamentiLocali,
       importoTotale: importoTotale.trim() === '' ? null : Number(importoTotale),
+      // In modifica il campo svuotato toglie la commissione (0): null la lascerebbe com'era.
+      commissioneOta: commissione.trim() === '' ? (modifica ? 0 : null) : Number(commissione),
       checkIn: isoLocale(checkInDate!),
       checkOut: isoLocale(checkOutDate!),
       numeroOspiti: numeroOspitiNumero,
@@ -674,7 +689,9 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
         variant="scrollable"
         scrollButtons="auto"
         allowScrollButtonsMobile
-        sx={{ px: 3, minHeight: 0, borderBottom: `1px solid ${tokens.surfaceBorder}`, '& .MuiTab-root': { pt: 1, pb: 1.75 } }}
+        // flexShrink 0: con un tab lungo (Soggiorno, sul telefono) la colonna del dialogo comprimeva i
+        // tab fino a lasciare solo la linea blu, perché minHeight 0 permette di restringerli a zero.
+        sx={{ px: 3, minHeight: 0, flexShrink: 0, borderBottom: `1px solid ${tokens.surfaceBorder}`, '& .MuiTab-root': { pt: 1, pb: 1.75 } }}
       >
         <Tab label="Soggiorno" value="soggiorno" sx={{ minHeight: 0, fontWeight: 700, fontSize: 13.5 }} />
         {mostraTabServizi && (
@@ -700,7 +717,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
             prenotazioneId={modifica?.id ?? null}
             locali={pagamentiLocali}
             onCambiaLocali={setPagamentiLocali}
-            daSaldare={Math.max(Math.round(((Number(importoTotale) || 0) - pagato) * 100) / 100, 0)}
+            daSaldare={Math.max(saldoAperto, 0)}
             tipoSuggerito={
               modifica && (modifica.statoPrenotazione === StatoPrenotazione.InCorso || modifica.statoPrenotazione === StatoPrenotazione.Completata)
                 ? TipoPagamento.Saldo
@@ -1167,6 +1184,20 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
             fullWidth
             disabled={inCorso}
           />
+          <TextField
+            label="Commissione (€)"
+            type="number"
+            value={commissione}
+            onChange={(e) => setCommissione(e.target.value)}
+            fullWidth
+            disabled={inCorso}
+            error={commissioneNonValida}
+            helperText={
+              commissioneNonValida
+                ? 'Tra zero e l’importo totale'
+                : `Ricevuto: ${formattaEuro(ricevuto)}`
+            }
+          />
           {/* In sola lettura: è la somma del registro, si cambia dal tab Pagamenti. */}
           <TextField
             label="Pagato (€)"
@@ -1175,10 +1206,10 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
             onClick={() => setTab('pagamenti')}
             slotProps={{ input: { readOnly: true } }}
             helperText={
-              (Number(importoTotale) || 0) - pagato > 0.004
-                ? `Da saldare: ${((Number(importoTotale) || 0) - pagato).toFixed(2)} €`
-                : (Number(importoTotale) || 0) - pagato < -0.004
-                  ? `Pagato in più: ${(pagato - (Number(importoTotale) || 0)).toFixed(2)} €`
+              saldoAperto > 0.004
+                ? `Da saldare: ${formattaEuro(saldoAperto)}`
+                : saldoAperto < -0.004
+                  ? `Pagato in più: ${formattaEuro(-saldoAperto)}`
                   : ' '
             }
           />

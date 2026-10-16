@@ -143,7 +143,7 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
         ImportoPagato = null,
         ImportoTotale = null,
         CommissioneOta = null,
-        ImportoRicevutoOta = null,
+        ImportoRicevuto = null,
         TotalTax = null,
         // Serve al prezzo, non alle pulizie.
         EtaBambini = [],
@@ -157,5 +157,5 @@ public class PrenotazioniController(PrenotazioniService service, ICurrentUser cu
         p.NumeroOspiti, p.StatePolice, p.PMS, p.PayTourist, p.Anno, p.TotalTax, p.StatoPrenotazione,
         p.TassaSoggiornoAttiva, p.SpesePuliziaAttiva, p.AnimaliAttiva, p.CauzioneAttiva, p.Ospite?.Nome, p.Ospite?.Cognome,
         p.RinunciaPulizia, p.RinunciaBiancheria, p.EtaBambini, p.Trattamento, p.NoteOta, p.IdPrenotazioneWubook is not null,
-        p.CommissioneOta, p.ImportoRicevutoOta);
+        p.CommissioneOta, Prenotazione.Ricevuto(p.ImportoTotale, p.CommissioneOta));
 }

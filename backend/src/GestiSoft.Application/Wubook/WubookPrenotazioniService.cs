@@ -307,9 +307,8 @@ public class WubookPrenotazioniService(
         // Come l'annullamento a mano: i soldi già ricevuti restano, un eventuale rimborso si registra.
         esistente.ImportoPrenotazione = 0;
         esistente.ImportoTotale = 0;
-        // Commissione e versato del portale seguono il totale: senza soggiorno non restano.
+        // La commissione segue il totale: senza soggiorno non resta.
         esistente.CommissioneOta = null;
-        esistente.ImportoRicevutoOta = null;
         // L'imposta di soggiorno è dovuta per i pernottamenti: senza soggiorno non c'è.
         esistente.TotalTax = 0;
         esistente.UpdatedAtUtc = DateTime.UtcNow;
@@ -437,12 +436,15 @@ public class WubookPrenotazioniService(
         await AssicuraCanaleVenditaAsync(strutturaId, nomeCanale, cancellationToken);
         entity.NumeroPrenotazione = !string.IsNullOrWhiteSpace(booking.ChannelReservationCode) ? booking.ChannelReservationCode : booking.RCode.ToString();
         // Il totale è il prezzo pagato dall'ospite, quello da fatturare. Se il portale trattiene una
-        // commissione e la comunica (vedi ImportiOta), amount è il netto versato e si tiene a parte.
+        // commissione e la comunica (vedi ImportiOta), amount è il netto versato e la commissione si
+        // somma. Se non la comunica resta quella scritta a mano dall'operatore, che l'import non tocca.
         var prezzoOspite = camera.Importo + (camera.Commissione ?? 0);
         entity.ImportoPrenotazione = prezzoOspite;
         entity.ImportoTotale = prezzoOspite;
-        entity.CommissioneOta = camera.Commissione;
-        entity.ImportoRicevutoOta = camera.Commissione is null ? null : camera.Importo;
+        if (camera.Commissione is { } commissioneOta)
+        {
+            entity.CommissioneOta = commissioneOta;
+        }
         entity.CheckIn = booking.CheckIn;
         entity.CheckOut = booking.CheckOut;
         entity.NumeroOspiti = camera.NumeroOspiti;

@@ -51,9 +51,10 @@ export interface PrenotazioneDto {
   noteOta?: string | null
   /** Arrivata dall'OTA (anche dal sito web): si annulla solo dall'OTA. */
   daOta?: boolean
-  /** Commissione trattenuta dal portale (IVA compresa) e importo che versa: null se il portale non li comunica. importoTotale resta il prezzo pagato dall'ospite. */
+  /** Commissione del portale o dell'agenzia, IVA compresa (null = nessuna): dall'OTA se la comunica (Airbnb), altrimenti scritta a mano. */
   commissioneOta?: number | null
-  importoRicevutoOta?: number | null
+  /** Quanto resta alla struttura: importoTotale − commissioneOta, calcolato dal backend. Uguale al totale senza commissione. */
+  importoRicevuto?: number | null
 }
 
 export interface PrenotazioneRequest {
@@ -85,6 +86,8 @@ export interface PrenotazioneRequest {
   servizi: ServizioPrenotazioneRichiesta[] | null
   /** Solo in creazione: pagamenti già ricevuti (l'acconto preso al telefono). In modifica si usa il registro. */
   pagamenti?: SalvaPagamentoRequest[] | null
+  /** Commissione del portale o dell'agenzia. Omesso o null in modifica: resta quella registrata; 0 la toglie. */
+  commissioneOta?: number | null
 }
 
 export interface PreventivoDto {

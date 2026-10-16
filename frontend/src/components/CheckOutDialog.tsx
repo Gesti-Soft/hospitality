@@ -62,8 +62,11 @@ export function CheckOutDialog({
   const [proponiFattura, setProponiFattura] = useState<PrenotazioneDto | null>(null)
 
   const totale = prenotazione.importoTotale ?? 0
+  // Si salda quello che resta alla struttura: la commissione del portale non arriva mai.
+  const commissione = prenotazione.commissioneOta ?? 0
+  const ricevuto = prenotazione.importoRicevuto ?? totale - commissione
   const pagato = pagamenti.data ? nettoPagamenti(pagamenti.data) : (prenotazione.importoPagato ?? 0)
-  const daSaldare = Math.round((totale - pagato) * 100) / 100
+  const daSaldare = Math.round((ricevuto - pagato) * 100) / 100
   const inCorso = registra.isPending || checkOut.isPending
   const cauzionePrevista = cauzione > 0
 
@@ -138,6 +141,12 @@ export function CheckOutDialog({
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <RigaConto etichetta="Totale del soggiorno" valore={formattatoreEuro.format(totale)} />
+            {commissione > 0 && (
+              <>
+                <RigaConto etichetta="Commissione" valore={`− ${formattatoreEuro.format(commissione)}`} />
+                <RigaConto etichetta="Ricevuto" valore={formattatoreEuro.format(ricevuto)} />
+              </>
+            )}
             <RigaConto etichetta="Pagato" valore={formattatoreEuro.format(pagato)} />
             <Divider sx={{ my: 0.5 }} />
             <RigaConto

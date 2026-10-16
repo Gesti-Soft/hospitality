@@ -1630,10 +1630,6 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<decimal?>("ImportoRicevutoOta")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
                     b.Property<decimal?>("ImportoTotale")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");

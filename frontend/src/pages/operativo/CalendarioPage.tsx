@@ -127,6 +127,7 @@ export function CalendarioPage() {
     )
   }, [prenotazioneRichiesta, strutturaId, setParametri, toast])
   const [filtroAgenzia, setFiltroAgenzia] = useState('')
+  const [filtroSaldo, setFiltroSaldo] = useState<'' | 'saldato' | 'da-saldare'>('')
   const [ricerca, setRicerca] = useState('')
 
   // La griglia occupa tutto lo spazio disponibile: il numero di giorni visibili si ricalcola in
@@ -224,6 +225,12 @@ export function CalendarioPage() {
     const dati = datiVistaLista ?? []
     return dati.filter((p) => {
       if (filtroAgenzia && normalizzaAgenzia(p.agenzia) !== filtroAgenzia) return false
+      if (filtroSaldo) {
+        // Le annullate e quelle senza importo non sono né saldate né da saldare: fuori da entrambi.
+        const stato = statoSaldo(p)
+        if (stato === null) return false
+        if (filtroSaldo === 'saldato' ? stato.tipo !== 'saldato' : stato.tipo === 'saldato') return false
+      }
       if (p.cameraId && !idCamereFiltrate.has(p.cameraId)) return false
       if (testoRicercaLista) {
         const campi = [
@@ -244,7 +251,7 @@ export function CalendarioPage() {
       }
       return true
     })
-  }, [datiVistaLista, filtroAgenzia, idCamereFiltrate, testoRicercaLista])
+  }, [datiVistaLista, filtroAgenzia, filtroSaldo, idCamereFiltrate, testoRicercaLista])
 
   const caricamento = formato === 'lista' ? camere.isLoading || caricamentoLista : camere.isLoading || prenotazioni.isLoading
 
@@ -326,6 +333,20 @@ export function CalendarioPage() {
                   {a}
                 </MenuItem>
               ))}
+            </TextField>
+          )}
+          {formato === 'lista' && (
+            <TextField
+              select
+              size="small"
+              label="Saldo"
+              value={filtroSaldo}
+              onChange={(e) => setFiltroSaldo(e.target.value as typeof filtroSaldo)}
+              sx={{ minWidth: 150 }}
+            >
+              <MenuItem value="">Tutti</MenuItem>
+              <MenuItem value="saldato">Saldato</MenuItem>
+              <MenuItem value="da-saldare">Da saldare</MenuItem>
             </TextField>
           )}
           {formato === 'lista' && (
@@ -557,13 +578,18 @@ export function CalendarioPage() {
                     { etichetta: 'Check-in', valore: p.checkIn ? FORMATTATORE_LABEL.format(new Date(p.checkIn)) : '—' },
                     { etichetta: 'Check-out', valore: p.checkOut ? FORMATTATORE_LABEL.format(new Date(p.checkOut)) : '—' },
                     { etichetta: 'Importo totale', valore: p.importoTotale != null ? formattatoreValuta.format(p.importoTotale) : '—' },
-                    // Solo se il portale li comunica: per le prenotazioni dirette sarebbero sempre vuoti.
-                    ...(p.commissioneOta != null
-                      ? [
-                          { etichetta: 'Ricevuto', valore: p.importoRicevutoOta != null ? formattatoreValuta.format(p.importoRicevutoOta) : '—' },
-                          { etichetta: 'Commissioni', valore: <Box component="span" sx={{ color: tokens.error600 }}>− {formattatoreValuta.format(p.commissioneOta)}</Box> },
-                        ]
-                      : []),
+                    // Come le colonne della tabella: senza commissione, ricevuto uguale al totale e commissioni 0,00 €.
+                    { etichetta: 'Ricevuto', valore: p.importoRicevuto != null ? formattatoreValuta.format(p.importoRicevuto) : '—' },
+                    {
+                      etichetta: 'Commissioni',
+                      valore: p.commissioneOta ? (
+                        <Box component="span" sx={{ color: tokens.error600 }}>− {formattatoreValuta.format(p.commissioneOta)}</Box>
+                      ) : p.importoTotale != null ? (
+                        formattatoreValuta.format(0)
+                      ) : (
+                        '—'
+                      ),
+                    },
                     { etichetta: 'Importo pagato', valore: p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : '—' },
                   ]}
                 />
@@ -634,9 +660,9 @@ export function CalendarioPage() {
   )
 }
 
-/** Gli importi si leggono come un blocco a sé: un filo a sinistra e un fondo appena più scuro li separano dal resto della riga. */
-const inizioImporti = { borderLeft: `1px solid ${tokens.surfaceBorder}`, bgcolor: tokens.paper, whiteSpace: 'nowrap' } as const
-const colonnaImporti = { bgcolor: tokens.paper, whiteSpace: 'nowrap' } as const
+/** Gli importi si leggono come un blocco a sé: un filo a sinistra li separa dal resto della riga. */
+const inizioImporti = { borderLeft: `1px solid ${tokens.surfaceBorder}`, whiteSpace: 'nowrap' } as const
+const colonnaImporti = { whiteSpace: 'nowrap' } as const
 
 /** Seconda riga piccola sotto un importo: percentuale della commissione, stato del saldo. */
 function NotaImporto({ children, colore }: { children: ReactNode; colore: string }) {
@@ -644,15 +670,26 @@ function NotaImporto({ children, colore }: { children: ReactNode; colore: string
 }
 
 /**
- * Totale (pagato dall'ospite, da fatturare), ricevuto e commissione del portale, pagato. Ricevuto e
- * commissioni ci sono solo se il portale li comunica (oggi Airbnb): altrimenti un trattino tenue,
- * perché per una prenotazione diretta non è un dato mancante ma un dato che non esiste.
+ * Totale (pagato dall'ospite, da fatturare), ricevuto (totale meno commissione: per una
+ * prenotazione senza commissione è uguale al totale), commissione del portale o dell'agenzia, pagato.
  */
+/**
+ * Stato del saldo, lo stesso per la nota sotto il pagato e per il filtro "Saldo". Si salda quello che
+ * resta alla struttura (il ricevuto), non il prezzo pagato dall'ospite: la commissione del portale
+ * non arriva mai. Null per le annullate e per quelle senza importo. "portale" è un da saldare che
+ * versa Airbnb, a cui l'ospite ha già pagato tutto.
+ */
+function statoSaldo(p: PrenotazioneDto): { tipo: 'saldato' | 'da-saldare' | 'portale'; importo: number } | null {
+  const totale = p.importoTotale ?? 0
+  if (p.statoPrenotazione === StatoPrenotazione.Annullata || totale <= 0) return null
+  const importo = Math.round(((p.importoRicevuto ?? totale) - (p.importoPagato ?? 0)) * 100) / 100
+  if (importo <= 0) return { tipo: 'saldato', importo }
+  return { tipo: p.daOta && /airbnb/i.test(p.agenzia ?? '') ? 'portale' : 'da-saldare', importo }
+}
+
 function CelleImporti({ prenotazione: p }: { prenotazione: PrenotazioneDto }) {
   const totale = p.importoTotale ?? 0
-  const pagato = p.importoPagato ?? 0
-  const daSaldare = Math.round((totale - pagato) * 100) / 100
-  const annullata = p.statoPrenotazione === StatoPrenotazione.Annullata
+  const saldo = statoSaldo(p)
   const vuoto = <Box component="span" sx={{ color: tokens.textTertiary }}>—</Box>
 
   return (
@@ -661,29 +698,27 @@ function CelleImporti({ prenotazione: p }: { prenotazione: PrenotazioneDto }) {
         {p.importoTotale != null ? formattatoreValuta.format(p.importoTotale) : vuoto}
       </TableCell>
       <TableCell align="right" sx={{ ...colonnaImporti, fontFamily: fontMono }}>
-        {p.importoRicevutoOta != null ? formattatoreValuta.format(p.importoRicevutoOta) : vuoto}
+        {p.importoRicevuto != null ? formattatoreValuta.format(p.importoRicevuto) : vuoto}
       </TableCell>
       <TableCell align="right" sx={{ ...colonnaImporti, fontFamily: fontMono }}>
-        {p.commissioneOta != null ? (
+        {p.commissioneOta ? (
           <>
             <Box component="span" sx={{ color: tokens.error600 }}>− {formattatoreValuta.format(p.commissioneOta)}</Box>
             {totale > 0 && <NotaImporto colore={tokens.textTertiary}>{((p.commissioneOta / totale) * 100).toLocaleString('it-IT', { maximumFractionDigits: 1 })}% del totale</NotaImporto>}
           </>
+        ) : p.importoTotale != null ? (
+          // Nessuna commissione vale zero, non "dato mancante": il ricevuto è il totale.
+          formattatoreValuta.format(0)
         ) : (
           vuoto
         )}
       </TableCell>
       <TableCell align="right" sx={{ ...colonnaImporti, fontFamily: fontMono }}>
         {p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : vuoto}
-        {!annullata && totale > 0 &&
-          (daSaldare <= 0 ? (
-            <NotaImporto colore={tokens.ok600}>Saldato</NotaImporto>
-          ) : p.commissioneOta != null ? (
-            // L'ospite ha pagato il portale: a te arriva il versamento, non un saldo da chiedere.
-            <NotaImporto colore={tokens.textTertiary}>Incassa il portale</NotaImporto>
-          ) : (
-            <NotaImporto colore={tokens.wait600}>Da saldare {formattatoreValuta.format(daSaldare)}</NotaImporto>
-          ))}
+        {saldo?.tipo === 'saldato' && <NotaImporto colore={tokens.ok600}>Saldato</NotaImporto>}
+        {/* Su Airbnb l'ospite paga il portale: a te arriva il versamento, non un saldo da chiedere. */}
+        {saldo?.tipo === 'portale' && <NotaImporto colore={tokens.textTertiary}>Incassa il portale</NotaImporto>}
+        {saldo?.tipo === 'da-saldare' && <NotaImporto colore={tokens.wait600}>Da saldare {formattatoreValuta.format(saldo.importo)}</NotaImporto>}
       </TableCell>
     </>
   )

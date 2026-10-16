@@ -42,6 +42,7 @@ public record PrenotazioneDto(
     string? NoteOta = null,
     // Arrivata dall'OTA (anche dal sito web, che passa di lì): si annulla solo dall'OTA.
     bool DaOta = false,
-    // Commissione trattenuta dal portale e importo che versa: null se il portale non li comunica.
+    // Commissione del portale o dell'agenzia (null = nessuna) e quanto resta alla struttura:
+    // ImportoTotale − CommissioneOta, calcolato, uguale al totale per una prenotazione diretta.
     decimal? CommissioneOta = null,
-    decimal? ImportoRicevutoOta = null);
+    decimal? ImportoRicevuto = null);

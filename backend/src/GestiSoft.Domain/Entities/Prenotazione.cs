@@ -41,14 +41,16 @@ public class Prenotazione : TenantEntity
     public decimal? ImportoTotale { get; set; }
 
     /// <summary>
-    /// Commissione trattenuta dal portale, IVA compresa, come la comunica l'OTA. Null se il portale
-    /// non la manda (vedi ImportiOta): oggi solo Airbnb. ImportoTotale resta il prezzo pagato
-    /// dall'ospite, quello da fatturare.
+    /// Commissione trattenuta dal portale o dall'agenzia, IVA compresa. La compila l'import quando
+    /// l'OTA la comunica (vedi ImportiOta, oggi solo Airbnb), altrimenti l'operatore; null = 0.
+    /// ImportoTotale resta il prezzo pagato dall'ospite, quello da fatturare: l'importo ricevuto
+    /// dalla struttura non si salva, è ImportoTotale − CommissioneOta (vedi Ricevuto).
     /// </summary>
     public decimal? CommissioneOta { get; set; }
 
-    /// <summary>Quanto versa il portale alla struttura (ImportoTotale − CommissioneOta). Null come CommissioneOta.</summary>
-    public decimal? ImportoRicevutoOta { get; set; }
+    /// <summary>Quanto resta alla struttura: il totale meno la commissione. Per una prenotazione senza commissione, il totale.</summary>
+    public static decimal? Ricevuto(decimal? importoTotale, decimal? commissione) =>
+        importoTotale is { } totale ? totale - (commissione ?? 0) : null;
 
     public DateTime? CheckIn { get; set; }
 

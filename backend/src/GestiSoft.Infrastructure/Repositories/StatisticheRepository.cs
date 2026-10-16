@@ -31,7 +31,9 @@ public class StatisticheRepository(GestiSoftDbContext db) : IStatisticheReposito
         var risultato = await db.Prenotazioni.AsNoTracking()
             .Where(p => p.StrutturaId == strutturaId && p.Anno == anno)
             .GroupBy(_ => 1)
-            .Select(g => new { Stimato = g.Sum(p => p.ImportoTotale ?? 0), Effettivo = g.Sum(p => p.ImportoPagato ?? 0) })
+            // Stimato = quello che resta alla struttura (totale meno commissione del portale), non il
+            // prezzo pagato dall'ospite: con le OTA i due sono diversi.
+            .Select(g => new { Stimato = g.Sum(p => (p.ImportoTotale ?? 0) - (p.CommissioneOta ?? 0)), Effettivo = g.Sum(p => p.ImportoPagato ?? 0) })
             .FirstOrDefaultAsync(cancellationToken);
 
         return (risultato?.Stimato ?? 0, risultato?.Effettivo ?? 0);
