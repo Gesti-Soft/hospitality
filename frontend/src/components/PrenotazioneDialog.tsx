@@ -148,8 +148,10 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const puoAnnullareOta = puoGestireUtenti && !isSuperAdmin
   const modifica = stato.modo === 'modifica' ? stato.prenotazione : null
   // Chi non vede le finanze riceve null (403), e l'indicazione semplicemente non compare.
-  const fatturaGenerata = useFatturaPerPrenotazione(strutturaId, modifica?.id ?? null).data ?? null
+  const fatturaQuery = useFatturaPerPrenotazione(strutturaId, modifica?.id ?? null)
+  const fatturaGenerata = fatturaQuery.data ?? null
   const extraDaFatturare = testoDaFatturare(useDaFatturare(fatturaGenerata ? strutturaId : null, modifica?.id ?? null).data)
+  // Il dialogo della fattura: per gli extra addebitati dopo, o per la prima fattura del soggiorno.
   const [fatturaExtraAperta, setFatturaExtraAperta] = useState(false)
   const creaIniziale = stato.modo === 'crea' ? stato : null
 
@@ -239,6 +241,7 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
   const serviziSceglibili = (servizi.data ?? []).filter((s) => s.attivo)
   // Dopo il check-in, e anche dopo il check-out, quello che si aggiunge è un addebito sul conto.
   const soggiornoInCorso = modifica?.statoPrenotazione === StatoPrenotazione.InCorso || modifica?.statoPrenotazione === StatoPrenotazione.Completata
+  const generaFatturaDisponibile = !!modifica && puoFatturare && soggiornoInCorso && fatturaQuery.isFetched && !fatturaGenerata
 
   function aggiornaRiga(chiave: string, modifiche: Partial<RigaServizio>) {
     if (!righeServizi) return
@@ -1232,6 +1235,14 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
             Scheda ospiti
           </Button>
         )}
+        {/* Stessa regola della pagina Ospiti: soggiorno iniziato, nessun documento valido (una fattura
+            stornata per intero non conta), solo a chi scrive le finanze. Atteso il caricamento, per non
+            mostrarlo un istante su una prenotazione già fatturata. */}
+        {generaFatturaDisponibile && (
+          <Button onClick={() => setFatturaExtraAperta(true)} disabled={inCorso}>
+            Genera fattura
+          </Button>
+        )}
         {/* Secondo documento con i soli servizi addebitati dopo la fattura: la proposta salta il resto. */}
         {modifica && puoFatturare && extraDaFatturare && (
           <Button onClick={() => setFatturaExtraAperta(true)} disabled={inCorso}>
@@ -1290,6 +1301,14 @@ export function PrenotazioneDialog({ strutturaId, stato, camere, canali, tipolog
           prenotazione={modifica}
           onClose={() => setSchedaOspitiAperta(false)}
           onApriPrenotazione={() => setSchedaOspitiAperta(false)}
+          onGeneraFattura={
+            generaFatturaDisponibile
+              ? () => {
+                  setSchedaOspitiAperta(false)
+                  setFatturaExtraAperta(true)
+                }
+              : undefined
+          }
         />
       )}
 
