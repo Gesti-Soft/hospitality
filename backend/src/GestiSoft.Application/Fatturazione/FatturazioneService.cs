@@ -388,7 +388,8 @@ public class FatturazioneService(
                     DescrizioneSoggiorno(prenotazione), 1, Math.Max(importo, 0), aliquotaPredefinita, naturaPredefinita,
                     TipoRigaFattura.Soggiorno, prenotazione.Id));
 
-                if (prenotazione.TassaSoggiornoAttiva && prenotazione.TotalTax is > 0)
+                // Spento nei dati aziendali: l'imposta non si propone, resta 0 (modificabile a mano).
+                if (azienda?.ImpostaSoggiornoInFattura != false && prenotazione.TassaSoggiornoAttiva && prenotazione.TotalTax is > 0)
                 {
                     impostaSoggiorno += prenotazione.TotalTax.Value;
                 }

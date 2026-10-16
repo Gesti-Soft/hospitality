@@ -28,6 +28,7 @@ import {
   useAggiornaFattura,
   useCreaFattura,
   useCreaNotaDiCredito,
+  nomeDocumento,
   useDatiAziendali,
   usePropostaFattura,
   useRisolviClientePerPrenotazione,
@@ -113,6 +114,11 @@ function daRiga(r: RigaFatturaDto, chiave: string): RigaForm {
 }
 
 const formattatoreEuro = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
+const formattatoreData = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+/** Davanti a ogni riga della nota di credito: si legge subito che cosa storna. Resta modificabile. */
+const prefissoStorno = (stornata: DatiFatturaDto) =>
+  `Storno ${nomeDocumento(stornata).toLowerCase()} del ${formattatoreData.format(new Date(stornata.dataDocumento))}: `
 const centesimi = (valore: number) => Math.round(valore * 100)
 
 interface Props {
@@ -188,7 +194,13 @@ export function FatturaDialog({ strutturaId, stato, prenotazioniDisponibili, cli
     (modifica
       ? modifica.righe.map((r) => daRiga(r, `r${r.numero}`))
       : stornata
-        ? stornata.righe.map((r) => ({ ...daRiga(r, `s${r.numero}`), tipo: TipoRigaFattura.Altro, prenotazioneId: null, prenotazioneServizioId: null }))
+        ? stornata.righe.map((r) => ({
+            ...daRiga(r, `s${r.numero}`),
+            descrizione: `${prefissoStorno(stornata)}${r.descrizione}`,
+            tipo: TipoRigaFattura.Altro,
+            prenotazioneId: null,
+            prenotazioneServizioId: null,
+          }))
         : (proposta.data?.righe ?? []).map((r, i) => daRiga(r, `p${i}`)))
   // Forfettari e minimi non applicano l'IVA: ogni riga è 0% N2.2, senza doverlo scegliere riga per riga.
   const senzaIva = !ricevuta && REGIMI_SENZA_IVA.includes(Number(regimeFiscale) as RegimeFiscale)

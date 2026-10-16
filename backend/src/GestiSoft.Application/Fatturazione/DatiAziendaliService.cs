@@ -23,7 +23,8 @@ public record AggiornaDatiAziendaliRequest(
     string? Provincia,
     string? Nazione,
     string? IndirizzoImmobile = null,
-    bool CedolareSecca = false);
+    bool CedolareSecca = false,
+    bool ImpostaSoggiornoInFattura = true);
 
 /// <summary>
 /// Profilo fiscale emittente della struttura (una sola riga per Struttura) — porta
@@ -64,6 +65,7 @@ public class DatiAziendaliService(IDatiAziendaliRepository repository, PermessoS
         entity.Nazione = request.Nazione;
         entity.IndirizzoImmobile = string.IsNullOrWhiteSpace(request.IndirizzoImmobile) ? null : request.IndirizzoImmobile.Trim();
         entity.CedolareSecca = request.CedolareSecca;
+        entity.ImpostaSoggiornoInFattura = request.ImpostaSoggiornoInFattura;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         await repository.UpsertAsync(entity, cancellationToken);

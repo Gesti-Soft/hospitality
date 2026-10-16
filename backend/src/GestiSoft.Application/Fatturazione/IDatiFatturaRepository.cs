@@ -7,7 +7,10 @@ public interface IDatiFatturaRepository
 {
     Task<DatiFattura?> GetAsync(Guid id, CancellationToken cancellationToken);
 
-    /// <summary>L'eventuale documento più recente che fattura questa Prenotazione (anche insieme ad altre) — null se non ancora fatturata.</summary>
+    /// <summary>
+    /// L'eventuale documento più recente ancora valido che fattura questa Prenotazione (anche insieme ad
+    /// altre): mai una nota di credito né una fattura stornata per intero. Null se da fatturare.
+    /// </summary>
     Task<DatiFattura?> GetByPrenotazioneIdAsync(Guid prenotazioneId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<DatiFattura>> ListAsync(Guid strutturaId, int? anno, CancellationToken cancellationToken);

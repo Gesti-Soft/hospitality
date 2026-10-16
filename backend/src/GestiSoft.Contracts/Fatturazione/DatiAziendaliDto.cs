@@ -23,4 +23,5 @@ public record DatiAziendaliDto(
     string? Provincia,
     string? Nazione,
     string? IndirizzoImmobile,
-    bool CedolareSecca);
+    bool CedolareSecca,
+    bool ImpostaSoggiornoInFattura = true);

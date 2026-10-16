@@ -59,6 +59,8 @@ export interface DatiAziendaliDto {
   indirizzoImmobile: string | null
   /** Il locatore ha optato per la cedolare secca: la ricevuta lo dichiara. */
   cedolareSecca: boolean
+  /** La proposta di fattura riporta da sola l'imposta di soggiorno; spento, la propone a 0. */
+  impostaSoggiornoInFattura: boolean
 }
 
 export type DatiAziendaliRequest = Omit<DatiAziendaliDto, 'strutturaId' | 'haLogo'>

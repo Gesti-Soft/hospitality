@@ -18,6 +18,12 @@ public class DatiFatturaRepository(GestiSoftDbContext db) : IDatiFatturaReposito
         db.DatiFattura.AsNoTracking().Include(f => f.Cliente).Include(f => f.Righe.OrderBy(r => r.Numero)).Include(f => f.Prenotazioni)
             .AsSplitQuery()
             .Where(f => f.PrenotazioneId == prenotazioneId || f.Prenotazioni.Any(p => p.PrenotazioneId == prenotazioneId))
+            // Il documento ancora valido: non una nota di credito, né una fattura stornata per intero
+            // (stessa regola di ListRigheFatturateAsync). Altrimenti dopo uno storno la prenotazione
+            // risultava ancora fatturata e "Genera fattura" non ricompariva.
+            .Where(f => f.FatturaStornataId == null)
+            .Where(f => !(db.DatiFattura.Any(n => n.FatturaStornataId == f.Id)
+                          && db.DatiFattura.Where(n => n.FatturaStornataId == f.Id).Sum(n => n.ImportoTotale) >= f.ImportoTotale))
             .OrderByDescending(f => f.DataDocumento)
             .ThenByDescending(f => f.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);

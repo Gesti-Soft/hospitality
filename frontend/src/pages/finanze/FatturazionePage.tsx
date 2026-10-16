@@ -334,7 +334,17 @@ function TabFatture({
     .filter((f) => (vista === 'da-inviare') === daInviare(f))
     .filter(
       (f) =>
-        (!testoRicerca || [String(f.numeroDocumento), f.clienteNome, ...f.righe.map((r) => r.descrizione)].some((campo) => campo?.toString().toLowerCase().includes(testoRicerca))) &&
+        (!testoRicerca ||
+          // Numero anche come "2/2026", data come la si legge in tabella ("16/10/2026"), importo, tipo.
+          [
+            String(f.numeroDocumento),
+            `${f.numeroDocumento}/${f.anno}`,
+            formattatoreData.format(new Date(f.dataDocumento)),
+            formattatoreValuta.format(f.importoTotale),
+            f.tipoDocumento === TipoDocumentoFattura.TD04_NotaDiCredito ? 'nota di credito' : null,
+            f.clienteNome,
+            ...f.righe.map((r) => r.descrizione),
+          ].some((campo) => campo?.toString().toLowerCase().includes(testoRicerca))) &&
         nelRangeData(f.dataDocumento, dataDa, dataA),
     )
     .sort((a, b) => b.progressivo - a.progressivo)
@@ -387,7 +397,7 @@ function TabFatture({
       <FiltriRicercaData
         ricerca={ricerca}
         onRicercaChange={setRicerca}
-        placeholderRicerca="Cerca per numero, cliente o descrizione..."
+        placeholderRicerca="Cerca per numero (2/2026), data, cliente o descrizione..."
         dataDa={dataDa}
         onDataDaChange={setDataDa}
         dataA={dataA}
@@ -592,6 +602,7 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
   const [nazione, setNazione] = useState(dati.nazione ?? 'Italia')
   const [indirizzoImmobile, setIndirizzoImmobile] = useState(dati.indirizzoImmobile ?? '')
   const [cedolareSecca, setCedolareSecca] = useState(dati.cedolareSecca)
+  const [impostaSoggiornoInFattura, setImpostaSoggiornoInFattura] = useState(dati.impostaSoggiornoInFattura ?? true)
   const toast = useToast()
 
   const aggiorna = useAggiornaDatiAziendali(strutturaId)
@@ -617,6 +628,7 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
       nazione: vuoto(nazione),
       indirizzoImmobile: vuoto(indirizzoImmobile),
       cedolareSecca,
+      impostaSoggiornoInFattura,
     }
 
     aggiorna.mutate(request, {
@@ -714,6 +726,17 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
         disabled={aggiorna.isPending}
         helperText="La frase che deve comparire in fattura quando l'IVA non si applica — chiedila al commercialista, viene stampata così com'è."
       />
+
+      <FormControlLabel
+        control={
+          <Checkbox checked={impostaSoggiornoInFattura} onChange={(e) => setImpostaSoggiornoInFattura(e.target.checked)} disabled={aggiorna.isPending} />
+        }
+        label="Inserisci automaticamente l'imposta di soggiorno"
+      />
+      <Typography sx={{ fontSize: 12, color: tokens.textTertiary, mt: -1.5 }}>
+        Nelle fatture e nelle ricevute nuove si propone l'imposta di soggiorno delle prenotazioni. Se è spento si propone 0: la incassi a parte, con una
+        quietanza. Sul singolo documento resta modificabile.
+      </Typography>
 
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, mt: 1 }}>Ricevute di locazione breve</Typography>
       <TextField
