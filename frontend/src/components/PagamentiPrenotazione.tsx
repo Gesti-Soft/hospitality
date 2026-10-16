@@ -96,7 +96,8 @@ export function PagamentiPrenotazione({ strutturaId, prenotazioneId, locali, onC
   function conferma() {
     if (!modulo) return
     const importo = Number(modulo.importo)
-    if (!(importo > 0) || Math.round(importo * 100) !== importo * 100) {
+    // Con una tolleranza: in virgola mobile 1045.84 * 100 fa 104583.99999999999, non 104584.
+    if (!(importo > 0) || Math.abs(Math.round(importo * 100) - importo * 100) > 1e-6) {
       toast.errore("Indica un importo maggiore di zero, con al massimo due decimali.")
       return
     }
