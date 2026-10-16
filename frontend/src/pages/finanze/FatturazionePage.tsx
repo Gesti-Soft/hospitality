@@ -334,7 +334,17 @@ function TabFatture({
     .filter((f) => (vista === 'da-inviare') === daInviare(f))
     .filter(
       (f) =>
-        (!testoRicerca || [String(f.numeroDocumento), f.clienteNome, ...f.righe.map((r) => r.descrizione)].some((campo) => campo?.toString().toLowerCase().includes(testoRicerca))) &&
+        (!testoRicerca ||
+          // Numero anche come "2/2026", data come la si legge in tabella ("16/10/2026"), importo, tipo.
+          [
+            String(f.numeroDocumento),
+            `${f.numeroDocumento}/${f.anno}`,
+            formattatoreData.format(new Date(f.dataDocumento)),
+            formattatoreValuta.format(f.importoTotale),
+            f.tipoDocumento === TipoDocumentoFattura.TD04_NotaDiCredito ? 'nota di credito' : null,
+            f.clienteNome,
+            ...f.righe.map((r) => r.descrizione),
+          ].some((campo) => campo?.toString().toLowerCase().includes(testoRicerca))) &&
         nelRangeData(f.dataDocumento, dataDa, dataA),
     )
     .sort((a, b) => b.progressivo - a.progressivo)
@@ -387,7 +397,7 @@ function TabFatture({
       <FiltriRicercaData
         ricerca={ricerca}
         onRicercaChange={setRicerca}
-        placeholderRicerca="Cerca per numero, cliente o descrizione..."
+        placeholderRicerca="Cerca per numero (2/2026), data, cliente o descrizione..."
         dataDa={dataDa}
         onDataDaChange={setDataDa}
         dataA={dataA}
