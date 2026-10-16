@@ -17,8 +17,8 @@ public class FatturaSdiSchemaTests
     private static DatiAziendali Azienda() => new()
     {
         Iso2 = "IT",
-        PIva = "01234567890",
-        CodiceFiscale = "01234567890",
+        PIva = "01234567897",
+        CodiceFiscale = "01234567897",
         Denominazione = "Hotel Belvedere S.r.l.",
         RegimeFiscale = RegimeFiscale.RF01_Ordinario,
         Indirizzo = "Via Roma",
@@ -105,7 +105,7 @@ public class FatturaSdiSchemaTests
         Assert.Equal("ZMMGTN97E08G273L", trasmissione.Element("IdTrasmittente")!.Element("IdCodice")!.Value);
         Assert.Equal("01000", trasmissione.Element("ProgressivoInvio")!.Value);
         // La partita IVA del cedente resta la sua: il trasmittente non è chi emette.
-        Assert.Equal("01234567890", xml.Descendants("CedentePrestatore").Descendants("IdCodice").Single().Value);
+        Assert.Equal("01234567897", xml.Descendants("CedentePrestatore").Descendants("IdCodice").Single().Value);
     }
 
     /// <summary>
@@ -296,5 +296,48 @@ public class FatturaSdiSchemaTests
         var motivi = new FatturaDocumentGenerator().ValidaPerSdi(Fattura(), ClienteItaliano(), azienda);
 
         Assert.Contains(motivi, m => m.Contains("partita IVA della struttura"));
+    }
+
+    /// <summary>Scritti a mano: prefisso IT, spazi, minuscole e omocodia sono codici validi.</summary>
+    [Theory]
+    [InlineData("IT 012 345 678 97", "rssmra80a01h501u")]
+    [InlineData("01234567897", "RSSMRA80A01H50MM")]
+    public void PartitaIvaECodiceFiscaleValidi_Passano(string pIvaStruttura, string cfCliente)
+    {
+        var azienda = Azienda();
+        azienda.PIva = pIvaStruttura;
+        var cliente = ClienteItaliano();
+        cliente.CodiceFiscale = cfCliente;
+
+        Assert.Empty(new FatturaDocumentGenerator().ValidaPerSdi(Fattura(), cliente, azienda));
+    }
+
+    /// <summary>Una cifra sbagliata o due invertite si fermano prima dell'invio, non come scarto 00305/00306.</summary>
+    [Fact]
+    public void PartitaIvaECodiceFiscaleSbagliati_Bloccano()
+    {
+        var azienda = Azienda();
+        azienda.PIva = "01234567879";
+        azienda.CodiceFiscale = "01234567890";
+        var cliente = ClienteItaliano();
+        cliente.CodiceFiscale = "RSSMRA80A01H501X";
+        cliente.PIva = "1234567";
+
+        var motivi = new FatturaDocumentGenerator().ValidaPerSdi(Fattura(), cliente, azienda);
+
+        Assert.Contains("la partita IVA della struttura non è valida: controlla le cifre", motivi);
+        Assert.Contains("il codice fiscale della struttura non è valido: controlla i caratteri", motivi);
+        Assert.Contains("la partita IVA del cliente non è valida: controlla le cifre", motivi);
+        Assert.Contains("il codice fiscale del cliente non è valido: controlla i caratteri", motivi);
+    }
+
+    /// <summary>Per l'estero non c'è un formato italiano da controllare.</summary>
+    [Fact]
+    public void ClienteEstero_NonSiControllaIlFormato()
+    {
+        var cliente = ClienteTedescoPrivato();
+        cliente.PIva = "DE123";
+
+        Assert.Empty(new FatturaDocumentGenerator().ValidaPerSdi(Fattura(), cliente, Azienda()));
     }
 }

@@ -193,7 +193,7 @@ public class SdiInvioTests
 
         var file = await fileSdi.PreparaAsync(fattura, viaCanale: false, CancellationToken.None);
 
-        Assert.Equal("IT01234567890_01000.xml", file.NomeFile);
+        Assert.Equal("IT01234567897_01000.xml", file.NomeFile);
         Assert.False(file.ViaCanale);
     }
 
@@ -290,7 +290,7 @@ public class SdiInvioTests
     {
         public Task<DatiAziendali?> GetByStrutturaIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<DatiAziendali?>(new DatiAziendali
         {
-            StrutturaId = strutturaId, Iso2 = "IT", PIva = "01234567890", CodiceFiscale = "01234567890", Denominazione = "Hotel Belvedere S.r.l.",
+            StrutturaId = strutturaId, Iso2 = "IT", PIva = "01234567897", CodiceFiscale = "01234567897", Denominazione = "Hotel Belvedere S.r.l.",
             RegimeFiscale = RegimeFiscale.RF01_Ordinario, Indirizzo = "Via Roma", Cap = "91014", Comune = "CASTELLAMMARE DEL GOLFO", Provincia = "TP",
         });
 

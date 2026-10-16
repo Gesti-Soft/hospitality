@@ -583,6 +583,18 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
             motivi.Add($"manca la partita IVA o il codice fiscale {chi}");
         }
 
+        // Solo la forma e il carattere di controllo: se esistono davvero lo sa solo lo SdI (scarti
+        // 00305/00306). Basta però a fermare prima dell'invio una cifra sbagliata o due invertite.
+        if (!estero && Codice(pIva) is { } partitaIva && !PartitaIvaValida(partitaIva is { Length: 13 } && partitaIva.StartsWith("IT", StringComparison.Ordinal) ? partitaIva[2..] : partitaIva))
+        {
+            motivi.Add($"la partita IVA {chi} non è valida: controlla le cifre");
+        }
+
+        if (!estero && Codice(codiceFiscale) is { } cf && !(cf.Length == 11 ? PartitaIvaValida(cf) : CodiceFiscaleValido(cf)))
+        {
+            motivi.Add($"il codice fiscale {chi} non è valido: controlla i caratteri");
+        }
+
         if (string.IsNullOrWhiteSpace(denominazione) && (string.IsNullOrWhiteSpace(nome) || string.IsNullOrWhiteSpace(cognome)))
         {
             motivi.Add($"manca la denominazione {chi}, oppure nome e cognome");
@@ -619,6 +631,62 @@ public class FatturaDocumentGenerator : IFatturaDocumentGenerator
     /// <summary>Vuoto va bene: <see cref="CodiceNazione"/> ripiega su IT. Altrimenti servono esattamente due lettere.</summary>
     private static bool NazioneValida(string? nazione) =>
         string.IsNullOrWhiteSpace(nazione) || (nazione.Trim().Length == 2 && nazione.Trim().All(char.IsLetter));
+
+    /// <summary>
+    /// Partita IVA italiana (o codice fiscale numerico di una società): 11 cifre, l'ultima di controllo.
+    /// Le cifre in posizione pari si raddoppiano (meno 9 se superano 9), si somma tutto e il totale
+    /// deve essere un multiplo di 10.
+    /// </summary>
+    internal static bool PartitaIvaValida(string partitaIva)
+    {
+        if (partitaIva.Length != 11 || !partitaIva.All(char.IsAsciiDigit))
+        {
+            return false;
+        }
+
+        var somma = 0;
+        for (var i = 0; i < 11; i++)
+        {
+            var cifra = partitaIva[i] - '0';
+            if (i % 2 == 1)
+            {
+                cifra *= 2;
+                if (cifra > 9)
+                {
+                    cifra -= 9;
+                }
+            }
+
+            somma += cifra;
+        }
+
+        return somma % 10 == 0;
+    }
+
+    /// <summary>
+    /// Codice fiscale di persona fisica: 16 caratteri, l'ultimo di controllo (DM 23/12/1976). Ammette
+    /// l'omocodia (lettere al posto delle cifre): le tabelle di conversione valgono uguali per le due.
+    /// </summary>
+    internal static bool CodiceFiscaleValido(string codiceFiscale)
+    {
+        if (codiceFiscale.Length != 16 || !System.Text.RegularExpressions.Regex.IsMatch(
+                codiceFiscale, "^[A-Z]{6}[0-9LMNPQRSTUV]{2}[ABCDEHLMPRST][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]$"))
+        {
+            return false;
+        }
+
+        // Valori dei caratteri in posizione dispari (1ª, 3ª, ...), per cifre 0-9 e lettere A-Z.
+        int[] dispari = [1, 0, 5, 7, 9, 13, 15, 17, 19, 21, 2, 4, 18, 20, 11, 3, 6, 8, 12, 14, 16, 10, 22, 25, 24, 23];
+        var somma = 0;
+        for (var i = 0; i < 15; i++)
+        {
+            var c = codiceFiscale[i];
+            var indice = char.IsAsciiDigit(c) ? c - '0' : c - 'A';
+            somma += i % 2 == 0 ? dispari[indice] : indice;
+        }
+
+        return codiceFiscale[15] == (char)('A' + somma % 26);
+    }
 
     private static bool CapValido(string? cap) =>
         !string.IsNullOrWhiteSpace(cap) && cap.Trim().Length == 5 && cap.Trim().All(char.IsAsciiDigit);

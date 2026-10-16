@@ -21,7 +21,7 @@ public class FatturaSdiTests
     {
         Iso2 = "IT",
         Nazione = "ITALIA",
-        PIva = "01234567890",
+        PIva = "01234567897",
         Denominazione = "Struttura di prova",
         RegimeFiscale = RegimeFiscale.RF01_Ordinario,
         Indirizzo = "Via Roma",
