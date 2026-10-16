@@ -18,7 +18,7 @@ public static class LogVisibilita
         "AlloggiatiWeb",
         "Osservatorio",
         "PayTourist",
-        // Nuova versione del gestionale installata (vedi NotificaService.NotificaAggiornamentoGestionaleAsync).
+        // Nuova versione del gestionale installata (vedi NotificaService.RegistraAggiornamentoGestionaleAsync).
         "Aggiornamento",
     ];
 }

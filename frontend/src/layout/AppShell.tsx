@@ -23,7 +23,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useMobile } from '../lib/useMobile'
 import { useStruttura } from '../struttura/StrutturaContext'
 import { useAggiornaStruttura, useCreaStruttura, useImpostaAttivoStruttura, type StrutturaDto } from '../api/strutture'
-import { GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA } from '../api/superAdmin'
+import { GIORNI_MINIMI_ELIMINAZIONE_STRUTTURA, useVersioneGestionale } from '../api/superAdmin'
 import { ApiError } from '../api/client'
 import { fontDisplay, tokens } from '../theme'
 import { GestiSoftMark } from '../components/GestiSoftMark'
@@ -42,6 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { sessione, esci } = useAuth()
   const { isSuperAdmin, clienti, clienteId, strutture, strutturaId, strutturaCorrente, loading, selezionaStruttura, esciDaImpersonazione } =
     useStruttura()
+  const versione = useVersioneGestionale(isSuperAdmin)
   const { sezioni: sezioniVisibili } = useSezioniVisibili()
 
   const sezioneAttiva = sezioniVisibili.find(({ voci }) => voci.some((item) => item.path === location.pathname)) ?? sezioniVisibili[0]
@@ -174,6 +175,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           )
         })}
       </Box>
+
+      {/* Versione installata, solo al Super Admin: al posto della notifica a ogni aggiornamento. */}
+      {isSuperAdmin && (
+        <Typography sx={{ mt: 'auto', px: '14px', fontSize: 11.5, color: tokens.navText, opacity: 0.7 }}>
+          {versione.data?.versione ? `Versione ${versione.data.versione}` : 'Versione di sviluppo'}
+        </Typography>
+      )}
     </Box>
   )
 
