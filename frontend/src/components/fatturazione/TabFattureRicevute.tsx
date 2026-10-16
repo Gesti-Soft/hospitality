@@ -67,7 +67,10 @@ export function TabFattureRicevute({ strutturaId, anno }: { strutturaId: string 
   const filtrate = (fatture.data ?? []).filter(
     (f) =>
       (!testoRicerca ||
-        [f.fornitore, f.numero, f.fornitorePartitaIva, f.fornitoreCodiceFiscale].some((campo) => campo?.toLowerCase().includes(testoRicerca))) &&
+        // Anche data e importo, scritti come in tabella ("16/10/2026", "1.093,00 €").
+        [f.fornitore, f.numero, f.fornitorePartitaIva, f.fornitoreCodiceFiscale, data(f), importo(f)].some((campo) =>
+          campo?.toLowerCase().includes(testoRicerca),
+        )) &&
       nelRangeData(`${f.data}T00:00:00`, dataDa, dataA),
   )
   const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(filtrate.length, [testoRicerca, dataDa, dataA, fatture.data])
@@ -107,7 +110,7 @@ export function TabFattureRicevute({ strutturaId, anno }: { strutturaId: string 
       <FiltriRicercaData
         ricerca={ricerca}
         onRicercaChange={setRicerca}
-        placeholderRicerca="Cerca per fornitore, numero o partita IVA..."
+        placeholderRicerca="Cerca per fornitore, numero, partita IVA, data o importo..."
         dataDa={dataDa}
         onDataDaChange={setDataDa}
         dataA={dataA}

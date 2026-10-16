@@ -55,7 +55,11 @@ export function SuperAdminArchivioDocumentiPage() {
   const filtrati = documenti.filter(
     (d) =>
       (!clienteId || d.clienteId === clienteId) &&
-      (!testo || [d.strutturaNome, d.numero, d.controparte, d.strutturaPartitaIva].some((campo) => campo?.toLowerCase().includes(testo))),
+      // Anche data e importo, scritti come in tabella ("16/10/2026", "1.093,00 €").
+      (!testo ||
+        [d.strutturaNome, d.numero, d.controparte, d.strutturaPartitaIva, data(d.data), d.importo != null ? formattatoreValuta.format(d.importo) : null].some(
+          (campo) => campo?.toLowerCase().includes(testo),
+        )),
   )
 
   async function scarica(fn: () => Promise<void>) {

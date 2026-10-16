@@ -63,7 +63,15 @@ export function SpesePage() {
   const testoRicerca = ricerca.trim().toLowerCase()
   const dati = (spese.data ?? []).filter(
     (s) =>
-      (!testoRicerca || [s.tipoSpesa, s.metodoPagamento, s.descrizione].some((campo) => campo?.toLowerCase().includes(testoRicerca))) &&
+      // Anche data e importo, scritti come in tabella ("16/10/2026", "120,00 €").
+      (!testoRicerca ||
+        [
+          s.tipoSpesa,
+          s.metodoPagamento,
+          s.descrizione,
+          s.dataSpesa ? formattatoreData.format(new Date(s.dataSpesa)) : null,
+          formattatoreValuta.format(s.importoSpesa),
+        ].some((campo) => campo?.toLowerCase().includes(testoRicerca))) &&
       nelRangeData(s.dataSpesa, dataDa, dataA),
   )
   const totale = dati.reduce((acc, s) => acc + s.importoSpesa, 0)
@@ -82,7 +90,7 @@ export function SpesePage() {
       <FiltriRicercaData
         ricerca={ricerca}
         onRicercaChange={setRicerca}
-        placeholderRicerca="Cerca per descrizione, tipo o metodo di pagamento..."
+        placeholderRicerca="Cerca per descrizione, tipo, metodo, data o importo..."
         dataDa={dataDa}
         onDataDaChange={setDataDa}
         dataA={dataA}

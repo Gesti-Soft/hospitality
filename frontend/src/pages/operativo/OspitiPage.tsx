@@ -105,7 +105,16 @@ export function OspitiPage() {
   const testoRicerca = ricerca.trim().toLowerCase()
   if (testoRicerca) {
     datiFiltrati = datiFiltrati.filter((p) =>
-      [p.numeroPrenotazione, p.ospiteNome, p.ospiteCognome, p.cameraNome, p.agenzia].some((campo) => campo?.toLowerCase().includes(testoRicerca)),
+      [
+        p.numeroPrenotazione,
+        p.ospiteNome,
+        p.ospiteCognome,
+        p.cameraNome,
+        p.agenzia,
+        // Anche arrivo e partenza, scritti come nelle schede ("16/10/2026").
+        p.checkIn ? formattatoreData.format(new Date(p.checkIn)) : null,
+        p.checkOut ? formattatoreData.format(new Date(p.checkOut)) : null,
+      ].some((campo) => campo?.toLowerCase().includes(testoRicerca)),
     )
   }
 
@@ -187,7 +196,7 @@ export function OspitiPage() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: mobile ? 'flex-start' : 'flex-end', gap: 1.5, flexWrap: 'wrap' }}>
         <TextField
           size="small"
-          placeholder="Cerca per ospite, camera, numero prenotazione o agenzia..."
+          placeholder="Cerca per ospite, camera, numero, agenzia o data..."
           value={ricerca}
           onChange={(e) => setRicerca(e.target.value)}
           sx={{ minWidth: 300 }}

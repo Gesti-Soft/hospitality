@@ -62,7 +62,13 @@ export function EntratePage() {
 
   const testoRicerca = ricerca.trim().toLowerCase()
   const dati = (entrate.data ?? []).filter(
-    (e) => (!testoRicerca || [e.tipoEntrata, e.descrizione].some((campo) => campo?.toLowerCase().includes(testoRicerca))) && nelRangeData(e.data, dataDa, dataA),
+    (e) =>
+      // Anche data e importo, scritti come in tabella ("16/10/2026", "120,00 €").
+      (!testoRicerca ||
+        [e.tipoEntrata, e.descrizione, e.data ? formattatoreData.format(new Date(e.data)) : null, formattatoreValuta.format(e.importoEntrata)].some((campo) =>
+          campo?.toLowerCase().includes(testoRicerca),
+        )) &&
+      nelRangeData(e.data, dataDa, dataA),
   )
   const totale = dati.reduce((acc, e) => acc + e.importoEntrata, 0)
   const { righeVisibili, altreDaCaricare, sentinellaRef } = usePaginazioneScroll(dati.length, [anno, testoRicerca, dataDa, dataA])
@@ -80,7 +86,7 @@ export function EntratePage() {
       <FiltriRicercaData
         ricerca={ricerca}
         onRicercaChange={setRicerca}
-        placeholderRicerca="Cerca per descrizione o tipo..."
+        placeholderRicerca="Cerca per descrizione, tipo, data o importo..."
         dataDa={dataDa}
         onDataDaChange={setDataDa}
         dataA={dataA}

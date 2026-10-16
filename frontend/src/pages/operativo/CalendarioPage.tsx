@@ -54,6 +54,8 @@ const RIGA_ALTEZZA = 56
 
 const NOMI_GIORNO = ['DOM', 'LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB']
 const FORMATTATORE_LABEL = new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
+// Solo per la ricerca: la data scritta con le barre ("16/10/2026"), oltre a quella mostrata ("16 ott 2026").
+const FORMATTATORE_DATA_NUMERI = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const formattatoreValuta = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
 
 type FormatoCalendario = 'griglia' | 'lista'
@@ -241,7 +243,11 @@ export function CalendarioPage() {
           normalizzaAgenzia(p.agenzia),
           p.checkIn ? FORMATTATORE_LABEL.format(new Date(p.checkIn)) : null,
           p.checkOut ? FORMATTATORE_LABEL.format(new Date(p.checkOut)) : null,
+          p.checkIn ? FORMATTATORE_DATA_NUMERI.format(new Date(p.checkIn)) : null,
+          p.checkOut ? FORMATTATORE_DATA_NUMERI.format(new Date(p.checkOut)) : null,
           p.importoTotale != null ? formattatoreValuta.format(p.importoTotale) : null,
+          p.importoRicevuto != null ? formattatoreValuta.format(p.importoRicevuto) : null,
+          p.commissioneOta ? formattatoreValuta.format(p.commissioneOta) : null,
           p.importoPagato != null ? formattatoreValuta.format(p.importoPagato) : null,
         ]
           .filter(Boolean)
