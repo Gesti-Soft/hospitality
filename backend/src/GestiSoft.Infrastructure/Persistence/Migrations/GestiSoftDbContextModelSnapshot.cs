@@ -266,6 +266,11 @@ namespace GestiSoft.Infrastructure.Persistence.Migrations
                     b.Property<string>("DicituraFattura")
                         .HasColumnType("text");
 
+                    b.Property<bool>("ImpostaSoggiornoInFattura")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Indirizzo")
                         .HasColumnType("text");
 

@@ -592,6 +592,7 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
   const [nazione, setNazione] = useState(dati.nazione ?? 'Italia')
   const [indirizzoImmobile, setIndirizzoImmobile] = useState(dati.indirizzoImmobile ?? '')
   const [cedolareSecca, setCedolareSecca] = useState(dati.cedolareSecca)
+  const [impostaSoggiornoInFattura, setImpostaSoggiornoInFattura] = useState(dati.impostaSoggiornoInFattura ?? true)
   const toast = useToast()
 
   const aggiorna = useAggiornaDatiAziendali(strutturaId)
@@ -617,6 +618,7 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
       nazione: vuoto(nazione),
       indirizzoImmobile: vuoto(indirizzoImmobile),
       cedolareSecca,
+      impostaSoggiornoInFattura,
     }
 
     aggiorna.mutate(request, {
@@ -714,6 +716,17 @@ export function DatiAziendaliForm({ strutturaId, dati }: { strutturaId: string; 
         disabled={aggiorna.isPending}
         helperText="La frase che deve comparire in fattura quando l'IVA non si applica — chiedila al commercialista, viene stampata così com'è."
       />
+
+      <FormControlLabel
+        control={
+          <Checkbox checked={impostaSoggiornoInFattura} onChange={(e) => setImpostaSoggiornoInFattura(e.target.checked)} disabled={aggiorna.isPending} />
+        }
+        label="Inserisci automaticamente l'imposta di soggiorno"
+      />
+      <Typography sx={{ fontSize: 12, color: tokens.textTertiary, mt: -1.5 }}>
+        Nelle fatture e nelle ricevute nuove si propone l'imposta di soggiorno delle prenotazioni. Se è spento si propone 0: la incassi a parte, con una
+        quietanza. Sul singolo documento resta modificabile.
+      </Typography>
 
       <Typography sx={{ fontFamily: fontDisplay, fontWeight: 700, fontSize: 15, mt: 1 }}>Ricevute di locazione breve</Typography>
       <TextField

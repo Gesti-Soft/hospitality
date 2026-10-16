@@ -13,5 +13,9 @@ public class DatiAziendaliConfiguration : IEntityTypeConfiguration<DatiAziendali
 
         // Un solo profilo fiscale emittente per Struttura.
         builder.HasIndex(d => d.StrutturaId).IsUnique();
+
+        // Default true anche nel database: le strutture esistenti continuano a vedere l'imposta di
+        // soggiorno proposta in fattura come prima.
+        builder.Property(d => d.ImpostaSoggiornoInFattura).HasDefaultValue(true);
     }
 }

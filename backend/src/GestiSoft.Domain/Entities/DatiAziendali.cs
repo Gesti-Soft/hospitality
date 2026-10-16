@@ -72,4 +72,11 @@ public class DatiAziendali : TenantEntity
     /// <summary>Il locatore ha optato per la cedolare secca: la ricevuta lo dichiara.</summary>
     public bool CedolareSecca { get; set; }
 
+    /// <summary>
+    /// La proposta di fattura (e di ricevuta) riporta da sola l'imposta di soggiorno calcolata sulle
+    /// prenotazioni. Spento, la propone a 0: chi la incassa con una quietanza a parte non la vuole sul
+    /// documento. Resta comunque modificabile a mano sul singolo documento. Di default acceso.
+    /// </summary>
+    public bool ImpostaSoggiornoInFattura { get; set; } = true;
+
 }
