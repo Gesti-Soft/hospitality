@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { startTransition, useEffect, useState, type ReactNode } from 'react'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
@@ -249,8 +249,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Button
             size="small"
             onClick={() => {
-              esciDaImpersonazione()
-              navigate('/super-admin/clienti')
+              // Nella stessa transizione: React Router naviga in una transizione, e uscendo prima la
+              // pagina corrente si ridisegnava senza struttura, la sua guardia la mandava alla prima
+              // voce del menu (la Dashboard) e la navigazione verso Clienti andava persa.
+              startTransition(() => {
+                esciDaImpersonazione()
+                navigate('/super-admin/clienti')
+              })
             }}
             sx={{
               ml: 'auto',
