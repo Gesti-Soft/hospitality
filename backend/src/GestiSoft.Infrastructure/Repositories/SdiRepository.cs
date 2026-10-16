@@ -57,7 +57,7 @@ public class SdiRepository(GestiSoftDbContext db) : ISdiRepository
 
         var dati = await (from azienda in db.DatiAziendali.AsNoTracking()
                           join struttura in db.Strutture.AsNoTracking() on azienda.StrutturaId equals struttura.Id
-                          where struttura.Attivo
+                          where struttura.Attivo && struttura.SdiAbilitato
                           orderby struttura.CreatedAtUtc
                           select new { azienda.StrutturaId, struttura.ClienteId, azienda.PIva, azienda.CodiceFiscale })
             .ToListAsync(cancellationToken);

@@ -112,7 +112,7 @@ public class SdiRicezioneService(
         {
             ricevuto.Esito = clienti == 0 ? EsitoFileRicevutoSdi.SenzaDestinatario : EsitoFileRicevutoSdi.PiuDestinatari;
             ricevuto.Messaggio = clienti == 0
-                ? "Nessuna struttura ha la partita IVA o il codice fiscale del destinatario."
+                ? "Nessuna struttura con il servizio SdI abilitato ha la partita IVA o il codice fiscale del destinatario."
                 : "Strutture di Clienti diversi hanno la partita IVA o il codice fiscale del destinatario: va attribuita a mano.";
             await sdi.SalvaAsync(cancellationToken);
             await AvvisaAsync(LivelloLog.Warning, $"Fattura ricevuta dallo SdI (identificativo {ricevuto.IdentificativoSdi}) in quarantena: {ricevuto.Messaggio}", null, cancellationToken);

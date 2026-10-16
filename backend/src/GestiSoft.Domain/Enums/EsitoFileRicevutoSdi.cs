@@ -9,7 +9,7 @@ public enum EsitoFileRicevutoSdi
     /// <summary>Le fatture che contiene erano già registrate.</summary>
     Duplicata = 2,
 
-    /// <summary>Nessuna struttura ha la partita IVA o il codice fiscale del cessionario: in quarantena.</summary>
+    /// <summary>Nessuna struttura con il servizio SdI abilitato ha la partita IVA o il codice fiscale del cessionario: in quarantena.</summary>
     SenzaDestinatario = 3,
 
     /// <summary>

@@ -21,8 +21,9 @@ public interface ISdiRepository
     Task AggiungiFattureRicevuteAsync(IReadOnlyList<FatturaRicevuta> fatture, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Strutture attive i cui dati fiscali hanno questa partita IVA o questo codice fiscale,
-    /// normalizzati anche dal lato del database: in anagrafica sono scritti a mano, con "IT", punti, spazi.
+    /// Strutture attive, con il servizio SdI concesso dal Super Admin, i cui dati fiscali hanno questa
+    /// partita IVA o questo codice fiscale, normalizzati anche dal lato del database: in anagrafica sono
+    /// scritti a mano, con "IT", punti, spazi. Senza concessione la fattura resta in quarantena.
     /// </summary>
     Task<IReadOnlyList<StrutturaDestinataria>> StrutturePerIdentificativoFiscaleAsync(string? partitaIva, string? codiceFiscale, CancellationToken cancellationToken);
 
