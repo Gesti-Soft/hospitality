@@ -130,6 +130,8 @@ export function CalendarioPage() {
   }, [prenotazioneRichiesta, strutturaId, setParametri, toast])
   const [filtroAgenzia, setFiltroAgenzia] = useState('')
   const [filtroSaldo, setFiltroSaldo] = useState<'' | 'saldato' | 'da-saldare'>('')
+  // Solo nello Storico, come nella pagina Ospiti, e come lì di default le sole completate.
+  const [filtroStatoStorico, setFiltroStatoStorico] = useState<StatoPrenotazione | 'tutti'>(StatoPrenotazione.Completata)
   const [ricerca, setRicerca] = useState('')
 
   // La griglia occupa tutto lo spazio disponibile: il numero di giorni visibili si ricalcola in
@@ -227,6 +229,7 @@ export function CalendarioPage() {
     const dati = datiVistaLista ?? []
     return dati.filter((p) => {
       if (filtroAgenzia && normalizzaAgenzia(p.agenzia) !== filtroAgenzia) return false
+      if (vistaLista === 'storico' && filtroStatoStorico !== 'tutti' && p.statoPrenotazione !== filtroStatoStorico) return false
       if (filtroSaldo) {
         // Le annullate e quelle senza importo non sono né saldate né da saldare: fuori da entrambi.
         const stato = statoSaldo(p)
@@ -257,7 +260,7 @@ export function CalendarioPage() {
       }
       return true
     })
-  }, [datiVistaLista, filtroAgenzia, filtroSaldo, idCamereFiltrate, testoRicercaLista])
+  }, [datiVistaLista, filtroAgenzia, filtroSaldo, filtroStatoStorico, vistaLista, idCamereFiltrate, testoRicercaLista])
 
   const caricamento = formato === 'lista' ? camere.isLoading || caricamentoLista : camere.isLoading || prenotazioni.isLoading
 
@@ -339,6 +342,20 @@ export function CalendarioPage() {
                   {a}
                 </MenuItem>
               ))}
+            </TextField>
+          )}
+          {formato === 'lista' && vistaLista === 'storico' && (
+            <TextField
+              select
+              size="small"
+              label="Stato"
+              value={filtroStatoStorico}
+              onChange={(e) => setFiltroStatoStorico(e.target.value as StatoPrenotazione | 'tutti')}
+              sx={{ minWidth: 150 }}
+            >
+              <MenuItem value="tutti">Tutti</MenuItem>
+              <MenuItem value={StatoPrenotazione.Completata}>Completata</MenuItem>
+              <MenuItem value={StatoPrenotazione.Annullata}>Annullata</MenuItem>
             </TextField>
           )}
           {formato === 'lista' && (

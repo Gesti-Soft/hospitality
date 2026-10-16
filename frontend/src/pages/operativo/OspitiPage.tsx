@@ -69,6 +69,8 @@ export function OspitiPage() {
   const [fatturaDaPrenotazione, setFatturaDaPrenotazione] = useState<PrenotazioneDto | null>(null)
   const [ricerca, setRicerca] = useState('')
   const [filtroStato, setFiltroStato] = useState<StatoPrenotazione | 'tutti'>(StatoPrenotazione.Completata)
+  // Come nel Calendario: vuoto = tutte le tipologie.
+  const [filtroTipologiaId, setFiltroTipologiaId] = useState('')
   const [righeVisibili, setRigheVisibili] = useState(RIGHE_PER_PAGINA)
 
   const arrivi = useArriviProssimi(strutturaId)
@@ -102,6 +104,12 @@ export function OspitiPage() {
     datiFiltrati = datiFiltrati.filter((p) => p.statoPrenotazione === filtroStato)
   }
 
+  if (filtroTipologiaId) {
+    // La tipologia della prenotazione, o quella della sua camera per le prenotazioni che non l'hanno salvata.
+    const tipologiaCamera = new Map((camere.data ?? []).map((c) => [c.id, c.tipologiaId]))
+    datiFiltrati = datiFiltrati.filter((p) => (p.tipologiaId ?? (p.cameraId ? tipologiaCamera.get(p.cameraId) : null)) === filtroTipologiaId)
+  }
+
   const testoRicerca = ricerca.trim().toLowerCase()
   if (testoRicerca) {
     datiFiltrati = datiFiltrati.filter((p) =>
@@ -124,7 +132,7 @@ export function OspitiPage() {
   useEffect(() => {
     setRigheVisibili(RIGHE_PER_PAGINA)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, formato, giornoSelezionato, filtroStato, testoRicerca])
+  }, [vista, formato, giornoSelezionato, filtroStato, filtroTipologiaId, testoRicerca])
 
   const datiVisibili = datiFiltrati.slice(0, righeVisibili)
   const altreDaCaricare = righeVisibili < datiFiltrati.length
@@ -210,6 +218,14 @@ export function OspitiPage() {
             },
           }}
         />
+        <TextField select size="small" label="Tipologia" value={filtroTipologiaId} onChange={(e) => setFiltroTipologiaId(e.target.value)} sx={{ minWidth: 180 }}>
+          <MenuItem value="">Tutte</MenuItem>
+          {(tipologie.data ?? []).map((t) => (
+            <MenuItem key={t.id} value={t.id}>
+              {t.tipologiaCamera}
+            </MenuItem>
+          ))}
+        </TextField>
         {vista === 'storico' && (
           <TextField select size="small" label="Stato" value={filtroStato} onChange={(e) => setFiltroStato(e.target.value as StatoPrenotazione | 'tutti')} sx={{ minWidth: 160 }}>
             <MenuItem value="tutti">Tutti</MenuItem>
